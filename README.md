@@ -2,7 +2,7 @@
 
 Independent execution and recovery for existing agentic harnesses.
 
-> Bootstrap documentation only. No product runtime, released API, installation command or performance claim is established here. The reviewed architecture is `architecture-v1-20260912`; its full canonical documents have not yet been imported into these repositories. These READMEs summarize boundaries and do not replace the specifications.
+> Bootstrap documentation only. No product runtime, released API, installation command or performance claim is established here. The reviewed architecture is `architecture-v1-20260912`, published as `public-development-v1-20260913`. Canonical specifications are available through [the documentation map](docs/README.md). This README is an overview, not the full specification.
 
 PIO supervises real harnesses without replacing their native reasoning, investigation, editing and testing loops. A CLI, CI job, CBR memory investigation or another control plane can use PIO without Combraton or CBR being installed.
 
@@ -31,4 +31,8 @@ Develop alongside CBR; neither project waits for the other's complete feature se
 
 Rust/Tokio and SQLite/content-addressed payloads are starting preferences, not installed dependencies. Adapter versions, sandbox backend and usage limits need targeted experiments. Puppetmaster supplies evaluated execution ideas, not an adopted controller/workflow engine.
 
-For the shared sequence and self-development boundary, read [BOOTSTRAP](https://github.com/Combraton/combraton/blob/main/BOOTSTRAP.md). No runtime or license is provided by this bootstrap; initial visibility is private.
+For the shared sequence and self-development boundary, read [BOOTSTRAP](https://github.com/Combraton/combraton/blob/main/BOOTSTRAP.md). No runtime or license is provided by this bootstrap; the repository is public and its project license remains to be selected.
+
+## Working on this repository
+
+Read [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), [the documentation map](docs/README.md), and [verification](docs/VERIFICATION.md). Use existing native harnesses for development. **Combraton self-development is deferred until usable v0.1 releases of all four projects.** Public visibility does not select a license; no project license has been added yet.

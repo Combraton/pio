@@ -1,12 +1,32 @@
-# Repository working agreement
+# PIO — working instructions
 
-Read README.md for this repository's scope and implementation status. Read the shared bootstrap plan at https://github.com/Combraton/combraton/blob/main/BOOTSTRAP.md for sequencing and source ownership.
+Build standalone harness execution and recovery: invocation/session/process/workspace identities, grants, usage, cancellation and immutable execution receipts. Do not decide project direction, claim truth, context-readiness policy or product acceptance. Combraton and other callers supply authorized work; CBR is optional. No shared writable product stores.
 
-- This repository currently contains bootstrap documentation. Do not invent build commands, existing APIs, benchmarks or completed milestones.
-- Before product implementation, import/read the applicable finalized architecture and the selected protocol revision. README summaries are not complete implementation specifications.
-- Preserve independent ownership: the control plane owns project direction/acceptance, PIO execution facts, CBR evidence/context, and protocol shared semantics.
-- Work on a bounded issue or user-authorized task. Inspect actual checkout state and preserve unrelated changes.
-- Record concrete component selections and evidence; research examples do not select an SDK, model, numeric budget or license.
-- Update contracts/fixtures and affected consumers when semantics change. Do not introduce shared writable product stores or private cross-repository imports.
-- Report actual checks, unsupported behavior and unresolved facts. A returned worker result alone does not prove acceptance.
-- Before handing off, save changed commits/files, validation results and remaining work in the task's durable record. Keep this file concise rather than accumulating session transcripts.
+## Read the right sources
+
+Start with [README](README.md) and [the documentation map](docs/README.md), then [execution spec](docs/spec/SPEC.md) and [internal mechanics](docs/spec/INTERNALS.md). Read the [accepted baseline](https://github.com/Combraton/combraton/blob/main/docs/architecture/BASELINE.md) and relevant shared/domain sections for boundary changes. Follow [the shared development workflow](https://github.com/Combraton/combraton/blob/main/docs/DEVELOPMENT.md); record its commit/revision for multi-session work. Research and old code are references, not silent overrides of accepted decisions.
+
+## Preserve these boundaries
+
+- Journal invocation before dispatch. Fence ownership and reconcile ambiguous effects before retry; a lost acknowledgment must not create a duplicate process.
+- Preserve native harness investigation/edit/test loops within granted scope. Execution completion is not verification or project acceptance.
+- Advertise actual adapter/version capabilities and enforcement limits. Submitted bytes, observed delivery and model comprehension are different facts.
+- Support standalone callers through public protocol profiles. Caller-selected context obligations do not become hidden PIO knowledge policy.
+
+## Work and coordination
+
+Inspect the assigned issue/task, branch, head, worktree and uncommitted changes before editing. Preserve unrelated work. For a large task, persist a small plan with outcome, scope, acceptance, dependencies and next step in `docs/work/` or the linked issue; do not rely on chat alone. One owner per task; one isolated worktree per concurrent writer. Agree shared contracts before consumers diverge.
+
+Use subagents when a bounded independent investigation or review will help; pass scope, relevant invariants, source revisions and expected evidence explicitly. Prefer read-only helpers. Parallel writers require separate worktrees and non-overlapping scope/resources. Collect and verify results. Use separate top-level sessions for independently owned component implementations; no recursive swarm or permanent model-to-repo assignment is required.
+
+Changing process/session identity, cancellation, workspace isolation, sandbox/permission enforcement, recovery, external-effect handling, accounting or an adapter requires primary docs and pinned source for the actual supported harness/version. Record accepted choices and superseded sections in the owning [decision record](docs/decisions/README.md). Escalate a needed change of direction, authority or reserved judgment; routine scoped investigation and repair proceed automatically.
+
+## Verify and hand off
+
+Run `python3 scripts/check_docs.py` from the repository root for documentation changes; see [verification](docs/VERIFICATION.md). Product runtime/build/test commands do not exist yet: do not invent them or report product checks as passed. Add reproducible commands when implementation introduces them.
+
+Future product validation must include a real adapter, surviving-process recovery, lost acknowledgments, duplicate commands, cancellation, stale owners and truthful unsupported capabilities. A fake process alone cannot complete the real-adapter milestone.
+
+Review the actual diff at recorded base/head. Before a session ends, persist commits/files, commands with exit status and evidence, unresolved facts, active resources and the next action in the task handoff. Treat old handoffs as historical observations; reconcile them with the checkout. Keep public records free of credentials and private transcripts.
+
+Use existing native harnesses to ship v0.1. Combraton self-development is deferred until all four usable v0.1 releases. Do not install ECC/global hooks, select a model or relax runtime permissions merely because a reference suggests it.

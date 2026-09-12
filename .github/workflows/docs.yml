@@ -1,0 +1,15 @@
+name: Documentation
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, pinned at setup
+        with:
+          persist-credentials: false
+      - name: Check documentation
+        run: python3 scripts/check_docs.py

@@ -1,0 +1,9 @@
+.DS_Store
+__pycache__/
+*.pyc
+CLAUDE.local.md
+.env
+.env.*
+!.env.example
+.worktrees/
+artifacts/local/
