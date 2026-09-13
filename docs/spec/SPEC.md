@@ -163,3 +163,7 @@ Comreton or a standalone caller selects context obligations; PIO does not decide
 Do not reserve a scarce harness slot or exclusive workspace writer solely while waiting for preparation that needs that resource. CBR may submit a separately granted investigation to PIO; retain its own execution identity without inventing a Comreton workflow node. Direct-model CBR jobs need no PIO process.
 
 Delivery records identify exact packet/update digests, target execution/native session, supported boundary and actual outcome. Unsupported steering, late arrival and unknown delivery remain visible; a receipt proves neither comprehension nor compliance. Relevant authority changes follow existing epoch, revocation, interruption and reconciliation contracts. The caller's readiness check is not an atomic transaction with an opaque harness action. See [CBR delivery](https://github.com/Combraton/cbr/blob/main/docs/spec/PREPARATION-AND-DELIVERY.md).
+
+## Standalone discovery, terminal management and CBR client
+
+The [standalone client contract](STANDALONE-CLIENT.md) defines supported-harness discovery, truthful capability states, multiple native sessions, explicit user/caller authority and optional CBR enrichment. The CLI/TUI application carries caller scope and context policy; the execution core does not invent knowledge requirements. Combraton later uses the same public service contracts directly, without embedding the TUI.

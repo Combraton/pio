@@ -45,7 +45,7 @@ def check(root, workspace=None):
             if not parts.path or parts.scheme == 'mailto':
                 continue
             if parts.scheme in ('http', 'https'):
-                cross = re.fullmatch(r'/Combraton/(combraton|pio|cbr|protocol)/blob/main/(.+)', parts.path)
+                cross = re.fullmatch(r'/Combraton/(combraton|pio|cbr|protocol|benchmarks)/blob/main/(.+)', parts.path)
                 if parts.netloc == 'github.com' and cross:
                     if workspace:
                         destination = workspace / cross[1] / unquote(cross[2])
@@ -72,7 +72,7 @@ def check(root, workspace=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--workspace', type=Path, help='Optional parent containing all four clones, for cross-repository file links')
+    parser.add_argument('--workspace', type=Path, help='Optional parent containing all five clones, for cross-repository file links')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     errors, files, links, skipped = check(root, args.workspace.resolve() if args.workspace else None)

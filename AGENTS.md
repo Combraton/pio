@@ -13,6 +13,10 @@ Start with [README](README.md) and [the documentation map](docs/README.md), then
 - Advertise actual adapter/version capabilities and enforcement limits. Submitted bytes, observed delivery and model comprehension are different facts.
 - Support standalone callers through public protocol profiles. Caller-selected context obligations do not become hidden PIO knowledge policy.
 
+## Current standalone-first milestone
+
+Own the standalone CLI/TUI and its user-attributed optional CBR client. Keep caller context policy separate from execution-core admission; discovery is not proof of capability. Core use must pass with CBR absent. Follow [release gates](https://github.com/Combraton/combraton/blob/main/docs/STANDALONE-RELEASES.md) and [ADR 001](https://github.com/Combraton/combraton/blob/main/docs/decisions/001-standalone-first-and-evaluation.md). Comparative evaluation lives in [benchmarks](https://github.com/Combraton/benchmarks); product acceptance remains evidence-based.
+
 ## Work and coordination
 
 Inspect the assigned issue/task, branch, head, worktree and uncommitted changes before editing. Preserve unrelated work. For a large task, persist a small plan with outcome, scope, acceptance, dependencies and next step in `docs/work/` or the linked issue; do not rely on chat alone. One owner per task; one isolated worktree per concurrent writer. Agree shared contracts before consumers diverge.
