@@ -26,20 +26,23 @@ Permitted M2 work: enforce the journal commit bound; qualify the exact Codex bin
 Owner decisions that bind M2 (2026-09-16):
 
 - **Harness as configured.** PIO never selects or injects a model or provider and never edits the provider configuration. A same-day draft routing MiniMax through a Codex custom provider was withdrawn by the owner; no such configuration exists or may be created.
-- **Real Codex home.** Live runs use the user's real Codex home. Capture its configuration before and after **every** live run, disclose any trusted-project entry that `thread/start` adds, and change nothing else. Raw snapshots contain private paths and stay outside Git; commit digests and a redacted difference only.
-- **Spend bound:** at most **1,000,000 Codex tokens across all M2 live tests**, counted per run from Codex's own usage reports and recorded per journey in STATE. A run without a usage report is unknown liability, never zero. Stop live work and report at **800,000** (80 percent). At most **three concurrent live sessions**.
+- **Real Codex home.** Live runs use the user's real Codex home. Capture its configuration before and after **every** live run, disclose any trusted-project entry that `thread/start` adds, and change nothing else. Raw snapshots contain private paths and stay outside Git; commit digests and a redacted difference only. Entries from successive fixture paths accumulate; report them, never remove them by editing the configuration.
+- **Fixture repositories and sandbox.** Every live Codex run works in a **throwaway fixture repository path**, never a user project. PIO never selects the full-access sandbox (`dangerFullAccess` / `danger-full-access`) or the unsandboxed `thread/shellCommand` surface; consistent with no weakened permissions, it also does not select `externalSandbox` or the unsandboxed `process/spawn` API.
+- **Spend bound:** at most **1,000,000 Codex tokens across all M2 live tests** (per harness; Claude Code has its own separate cap), counted per run from Codex's own usage reports and recorded per journey in STATE. A run without a usage report is unknown liability, never zero. Stop live work and report at **800,000** (80 percent). At most **three concurrent live sessions**.
 - **Frugality consequence.** The Codex bound supports only a small number of deliberately tiny live tasks. Repetition-heavy live sampling belongs to OpenCode (PLAN row M3b), which the owner prefers for heavy-usage testing. Offline, fake-host and conformance evidence carry repetition in M2 but never substitute for a real journey.
 
 Reserved owner decisions: evaluation thresholds/rubric, merge, tag and publication. No native permission relaxation, bypass, fabricated allow, unrestricted alternate API, global hook or global configuration change.
 
-Exclude Claude implementation (M3), OpenCode/Hermes adapters (M3b), TUI journey completion (M4), optional real CBR composition (M5), release qualification (M6), workflow policy and sibling-store writes. Do not count fake-host or headless fixture evidence as a real harness or TUI journey. Preserve all M1 evidence directories, the acceptance mapping and historical checkpoint documents.
+Release scope: **v0.1 remains Codex and Claude Code**; OpenCode and Hermes Agent are test-scope adapters that do not gate v0.1 unless the owner promotes them.
+
+Exclude Claude implementation (M3), OpenCode/Hermes adapters (M3b; Hermes only through an isolated model-only profile, never the owner's real Hermes home), TUI journey completion (M4), optional real CBR composition (M5), release qualification (M6), workflow policy and sibling-store writes. Do not count fake-host or headless fixture evidence as a real harness or TUI journey. Preserve all M1 evidence directories, the acceptance mapping and historical checkpoint documents.
 
 ## Acceptance
 
 M2 is accepted only with PLAN's distinguishing behavior and evidence:
 
 - Codex **0.146.0 app-server** runs behind the durable host; client/daemon detach does not own its transport. The CLI submits scoped repository work and records real native output/result.
-- **J1:** real Codex discovery/qualified binary selection, bounded repository edit/test, output and result evidence; wrong/unsupported executable is refused, never advertised usable.
+- **J1:** real Codex discovery/qualified binary selection, bounded edit/test in a throwaway fixture repository, output and result evidence; wrong/unsupported executable is refused, never advertised usable.
 - **J3:** real Codex detach, daemon restart, reattach/reconcile without duplicate prompt/work, with native session/turn, kernel start identity, host slot and controller generation evidence. Lost host remains uncertain; the duplicate-launch control fails for its intended identity/count reason.
 - **J4:** real Codex supported steering/cancellation with correlated native acknowledgment and observed outcome, truthful refusal/unsupported behavior and a suppressed-ack negative control. A write or cancel request alone never proves comprehension or stopped work. M2 proves API/CLI paths; TUI proof remains M4.
 - **J5:** real Codex core journey with CBR and Combraton absent; no hidden Context dependency. Claims remain bounded to the actual paths/platforms exercised.
@@ -65,7 +68,7 @@ Prerequisites and carry-forwards are part of the acceptance work:
 
 ## Dependencies
 
-The PR #4 merge and issue transition are complete. Live testing additionally requires the enforced commit bound, the qualified selected Codex executable/schema, an isolated fixture repository and PIO store, before/after capture of the user's Codex configuration, unchanged native permission policy, a usable Codex login on the user's own account, and working per-run token accounting against the bound. Missing prerequisites block live calls, not offline bound/adapter work. Protocol gaps retain explicit limits while upstream proposals are reviewed. CBR and Combraton are not runtime dependencies.
+The PR #4 merge and issue transition are complete. Live testing additionally requires the enforced commit bound, the qualified selected Codex executable/schema, a throwaway fixture repository path and isolated PIO store, a sandbox selection that is neither full access, external nor `thread/shellCommand`, before/after capture of the user's Codex configuration, unchanged native permission policy, a usable Codex login on the user's own account, and working per-run token accounting against the bound. Missing prerequisites block live calls, not offline bound/adapter work. Protocol gaps retain explicit limits while upstream proposals are reviewed. CBR and Combraton are not runtime dependencies.
 
 ## Plan and next step
 

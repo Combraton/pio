@@ -85,13 +85,16 @@ The harness test scope expands from the two initial candidates to the four harne
 | OpenCode | `opencode v2.0.1` (`@opencode/cli`, invoked as `opencode2`) | Additional adapter; the owner has MiniMax, GLM and Kimi models configured. Preferred for heavy-usage testing |
 | Hermes Agent | `v0.20.1 (2026.8.13)` | Additional adapter; the owner has MiniMax configured |
 
-These are version-command observations, not qualification: each adapter still binds the resolved executable, exact version and binary hash. A separately installed `opencode` reporting 1.18.18 is a different version and is not selected. Test scope is not a support claim; advertised support follows per-version qualification evidence. The PLAN records milestone placement.
+These are version-command observations, not qualification: each adapter still binds the resolved executable, exact version and binary hash. A separately installed `opencode` reporting 1.18.18 is a different version and is not selected. Test scope is not a support claim; advertised support follows per-version qualification evidence.
+
+**v0.1 release scope remains Codex and Claude Code.** OpenCode and Hermes Agent are test-scope adapters and do not gate the v0.1 release unless the owner promotes them. Test scope is not release scope. The owner confirmed on 2026-09-16 that their adapters come after M3 (PLAN row M3b).
 
 ### Live-run spend and concurrency bounds
 
-- **Codex:** at most **1,000,000 tokens** across all tests.
-- **Claude Code:** at most **1,000,000 tokens** across all tests.
-- **MiniMax through OpenCode and Hermes:** at most **300,000,000 tokens** combined. OpenCode runs on its GLM or Kimi models count against this cap until the owner sets a separate one.
+- **Codex:** at most **1,000,000 tokens** across all its tests.
+- **Claude Code:** a separate **1,000,000 tokens** across all its tests. The two caps are per harness, not shared.
+- **MiniMax through OpenCode and Hermes:** at most **300,000,000 tokens** combined.
+- **GLM and Kimi through OpenCode:** they bill separately from MiniMax. Until the owner sets per-provider caps, which must happen before M3b starts, their usage counts against the 300,000,000 cap **as an interim proxy only** and is recorded as proxy-counted.
 - Count tokens per run from each harness's own usage reports and record them per journey in [STATE](../work/STATE.md). A run without a usage report is recorded as unknown liability, never as zero. Stop live work on a harness and report when any cap reaches 80 percent.
 - At most **three concurrent live sessions** across all harnesses.
 - Comparative measurements name the harness and the model that actually served each run. Results from different models are not equivalent.
@@ -116,3 +119,10 @@ For M3 experiment 4, the primary criterion is fidelity to the user's own configu
 - **M4:** before implementation, the independent reviewer supplies TUI mockups produced with Claude Design and iterated against reference terminal interfaces. The builder implements against them and records every deviation with its reason.
 - **M6:** before any release candidate is accepted, the reviewer works through the full product as a user would, on a runnable build, with the user's own installed harnesses and existing logins on the walkthrough machine. Findings are review evidence, not builder evidence.
 - **Thresholds:** unchanged. Evaluation thresholds and rubric are frozen after the pilot, based on pilot variance, and never moved after confirmatory results are seen.
+
+### Constraints for later milestones
+
+Recorded by the owner on 2026-09-16, after the amendment above was committed.
+
+- **Hermes isolation.** Hermes runs only under an isolated Hermes profile that carries model configuration and nothing else. The owner's real Hermes home runs their scheduled messaging check-ins and other scheduled jobs and **must never be driven by PIO**. If Hermes cannot be isolated that way, defer the Hermes adapter and say so; do not fall back to the real home.
+- **Codex live runs.** Every live Codex run works in a **throwaway fixture repository path**, never a user project. PIO never selects Codex's full-access sandbox (`dangerFullAccess`, configuration value `danger-full-access`) or the unsandboxed shell-command surface (`thread/shellCommand`). Consistent with the existing no-weakening rule, PIO also does not select `externalSandbox`, under which Codex enforces no sandbox, or the unsandboxed `process/spawn` API. Every trusted-project entry a run adds to the user's Codex configuration is disclosed. Because each fixture path is new, these entries accumulate; PIO reports them and does not edit the configuration to remove them.

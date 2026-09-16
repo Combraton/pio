@@ -21,9 +21,10 @@ Disposable prompt, rewritten 2026-09-16 after M2 started. It replaces the fresh-
 ## 3. Owner decisions that are easy to get wrong
 
 - **PIO drives harnesses as the user configured them.** Never select or inject a model or provider, and never add a provider entry to a harness configuration. An earlier draft that put MiniMax inside Codex was withdrawn by the owner; do not revive it.
-- **Test scope:** Codex 0.146.0 (M2), Claude Code 2.1.273 (M3), OpenCode v2.0.1 invoked as `opencode2` and Hermes Agent v0.20.1 (M3b). A separately installed `opencode` 1.18.18 is not the selected OpenCode. OpenCode is preferred for heavy-usage testing.
-- **Token caps:** Codex 1,000,000 and Claude Code 1,000,000, each across all its tests; MiniMax through OpenCode and Hermes 300,000,000 combined, with GLM/Kimi counted against it until the owner says otherwise. Record per journey in STATE, stop and report at 80 percent, and never run more than three live sessions at once.
-- **Codex home:** use the user's real Codex home. Capture configuration before and after every live run and disclose added trusted-project entries; change nothing else; keep raw snapshots outside Git.
+- **Test scope:** Codex 0.146.0 (M2), Claude Code 2.1.273 (M3), OpenCode v2.0.1 invoked as `opencode2` and Hermes Agent v0.20.1 (M3b, after M3). A separately installed `opencode` 1.18.18 is not the selected OpenCode. OpenCode is preferred for heavy-usage testing. **Test scope is not release scope:** v0.1 remains Codex and Claude Code.
+- **Hermes (later):** only an isolated profile carrying model configuration; never the owner's real Hermes home, which runs their scheduled jobs. If isolation is impossible, defer the Hermes adapter and say so.
+- **Token caps:** Codex 1,000,000 and Claude Code a separate 1,000,000, each across all its tests; MiniMax through OpenCode and Hermes 300,000,000 combined. GLM/Kimi bill separately and are proxy-counted against the MiniMax cap only until the owner sets per-provider caps before M3b. Record per journey in STATE, stop and report at 80 percent, and never run more than three live sessions at once.
+- **Codex home and fixtures:** use the user's real Codex home. Capture configuration before and after every live run and disclose added trusted-project entries; change nothing else; keep raw snapshots outside Git. Live runs work in a throwaway fixture repository path. Never select the full-access sandbox or `thread/shellCommand` (nor `externalSandbox` or `process/spawn`).
 - **Claude Code (M3, not now):** the user's own login, or API key when configured; per-run route evidence, precedence rule, missing-route refusal. Never log out, copy tokens or edit global settings.
 - Reserved to the owner: evaluation thresholds/rubric, merge, tag and publication.
 

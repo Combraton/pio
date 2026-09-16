@@ -12,21 +12,23 @@ Dated snapshot; reconcile Git with [M2 issue #5](https://github.com/Combraton/pi
 Full text: [ADR 001 amendment](../decisions/001-standalone-stack.md#amendment--owner-decisions-after-m1-acceptance-2026-09-16) and [PLAN amendment](standalone-0.1/PLAN.md#owner-amendment-after-m1-acceptance-2026-09-16).
 
 - PIO drives each harness **as the user installed and configured it**; it never selects or injects a model or provider. A same-day kickoff draft routing MiniMax through a Codex custom provider was **withdrawn by the owner**; nothing was configured for it.
-- Test scope: Codex 0.146.0 (M2), Claude Code 2.1.273 (M3), OpenCode v2.0.1 as `opencode2` and Hermes Agent v0.20.1 (PLAN row M3b, placement proposed). OpenCode preferred for heavy-usage testing.
-- Codex live runs use the user's real Codex home with before/after configuration capture on every run.
+- Test scope: Codex 0.146.0 (M2), Claude Code 2.1.273 (M3), OpenCode v2.0.1 as `opencode2` and Hermes Agent v0.20.1 (PLAN row M3b, after M3, confirmed). OpenCode preferred for heavy-usage testing. **v0.1 release scope remains Codex and Claude Code**; OpenCode and Hermes do not gate v0.1 unless the owner promotes them. Test scope is not release scope.
+- Codex live runs use the user's real Codex home with before/after configuration capture on every run, in a throwaway fixture repository path; never the full-access sandbox or `thread/shellCommand`; every added trusted-project entry disclosed.
+- Hermes (later): only an isolated profile carrying model configuration; the owner's real Hermes home runs scheduled jobs and is never driven by PIO. If isolation is impossible, defer the Hermes adapter and say so.
 - Claude Code (M3): user's own login, or API key when configured; Anthropic caveat visible; route evidence, precedence rule and missing-route refusal.
 - MIT license; M4 reviewer mockup design step; M6 reviewer walkthrough; thresholds unchanged.
 - Reserved: evaluation thresholds/rubric, merge, tag, publication.
 
 ## Live-run spend ledger
 
-Counted from each harness's own usage reports; missing usage is unknown liability, not zero. Stop and report at 80 percent. At most three concurrent live sessions.
+Counted from each harness's own usage reports; missing usage is unknown liability, not zero. Stop and report at 80 percent. At most three concurrent live sessions. Codex and Claude Code caps are separate, per harness (owner confirmation 2026-09-16).
 
 | Cap | Limit (tokens) | Stop at | Used | Runs |
 | --- | ---: | ---: | ---: | ---: |
 | Codex, all tests | 1,000,000 | 800,000 | 0 | 0 |
 | Claude Code, all tests | 1,000,000 | 800,000 | 0 | 0 |
-| MiniMax via OpenCode + Hermes (GLM/Kimi via OpenCode counted here until a separate cap) | 300,000,000 | 240,000,000 | 0 | 0 |
+| MiniMax via OpenCode + Hermes | 300,000,000 | 240,000,000 | 0 | 0 |
+| GLM/Kimi via OpenCode — **proxy-counted** in the MiniMax row until the owner sets per-provider caps (required before M3b) | proxy | — | 0 | 0 |
 
 ## Accepted baseline and limits (unchanged from M1)
 
