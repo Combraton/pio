@@ -1,5 +1,7 @@
 # Standalone 0.1 readiness handoff
 
+> Historical M0 record. M0 was accepted and PR #2 was subsequently merged with owner authorization. Continue from [current STATE](../STATE.md) and [M1 checkpoints](../m1/CHECKPOINTS.md); do not replay the readiness next steps below.
+
 Updated 2026-09-16. Owner: Codex, PIO implementation lead. Task: [issue #1](https://github.com/Combraton/pio/issues/1). Branch: `codex/standalone-readiness`; base `e65b7c02318e71e848ab7c8b3f8efab3489fb2d2`. Read the branch/PR's actual head on resume; the readiness documents do not claim their own future commit ID.
 
 Reviewable delivery: [PR #2](https://github.com/Combraton/pio/pull/2). The substantive readiness commit is `de05afb4217ea47dec1fc445ddbf67790cdfd6f0`; the follow-up links the created PR. No merge, tag or release was performed.

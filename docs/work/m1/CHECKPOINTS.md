@@ -23,3 +23,9 @@ Local macOS arm64 matrix: twelve cases, three repetitions each, **36 attempted**
 The writer helper was stopped during review: its FNV dedupe hash and overwriteable marker design did not meet the invariants. Its uncommitted draft was preserved outside Git and replaced by the coordinator before any behavior commit. Dispatcher reports killed/exit -15 and approximately 1,109,268 estimated tokens; no final token/cost receipt was available. The earlier read-only helper's receipt is above. No worker result is treated as proof.
 
 This is a lower-level experimental fake-host slice. The diagnostic JSON interface is not Protocol; no real adapter, production service, public grant/capability semantics, caller operation persistence, discovery/workspaces/usage or complete backup/restore certification is claimed. Actual participant claims remain empty. The PLAN target and full issue acceptance list remain unchanged and open.
+
+## Verified behavior head — 2026-09-16
+
+Base remains `900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe`; tested head is `d1348e168a46430415ef9900d2f225ace4effa5d`. [Exact-head CI](https://github.com/Combraton/pio/actions/runs/35071561771) succeeded on macOS arm64 and Linux x86_64. Downloaded artifacts confirm 36 attempts per platform: 33 pass and 3 intended mutant property failures. Protocol outcomes on each platform remain 279 unsupported, 1 skipped, zero pass. A clean clone at the same head reproduced the documented build/test/clippy, matrix and freshly downloaded pinned-runner sequence, exit 0. [Receipt index](evidence/checkpoint.json) records source inventory/binary hashes and artifact names. Cargo's unit/doc suites have zero tests; the process matrix supplies the behavior evidence. All local fake processes were cleaned up; isolated stores remain outside Git for diagnosis.
+
+This evidence-only successor records that behavior head. Public protocol work is the next implementation checkpoint; the draft is not ready for M1 acceptance.
