@@ -8,7 +8,12 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
 use uuid::Uuid;
 
-pub const FEATURES: &[&str] = &["core.grants", "core.events", "core.capabilities"];
+pub const FEATURES: &[&str] = &[
+    "core.grants",
+    "core.events",
+    "core.capabilities",
+    "core.effects",
+];
 pub fn text(v: &Value) -> &str {
     v.as_str().unwrap_or("")
 }
@@ -106,6 +111,7 @@ pub struct Data {
     pub cap_revision: u64,
     pub predicates: Value,
     pub effects: BTreeMap<String, Value>,
+    pub executions: BTreeMap<String, Value>,
 }
 pub struct Provider {
     pub config: Value,
@@ -163,7 +169,8 @@ impl Provider {
                     "clock",
                     "faults",
                     "events",
-                    "capabilities"
+                    "capabilities",
+                    "executor"
                 ]
                 .contains(&k.as_str()),
                 "unsupported launch control: {k}"
@@ -175,6 +182,7 @@ impl Provider {
                 "unsupported launch control: events.{control}"
             );
         }
+        pio_host::script::validate(&config["executor"])?;
         std::fs::create_dir_all(root)?;
         ensure!(
             !root.join("protocol.sqlite3").exists(),
@@ -237,6 +245,7 @@ impl Provider {
         p.events_start();
         p.capabilities_start();
         p.save()?;
+        p.execution_recover()?;
         Ok(p)
     }
     pub fn capabilities_start(&mut self) {
@@ -307,11 +316,14 @@ impl Provider {
         json!({"oldest_retained":self.data.oldest,"current":self.data.generation})
     }
     pub fn manifest(&self) -> Value {
-        json!({"provider":{"name":"pio-core-conformance","version":"0.1.0-dev"},"profiles":[{"name":"core","majors":[1],"features":FEATURES,"depends_on":[]},{"name":"core-test","majors":[1],"features":[],"depends_on":["core"]}],"unsupported_profiles":[{"name":"coordination","reason":"not_in_release"},{"name":"remote-trust","reason":"not_in_release"}],"limits":self.limits,"dedupe_window":self.window(),"unknown_extensions":"drop"})
+        json!({"provider":{"name":"pio-core-conformance","version":"0.1.0-dev"},"profiles":[{"name":"core","majors":[1],"features":FEATURES,"depends_on":[]},{"name":"core-test","majors":[1],"features":[],"depends_on":["core"]},{"name":"execution","majors":[1],"features":crate::execution::FEATURES,"depends_on":["core"]}],"unsupported_profiles":[{"name":"coordination","reason":"not_in_release"},{"name":"remote-trust","reason":"not_in_release"}],"limits":self.limits,"dedupe_window":self.window(),"unknown_extensions":"drop"})
     }
     pub fn handle(&mut self, session: &mut Session, method: &str, p: &Value) -> Reply {
         let _ = self.clock(false);
-        let _ = self.expire_obligations();
+        self.execution_tick()
+            .map_err(|_| err("unavailable", json!({})))?;
+        self.expire_obligations()
+            .map_err(|_| err("unavailable", json!({})))?;
         if session.principal.is_none() && !matches!(method, "core.describe" | "core.authenticate") {
             return Err(err("authentication_required", json!({})));
         }
@@ -348,6 +360,7 @@ impl Provider {
         if p.get("grant").is_some() && !session.feature("core.grants") {
             return Err(invalid("/grant"));
         }
+        self.execution_gate(session, method, p)?;
         let pre = list(&p["preconditions"]);
         let mut seen = vec![];
         for c in &pre {
@@ -397,6 +410,18 @@ impl Provider {
             Some("core.capabilities")
         } else if method.starts_with("core.effects.") {
             Some("core.effects")
+        } else if method == "execution.steer" {
+            Some("execution.steering")
+        } else if method == "execution.respond_action" {
+            Some("execution.actions")
+        } else if method == "execution.controller.claim" {
+            Some("execution.controller")
+        } else if method == "execution.discovery.list" {
+            Some("execution.discovery")
+        } else if method == "execution.output.read" {
+            Some("execution.output")
+        } else if method == "execution.workspace.checkpoint" {
+            Some("execution.workspaces")
         } else {
             None
         };
@@ -416,7 +441,7 @@ impl Provider {
             "core.describe" => return Ok(self.manifest()),
             "core.feature_dependencies" => {
                 return Ok(
-                    json!({"dependencies":[{"profile":"core-test","major":1,"trigger":{"kind":"profile"},"requires":[{"profile":"core","major":1,"features":[]}]}]}),
+                    json!({"dependencies":[{"profile":"core-test","major":1,"trigger":{"kind":"profile"},"requires":[{"profile":"core","major":1,"features":[]}]},{"profile":"execution","major":1,"trigger":{"kind":"profile"},"requires":[{"profile":"core","major":1,"features":["core.events","core.capabilities","core.effects"]}]}]}),
                 );
             }
             "core.authenticate" => {
@@ -486,6 +511,7 @@ impl Provider {
             }
         }
         self.authorize(session, method, p)?;
+        self.execution_epoch(session, method, p)?;
         if !command {
             if method.starts_with("core.events.") {
                 return self.event_query(session, method, p);
@@ -662,7 +688,7 @@ impl Provider {
             let required = p["required"] == true || name == "core";
             let mut items = vec![];
             let mut code = "unsupported_required_feature";
-            if !["core", "core-test"].contains(&name) {
+            if !["core", "core-test", "execution"].contains(&name) {
                 code = "unsupported_profile";
                 items.push(json!({"profile":name,"reason":if ["coordination","remote-trust"].contains(&name){"declared_unsupported"}else{"unknown_profile"}}));
             } else if !list(&p["majors"]).contains(&json!(1)) {
@@ -670,7 +696,9 @@ impl Provider {
                 items.push(json!({"profile":name,"reason":"no_common_major"}));
             } else {
                 for f in list(&p["required_features"]) {
-                    if name != "core" || !FEATURES.contains(&text(&f)) {
+                    if !(name == "core" && FEATURES.contains(&text(&f))
+                        || name == "execution" && crate::execution::FEATURES.contains(&text(&f)))
+                    {
                         items.push(json!({"profile":name,"feature":f,"reason":"unknown_feature"}));
                     }
                 }
@@ -680,7 +708,9 @@ impl Provider {
                         .into_iter()
                         .chain(list(&p["optional_features"]))
                     {
-                        if name == "core" && FEATURES.contains(&text(&f)) {
+                        if name == "core" && FEATURES.contains(&text(&f))
+                            || name == "execution" && crate::execution::FEATURES.contains(&text(&f))
+                        {
                             if !features.contains(&text(&f).to_owned()) {
                                 features.push(text(&f).to_owned());
                             }
@@ -710,6 +740,19 @@ impl Provider {
             };
             return Err(err(code, json!({"unsatisfied":unsatisfied})));
         }
+        if selected.contains_key("execution") {
+            let missing:Vec<Value>=["core.events","core.capabilities","core.effects"].iter().filter(|f|!selected.get("core").is_some_and(|v|v.iter().any(|s|s==**f))).map(|f|json!({"profile":"execution","feature":f,"reason":"dependency_not_selected"})).collect();
+            if !missing.is_empty() {
+                if list(&p["profiles"])
+                    .iter()
+                    .any(|p| p["name"] == "execution" && p["required"] == true)
+                {
+                    return Err(err("unsupported_profile", json!({"unsatisfied":missing})));
+                }
+                selected.remove("execution");
+                unselected.extend(missing);
+            }
+        }
         session.receive = num(&p["receive_limits"]["max_frame_bytes"]) as usize;
         session.selected = Some(selected.clone());
         Ok(
@@ -717,6 +760,9 @@ impl Provider {
         )
     }
     fn query(&self, session: &Session, method: &str, p: &Value) -> Reply {
+        if method.starts_with("execution.") {
+            return self.execution_query(session, method, p);
+        }
         if method == "core.effects.get" {
             return self.effect_get(text(&p["payload"]["effect"]));
         }
@@ -743,6 +789,9 @@ impl Provider {
         }
     }
     fn apply(&mut self, session: &Session, method: &str, p: &Value) -> Reply {
+        if method.starts_with("execution.") {
+            return self.execution_apply(session, method, p);
+        }
         if method == "core.effects.abort_obligation" {
             return self.effect_abort(p);
         }

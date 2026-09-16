@@ -124,10 +124,7 @@ fn effects_abort_closes_wait_without_claiming_an_outcome() {
     let root = tempfile::tempdir().unwrap();
     let mut store = Provider::new(root.path(), config()).unwrap();
     let mut s = session();
-    assert!(
-        !FEATURES.contains(&"core.effects"),
-        "public claim waits for pinned Execution fixtures"
-    );
+
     // Internal store test only. Launch configuration and public core-test cannot seed effects.
     store.data.effects.insert("effect".into(),json!({"effect":{"id":"effect","kind":"execution.prompt_submission","target":{"kind":"core-test.subject","id":"x"},"payload_digest":pio_core::digest(b"payload"),"authorization":{"principal":"owner"},"retry_class":"non_repeatable","operation_ref":"source"},"revision":1,"status":"unknown","observations":[{"status":"unknown","evidence":{"class":"lost_response","source":"test"},"recorded_at":"2026-01-01T00:00:00Z"}],"attempts":[{"attempt":1,"outcome":"unknown","recorded_at":"2026-01-01T00:00:00Z"}],"obligations":[{"id":"wait","expects":"outcome","deadline":"2026-01-01T00:00:01Z","state":"open"}]}));
     store.save().unwrap();
@@ -206,4 +203,92 @@ fn negotiation_treats_features_as_sets_and_validates_before_session_refusal() {
         store.handle(&mut s, "core.negotiate", &p).unwrap_err().code,
         "invalid_envelope"
     );
+}
+
+#[test]
+fn execution_admission_is_atomic_and_replay_never_dispatches_twice() {
+    let root = tempfile::tempdir().unwrap();
+    let mut cfg = config();
+    cfg["executor"] = json!({"default_script":[{"deliver":"provider_ack_id"}]});
+    cfg["faults"] = json!({"commit_unavailable":[{"operation":"execution.submit","times":1}]});
+    let mut p = Provider::new(root.path(), cfg.clone()).unwrap();
+    let mut s = session();
+    s.selected
+        .as_mut()
+        .unwrap()
+        .insert("execution".into(), vec![]);
+    let command = command(
+        "execution.submit",
+        json!({"kind":"execution.execution","id":"e"}),
+        0,
+        json!({"brief":{"digest":pio_core::digest(b"brief"),"media_type":"text/plain"}}),
+    );
+    assert_eq!(
+        p.handle(&mut s, "execution.submit", &command)
+            .unwrap_err()
+            .code,
+        "unavailable"
+    );
+    assert!(p.data.effects.is_empty());
+    assert!(p.data.executions.is_empty());
+    let ack = p.handle(&mut s, "execution.submit", &command).unwrap();
+    let facts = p.store.journal().unwrap();
+    let admission = facts
+        .iter()
+        .find(|f| {
+            f["changes"]
+                .as_array()
+                .is_some_and(|a| a.iter().any(|c| c["key"] == "execution/e"))
+        })
+        .unwrap();
+    let changes = admission["changes"].as_array().unwrap();
+    for prefix in ["execution/", "effect/", "command/", "event/"] {
+        assert!(
+            changes.iter().any(|c| text(&c["key"]).starts_with(prefix)),
+            "{prefix} must commit with admission"
+        );
+    }
+    assert_eq!(p.data.effects["e.delivery-1"]["status"], "pending");
+    p.execution_tick().unwrap();
+    assert_eq!(
+        p.data.effects["e.delivery-1"]["attempts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    drop(p);
+    cfg.as_object_mut().unwrap().remove("faults");
+    let mut p = Provider::new(root.path(), cfg).unwrap();
+    let replay = p.handle(&mut s, "execution.submit", &command).unwrap();
+    assert_eq!(replay["acknowledgment"], ack["acknowledgment"]);
+    assert_eq!(replay["replay"], true);
+    assert_eq!(
+        p.data.effects["e.delivery-1"]["attempts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let before = p.data.records().unwrap();
+    p.store.rebuild_protocol().unwrap();
+    p.reload().unwrap();
+    assert_eq!(p.data.records().unwrap(), before);
+}
+
+#[test]
+fn legacy_blob_store_is_refused_without_modifying_it() {
+    let root = tempfile::tempdir().unwrap();
+    let file = root.path().join("protocol.sqlite3");
+    std::fs::write(&file, b"legacy").unwrap();
+    let result = Provider::new(root.path(), config());
+    assert!(
+        result
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("explicit migration")
+    );
+    assert_eq!(std::fs::read(file).unwrap(), b"legacy");
+    assert!(!root.path().join("journal.sqlite3").exists());
 }

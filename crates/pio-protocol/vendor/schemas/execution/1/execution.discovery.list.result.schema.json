@@ -1,0 +1,70 @@
+{
+  "type": "object",
+  "required": [
+    "installations"
+  ],
+  "properties": {
+    "installations": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "required": [
+          "installation_id",
+          "harness",
+          "detected",
+          "adapter_recognized",
+          "version_supported",
+          "authentication",
+          "reachable",
+          "usable"
+        ],
+        "properties": {
+          "installation_id": {
+            "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+          },
+          "harness": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "detected": {
+            "type": "boolean"
+          },
+          "adapter_recognized": {
+            "$ref": "common.schema.json#/$defs/tri_state"
+          },
+          "version_supported": {
+            "$ref": "common.schema.json#/$defs/tri_state"
+          },
+          "authentication": {
+            "enum": [
+              "authenticated",
+              "unauthenticated",
+              "unknown"
+            ]
+          },
+          "reachable": {
+            "$ref": "common.schema.json#/$defs/tri_state"
+          },
+          "last_verified": {
+            "$ref": "../../core/1/common.schema.json#/$defs/instant"
+          },
+          "usable": {
+            "type": "boolean"
+          }
+        },
+        "unevaluatedProperties": false
+      }
+    }
+  },
+  "unevaluatedProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.discovery.list.result.schema.json",
+  "title": "execution.discovery.list result"
+}

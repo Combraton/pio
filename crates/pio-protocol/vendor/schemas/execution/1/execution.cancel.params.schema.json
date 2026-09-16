@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.cancel.params.schema.json",
+  "title": "execution.cancel params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/command.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "execution.cancel"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "subject": {
+      "$ref": "common.schema.json#/$defs/execution_subject"
+    },
+    "preconditions": {
+      "minItems": 1,
+      "maxItems": 1
+    }
+  },
+  "unevaluatedProperties": false
+}

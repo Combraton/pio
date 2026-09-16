@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.discovery.list.params.schema.json",
+  "title": "execution.discovery.list params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/query.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "execution.discovery.list"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {},
+      "unevaluatedProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

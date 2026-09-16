@@ -16,6 +16,7 @@ pio-host = { path = "../pio-host" }
 jsonschema = { version = "0.56.0", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }
 chrono = "0.4"
+base64 = "0.22"
 libc.workspace = true
 [dev-dependencies]
 tempfile = "3"

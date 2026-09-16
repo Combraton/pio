@@ -1,5 +1,13 @@
 pub fn resources() -> Vec<serde_json::Value> {
     vec![
+        serde_json::from_str(include_str!(
+            "../vendor/conformance/schemas/launch-config.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/context/1/common.schema.json"
+        ))
+        .unwrap(),
         serde_json::from_str(include_str!("../vendor/schemas/core/1/command.schema.json")).unwrap(),
         serde_json::from_str(include_str!("../vendor/schemas/core/1/common.schema.json")).unwrap(),
         serde_json::from_str(include_str!(
@@ -148,7 +156,95 @@ pub fn resources() -> Vec<serde_json::Value> {
         ))
         .unwrap(),
         serde_json::from_str(include_str!(
-            "../vendor/conformance/schemas/launch-config.schema.json"
+            "../vendor/schemas/evidence/1/common.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/common.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.cancel.params.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.cancel.result.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.controller.claim.params.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.controller.claim.result.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.discovery.list.params.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.discovery.list.result.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.inspect.params.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.inspect.result.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.output.read.params.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.output.read.result.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.reconcile.params.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.reconcile.result.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.respond_action.params.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.respond_action.result.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.steer.params.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.steer.result.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.submit.params.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.submit.result.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.workspace.checkpoint.params.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/execution/1/execution.workspace.checkpoint.result.schema.json"
+        ))
+        .unwrap(),
+        serde_json::from_str(include_str!(
+            "../vendor/schemas/knowledge/1/common.schema.json"
         ))
         .unwrap(),
     ]

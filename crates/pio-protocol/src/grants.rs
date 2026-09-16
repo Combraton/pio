@@ -138,6 +138,23 @@ impl Provider {
         let grant = self.usable_grant(session, text(&p["grant"]))?;
         let mut needed = vec![];
         match method {
+            "execution.submit"
+            | "execution.cancel"
+            | "execution.controller.claim"
+            | "execution.workspace.checkpoint" => needed.push((method, p["subject"].clone())),
+            "execution.inspect" | "execution.output.read" => needed.push((
+                "execution.read",
+                json!({"kind":"execution.execution","id":p["payload"]["execution"]}),
+            )),
+            "execution.discovery.list" => needed.push((
+                "execution.discovery.list",
+                json!({"kind":"execution.discovery","id":"installations"}),
+            )),
+            "execution.reconcile" => {
+                if !list(&grant["rights"]).contains(&json!("execution.read")) {
+                    return Err(denied("right_missing"));
+                }
+            }
             "core-test.authority.claim" => needed.push(("core-test.claim", p["subject"].clone())),
             "core-test.subject.put" => {
                 needed.push(("core-test.write", p["subject"].clone()));
@@ -165,6 +182,7 @@ impl Provider {
                     } else {
                         match text(&target["kind"]) {
                             "core-test.subject" | "core-test.authority" => "core-test.read",
+                            "execution.execution" | "execution.controller" => "execution.read",
                             _ => return false,
                         }
                     };
@@ -232,6 +250,9 @@ impl Provider {
                 covered && list(&grant["rights"]).contains(&json!("core-test.read"))
             }
             "core.capabilities" => covered,
+            "execution.execution" | "execution.controller" => {
+                covered && list(&grant["rights"]).contains(&json!("execution.read"))
+            }
             _ => false,
         }
     }

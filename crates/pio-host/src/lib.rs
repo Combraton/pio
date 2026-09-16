@@ -1,4 +1,5 @@
 //! Experimental local fake host. No native harness or Protocol capability claim.
+pub mod script;
 use anyhow::{Context, Result, bail, ensure};
 use pio_core::{ProcessIdentity, Store};
 use serde_json::{Value, json};

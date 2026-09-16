@@ -35,7 +35,7 @@ impl Provider {
     pub fn expire_obligations(&mut self) -> anyhow::Result<()> {
         let mut expired = vec![];
         for (id, record) in &mut self.data.effects {
-            if record.is_null() {
+            if record.is_null() || record["effect"]["target"]["kind"] == "execution.execution" {
                 continue;
             }
             for obligation in record["obligations"].as_array_mut().unwrap() {

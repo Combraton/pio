@@ -1,0 +1,71 @@
+{
+  "type": "object",
+  "required": [
+    "execution",
+    "offset",
+    "data_base64",
+    "next_offset",
+    "end_offset",
+    "lost_ranges",
+    "coverage",
+    "policy"
+  ],
+  "properties": {
+    "execution": {
+      "$ref": "common.schema.json#/$defs/execution_subject"
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "data_base64": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+    },
+    "next_offset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "end_offset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "lost_ranges": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/lost_range"
+      }
+    },
+    "coverage": {
+      "enum": [
+        "complete",
+        "incomplete"
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "spool_bytes",
+        "overflow"
+      ],
+      "properties": {
+        "spool_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "overflow": {
+          "const": "discard_oldest"
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  },
+  "unevaluatedProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.output.read.result.schema.json",
+  "title": "execution.output.read result"
+}

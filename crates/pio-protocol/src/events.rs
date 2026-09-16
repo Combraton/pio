@@ -240,6 +240,9 @@ impl Provider {
     }
     pub fn notifications(&mut self, session: &mut Session) -> Vec<Value> {
         let _ = self.clock(false);
+        if self.execution_tick().is_err() {
+            return vec![];
+        }
         let _ = self.expire_obligations();
         let mut frames = vec![];
         for (id, mut p) in session.subscriptions.clone() {

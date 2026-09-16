@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.controller.claim.params.schema.json",
+  "title": "execution.controller.claim params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/command.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "execution.controller.claim"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {},
+      "unevaluatedProperties": false
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "execution.controller"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "preconditions": {
+      "minItems": 1,
+      "maxItems": 1
+    }
+  },
+  "unevaluatedProperties": false
+}

@@ -1,8 +1,8 @@
 {
   "format": "combraton-conformance-participant/1",
-  "name": "pio-core-conformance",
+  "name": "pio-journal-fake-executor",
   "version": "0.1.0-dev",
-  "description": "PIO conformance-only Core and core-test Unix service with fake-host tooling; no real adapters. Execution, public effects and event-backpressure are not claimed. m1-target.json is a future target, not evidence.",
+  "description": "PIO journal-backed Core and Execution conformance service with an explicitly labeled executor.script fake host; no real adapter. Claims cover the five PLAN Execution features and public effect lifecycle. Event backpressure remains unclaimed. The polling service is not the durable-host design.",
   "role": "provider",
   "binding": "unix",
   "claims": {
@@ -14,16 +14,27 @@
       {
         "name": "core-test",
         "major": 1
+      },
+      {
+        "name": "execution",
+        "major": 1
       }
     ],
     "features": [
       "core.grants",
       "core.events",
-      "core.capabilities"
+      "core.capabilities",
+      "core.effects",
+      "execution.controller",
+      "execution.discovery",
+      "execution.output",
+      "execution.workspaces",
+      "execution.usage"
     ],
     "test_controls": [
       "clock.file",
-      "store.faults"
+      "store.faults",
+      "executor.script"
     ],
     "test_barriers": []
   },

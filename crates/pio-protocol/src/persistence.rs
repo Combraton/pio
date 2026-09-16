@@ -15,6 +15,9 @@ impl Data {
         for (key, value) in &self.commands {
             r.insert(format!("command/{key}"), serde_json::to_value(value)?);
         }
+        for (key, value) in &self.executions {
+            r.insert(format!("execution/{key}"), value.clone());
+        }
         for (key, value) in &self.effects {
             r.insert(format!("effect/{key}"), value.clone());
         }
@@ -46,14 +49,19 @@ impl Data {
                 cap_revision: 1,
                 predicates: json!([]),
                 effects: BTreeMap::new(),
+                executions: BTreeMap::new(),
             });
         };
         let mut v = meta.clone();
         v["subjects"] = json!({});
         v["commands"] = json!({});
         v["effects"] = json!({});
+        v["executions"] = json!({});
         v["events"] = json!([]);
         for (key, value) in records {
+            if let Some(key) = key.strip_prefix("execution/") {
+                v["executions"][key] = value.clone();
+            }
             if let Some(key) = key.strip_prefix("subject/") {
                 v["subjects"][key] = value.clone();
             }

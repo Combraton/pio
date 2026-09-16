@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.inspect.params.schema.json",
+  "title": "execution.inspect params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/query.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "execution.inspect"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "execution"
+      ],
+      "properties": {
+        "execution": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

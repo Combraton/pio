@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.workspace.checkpoint.result.schema.json",
+  "title": "execution.workspace.checkpoint result",
+  "type": "object",
+  "required": [
+    "acknowledgment",
+    "outcome",
+    "replay"
+  ],
+  "properties": {
+    "acknowledgment": {
+      "$ref": "../../core/1/common.schema.json#/$defs/acknowledgment"
+    },
+    "replay": {
+      "type": "boolean"
+    },
+    "outcome": {
+      "$ref": "common.schema.json#/$defs/checkpoint"
+    }
+  },
+  "unevaluatedProperties": false
+}
