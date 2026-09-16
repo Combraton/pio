@@ -1,0 +1,46 @@
+name: M1 build and conformance
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  runtime:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: ubuntu-24.04
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Verify platform and install pinned toolchain
+        run: |
+          test "$(uname -m)" = '${{ matrix.arch }}'
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+          rustc --version
+          cargo --version
+      - name: Format, build and test
+        run: |
+          cargo fmt --all -- --check
+          cargo build --workspace --locked
+          cargo test --workspace --locked
+          python3 scripts/check_docs.py
+          git diff --exit-code -- Cargo.lock
+      - name: Pinned Protocol runner against PIO
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/conformance.py --out target/conformance
+      - name: Upload exact descriptor, manifests and transcripts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pio-m1-${{ matrix.os }}-${{ matrix.arch }}-${{ github.sha }}
+          path: target/conformance
+          if-no-files-found: error

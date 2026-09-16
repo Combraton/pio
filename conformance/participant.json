@@ -1,0 +1,30 @@
+{
+  "format": "combraton-conformance-participant/1",
+  "name": "pio-fake-host",
+  "version": "0.1.0-dev",
+  "description": "PIO M1 skeleton. Fake host only; no real adapters. No profiles, features or test controls implemented yet. m1-target.json records the accepted target, not claims.",
+  "role": "provider",
+  "binding": "unix",
+  "claims": {
+    "profiles": [],
+    "features": [],
+    "test_controls": [],
+    "test_barriers": []
+  },
+  "launch": {
+    "argv": [
+      "{pio_binary}",
+      "conformance",
+      "--data-dir",
+      "{data_dir}",
+      "--config",
+      "{config_file}",
+      "--socket",
+      "{socket_path}"
+    ]
+  },
+  "mutants": {
+    "argv": [],
+    "names": []
+  }
+}

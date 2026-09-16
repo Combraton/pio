@@ -1,0 +1,14 @@
+[package]
+name = "pio-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "pio"
+path = "src/main.rs"
+
+[dependencies]
+pio-core = { path = "../pio-core" }
+pio-host = { path = "../pio-host" }

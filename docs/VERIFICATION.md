@@ -1,6 +1,6 @@
 # Verification available now
 
-PIO contains architecture, implementation-readiness documents and a release-integrity verifier, not a product runtime. Protocol v0.1.0 is released separately. The documentation checks below validate structure only.
+PIO now has an M1 Cargo skeleton and pinned conformance pipeline. Its participant advertises no implemented profiles yet. Protocol v0.1.0 is released separately. Documentation checks validate structure only.
 
 From this repository's root:
 
@@ -21,11 +21,29 @@ This additionally resolves Combraton GitHub main-file links against the sibling 
 
 The GitHub Actions documentation job runs the first script on pushes and pull requests, with read-only contents permissions. It does not fetch sibling repositories. Remote URL reachability, Markdown fragment targets, Mermaid rendering, source-manifest consistency, semantic correctness, live harness instruction loading and product behavior need separate inspection. The script is intentionally small and is not a general Markdown parser.
 
-## Product checks to add with implementation
+## M1 build and conformance
 
 The [journey-verification matrix](JOURNEYS.md) records the six required journeys and their shared evidence fields. All product journeys remain `not_evaluated` until their actual entry points exist and are exercised. A lower-level test cannot complete a TUI or real-adapter journey.
 
-No runtime build, unit, adapter, memory-evaluation or end-to-end commands exist yet. Add actual reproducible setup/build/test commands here in the same change that introduces the corresponding code, including tool versions and fixtures. Do not manufacture a passing runtime status from documentation checks.
+Prerequisites: Rustup, Python 3.12+, Git, GitHub CLI (`gh`), C compiler/linker and network access. Authenticate `gh` for release asset downloads (CI uses its read-only `GH_TOKEN`). The pinned toolchain is Rust 1.97.1; Cargo.lock is committed. From a clean clone on macOS arm64 or Linux x86_64:
+
+```sh
+rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+rustc --version
+cargo --version
+cargo fmt --all -- --check
+cargo build --workspace --locked
+cargo test --workspace --locked
+python3 scripts/check_docs.py
+git diff --exit-code -- Cargo.lock
+python3 scripts/conformance.py --out target/conformance
+```
+
+These are the commands in [runtime CI](../.github/workflows/runtime.yml). CI uses macOS 15 arm64 and Ubuntu 24.04 x86_64 and asserts the architecture. These are tested CI environments, not a broader minimum-OS support claim. Use `target/debug/pio` explicitly: an unrelated historical `pio` may already be installed on PATH. The skeleton only supports `--version` and `participant`; its conformance service refuses startup.
+
+The conformance command downloads the six pinned release assets into a fresh temporary directory, runs the existing integrity verifier, extracts the verified source archive, builds `combraton-conformance` with its released lockfile, runs runner self-tests and fixture validation, and runs all fixtures against PIO's descriptor. No sibling clone or pre-existing cache is required. It preserves the runner's exit status and unmodified manifest/transcripts; `pio-report.json` reports native outcome classes and every unsupported/skipped coverage limit. CI uploads the rendered descriptor, target, pin receipt, environment, manifest and transcripts even on failures. Empty claims in this first skeleton mean no protocol coverage, not M1 acceptance. Cargo tests currently contain no behavior tests.
+
+For offline asset reuse, append `--assets "$PIO_RELEASE_DIR"`; verification still runs. Choose a fresh output path for every run: existing evidence directories are never overwritten. Cargo downloads still need either network access or an existing registry cache. No real adapter, UI, memory-evaluation or end-to-end journey has passed.
 
 For a change, report the command, exit status, environment, tested revision, real versus simulated dependencies, evidence location and untested limitations. Preserve the producer exit code when displaying shortened logs. Review the relevant diff against an explicit base/head.
 

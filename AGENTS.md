@@ -27,7 +27,7 @@ Changing process/session identity, cancellation, workspace isolation, sandbox/pe
 
 ## Verify and hand off
 
-Run `python3 scripts/check_docs.py` from the repository root for documentation changes; see [verification](docs/VERIFICATION.md). Product runtime/build/test commands do not exist yet: do not invent them or report product checks as passed. Add reproducible commands when implementation introduces them.
+Run `python3 scripts/check_docs.py` from the repository root for documentation changes; see [verification](docs/VERIFICATION.md). Build/test and pinned-runner commands now exist in verification. The M1 skeleton has empty protocol claims and no behavior tests; do not count unsupported fixtures or a successful skeleton build as a product milestone. Add reproducible commands alongside implementation.
 
 Future product validation must include a real adapter, surviving-process recovery, lost acknowledgments, duplicate commands, cancellation, stale owners and truthful unsupported capabilities. A fake process alone cannot complete the real-adapter milestone.
 

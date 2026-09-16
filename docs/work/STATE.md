@@ -1,18 +1,15 @@
 # Current session state — PIO
 
-Dated navigation snapshot; reconcile with Git and [issue #1](https://github.com/Combraton/pio/issues/1) before continuing. Issues own live progress; this file grants no authority.
+Dated snapshot; reconcile Git with [M1 issue #3](https://github.com/Combraton/pio/issues/3). Issues own live progress.
 
 - **Updated:** 2026-09-16. **Owner:** Codex, standalone PIO implementation lead.
-- **Task/branch:** standalone 0.1 readiness; [PR #2](https://github.com/Combraton/pio/pull/2), `codex/standalone-readiness`, based on clean remote-matching `e65b7c02318e71e848ab7c8b3f8efab3489fb2d2`. Read actual Git/PR head on resume.
-- **Deliverables:** [plan](standalone-0.1/PLAN.md), [accepted stack](../decisions/001-standalone-stack.md), [journeys](../JOURNEYS.md), [Protocol/CBR boundary](standalone-0.1/PROTOCOL.md), [handoff](standalone-0.1/HANDOFF.md).
-- **Protocol correction:** v0.1.0 is released at `cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc`. Tag, manifest/assets, 539 bundle files and 420 normative entries verified. [Pin](../../protocol.lock.json) replaces the earlier pre-release observation; later main is not the contract.
-- **Shared source:** Combraton `9af69ce966bfacf0deb03606d99f28a355d1f944`; other revisions are in the handoff. No sibling repository was edited.
-- **Product status:** readiness only. No runtime, supported adapter, product build or journey pass. Codex 0.146.0 and Claude Code 2.1.273 are validation candidates; authentication unknown. Both remain in the accepted release scope. M0 was accepted by the owner as documentation at `85255d9` against `e65b7c0`; no runtime milestone was accepted.
-- **Owner dispositions:** stack accepted; Python bridge conditional on M3; macOS arm64 + Linux x86_64 accepted with both-platform build/conformance CI from M1; Claude API-key/provider route accepted and claude.ai login unsupported until approved. License and confirmatory thresholds remain later decisions.
-- **M1 carry-forward:** canonical per-file Codex schema comparison, trusted-project config side-effect accounting, named participant feature/control coverage and the owner’s exact acceptance evidence are recorded in the [plan](standalone-0.1/PLAN.md).
-- **Checks:** release verifier and tampered-manifest negative control executed; Codex schema generation succeeded. [Initial validation](standalone-0.1/evidence/validation.json) and [owner-disposition follow-up checks](standalone-0.1/evidence/validation-followup.json) record documentation/diff evidence. Product journeys remain `not_evaluated`.
-- **Resources:** one read-only MiniMax review worker completed. No PIO product service/host started; unrelated harness processes left alone. Historical installed `pio` is a different program.
-- **Prompt disposition:** user attachment preserved; no owned disposable prompt retired. Separate Protocol kickoff stays under its owner's control.
-- **Next:** await separately authorized merge of PR #2; only then branch M1 from main. This follow-up records the dispositions for the owner-requested ready transition; read live PR state before acting. No merge, tag or release publication authorized here. Update this snapshot at every M1 checkpoint.
-
-Git preserves previous snapshots; the handoff preserves evidence, limitations and continuation details.
+- **M0:** accepted at `4549c22ad9835504a0618d8fcb226afe222c0190`; owner authorized merge and continuation. [PR #2](https://github.com/Combraton/pio/pull/2) merged as `900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe`.
+- **M1 branch/base:** `codex/m1-core-host`, one implementation worktree branched from remote main at `900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe`. **Inspected HEAD at this checkpoint:** same commit; the skeleton commit containing this record is its successor. Read actual HEAD on resume.
+- **Scope:** [PLAN](standalone-0.1/PLAN.md), [ADR](../decisions/001-standalone-stack.md), [M1 issue acceptance](https://github.com/Combraton/pio/issues/3). Shared architecture inspected at Combraton `9af69ce966bfacf0deb03606d99f28a355d1f944`. Siblings untouched.
+- **First checkpoint:** Cargo workspace, Rust 1.97.1/lockfile, empty actual participant claims, separate exact M1 target, dual-platform CI and verified-release runner command. [Verification](../VERIFICATION.md) records commands. This is a skeleton, with no behavior or real-adapter claim.
+- **Protocol:** locked v0.1.0 source `cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc`; neither later main nor the reference provider is PIO's implementation.
+- **Checks:** Rust 1.97.1 build/test exit 0 on macOS arm64 (zero behavior tests); released runner self-test/fixture check exit 0; 280 fixture outcomes: 279 unsupported, 1 skipped, 0 pass. Documentation and diff checks exit 0. CI and clean-export replication remain to run after push.
+- **Carry-forward:** canonical Codex schema comparison; Codex trusted-project config side effect; exact participant/control claims; M3 distinguishing authentication evidence and missing-credential/cached-login refusal control.
+- **Resources:** bounded read-only MiniMax contract reviewer completed (exit 0); its suggestions are untrusted and checked against PLAN/spec. No real adapter invoked. Historical installed `pio` is a different tool.
+- **Remaining:** implement durable core, Unix participant, fake host, fault matrix, independent spawn observations and J3 mutant; verify on both platforms and update acceptance evidence. No M1 merge/tag/publication authorized.
+- **Next:** commit verified skeleton first, then implement behavior with checkpoint records of base/head. User source attachment remains preserved; no sibling prompt retired.
