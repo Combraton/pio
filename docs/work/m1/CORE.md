@@ -18,6 +18,12 @@ Grants implement bounded delegation, holder/issuer visibility, expiry, authority
 
 The effect store has internal tests for unknown status, overdue waits, abort without changing outcome, replay after restart, and absent versus forgotten history. **Public `core.effects` remains unclaimed:** the pinned effect-producing and effect-lifecycle fixtures require Execution and `executor.script`. Core-test creates no external effects. Those fixtures must run at the next checkpoint before this claim is enabled. There is no invented public test operation or launch control that seeds domain state.
 
+## Journal migration checkpoint
+
+The ADR 002 migration now uses `pio-core::Store` in `journal.sqlite3`. Each changed subject, command result, effect or event is an individual projection record; metadata is separate. One transaction appends the record delta and identical outbox entry and updates projections. A stale cache revision is fenced. Rebuild replays append-only deltas, including retention deletions; command rollback reloads committed projections instead of cloning the entire provider before every command. Legacy blob files are explicitly refused. The provider still caches and scans retained records, an acknowledged memory/performance limit.
+
+Ten Cargo tests and Clippy pass, including failure between projection writes and outbox insertion, rebuild equivalence and stale-writer refusal. The pinned runner reproduces **164 pass / 115 unsupported / 1 skipped**, unchanged from the accepted Core checkpoint. Evidence: `target/journal-checkpoint`; parent design head `c6b5b8f`, base `900bc03`.
+
 ## Pinned-runner results
 
 Implementation progressed in the requested order: stream/authentication/negotiation/core-test, then grants (124 passes), events, capabilities, then the internal effect store. The final local run reports:

@@ -40,6 +40,8 @@ pub struct Invocation {
     pub receipt: Option<Value>,
 }
 
+pub mod projections;
+
 pub struct Store {
     conn: Connection,
 }
@@ -52,16 +54,16 @@ impl Store {
             "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA fullfsync=ON;",
         )?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        ensure!(
-            version == 0 || version == 1,
-            "unsupported store schema {version}"
-        );
+        ensure!(version <= 2, "unsupported store schema {version}");
         conn.execute_batch("BEGIN IMMEDIATE;
             CREATE TABLE IF NOT EXISTS meta (singleton INTEGER PRIMARY KEY CHECK(singleton=1), store_id TEXT NOT NULL, generation INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS invocations (command_id TEXT PRIMARY KEY, state TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS journal (sequence INTEGER PRIMARY KEY AUTOINCREMENT, record TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY REFERENCES journal(sequence), record TEXT NOT NULL);
-            PRAGMA user_version=1; COMMIT;")?;
+            CREATE TABLE IF NOT EXISTS protocol_projection (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS protocol_head (singleton INTEGER PRIMARY KEY CHECK(singleton=1),revision INTEGER NOT NULL);
+            INSERT OR IGNORE INTO protocol_head VALUES(1,0);
+            PRAGMA user_version=2; COMMIT;")?;
         conn.execute(
             "INSERT OR IGNORE INTO meta VALUES (1, ?1, 0)",
             [Uuid::new_v4().to_string()],
@@ -267,7 +269,9 @@ impl Store {
 }
 
 fn append(tx: &rusqlite::Transaction<'_>, mut record: Value) -> Result<()> {
-    record["source"] = json!("fake-host");
+    if record.get("source").is_none() {
+        record["source"] = json!("fake-host");
+    }
     let text = serde_json::to_string(&record)?;
     tx.execute("INSERT INTO journal(record) VALUES (?1)", [&text])?;
     tx.execute(

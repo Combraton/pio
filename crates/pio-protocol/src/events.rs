@@ -83,17 +83,17 @@ impl Provider {
         self.data.events.push(event);
         self.retain_events();
     }
-    pub fn record_changes(&mut self, before: &Data, result: &Value, p: &Value) {
+    pub fn record_changes(
+        &mut self,
+        before: &std::collections::BTreeMap<String, u64>,
+        result: &Value,
+        p: &Value,
+    ) {
         let mut changed: Vec<_> = self
             .data
             .subjects
             .iter()
-            .filter(|(k, s)| {
-                before
-                    .subjects
-                    .get(*k)
-                    .is_none_or(|old| old.revision != s.revision)
-            })
+            .filter(|(k, s)| before.get(*k).is_none_or(|old| *old != s.revision))
             .map(|(_, s)| s.clone())
             .collect();
         changed.sort_by_key(|s| s.subject != p["subject"]);

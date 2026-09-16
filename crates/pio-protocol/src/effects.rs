@@ -33,7 +33,6 @@ impl Provider {
         )
     }
     pub fn expire_obligations(&mut self) -> anyhow::Result<()> {
-        let before = self.data.clone();
         let mut expired = vec![];
         for (id, record) in &mut self.data.effects {
             if record.is_null() {
@@ -67,7 +66,7 @@ impl Provider {
             );
         }
         if let Err(e) = self.save() {
-            self.data = before;
+            self.reload()?;
             return Err(e);
         }
         Ok(())

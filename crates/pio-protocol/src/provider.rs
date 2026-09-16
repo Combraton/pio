@@ -2,7 +2,7 @@ use crate::{encoding, schemas};
 use anyhow::{Context, Result, ensure};
 use chrono::Utc;
 use jsonschema::Validator;
-use rusqlite::Connection;
+use pio_core::Store;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
@@ -110,7 +110,8 @@ pub struct Data {
 pub struct Provider {
     pub config: Value,
     pub data: Data,
-    pub db: Connection,
+    pub store: Store,
+    pub store_revision: u64,
     pub validators: BTreeMap<String, Validator>,
     pub credentials: Vec<(String, String, bool)>,
     pub limits: Value,
@@ -175,30 +176,13 @@ impl Provider {
             );
         }
         std::fs::create_dir_all(root)?;
-        let db = Connection::open(root.join("protocol.sqlite3"))?;
-        db.execute_batch("PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;PRAGMA fullfsync=ON;CREATE TABLE IF NOT EXISTS state (singleton INTEGER PRIMARY KEY CHECK(singleton=1), data TEXT NOT NULL);")?;
-        let prior = db.query_row("SELECT data FROM state WHERE singleton=1", [], |r| {
-            r.get::<_, String>(0)
-        });
-        let data = match prior {
-            Ok(s) => serde_json::from_str(&s)?,
-            Err(rusqlite::Error::QueryReturnedNoRows) => Data {
-                subjects: BTreeMap::new(),
-                commands: BTreeMap::new(),
-                generation: 1,
-                oldest: 1,
-                stream: Uuid::new_v4().to_string(),
-                epoch: 1,
-                sequence: 0,
-                events: vec![],
-                vouches: BTreeMap::new(),
-                discarded: None,
-                cap_revision: 1,
-                predicates: json!([]),
-                effects: BTreeMap::new(),
-            },
-            Err(e) => return Err(e.into()),
-        };
+        ensure!(
+            !root.join("protocol.sqlite3").exists(),
+            "legacy conformance blob store requires explicit migration or a fresh data directory"
+        );
+        let store = Store::open(root)?;
+        let (store_revision, records) = store.protocol_records()?;
+        let data = Data::from_records(&records)?;
         let mut credentials = vec![];
         for c in list(&config["credentials"]) {
             let raw = text(&c["credential"]);
@@ -232,7 +216,8 @@ impl Provider {
         let mut p = Self {
             config,
             data,
-            db,
+            store,
+            store_revision,
             validators,
             credentials,
             limits,
@@ -287,8 +272,16 @@ impl Provider {
             }
         }
     }
-    pub fn save(&self) -> Result<()> {
-        self.db.execute("INSERT INTO state VALUES(1,?1) ON CONFLICT(singleton) DO UPDATE SET data=excluded.data",[serde_json::to_string(&self.data)?])?;
+    pub fn save(&mut self) -> Result<()> {
+        self.store_revision = self
+            .store
+            .commit_protocol(self.store_revision, &self.data.records()?)?;
+        Ok(())
+    }
+    pub fn reload(&mut self) -> Result<()> {
+        let (revision, records) = self.store.protocol_records()?;
+        self.data = Data::from_records(&records)?;
+        self.store_revision = revision;
         Ok(())
     }
     pub fn clock(&mut self, start: bool) -> Result<()> {
@@ -557,7 +550,12 @@ impl Provider {
         if !failed.is_empty() {
             return Err(err("precondition_failed", json!({"failed":failed})));
         }
-        let before = self.data.clone();
+        let before: BTreeMap<String, u64> = self
+            .data
+            .subjects
+            .iter()
+            .map(|(k, s)| (k.clone(), s.revision))
+            .collect();
         let result = self.apply(session, method, p);
         match result {
             Ok(result) => {
@@ -571,7 +569,8 @@ impl Provider {
                     },
                 );
                 if self.fault("commit_unavailable", method) || self.save().is_err() {
-                    self.data = before;
+                    self.reload()
+                        .map_err(|_| err("internal_error", json!({})))?;
                     return Err(err("unavailable", json!({})));
                 }
                 if self.fault("response_internal_error", method) {
@@ -580,7 +579,8 @@ impl Provider {
                 Ok(result)
             }
             Err(e) => {
-                self.data = before;
+                self.reload()
+                    .map_err(|_| err("internal_error", json!({})))?;
                 Err(e)
             }
         }
