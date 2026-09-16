@@ -1,0 +1,78 @@
+{
+  "observed_at": "2026-09-16T04:46:33.649852+00:00",
+  "scope": "readiness inspection, not product runtime",
+  "source_revisions": {
+    "pio": "e65b7c02318e71e848ab7c8b3f8efab3489fb2d2",
+    "combraton": "9af69ce966bfacf0deb03606d99f28a355d1f944",
+    "protocol_local_main": "71ed2c4fcf79c35e6b5c7125f8d15b8925345f4a",
+    "protocol_release": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+    "cbr_observed_main": "32783934b4e52d38a67f4bcc770f16e14b5993e3",
+    "benchmarks": "c8d5878ab655d090942ad613cd932b44b5e62929"
+  },
+  "environment": {
+    "os": "macOS 26.3.1 (a)",
+    "build": "25D771280a",
+    "kernel": "Darwin 25.3.0",
+    "architecture": "arm64",
+    "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+    "cargo": "1.97.1 (c980f4866 2026-06-30)"
+  },
+  "harnesses": {
+    "codex": {
+      "version": "0.146.0",
+      "source_tag": "rust-v0.146.0",
+      "source_commit": "e363b08c9175ac1cbe5893615dd2cb9ddf95043b",
+      "schema_generation_exit": 0,
+      "live_operation": "not_evaluated",
+      "authentication": "unknown"
+    },
+    "claude": {
+      "discovery_version": "2.1.270",
+      "direct_version": "2.1.273",
+      "version_drift_cause": "unknown",
+      "sdk_candidate": "0.2.153",
+      "sdk_source_commit": "763922b0de2c9fb5371504d73ae54cde49536fe1",
+      "sdk_execution": "not_evaluated",
+      "authentication": "unknown"
+    }
+  },
+  "inspection": {
+    "schema_files": 275,
+    "schema_listing_sha256": "631aa18a0f9ee21e0827d0272f020a8ac6c85805da3dc19b8fa4b9f7d9802b56",
+    "binaries": {
+      "codex_launcher": {
+        "sha256": "134063e133f0b4244fa3b251acf973d4fe4b4aeeacbdc135211bf480f59f1477"
+      },
+      "claude_cli": {
+        "sha256": "953e9880dbcb0b70f31c1f508de6a3fd389753d131688557fd992da9184693fb"
+      },
+      "codex_native": {
+        "sha256": "ae1d3ffe6d48aec6a4dc3f50e7eb8e0d11962485a6a9406c5a7012139383da02"
+      }
+    },
+    "sources": {
+      "codex-transport.rs": "471b03308c0e32e5b1be59883330856f7fb3950f97e3d4afeb9f26ea13137712",
+      "claude-python-project.toml": "52b8b84b232b720c274cf78d8b941ec5c7532c4bec5d30777ac185f9e0e7666b",
+      "claude-python-client.py": "feb85541077eb9b059f9a7daebee32b847092321c90ccaa639a288ef275a7bf7",
+      "codex-app-server.md": "8c3c95f538c672340fb83e40792385030c19afb404d65a75aa2ed47e6fb520f2",
+      "claude-python-transport.py": "92eb1ba5291090388c9e845ad82b1a5ad0b1ca11f0abe76175fc55d9ace85f9e"
+    }
+  },
+  "protocol_release_ci": {
+    "run": 35014862971,
+    "conclusion": "success",
+    "head": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+    "source": "GitHub API, not rerun locally"
+  },
+  "review_worker": {
+    "run": "20260916-100652-read-only-pio-implementa-031a",
+    "harness": "pi-m3",
+    "role": "read-only contract review",
+    "status": "done",
+    "exit_code": 0,
+    "tokens_total": 45651,
+    "cost_usd": 0.00953,
+    "limitations": "Shared sources; not independent runtime corroboration. Coordinator rejected unrelated Knowledge/Verification scope expansion and used the user six-journey list."
+  },
+  "runtime_journeys": "not_evaluated"
+}

@@ -1,0 +1,31 @@
+{
+  "format": "pio-protocol-pin/1",
+  "repository": "https://github.com/Combraton/protocol",
+  "release": "https://github.com/Combraton/protocol/releases/tag/v0.1.0",
+  "tag": "v0.1.0",
+  "tag_object": "71856e599200dde618ecd197d985ff230165b71f",
+  "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+  "source_tree": "ad57cc4ef067834c20d868dbcc844f70b8ef223f",
+  "inventory_listing_sha256": "80b39377b10685c29bb5823e69ee539ef91bb1eace5b049f2894b603ce08b41d",
+  "assets": {
+    "combraton-protocol-0.1.0-BUNDLE-SHA256SUMS": "844850ba83110a7e92d7e8c33c74ff3bdb9b40ee23a497ba38ced81f94e49ea3",
+    "combraton-protocol-0.1.0-evidence.tar.gz": "1344e0ba30c6386c3efe3d02b9578dadf5c6e009853a5da4416b4e23c3784f61",
+    "combraton-protocol-0.1.0-source.tar.gz": "bde7892404bcc6fcf45f4cddb95026517e92a6bdf352ce20f959941596a3511d",
+    "release-manifest.json": "af6ce6526c3761f2f75466cf203fb57fcd48c159221462e8f943329655c45358",
+    "release-notes.md": "adf7a17fc9e21359a86eb756bb13d959037b27e56f9cd65facf04c696b32b6d9",
+    "SHA256SUMS": "50b5123513c6c2705501f1e984226ec3d139ca23f3710e1e4ccb8fbddf830e12"
+  },
+  "profiles_served": {
+    "core": 1,
+    "execution": 1
+  },
+  "optional_profiles_consumed": {
+    "context": 1,
+    "evidence": 1
+  },
+  "bindings": {
+    "stream": 1,
+    "encoding": 1
+  },
+  "note": "Contract pin only; no PIO runtime or conformance support claimed."
+}

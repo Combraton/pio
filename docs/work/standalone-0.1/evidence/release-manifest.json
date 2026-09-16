@@ -1,0 +1,66 @@
+{
+  "format": "combraton-release-manifest/1",
+  "tag": "v0.1.0",
+  "version": "0.1.0",
+  "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+  "source_tree": "ad57cc4ef067834c20d868dbcc844f70b8ef223f",
+  "tested_head": "f7e67975dc712bb810d4e14aa0819d980b06dbe3",
+  "tested_head_tree": "ad57cc4ef067834c20d868dbcc844f70b8ef223f",
+  "versions": {
+    "protocol": "0.1",
+    "profiles": {
+      "core": 1,
+      "execution": 1,
+      "evidence": 1,
+      "context": 1,
+      "knowledge": 1,
+      "verification": 1
+    },
+    "bindings": {
+      "stream": 1,
+      "encoding": 1
+    },
+    "combraton-conformance": "0.1.0",
+    "combraton-reference-provider": "0.1.0",
+    "combraton-independent-python-core": "0.1.0",
+    "thirdparty-minimal-executor": "0.1.0",
+    "thirdparty-minimal-publisher": "0.1.0",
+    "rust_toolchain": "1.97.1"
+  },
+  "normative_inventory": {
+    "path": "docs/release/0.1/inventory.json",
+    "files": 420,
+    "listing_sha256": "80b39377b10685c29bb5823e69ee539ef91bb1eace5b049f2894b603ce08b41d"
+  },
+  "bundle": {
+    "asset": "combraton-protocol-0.1.0-source.tar.gz",
+    "sha256": "bde7892404bcc6fcf45f4cddb95026517e92a6bdf352ce20f959941596a3511d",
+    "file_checksums": "combraton-protocol-0.1.0-BUNDLE-SHA256SUMS"
+  },
+  "ci": [
+    {
+      "run": "35012512679",
+      "conclusion": "success",
+      "event": "push",
+      "headSha": "f7e67975dc712bb810d4e14aa0819d980b06dbe3",
+      "url": "https://github.com/Combraton/protocol/actions/runs/35012512679",
+      "workflowName": "Conformance"
+    },
+    {
+      "run": "35012514846",
+      "conclusion": "success",
+      "event": "pull_request",
+      "headSha": "f7e67975dc712bb810d4e14aa0819d980b06dbe3",
+      "url": "https://github.com/Combraton/protocol/actions/runs/35012514846",
+      "workflowName": "Conformance"
+    },
+    {
+      "run": "35014862971",
+      "conclusion": "success",
+      "event": "push",
+      "headSha": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+      "url": "https://github.com/Combraton/protocol/actions/runs/35014862971",
+      "workflowName": "Conformance"
+    }
+  ]
+}

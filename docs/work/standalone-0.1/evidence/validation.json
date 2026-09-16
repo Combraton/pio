@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-09-16T04:52:00.747973+00:00",
+  "base": "e65b7c02318e71e848ab7c8b3f8efab3489fb2d2",
+  "subject": "readiness working tree; exact final commit is in Git/PR history",
+  "checks": [
+    {
+      "command": "python3 scripts/check_docs.py",
+      "exit_code": 0,
+      "stdout": "pio: 18 Markdown files, 70 file links, 0 errors; 32 cross-repository links not checked\nChecks entrypoints, local imports, ordinary file links and fences. Does not validate remote URLs, fragments, Mermaid syntax or product behavior.",
+      "stderr": ""
+    },
+    {
+      "command": "python3 scripts/check_docs.py --workspace ..",
+      "exit_code": 0,
+      "stdout": "pio: 18 Markdown files, 102 file links, 0 errors; 0 cross-repository links not checked\nChecks entrypoints, local imports, ordinary file links and fences. Does not validate remote URLs, fragments, Mermaid syntax or product behavior.",
+      "stderr": ""
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": "python3 scripts/verify_protocol_pin.py --assets \"$PIO_RELEASE_DIR\"",
+      "exit_code": 0,
+      "stdout": "{\n  \"result\": \"pass\",\n  \"scope\": \"release integrity only\",\n  \"tag\": \"v0.1.0\",\n  \"source_commit\": \"cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc\",\n  \"assets_verified\": 6,\n  \"bundle_files_verified\": 539,\n  \"normative_files_verified\": 420,\n  \"inventory_listing_sha256\": \"80b39377b10685c29bb5823e69ee539ef91bb1eace5b049f2894b603ce08b41d\",\n  \"released_inventory_exit\": 0\n}",
+      "stderr": ""
+    }
+  ],
+  "limits": "Documentation/link and release-integrity checks only. No PIO build, conformance, TUI, real-adapter or CBR journey was run.",
+  "initial_docs_check": "During assembly, check_docs reported two missing links to this not-yet-written validation record. Final checks above include the record."
+}

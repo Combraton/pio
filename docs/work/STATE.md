@@ -1,16 +1,17 @@
-# Current session state — pio
+# Current session state — PIO
 
-This is a dated navigation snapshot. Reconcile it with Git, linked issues and current task evidence before acting. Issues own live progress; this file does not grant authority or maintain a second backlog.
+Dated navigation snapshot; reconcile with Git and [issue #1](https://github.com/Combraton/pio/issues/1) before continuing. Issues own live progress; this file grants no authority.
 
-- **Updated:** 2026-09-13T07:48:44+00:00.
-- **Owner/last completed task:** Codex; user-requested prompt lifecycle and session continuity documentation. No runtime implementation task was assigned in this maintenance session. Inspect GitHub before assuming no other tasks exist.
-- **Inspected source revision:** `main` at `cf4aba6e2ed39420cca654e08858f2ac9b37e048`, clean before this documentation change. This snapshot is introduced by the subsequent maintenance commit; use Git history for that commit's identity.
-- **Completed before this change:** repository architecture/development setup and clone verification. Source inventory contains documentation and documentation-check infrastructure; no product runtime is present at the inspected revision.
-- **This change:** explicit prompt lifecycle and human progress-update rules in `AGENTS.md` and `CLAUDE.md`; this restart entrypoint. Shared workflow and handoff-template updates live in Combraton.
-- **Current validation:** `python3 scripts/check_docs.py --workspace ..` and `git diff --check` both exited 0 on the maintenance working tree based on the inspected revision. All five sibling documentation checks passed with no unresolved cross-repository file links. These checks validate documentation structure, not product behavior. Product tests and live harness instruction-loading checks have not been run.
-- **Decisions/uncertainty:** preserve standalone product ownership and the accepted standalone-first sequence. Implementation stack and detailed release-scope choices are not resolved by instruction files. See the [shared release gates](https://github.com/Combraton/combraton/blob/main/docs/STANDALONE-RELEASES.md).
-- **Task resources:** no product process, model worker or test service was started by this maintenance session. Other sessions' resources have not been inventoried; inspect relevant resources on resume.
-- **Prompt disposition:** no existing one-off prompt was completed or deleted by this maintenance task. The workspace-local Protocol kickoff remains active because Protocol implementation has not started here; its owner must update or retire it after use. Reusable repository templates remain templates.
-- **Next action:** Follow the Protocol release readiness decision, then begin the agreed standalone PIO release with a task and pinned Protocol version. Plan the native CLI/TUI and optional public CBR integration without a Combraton dependency.
+- **Updated:** 2026-09-16. **Owner:** Codex, standalone PIO implementation lead.
+- **Task/branch:** standalone 0.1 readiness; `codex/standalone-readiness`, based on clean remote-matching `e65b7c02318e71e848ab7c8b3f8efab3489fb2d2`. Read actual Git/PR head on resume.
+- **Deliverables:** [plan](standalone-0.1/PLAN.md), [proposed stack](../decisions/001-standalone-stack.md), [journeys](../JOURNEYS.md), [Protocol/CBR boundary](standalone-0.1/PROTOCOL.md), [handoff](standalone-0.1/HANDOFF.md).
+- **Protocol correction:** v0.1.0 is released at `cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc`. Tag, manifest/assets, 539 bundle files and 420 normative entries verified. [Pin](../../protocol.lock.json) replaces the earlier pre-release observation; later main is not the contract.
+- **Shared source:** Combraton `9af69ce966bfacf0deb03606d99f28a355d1f944`; other revisions are in the handoff. No sibling repository was edited.
+- **Product status:** readiness only. No runtime, supported adapter, product build or journey pass. Codex 0.146.0 and Claude Code 2.1.273 are validation candidates; authentication unknown. Both remain in the full proposed release.
+- **Owner checkpoint:** stack/hosting and Claude SDK bridge; macOS arm64 + Linux x86_64 scope; Claude authentication route. See [source findings](../decisions/001-standalone-stack.md). License and confirmatory thresholds are later decisions.
+- **Checks:** release verifier and tampered-manifest negative control executed; Codex schema generation succeeded. [Validation](standalone-0.1/evidence/validation.json) records documentation/diff checks. Product journeys remain `not_evaluated`.
+- **Resources:** one read-only MiniMax review worker completed. No PIO product service/host started; unrelated harness processes left alone. Historical installed `pio` is a different program.
+- **Prompt disposition:** user attachment preserved; no owned disposable prompt retired. Separate Protocol kickoff stays under its owner's control.
+- **Next:** owner review of M0 decisions, then M1 core/host/packaging experiments. No merge, tag or release publication authorized here.
 
-At the next meaningful checkpoint replace stale observations with verified current state, preserve consequential history in Git/decision/task records, and link the actual assigned issue, branch, PR and task handoff. Do not accumulate transcripts here. Record exact test commands, exit status, evidence and remaining limitations for the work performed.
+Git preserves previous snapshots; the handoff preserves evidence, limitations and continuation details.

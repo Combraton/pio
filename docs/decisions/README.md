@@ -4,4 +4,6 @@ This directory owns PIO-local implementation decisions. The accepted architectur
 
 Use one small file per meaningful decision. Include title, status (proposed/accepted/superseded), date, owner/authority, concrete problem, affected contracts, alternatives, selected choice, primary evidence or experiment, consequences, verification and superseded sections.
 
+- [PIO ADR 001 — standalone implementation stack](001-standalone-stack.md): proposed 2026-09-16, awaiting owner judgment and bounded experiments. This PIO-local number is distinct from Combraton's cross-system ADR 001.
+
 Wire/compatibility decisions belong in Protocol; cross-system authority changes belong in Combraton. Link the owning decision instead of maintaining independent copies. An experiment result does not silently select a product direction. Keep ordinary local choices lightweight and record material selections in their implementation PR.

@@ -23,13 +23,15 @@ Implement the relevant [protocol](https://github.com/Combraton/protocol) Core/Ex
 
 ## First milestone
 
-After a small shared contract is defined, support one real harness with a usable local interface, durable execution identity and inspectable results. Test interruption, lost acknowledgment, a surviving worker, late/conflicting completion and cancellation races. Then validate a second adapter with different lifecycle behavior. Report actual enforced/mediated/cooperative capabilities by tested version.
+Protocol [v0.1.0](https://github.com/Combraton/protocol/releases/tag/v0.1.0) is released and its exact commit/assets are recorded in [protocol.lock.json](protocol.lock.json). The [standalone readiness plan](docs/work/standalone-0.1/PLAN.md) proposes a Codex-first real-adapter milestone followed by Claude Code; both remain in the full standalone release target. Stack/platform/authentication choices await owner judgment. No PIO runtime or adapter support is established yet.
+
+Test interruption, lost acknowledgment, a surviving worker, late/conflicting completion and cancellation races. Report actual enforced/mediated/cooperative capabilities by tested version. The [journey matrix](docs/JOURNEYS.md) separates real CLI/TUI, recovery and optional CBR evidence.
 
 Develop alongside CBR; neither project waits for the other's complete feature set or the desktop application.
 
 ## Stack and status
 
-Rust/Tokio and SQLite/content-addressed payloads are starting preferences, not installed dependencies. Adapter versions, sandbox backend and usage limits need targeted experiments. Puppetmaster supplies evaluated execution ideas, not an adopted controller/workflow engine.
+Rust/Tokio, SQLite/content-addressed payloads and Ratatui are [proposed choices](docs/decisions/001-standalone-stack.md), not installed dependencies or an accepted implementation. Exact adapter candidates and bounded experiments are recorded there. Puppetmaster supplies evaluated execution ideas, not an adopted controller/workflow engine.
 
 For the shared sequence and self-development boundary, read [BOOTSTRAP](https://github.com/Combraton/combraton/blob/main/BOOTSTRAP.md). No runtime or license is provided by this bootstrap; the repository is public and its project license remains to be selected.
 
