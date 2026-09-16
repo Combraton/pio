@@ -160,13 +160,20 @@ def run_case(case,name):
         before=journal_counts()
         with Client(case.root/'public.sock',case.transcript) as c:
             refused=c.call(submit(100,identity='capacity-refused'))
+            # A command that admits no work uses the hard limit instead.
+            claim=c.call(command('execution.controller.claim',dict(kind='execution.controller',id='durable-fake-host'),{},'capacity-claim'))
         assert refused['error']['data']['code']=='unavailable' and refused['error']['data']['retry']=='same_command',refused
+        assert claim['error']['data']['code']=='unavailable' and claim['error']['data']['retry']=='same_command',claim
         time.sleep(.5)
         with Client(case.root/'public.sock',case.transcript) as c:
             absent=c.query('execution.inspect',{'execution':'capacity-refused'})
         assert absent['error']['data']['code']=='not_found',absent
         log=[json.loads(line.split(': ',1)[1]) for line in stderr_path.read_text().splitlines() if line.startswith('PIO capacity refusal: ')]
-        assert len(log)==1 and log[0]['limit']=='projection_records' and log[0]['maximum']==MAX_PROJECTION_RECORDS and log[0]['projected']>MAX_PROJECTION_RECORDS,log
+        # Near the hard limit a new submit is refused first by the admission
+        # threshold; the claim reaches the hard limit.
+        assert len(log)==2,log
+        assert log[0]['limit']=='admission_projection_records' and log[0]['maximum']==MAX_ADMISSION_PROJECTION_RECORDS and log[0]['projected']>MAX_PROJECTION_RECORDS,log
+        assert log[1]['limit']=='projection_records' and log[1]['maximum']==MAX_PROJECTION_RECORDS and log[1]['projected']>MAX_PROJECTION_RECORDS,log
         after=journal_counts();matches=process_matches()
         assert after==before and after['invocations']==0 and after['refused_rows']==0 and after['projection_records']==MAX_PROJECTION_RECORDS-1,(before,after)
         assert records(case.root/'spawn.jsonl')==[] and matches==[]
@@ -180,7 +187,7 @@ def run_case(case,name):
         control=poll(case.inspect,lambda r:r.get('invocation',{}).get('phase')=='completed' and r['public'].get('result',{}).get('runtime')=='exited')
         spawned=records(case.root/'spawn.jsonl')
         assert len(spawned)==1 and journal_counts()['refused_rows']==0
-        return dict(outcome='pass',baseline_records=baseline,fill=filled,refusal=refused,capacity_log=log,journal_before_refusal=before,journal_after_refusal=after,spawn_count_at_capacity=0,independent_process_table_matches=matches,inspect_refused=absent['error']['data'],shrink=shrunk,positive_control=dict(spawn_count=len(spawned),phase=control['invocation']['phase'],runtime=control['public']['result']['runtime']),generations=dict(first=first,capacity=capacity_start,control=control_start))
+        return dict(outcome='pass',baseline_records=baseline,fill=filled,refusal=refused,claim_refusal=claim,capacity_log=log,journal_before_refusal=before,journal_after_refusal=after,spawn_count_at_capacity=0,independent_process_table_matches=matches,inspect_refused=absent['error']['data'],shrink=shrunk,positive_control=dict(spawn_count=len(spawned),phase=control['invocation']['phase'],runtime=control['public']['result']['runtime']),generations=dict(first=first,capacity=capacity_start,control=control_start))
     if name=='fake_discovery':
         case.start()
         with Client(case.root/'public.sock',case.transcript) as c:
