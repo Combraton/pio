@@ -105,7 +105,10 @@ async fn connection(mut stream: UnixStream, provider: Arc<Mutex<Provider>>) -> R
                 }
                 continue;
             }
-            if frame.iter().all(u8::is_ascii_whitespace) {
+            if frame
+                .iter()
+                .all(|byte| matches!(byte, b' ' | b'\t' | b'\r'))
+            {
                 frame.clear();
                 continue;
             }
@@ -197,6 +200,38 @@ impl Drop for StoreLock {
         use std::os::fd::AsRawFd;
         unsafe {
             libc::flock(self.0.as_raw_fd(), libc::LOCK_UN);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    #[tokio::test]
+    async fn non_json_whitespace_is_a_fatal_parse_error() {
+        for byte in [0x0b, 0x0c] {
+            let root = tempfile::tempdir().unwrap();
+            let provider = Provider::new(
+                root.path(),
+                json!({"format":"combraton-conformance-config/1"}),
+            )
+            .unwrap();
+            let (mut caller, server) = UnixStream::pair().unwrap();
+            let task = tokio::spawn(connection(server, Arc::new(Mutex::new(provider))));
+            caller.write_all(&[byte, b'\n']).await.unwrap();
+            let mut reader = BufReader::new(caller);
+            let mut line = String::new();
+            tokio::time::timeout(Duration::from_secs(2), reader.read_line(&mut line))
+                .await
+                .unwrap()
+                .unwrap();
+            let frame: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(frame["error"]["data"]["code"], "parse_error");
+            assert!(frame["id"].is_null());
+            line.clear();
+            assert_eq!(reader.read_line(&mut line).await.unwrap(), 0);
+            task.await.unwrap().unwrap();
         }
     }
 }

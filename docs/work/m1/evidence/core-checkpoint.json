@@ -1,14 +1,15 @@
 {
   "base": "900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe",
-  "tested_head": "642c56e6c5bc48ce51d9deef55b1d6ba5d6fcab4",
-  "ci_run": "https://github.com/Combraton/pio/actions/runs/35079691494",
+  "tested_head": "5972bee7c4b8f22403393198c2eeede8e76869d0",
+  "ci_run": "https://github.com/Combraton/pio/actions/runs/35080341144",
   "acceptance": "Core implementation checkpoint only; not M1 acceptance",
   "real_adapter": false,
+  "cargo_unit_tests": 8,
   "platforms": [
     {
-      "artifact": "pio-m1-macos-15-arm64-642c56e6c5bc48ce51d9deef55b1d6ba5d6fcab4",
+      "artifact": "pio-m1-macos-15-arm64-5972bee7c4b8f22403393198c2eeede8e76869d0",
       "environment": {
-        "pio_head": "642c56e6c5bc48ce51d9deef55b1d6ba5d6fcab4",
+        "pio_head": "5972bee7c4b8f22403393198c2eeede8e76869d0",
         "pio_dirty": false,
         "os": "Darwin",
         "arch": "arm64",
@@ -66,14 +67,14 @@
         "expected_defense_refusal": 9,
         "expected_classifier_failure": 3
       },
-      "source_tree_sha256": "70d872155df4425895714856f8bf5beaec39752643eeebe625e843c94c374de1",
-      "binary_sha256": "2f413dec300bc30a60bd16065935e04d3367ae523954c8347b877d3ba4522af5",
+      "source_tree_sha256": "905fd6e44821dad1134f2869c56eb721526c6204a07cf0fdea6e21117fa4dc77",
+      "binary_sha256": "e4e2f60b6933ce403b8642dc5d4760b10f766993d2e40c9e1ac7b05313e68a3a",
       "manifest_sha256": "26c591b53cddcde2290b54eee9e3f0c2851bc1b3df50b9e74245fc5bb64f3d4e"
     },
     {
-      "artifact": "pio-m1-ubuntu-24.04-x86_64-642c56e6c5bc48ce51d9deef55b1d6ba5d6fcab4",
+      "artifact": "pio-m1-ubuntu-24.04-x86_64-5972bee7c4b8f22403393198c2eeede8e76869d0",
       "environment": {
-        "pio_head": "642c56e6c5bc48ce51d9deef55b1d6ba5d6fcab4",
+        "pio_head": "5972bee7c4b8f22403393198c2eeede8e76869d0",
         "pio_dirty": false,
         "os": "Linux",
         "arch": "x86_64",
@@ -131,13 +132,13 @@
         "expected_defense_refusal": 9,
         "expected_classifier_failure": 3
       },
-      "source_tree_sha256": "70d872155df4425895714856f8bf5beaec39752643eeebe625e843c94c374de1",
-      "binary_sha256": "26b10ff9963160c335f665b0b5739393fcca07422e7df851014872ef34c9e501",
+      "source_tree_sha256": "905fd6e44821dad1134f2869c56eb721526c6204a07cf0fdea6e21117fa4dc77",
+      "binary_sha256": "58e18f95c3c104691bcf1590c1322c3d80afdeff81be94bab22fe05d822b3390",
       "manifest_sha256": "e4cc6834c836195cab3a707771a253f9f7f32df69740dde7c7bdf99f384f658d"
     }
   ],
   "clean_clone": {
-    "head": "642c56e6c5bc48ce51d9deef55b1d6ba5d6fcab4",
+    "head": "5972bee7c4b8f22403393198c2eeede8e76869d0",
     "platform": "macOS arm64",
     "fresh_protocol_downloads": true,
     "documented_sequence_exit": 0,
