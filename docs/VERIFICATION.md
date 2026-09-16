@@ -25,7 +25,7 @@ The GitHub Actions documentation job runs the first script on pushes and pull re
 
 The [journey-verification matrix](JOURNEYS.md) records the six required journeys and their shared evidence fields. All product journeys remain `not_evaluated` until their actual entry points exist and are exercised. A lower-level test cannot complete a TUI or real-adapter journey.
 
-Prerequisites: Rustup, Python 3.12+, Git, GitHub CLI (`gh`), C compiler/linker and network access. Authenticate `gh` for release asset downloads (CI uses its read-only `GH_TOKEN`). The pinned toolchain is Rust 1.97.1; Cargo.lock is committed. From a clean clone on macOS arm64 or Linux x86_64:
+Prerequisites: Rustup, Python 3.12+, Git, GitHub CLI (`gh`), C compiler/linker and network access. An existing macOS GUI user domain or Linux systemd user manager is required for the packaging lifecycle test (CI checks the actual manager; no substitute process launch). Authenticate `gh` for release asset downloads (CI uses its read-only `GH_TOKEN`). The pinned toolchain is Rust 1.97.1; Cargo.lock is committed. From a clean clone on macOS arm64 or Linux x86_64:
 
 ```sh
 rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
@@ -40,6 +40,7 @@ git diff --exit-code -- Cargo.lock
 python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3
 python3 scripts/public_host_matrix.py --out target/public-host --repetitions 3
 python3 scripts/client_recovery.py --out target/client-recovery
+python3 scripts/packaging_check.py --out target/packaging
 python3 scripts/conformance.py --out target/conformance
 ```
 
@@ -79,17 +80,28 @@ target/debug/pio fake request /tmp/pio-fake-example '{"op":"submit","id":"demo",
 target/debug/pio fake request /tmp/pio-fake-example '{"op":"inspect","id":"demo"}'
 ```
 
-This diagnostic JSON interface is not Core/Execution or an installable product CLI. Every execution is labeled `fake-host`. The child performs only bounded deterministic output and waiting. The journal-backed conformance participant separately implements Core/Execution and scripted discovery/workspaces/usage. Durable caller operations, content-addressed payloads and integration with the surviving-process host remain M1 work. Neither the scripted observations nor the lower-level matrix alone establish the complete public durable-host path. Persistent launch guards and an external controller witness hold detected rollback; comprehensive backup/restore and storage-failure certification remain separate work. Do not remove guard/witness files to bypass a refusal.
+This diagnostic JSON interface is not Core/Execution or an installable product CLI. Every execution is labeled `fake-host`. The child performs only bounded deterministic output and waiting. The journal-backed conformance participant separately implements Core/Execution and scripted discovery/workspaces/usage. Durable caller operations, content-addressed payloads and integration with the surviving-process host are exercised in the public checkpoint below. Neither the scripted observations nor the lower-level matrix alone establish the complete public durable-host path. Persistent launch guards and an external controller witness hold detected rollback; comprehensive backup/restore and storage-failure certification remain separate work. Do not remove guard/witness files to bypass a refusal.
 
 
 ## Public process and caller checkpoint
 
 `target/debug/pio serve-fake --data-dir PRIVATE_DIR --config SERVICE_JSON --socket PRIVATE_DIR/public.sock` serves the public Unix binding independently of terminal stdin. Its explicit local configuration is `{"format":"pio-fake-service/1","protocol":{"format":"combraton-conformance-config/1","principal":"owner","credentials":[{"credential":"ccred1.owner.<43-character-test-token>"}],"executor":{"host_id":"durable-fake-host"}},"fake_host":{"duration_ms":10000,"fault":""}}`. Use an actual 43-character credential suffix. The matrix generates isolated configurations, credentials and stores; none are external provider credentials. `executor.script` is rejected in this mode. The conformance participant continues to use the separately labeled scripted test adapter.
 
-The public process mode supports submit, inspect, reconcile, output and controller claims. Workspace/budget adapter behavior and cancellation are explicitly unavailable there; the five-feature runner claim belongs to the scripted participant, not a native adapter. The shared mutex service loop still serializes commands; durable child ownership is in detached `pio-host` processes. The process daemon also polls independently of connected clients, so detach does not stop observation.
+The public process mode supports submit, inspect, reconcile, output, discovery and controller claims. Workspace/budget adapter behavior and cancellation are explicitly unavailable there; the five-feature runner claim belongs to the scripted participant, not a native adapter. The shared mutex service loop still serializes commands; durable child ownership is in detached `pio-host` processes. The process daemon also polls independently of connected clients, so detach does not stop observation.
 
 `target/debug/pio client submit --store CALLER_DIR --socket PRIVATE_DIR/public.sock --credential-file CREDENTIAL_FILE --request ENVELOPE_JSON [--basis BASIS_JSON]` first commits the exact frozen command envelope and optional user-selected scope/policy basis. `target/debug/pio client reconcile --store CALLER_DIR --socket PRIVATE_DIR/public.sock --credential-file CREDENTIAL_FILE` reconciles pending identities after restart. An empty reconciliation stays pending; it does not create a new command. Use a separate private caller directory. This is a low-level attributed CLI, not the planned TUI or a completed product journey.
 
 Public matrix artifacts include authenticated command/query transcripts, result-schema validation against unchanged vendored schemas, journal/outbox witnesses, child-created spawn/release markers and kernel start identities. The native schema cannot expose those detailed identities in `inspect`; they remain independent artifact witnesses. Each case records attempt/repetition and named property/refusal class. The diagnostic matrix remains separate test tooling.
 
 `client_recovery.py` proves write-before-network on an absent endpoint, no spawn on empty reconciliation, recovery from a committed-but-lost response with one child, real fake-child output/exit, and digest-only output references in the journal. CAS object corruption is a Cargo test. These results do not qualify a real harness, native authentication or any end-to-end journey.
+
+
+## M1 acceptance corrections
+
+The public matrix now has 22 cases × 3 repetitions = 66 attempts. The diagnostic matrix remains 18 × 3 = 54. Public additions cover discovery, a crash between protocol dispatch-marker and host invocation-intent commits (exit 95), an actual admission-before-marker mutant and its wrong-reason control. A read-only journal oracle correlates execution ID to host command identity and compares the first dispatch-intent observation's sequence with invocation intent. Ordinary dispatch cases require exactly one pair. The cut records a marker but no host intent; restart conservatively records ambiguity and never spawns. Journal-sequence witnesses are preserved in `journal-order.json`.
+
+Process-mode discovery reports the built-in labeled fake executable as detected, recognized, version-supported and reachable. Native authentication is **unknown**, so `usable` is false under the frozen all-positive rule. Protocol caller authentication is not harness authentication. Discovery itself spawns no child.
+
+Restart records `execution.recovery.decided` followed by `execution.host.changed`, bound to the advanced controller generation. An existing child retains its original process/slot identity. Pending marker-present work becomes ambiguous until release/absence evidence reconciles it; an already acknowledged release is preserved. The delivery evidence class **`child_release_marker`** means the identified fake child read its release message and wrote its marker. It is not model comprehension or native-provider acknowledgment. Recovery-state names are no longer used as delivery proof classes; the frozen optional `proof_class` enum is not extended or misused.
+
+[Private packaging and user-job prototypes](../packaging/README.md) document layout, collision refusal, uninstall ownership checks, and the exact lifecycle command used in CI. `target/packaging` contains native-manager start/stop evidence and unchanged unrelated-`pio` witnesses.

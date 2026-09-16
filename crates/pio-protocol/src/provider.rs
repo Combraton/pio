@@ -271,9 +271,7 @@ impl Provider {
         p.events_start();
         p.capabilities_start();
         p.save()?;
-        if p.durable.is_none() {
-            p.execution_recover()?;
-        }
+        p.execution_recover()?;
         Ok(p)
     }
     pub fn capabilities_start(&mut self) {
@@ -345,7 +343,11 @@ impl Provider {
     }
     pub fn execution_features(&self) -> &'static [&'static str] {
         if self.durable.is_some() {
-            &["execution.controller", "execution.output"]
+            &[
+                "execution.controller",
+                "execution.output",
+                "execution.discovery",
+            ]
         } else {
             crate::execution::FEATURES
         }

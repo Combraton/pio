@@ -25,7 +25,7 @@ class Client:
         self.file = self.stream.makefile('rb')
         self.transcript = transcript
         self.query('core.authenticate',dict(credential=CREDENTIAL))
-        self.query('core.negotiate',dict(profiles=[dict(name='core',majors=[1],required=True,required_features=FEATURES,optional_features=[]),dict(name='execution',majors=[1],required=True,required_features=['execution.controller','execution.output'],optional_features=[])],caller=dict(name="pio-matrix",version="1"),receive_limits=dict(max_frame_bytes=1048576)))
+        self.query('core.negotiate',dict(profiles=[dict(name='core',majors=[1],required=True,required_features=FEATURES,optional_features=[]),dict(name='execution',majors=[1],required=True,required_features=['execution.controller','execution.output','execution.discovery'],optional_features=[])],caller=dict(name="pio-matrix",version="1"),receive_limits=dict(max_frame_bytes=1048576)))
     def call(self, envelope):
         frame = dict(jsonrpc='2.0',id=str(uuid.uuid4()),method=envelope['operation'],params=envelope)
         self.stream.sendall(json.dumps(frame).encode()+b'\n')

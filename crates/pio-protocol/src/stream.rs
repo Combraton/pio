@@ -56,7 +56,9 @@ fn serve_mode(root: &Path, config: &Path, socket: &Path, durable: bool) -> Resul
                 "replay_relaunch",
                 "replay_without_launch_guard",
                 "replay_without_host_phase",
-                "before_release"
+                "before_release",
+                "after_dispatch_marker",
+                "reorder_dispatch_intent"
             ]
             .contains(&host["fault"].as_str().unwrap_or("")),
             "unsupported host launch fault"

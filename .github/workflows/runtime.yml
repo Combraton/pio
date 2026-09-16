@@ -42,6 +42,13 @@ jobs:
         run: |
           python3 scripts/public_host_matrix.py --out target/public-host --repetitions 3
           python3 scripts/client_recovery.py --out target/client-recovery
+      - name: Start isolated runner user manager
+        if: runner.os == 'Linux'
+        run: |
+          sudo systemctl start "user@$(id -u).service"
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+      - name: Private packaging and native user-job lifecycle
+        run: python3 scripts/packaging_check.py --out target/packaging
       - name: Pinned Protocol runner against PIO
         env:
           GH_TOKEN: ${{ github.token }}
@@ -56,4 +63,5 @@ jobs:
             target/fake-host
             target/public-host
             target/client-recovery
+            target/packaging
           if-no-files-found: error

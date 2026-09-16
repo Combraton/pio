@@ -275,8 +275,9 @@ impl Provider {
                 .map_err(|_| err("unavailable", json!({"reason":"script spool unavailable"})))?;
             e["script_digest"] = digest.into();
         }
-        if self.durable.is_some() {
+        if let Some(host) = &self.durable {
             e["source"] = "fake-host/process".into();
+            e["view"]["host"]["generation"] = host.generation.into();
             if method == "execution.submit"
                 && (p["payload"].get("workspace").is_some() || p["payload"].get("budget").is_some())
             {
@@ -523,6 +524,12 @@ impl Provider {
         Ok(checkpoint)
     }
     fn execution_discovery(&self) -> Value {
+        if self.durable.is_some() {
+            // The adapter is built into this executable and this live controller
+            // is reachable. It has no native authentication probe: unknown is
+            // not a positive fact, even though the Protocol caller authenticated.
+            return json!({"installations":[{"installation_id":"pio-builtin-fake-process","harness":"PIO labeled fake process (no native authentication)","version":env!("CARGO_PKG_VERSION"),"detected":true,"adapter_recognized":"yes","version_supported":"yes","authentication":"unknown","reachable":"yes","last_verified":self.now,"usable":false}]});
+        }
         let installations: Vec<_> = list(&self.config["executor"]["installations"])
             .into_iter()
             .map(|mut i| {
@@ -736,7 +743,11 @@ impl Provider {
     pub fn execution_recover(&mut self) -> anyhow::Result<()> {
         for id in self.data.executions.keys().cloned().collect::<Vec<_>>() {
             let mut e = self.data.executions[&id].clone();
-            if e["view"]["admission"] != "admitted" || e["view"]["delivery"] != "pending" {
+            let pending = e["view"]["delivery"] == "pending";
+            let live_durable = self.durable.is_some()
+                && e["view"]["runtime"] != "exited"
+                && e["view"]["delivery"] != "failed_before_delivery";
+            if e["view"]["admission"] != "admitted" || (!pending && !live_durable) {
                 continue;
             }
             let session = Session {
@@ -766,14 +777,30 @@ impl Provider {
             } else {
                 ("dispatch_resumed", "provably_not_dispatched")
             };
-            e["view"]["host"]["generation"] = (num(&e["view"]["host"]["generation"]) + 1).into();
+            e["view"]["host"]["generation"] = self
+                .durable
+                .as_ref()
+                .map(|host| host.generation)
+                .unwrap_or(num(&e["view"]["host"]["generation"]) + 1)
+                .into();
+            if let Some(host) = &self.durable {
+                let command = pio_core::digest(id.as_bytes());
+                if e["dispatched"] == true
+                    && host.inspect(command.trim_start_matches("sha256:")).is_err()
+                {
+                    e["recovery_no_admit"] = true.into();
+                    e["view"]["runtime"] = "unknown".into();
+                }
+            }
             let recovery = json!({"delivery_id":format!("{id}.delivery-1"),"decision":decision,"reason":reason,"recorded_at":self.now});
             push(&mut e["view"]["recovery"], recovery.clone());
             let mut event = recovery;
             event.as_object_mut().unwrap().remove("recorded_at");
             event["host"] = e["view"]["host"].clone();
             self.execution_event(&mut e, "execution.recovery.decided", event, None);
-            if decision != "dispatch_resumed" {
+            // Reconciliation does not erase an already observed child release.
+            // A pending delivery is made ambiguous before observing the host.
+            if pending && decision != "dispatch_resumed" {
                 if reason == "deadline_passed" {
                     self.overdue_execution(&mut e);
                 }

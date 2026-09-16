@@ -12,10 +12,7 @@ impl Provider {
             "fake-host/provider-clock"
         } else if matches!(
             class,
-            "same_process_observed"
-                | "receipt_recorded"
-                | "not_released_pending"
-                | "uncertain_no_respawn"
+            "child_release_marker" | "release_not_observed" | "release_absence_confirmed"
         ) {
             "fake-host/process"
         } else {
@@ -26,15 +23,39 @@ impl Provider {
     pub(crate) fn run_durable(&mut self, e: &mut Value) -> Result<()> {
         let command = pio_core::digest(text(&e["view"]["execution"]["id"]).as_bytes());
         let command = command.trim_start_matches("sha256:");
-        // Re-running admission is safe: the host's inserted flag is the first
-        // defense, followed by the immutable launch guard and host fences.
-        self.dispatch_marker(e)?;
+        // A persisted marker with no host admission is conservatively ambiguous
+        // after restart. Never infer permission to launch from a missing process.
+        if e["recovery_no_admit"] == true || e["view"]["delivery"] == "failed_before_delivery" {
+            return Ok(());
+        }
         let payload = json!({"duration_ms":self.host_config["duration_ms"]});
         let fault = text(&self.host_config["fault"]).to_owned();
+        let first = e["dispatched"] != true;
+        // Deliberate negative control, available only in labeled fake-service
+        // launch configuration. The journal-sequence oracle must reject it.
+        if first && fault == "reorder_dispatch_intent" {
+            e["host_submission"] =
+                self.durable
+                    .as_ref()
+                    .unwrap()
+                    .submit(command, payload.clone(), "")?;
+        }
+        self.dispatch_marker(e)?;
+        if first && fault == "after_dispatch_marker" {
+            std::process::exit(95);
+        }
+        let host_fault = if matches!(
+            fault.as_str(),
+            "after_dispatch_marker" | "reorder_dispatch_intent"
+        ) {
+            ""
+        } else {
+            &fault
+        };
         let host = self.durable.as_ref().unwrap();
         let current = host.inspect(command).ok();
         if current.is_none() {
-            let result = host.submit(command, payload.clone(), &fault)?;
+            let result = host.submit(command, payload.clone(), host_fault)?;
             e["host_submission"] = result;
         } else if e["mutant_attempted"] != true
             && fault.starts_with("replay_")
@@ -71,22 +92,33 @@ impl Provider {
             "failed_before_delivery"
         } else if observed["release_observed"] == true {
             "acknowledged"
-        } else if observed["recovery"] == "uncertain_no_respawn" {
+        } else if observed["recovery"] == "uncertain_no_respawn"
+            || e["view"]["delivery"] == "ambiguous"
+        {
             "ambiguous"
         } else {
             "pending"
+        };
+        let delivery_class = if observed["release_observed"] == true {
+            "child_release_marker"
+        } else if phase == "known_not_released" {
+            "release_absence_confirmed"
+        } else {
+            "release_not_observed"
         };
         if e["process_observation"] != observed {
             self.delivery_observed(
                 e,
                 determination,
-                text(&observed["class"]),
+                delivery_class,
                 None,
                 matches!(determination, "acknowledged" | "failed_before_delivery"),
-                false,
+                e["view"]["delivery"] == "ambiguous" && determination != "ambiguous",
             );
-            e["view"]["deliveries"][0]["evidence"] = self.host_evidence(text(&observed["class"]));
-            e["view"]["host"]["generation"] = observed["invocation"]["host_generation"].clone();
+            e["view"]["deliveries"][0]["evidence"] = self.host_evidence(delivery_class);
+            // Public generation fences the daemon controller, not the surviving
+            // process slot. The original slot generation stays in its journal fact.
+            e["view"]["host"]["generation"] = self.durable.as_ref().unwrap().generation.into();
             let runtime = if phase == "known_not_released" {
                 "not_started"
             } else if phase == "completed" {
