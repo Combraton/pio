@@ -9,7 +9,7 @@ fn run() -> Result<()> {
             pio_host::IMPLEMENTATION
         ),
         Some("participant") => println!("{}", pio_core::participant()),
-        Some("conformance" | "serve-fake") => {
+        Some("conformance" | "serve-fake" | "serve-codex") => {
             let option = |name: &str| -> Result<&Path> {
                 let index = args
                     .iter()
@@ -19,10 +19,10 @@ fn run() -> Result<()> {
                     args.get(index + 1).context("missing option value")?,
                 ))
             };
-            let serve = if args[0] == "serve-fake" {
-                pio_protocol::serve_fake
-            } else {
-                pio_protocol::serve
+            let serve = match args[0].as_str() {
+                "serve-fake" => pio_protocol::serve_fake,
+                "serve-codex" => pio_protocol::serve_codex,
+                _ => pio_protocol::serve,
             };
             serve(
                 option("--data-dir")?,
@@ -69,6 +69,12 @@ fn run() -> Result<()> {
                 // Labeled offline test double; accepts the `app-server` argument
                 // a real Codex executable receives.
                 Some("fake-app-server") => pio_codex::fake::run()?,
+                // Launched only by the service controller.
+                Some("host") => pio_host::codex::codex_host(
+                    Path::new(args.get(2).context("missing store")?),
+                    args.get(3).context("missing command id")?,
+                    args.get(4).context("missing invocation identity")?,
+                )?,
                 Some("config-snapshot") => println!(
                     "{}",
                     serde_json::to_string_pretty(&pio_codex::config_snapshot(option(

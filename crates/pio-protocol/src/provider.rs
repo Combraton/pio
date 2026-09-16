@@ -212,10 +212,23 @@ impl Provider {
                 execution.get("output").is_none(),
                 "legacy inline output requires explicit migration"
             );
-            ensure!(
-                (execution["source"] == "fake-host/process") == host.is_some(),
-                "cannot switch persisted execution adapter mode"
-            );
+            let persisted = execution["source"].as_str().unwrap_or("");
+            let expected = match host
+                .as_ref()
+                .map(|h| h["adapter"].as_str().unwrap_or("fake"))
+            {
+                None => persisted == pio_host::script::SOURCE,
+                Some("codex") => {
+                    persisted
+                        == if host.as_ref().unwrap()["labeled_fake"] == true {
+                            pio_codex::fake::SOURCE
+                        } else {
+                            "codex-app-server"
+                        }
+                }
+                Some(_) => persisted == "fake-host/process",
+            };
+            ensure!(expected, "cannot switch persisted execution adapter mode");
         }
         let mut credentials = vec![];
         for c in list(&config["credentials"]) {
@@ -381,7 +394,9 @@ impl Provider {
         json!({"oldest_retained":self.data.oldest,"current":self.data.generation})
     }
     pub fn execution_features(&self) -> &'static [&'static str] {
-        if self.durable.is_some() {
+        if self.codex() {
+            crate::codex::FEATURES
+        } else if self.durable.is_some() {
             &[
                 "execution.controller",
                 "execution.output",

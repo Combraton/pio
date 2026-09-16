@@ -43,6 +43,9 @@ impl Provider {
             .unwrap_or("scripted-host")
     }
     pub fn execution_gate(&self, session: &Session, method: &str, p: &Value) -> Result<(), Error> {
+        if self.codex() {
+            self.codex_content(method, p)?;
+        }
         if method == "execution.submit" {
             for (field, feature) in [
                 ("workspace", "execution.workspaces"),
@@ -275,7 +278,28 @@ impl Provider {
                 .map_err(|_| err("unavailable", json!({"reason":"script spool unavailable"})))?;
             e["script_digest"] = digest.into();
         }
-        if let Some(host) = &self.durable {
+        if self.codex() {
+            e["source"] = self.codex_source().into();
+            e["view"]["host"]["generation"] = self.durable.as_ref().unwrap().generation.into();
+            if let Some(extensions) = e["submit"]["extensions"].as_object_mut() {
+                // Content bytes live in the spool by digest, not in the journal.
+                extensions.remove(crate::codex::CONTENT_EXTENSION);
+            }
+            if matches!(method, "execution.steer" | "execution.respond_action") {
+                let mut effects = vec![];
+                let outcome = self.codex_apply(&mut e, method, p, &op, &mut effects)?;
+                self.update_execution(&e);
+                return Ok(
+                    json!({"acknowledgment":{"command_id":p["command_id"],"command_digest":p["command_digest"],"operation_ref":op,"subject":p["subject"],"revision":e["view"]["revision"],"effect_refs":effects},"outcome":outcome,"replay":false}),
+                );
+            }
+            if !matches!(method, "execution.submit" | "execution.cancel") {
+                return Err(err(
+                    "capability_unavailable",
+                    json!({"reason":"not implemented by the Codex adapter"}),
+                ));
+            }
+        } else if let Some(host) = &self.durable {
             e["source"] = "fake-host/process".into();
             e["view"]["host"]["generation"] = host.generation.into();
             if method == "execution.submit"
@@ -328,6 +352,9 @@ impl Provider {
                     }
                 }
                 self.execution_budget(&mut e, p, &mut refusal);
+                if refusal.is_none() && self.codex() {
+                    refusal = self.codex_admission(&mut e, p);
+                }
                 if let Some(reason) = refusal {
                     e["view"]["admission"] = "refused".into();
                     e["view"]["delivery"] = "failed_before_delivery".into();
@@ -524,6 +551,9 @@ impl Provider {
         Ok(checkpoint)
     }
     fn execution_discovery(&self) -> Value {
+        if self.codex() {
+            return self.codex_discovery();
+        }
         if self.durable.is_some() {
             // The adapter is built into this executable and this live controller
             // is reachable. It has no native authentication probe: unknown is

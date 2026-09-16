@@ -1,0 +1,379 @@
+#!/usr/bin/env python3
+"""Offline Codex adapter matrix: `pio serve-codex` over the public Unix API
+driving the labeled fake app-server (never a real Codex, never a live run).
+
+Independent witnesses: the fake app-server's own marker file (spawn, received
+turn input digest, approval answers), the durable host's journal and events
+file read-only, and the OS process table. Every execution is labeled
+`pio-fake-app-server`.
+"""
+import argparse
+from collections import Counter
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import sqlite3
+import subprocess
+import tempfile
+import time
+import uuid
+from public_api import Client, CREDENTIAL, command
+
+ROOT = Path(__file__).resolve().parents[1]
+BINARY = ROOT / 'target/debug/pio'
+CONTENT = 'pio.combraton.dev/content'
+FEATURES = ['execution.controller', 'execution.output', 'execution.discovery', 'execution.workspaces', 'execution.usage', 'execution.actions', 'execution.steering']
+CASES = ['j1_turn_completes', 'approval_decline', 'approval_accept', 'interrupt_cancels_turn', 'steer_acknowledged', 'suppressed_ack_negative_control',
+         'missing_content_refused', 'content_digest_mismatch', 'outside_fixture_refused', 'unqualified_executable_refused', 'restart_reattach_no_duplicate', 'host_lost_no_respawn', 'discovery_reports_observed_authentication']
+
+
+def poll(action, predicate, seconds=20):
+    deadline = time.monotonic() + seconds
+    last = None
+    while time.monotonic() < deadline:
+        try:
+            last = action()
+            if predicate(last):
+                return last
+        except (OSError, ValueError, KeyError):
+            pass
+        time.sleep(0.05)
+    raise AssertionError(f'bounded observation timed out; last={json.dumps(last)[:2000] if last is not None else None}')
+
+
+def digest(data):
+    return 'sha256:' + hashlib.sha256(data).hexdigest()
+
+
+class CodexClient(Client):
+    def __init__(self, path, transcript=None, timeout=10):
+        self.features = FEATURES
+        super().__init__(path, transcript, timeout)
+
+    def query(self, operation, payload):
+        if operation == 'core.negotiate':
+            payload = dict(payload, profiles=[dict(name='core', majors=[1], required=True, required_features=['core.events', 'core.capabilities', 'core.effects'], optional_features=[]),
+                                             dict(name='execution', majors=[1], required=True, required_features=FEATURES, optional_features=[])])
+        return super().query(operation, payload)
+
+
+class Case:
+    def __init__(self, out, name, scenario=None, fake=True):
+        self.name = name
+        self.out = out / name
+        self.out.mkdir(parents=True)
+        self.root = Path(tempfile.mkdtemp(prefix='pio-cx-', dir='/tmp')).resolve()
+        os.chmod(self.root, 0o700)
+        self.store = self.root / 'store'
+        self.fixtures = self.root / 'fixtures'
+        self.codex_home = self.root / 'codex-home'
+        self.markers = self.root / 'markers'
+        for d in (self.fixtures, self.codex_home, self.markers):
+            d.mkdir()
+        self.transcript = self.out / 'public-transcript.jsonl'
+        self.daemons = []
+        self.files = []
+        wrapper = self.root / 'fake-codex'
+        wrapper.write_text(f"#!/bin/sh\nexec '{BINARY}' codex fake-app-server \"$@\"\n")
+        wrapper.chmod(0o755)
+        scenario = dict(scenario or {}, markers=str(self.markers))
+        env = {'PATH': '/usr/bin:/bin', 'HOME': str(self.root), 'CODEX_HOME': str(self.codex_home), 'PIO_CODEX_FAKE_SCENARIO': json.dumps(scenario)}
+        protocol = dict(format='combraton-conformance-config/1', principal='owner', credentials=[dict(credential=CREDENTIAL)], executor=dict(host_id='codex-host'))
+        self.config = dict(format='pio-codex-service/1', protocol=protocol,
+                           codex=dict(executable=str(wrapper), env=env, codex_home=str(self.codex_home), fixture_root=str(self.fixtures),
+                                      thread=dict(sandbox='workspace-write', approvalPolicy='on-request'), labeled_fake=fake))
+        self.config_path = self.root / 'service.json'
+        self.config_path.write_text(json.dumps(self.config))
+
+    def argv(self):
+        return [str(BINARY), 'serve-codex', '--data-dir', str(self.store), '--config', str(self.config_path), '--socket', str(self.root / 'public.sock')]
+
+    def start(self, expect_ready=True):
+        n = len(self.daemons)
+        stdout = (self.out / f'daemon-{n}.stdout').open('w')
+        stderr = (self.out / f'daemon-{n}.stderr').open('w')
+        self.files += [stdout, stderr]
+        daemon = subprocess.Popen(self.argv(), stdout=stdout, stderr=stderr)
+        self.daemons.append(daemon)
+        if expect_ready:
+            poll(lambda: CodexClient(self.root / 'public.sock', self.transcript).query('core.describe', {}), lambda r: 'result' in r)
+        return daemon
+
+    def stop(self, daemon):
+        daemon.kill()
+        daemon.wait(timeout=5)
+
+    def client(self):
+        return CodexClient(self.root / 'public.sock', self.transcript)
+
+    def fixture(self, name='repo'):
+        repo = self.fixtures / name
+        repo.mkdir()
+        (repo / 'README.md').write_text('fixture\n')
+        run = lambda *a: subprocess.run(['git', '-C', str(repo), *a], check=True, capture_output=True, text=True)
+        run('init', '-q')
+        run('-c', 'user.email=pio@example.invalid', '-c', 'user.name=pio', 'add', '.')
+        run('-c', 'user.email=pio@example.invalid', '-c', 'user.name=pio', 'commit', '-q', '-m', 'fixture')
+        return repo, run('rev-parse', 'HEAD').stdout.strip()
+
+    def submit(self, identity='work', brief=b'Fixture task: reply with one line.', content=True, repository=None, tamper=False):
+        repo, base = self.fixture(identity) if repository is None else (repository, 'unused')
+        payload = dict(brief=dict(digest=digest(brief), media_type='text/plain'),
+                       workspace=dict(repository=str(repo), base=base, cleanup='retain'))
+        envelope = command('execution.submit', dict(kind='execution.execution', id=identity), payload, command_id=identity)
+        if content:
+            text = brief.decode() + (' tampered' if tamper else '')
+            envelope['extensions'] = {CONTENT: dict(media_type='text/plain', text=text)}
+        with self.client() as c:
+            return c.call(envelope), repo
+
+    def execution_command(self, operation, identity, payload, command_id, content_bytes=None, media_type=None):
+        with self.client() as c:
+            revision = c.query('execution.inspect', {'execution': identity})['result']['revision']
+            envelope = command(operation, dict(kind='execution.execution', id=identity), payload, command_id=command_id, revision=revision)
+            if content_bytes is not None:
+                envelope['extensions'] = {CONTENT: dict(media_type=media_type, text=content_bytes.decode())}
+            return c.call(envelope)
+
+    def inspect(self, identity='work'):
+        with self.client() as c:
+            return c.query('execution.inspect', {'execution': identity})
+
+    def markers_records(self):
+        path = self.markers / 'fake-app-server.jsonl'
+        return [json.loads(l) for l in path.read_text().splitlines()] if path.exists() else []
+
+    def journal(self):
+        with sqlite3.connect(f'file:{self.store}/journal.sqlite3?mode=ro', uri=True) as db:
+            return [json.loads(r[0]) for r in db.execute('select record from journal order by sequence')], \
+                   [json.loads(r[0]) for r in db.execute('select state from invocations')]
+
+    def app_server_processes(self):
+        table = subprocess.check_output(['ps', '-axww', '-o', 'pid=', '-o', 'command='], text=True)
+        return [l for l in table.splitlines() if str(self.root) in l and ('fake-app-server' in l or 'codex host' in l)]
+
+    def close(self):
+        try:
+            if self.transcript.exists():
+                check = subprocess.run([str(BINARY), 'check-transcript', str(self.transcript)], capture_output=True, text=True)
+                (self.out / 'schema-validation.txt').write_text(check.stdout + check.stderr)
+                assert check.returncode == 0, check.stderr
+            if (self.store / 'journal.sqlite3').exists():
+                journal, invocations = self.journal()
+                (self.out / 'journal.json').write_text(json.dumps(journal, indent=2) + '\n')
+                (self.out / 'invocations.json').write_text(json.dumps(invocations, indent=2) + '\n')
+            for f in list(self.store.glob('codex-*.events.jsonl')) + list(self.store.glob('codex-*.controls.jsonl')) + [self.markers / 'fake-app-server.jsonl']:
+                if f.exists():
+                    (self.out / f.name).write_bytes(f.read_bytes())
+        finally:
+            for line in self.app_server_processes():
+                try:
+                    os.kill(int(line.split()[0]), 9)
+                except (ProcessLookupError, ValueError):
+                    pass
+            for d in self.daemons:
+                if d.poll() is None:
+                    self.stop(d)
+            for f in self.files:
+                f.close()
+
+
+def exited(case, identity='work', seconds=30):
+    return poll(lambda: case.inspect(identity)['result'], lambda v: v['runtime'] == 'exited', seconds)
+
+
+def events_of(case, kind):
+    records = []
+    for f in case.store.glob('codex-*.events.jsonl'):
+        records += [json.loads(l) for l in f.read_text().splitlines() if json.loads(l)['kind'] == kind]
+    return records
+
+
+def run_case(out, name):
+    scenario = dict(
+        approval_decline={'approval': 'command', 'delay_ms': 100},
+        approval_accept={'approval': 'command', 'delay_ms': 100},
+        interrupt_cancels_turn={'delay_ms': 60000},
+        steer_acknowledged={'delay_ms': 60000},
+        suppressed_ack_negative_control={'ack_turn': False, 'delay_ms': 300},
+        restart_reattach_no_duplicate={'delay_ms': 4000},
+        host_lost_no_respawn={'delay_ms': 60000},
+    ).get(name, {'delay_ms': 100})
+    case = Case(out, name, scenario, fake=(name != 'unqualified_executable_refused'))
+    try:
+        if name == 'unqualified_executable_refused':
+            daemon = case.start(expect_ready=False)
+            code = daemon.wait(timeout=60)
+            stderr = (case.out / 'daemon-0.stderr').read_text()
+            assert code == 2 and 'codex_not_qualified' in stderr, (code, stderr)
+            assert case.markers_records() == [] and not (case.root / 'public.sock').exists()
+            qualification = json.loads((case.store / 'qualification.json').read_text())
+            return dict(outcome='pass', exit=code, refusals=qualification['refusals'], app_server_spawned=False, native_work=False)
+        case.start()
+        if name == 'discovery_reports_observed_authentication':
+            with case.client() as c:
+                before = c.query('execution.discovery.list', {})['result']['installations'][0]
+            assert before['authentication'] == 'unknown' and before['usable'] is False and before['adapter_recognized'] == 'no', before
+            case.submit()
+            exited(case)
+            with case.client() as c:
+                after = c.query('execution.discovery.list', {})['result']['installations'][0]
+            assert after['authentication'] == 'authenticated' and after['reachable'] == 'yes' and after['last_verified'], after
+            assert after['usable'] is False, 'a labeled fake is never usable Codex'
+            return dict(outcome='pass', before=before, after=after)
+        if name in ('missing_content_refused', 'outside_fixture_refused'):
+            if name == 'outside_fixture_refused':
+                outside = Path(tempfile.mkdtemp(prefix='pio-cx-outside-', dir='/tmp'))
+                response, _ = case.submit(repository=outside)
+            else:
+                response, _ = case.submit(content=False)
+            outcome = response['result']['outcome']
+            assert outcome['admission'] == 'refused' and outcome['reason'] == 'capability_unavailable', response
+            time.sleep(0.5)
+            assert case.markers_records() == [] and case.journal()[1] == [], 'no app-server, no host admission'
+            return dict(outcome='pass', admission=outcome, spawn_markers=0, invocations=0)
+        if name == 'content_digest_mismatch':
+            response, _ = case.submit(tamper=True)
+            data = response['error']['data']
+            assert data['code'] == 'invalid_envelope' and data['details']['path'] == '/extensions/pio.combraton.dev~1content', response
+            assert case.markers_records() == []
+            return dict(outcome='pass', refusal=data, spawn_markers=0)
+
+        brief = b'Fixture task: reply with one line.'
+        response, repo = case.submit(brief=brief)
+        assert response['result']['outcome']['admission'] == 'admitted', response
+        if name == 'restart_reattach_no_duplicate':
+            view = poll(lambda: case.inspect()['result'], lambda v: v['delivery'] == 'acknowledged')
+            before = case.journal()[1][0]
+            case.stop(case.daemons[-1])
+            case.start()
+            final = exited(case)
+            after = case.journal()[1][0]
+            received = [m for m in case.markers_records() if m['kind'] == 'turn_received']
+            spawned = [m for m in case.markers_records() if m['kind'] == 'spawned']
+            assert len(received) == 1 and len(spawned) == 1, case.markers_records()
+            assert after['host'] == before['host'] and after['child'] == before['child'] and after['invocation_id'] == before['invocation_id']
+            assert final['delivery'] == 'acknowledged' and final['exit'] == {'code': 0}
+            assert final['host']['generation'] > view['host']['generation']
+            return dict(outcome='pass', spawn_markers=len(spawned), turn_received=len(received), host_identity=after['host'], child_identity=after['child'],
+                        generations=dict(before=view['host']['generation'], after=final['host']['generation']), recovery=final['recovery'])
+        if name == 'host_lost_no_respawn':
+            poll(lambda: case.inspect()['result'], lambda v: v['delivery'] == 'acknowledged')
+            state = case.journal()[1][0]
+            case.stop(case.daemons[-1])
+            for identity in (state['host'], state['child']):
+                os.kill(identity['pid'], 9)
+            for line in case.app_server_processes():
+                os.kill(int(line.split()[0]), 9)
+            time.sleep(0.3)
+            case.start()
+            view = poll(lambda: case.inspect()['result'], lambda v: v['runtime'] == 'unknown', 30)
+            time.sleep(1)
+            spawned = [m for m in case.markers_records() if m['kind'] == 'spawned']
+            received = [m for m in case.markers_records() if m['kind'] == 'turn_received']
+            assert len(spawned) == 1 and len(received) == 1, case.markers_records()
+            assert view['delivery'] == 'acknowledged' and view['exit'] == 'unavailable', view
+            assert case.app_server_processes() == []
+            return dict(outcome='pass', runtime=view['runtime'], delivery=view['delivery'], spawn_markers=1, turn_received=1, recovery=view['recovery'], respawned=False)
+        if name == 'suppressed_ack_negative_control':
+            final = exited(case)
+            delivery = final['deliveries'][0]
+            assert final['delivery'] != 'acknowledged' and 'proof_class' not in delivery, final
+            assert events_of(case, 'turn_acknowledged') == [] and len(events_of(case, 'turn_completed')) == 1
+            return dict(outcome='pass', control='suppressed_native_turn_ack', property='acknowledged_requires_native_turn_ack', observed_delivery=final['delivery'], turn_completed_without_ack=True)
+        if name in ('approval_decline', 'approval_accept'):
+            decision = 'decline' if name == 'approval_decline' else 'accept'
+            waiting = poll(lambda: case.inspect()['result'], lambda v: v['runtime'] == 'requires_action')
+            action = waiting['runtime_detail']['action_id']
+            assert waiting['actions'][0]['state'] == 'pending'
+            response_bytes = json.dumps({'decision': decision}).encode()
+            answered = case.execution_command('execution.respond_action', 'work', dict(action_id=action, response=dict(digest=digest(response_bytes), media_type='application/json')), 'answer', response_bytes, 'application/json')
+            assert answered['result']['outcome']['state'] == 'answered', answered
+            effect = answered['result']['outcome']['response_effect']
+            final = exited(case)
+            answers = [m for m in case.markers_records() if m['kind'] == 'approval_answered']
+            assert [a['decision'] for a in answers] == [decision], answers
+            items = [e for e in events_of(case, 'item_completed') if e['item_id'] == 'item-approval']
+            assert items and items[0]['status'] == ('completed' if decision == 'accept' else 'declined'), items
+            with case.client() as c:
+                record = c.query('core.effects.get', {'effect': effect})['result']
+            assert record['status'] == 'succeeded' and record['observations'][-1]['evidence']['class'] == 'native_request_resolved', record
+            wrong = case.execution_command('execution.respond_action', 'work', dict(action_id=action, response=dict(digest=digest(response_bytes), media_type='application/json')), 'answer-again', response_bytes, 'application/json')
+            assert wrong['error']['data']['code'] == 'not_found', wrong
+            return dict(outcome='pass', action=action, decision=decision, native_answers=answers, item_status=items[0]['status'], response_effect=record['status'], repeat_answer=wrong['error']['data']['code'])
+        if name == 'interrupt_cancels_turn':
+            poll(lambda: case.inspect()['result'], lambda v: v['delivery'] == 'acknowledged')
+            cancel = case.execution_command('execution.cancel', 'work', {}, 'cancel')
+            assert 'result' in cancel, cancel
+            final = exited(case)
+            assert final['cancellation']['outcome'] == 'cancelled', final
+            assert [e['status'] for e in events_of(case, 'turn_completed')] == ['interrupted']
+            return dict(outcome='pass', cancellation=final['cancellation'], turn_status='interrupted')
+        if name == 'steer_acknowledged':
+            poll(lambda: case.inspect()['result'], lambda v: v['delivery'] == 'acknowledged')
+            message = b'Also mention the fixture name.'
+            steer = case.execution_command('execution.steer', 'work', dict(message=dict(digest=digest(message), media_type='text/plain')), 'steer', message, 'text/plain')
+            assert steer['result']['outcome']['request'] == 'recorded', steer
+            view = poll(lambda: case.inspect()['result'], lambda v: v.get('steering') and v['steering'][0]['delivery'] == 'acknowledged')
+            entry = view['steering'][0]
+            assert entry['proof_class'] == 'provider_ack_id' and entry['behavior'] == 'not_observed', entry
+            case.execution_command('execution.cancel', 'work', {}, 'cancel')
+            exited(case)
+            return dict(outcome='pass', steering=entry)
+        # j1_turn_completes
+        final = exited(case)
+        delivery = final['deliveries'][0]
+        assert final['delivery'] == 'acknowledged' and delivery['proof_class'] == 'provider_ack_id', final
+        assert final['exit'] == {'code': 0} and final['usage']['observations'][0]['amount'] == 42 and final['usage']['liability'] == 'resolved', final
+        received = [m for m in case.markers_records() if m['kind'] == 'turn_received']
+        assert len(received) == 1 and 'sha256:' + received[0]['input_sha256'] == digest(brief), received
+        with case.client() as c:
+            output = c.query('execution.output.read', {'execution': 'work', 'offset': 0})['result']
+        import base64
+        text = base64.b64decode(output['data_base64']).decode()
+        assert 'fake agent reply' in text, text
+        diff = events_of(case, 'config_after')[0]['diff']
+        assert [p['location'] for p in diff['projects_added']] == ['fixture'] and diff['other_changes'] is False, diff
+        thread = events_of(case, 'thread_started')[0]
+        assert thread['sandbox']['type'] == 'workspaceWrite' and thread['model_provider'] == 'pio-fake'
+        # The host commits its completed phase just after the exit observation.
+        invocations = poll(lambda: case.journal()[1], lambda i: len(i) == 1 and i[0]['phase'] == 'completed')
+        journal = case.journal()[0]
+        assert 'Fixture task' not in json.dumps(journal), 'brief bytes must not enter the journal'
+        return dict(outcome='pass', delivery=delivery, exit=final['exit'], usage=final['usage'], received_input_matches_brief=True, output_bytes=len(text),
+                    config_diff=diff, thread=dict(sandbox=thread['sandbox']['type'], model=thread['model'], provider=thread['model_provider']),
+                    source=final['deliveries'][0]['evidence']['source'])
+    finally:
+        case.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--repetitions', type=int, default=1)
+    parser.add_argument('--case', choices=CASES)
+    args = parser.parse_args()
+    args.out.mkdir(parents=True, exist_ok=False)
+    results = []
+    for name in ([args.case] if args.case else CASES):
+        for repetition in range(1, args.repetitions + 1):
+            result = dict(case=name, repetition=repetition, source='pio-fake-app-server', real_codex=False, attempted=1)
+            try:
+                result.update(run_case(args.out / f'rep-{repetition}', name))
+            except Exception as error:
+                result.update(outcome='harness_or_assertion_failure', reason=f'{type(error).__name__}: {error}')
+            results.append(result)
+            print(name, repetition, result['outcome'], result.get('reason', ''), flush=True)
+    counts = dict(Counter(r['outcome'] for r in results))
+    report = dict(format='pio-codex-host-matrix/1', source='pio-fake-app-server', real_codex=False, live_tokens=0,
+                  head=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+                  dirty=bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT)), platform=platform.platform(),
+                  binary_sha256=hashlib.sha256(BINARY.read_bytes()).hexdigest(), attempted=len(results), repetitions=args.repetitions, counts=counts, results=results)
+    (args.out / 'matrix.json').write_text(json.dumps(report, indent=2) + '\n')
+    assert set(counts) <= {'pass', 'expected_property_failure'}, counts
+
+
+if __name__ == '__main__':
+    main()

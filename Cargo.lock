@@ -685,6 +685,7 @@ version = "0.1.0-dev"
 dependencies = [
  "anyhow",
  "libc",
+ "pio-codex",
  "pio-core",
  "serde",
  "serde_json",
@@ -700,6 +701,7 @@ dependencies = [
  "chrono",
  "jsonschema",
  "libc",
+ "pio-codex",
  "pio-core",
  "pio-host",
  "rusqlite",

@@ -18,19 +18,119 @@ use tokio::{
 };
 
 pub fn serve(root: &Path, config: &Path, socket: &Path) -> Result<()> {
-    serve_mode(root, config, socket, false)
+    serve_mode(root, config, socket, Mode::Conformance)
 }
 pub fn serve_fake(root: &Path, config: &Path, socket: &Path) -> Result<()> {
-    serve_mode(root, config, socket, true)
+    serve_mode(root, config, socket, Mode::FakeProcess)
 }
-fn serve_mode(root: &Path, config: &Path, socket: &Path, durable: bool) -> Result<()> {
+pub fn serve_codex(root: &Path, config: &Path, socket: &Path) -> Result<()> {
+    serve_mode(root, config, socket, Mode::Codex)
+}
+#[derive(PartialEq)]
+enum Mode {
+    Conformance,
+    FakeProcess,
+    Codex,
+}
+/// Validate a `pio-codex-service/1` configuration and qualify the selected
+/// executable before any native work. A labeled fake app-server skips
+/// qualification and is reported as not Codex.
+fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
+    let object = codex.as_object().context("codex settings object")?;
+    for name in object.keys() {
+        anyhow::ensure!(
+            [
+                "executable",
+                "env",
+                "codex_home",
+                "fixture_root",
+                "thread",
+                "labeled_fake"
+            ]
+            .contains(&name.as_str()),
+            "unsupported codex setting: {name}"
+        );
+    }
+    for name in ["executable", "codex_home", "fixture_root"] {
+        anyhow::ensure!(
+            codex[name]
+                .as_str()
+                .is_some_and(|p| Path::new(p).is_absolute()),
+            "codex.{name} must be an absolute path"
+        );
+    }
+    let env = codex["env"].as_object().context("codex.env object")?;
+    anyhow::ensure!(
+        env.values().all(Value::is_string) && env.contains_key("PATH"),
+        "codex.env needs string values including PATH"
+    );
+    if let Some(thread) = codex["thread"].as_object() {
+        for (name, value) in thread {
+            anyhow::ensure!(
+                ["sandbox", "approvalPolicy"].contains(&name.as_str()),
+                "unsupported codex.thread setting: {name}"
+            );
+            // Never select full access or disable approvals on the user's behalf.
+            anyhow::ensure!(
+                !matches!(value.as_str(), Some("danger-full-access" | "never")),
+                "codex.thread.{name} value is not permitted: {value}"
+            );
+        }
+    }
+    let mut host = codex.clone();
+    host["adapter"] = "codex".into();
+    if codex["labeled_fake"] == true {
+        host["qualification_binding"] = Value::Null;
+        return Ok(host);
+    }
+    let expected: Value = serde_json::from_str(pio_codex::QUALIFIED_SCHEMA_IDENTITY)?;
+    let record = pio_codex::qualify(
+        Path::new(codex["executable"].as_str().unwrap()),
+        &expected,
+        env["PATH"].as_str().map(std::ffi::OsStr::new),
+        &root.join("qualification"),
+    )?;
+    std::fs::write(
+        root.join("qualification.json"),
+        serde_json::to_vec_pretty(&record)?,
+    )?;
+    anyhow::ensure!(
+        record["qualified"] == true,
+        "codex_not_qualified: {}",
+        record["refusals"]
+    );
+    let resolution = &record["resolution"];
+    host["qualification_binding"] = json!({
+        "native_path":resolution["native"]["path"],
+        "native_sha256":resolution["native"]["sha256"],
+        "wrapper_sha256":resolution["wrapper"]["sha256"],
+        "node_sha256":resolution["node"]["sha256"],
+        "canonical_listing_sha256":record["schema"]["canonical_listing_sha256"],
+    });
+    Ok(host)
+}
+fn serve_mode(root: &Path, config: &Path, socket: &Path, mode: Mode) -> Result<()> {
+    let durable = mode != Mode::Conformance;
     if durable {
         pio_host::secure_root(root)?;
     }
     pio_host::secure_root(socket.parent().context("socket parent")?)?;
     let _lock = StoreLock::acquire(root)?;
     let config: Value = serde_json::from_slice(&std::fs::read(config)?)?;
-    let provider = if durable {
+    let provider = if mode == Mode::Codex {
+        anyhow::ensure!(
+            config["format"] == "pio-codex-service/1",
+            "invalid codex service config"
+        );
+        let protocol = config["protocol"].clone();
+        anyhow::ensure!(
+            protocol["executor"]["scripts"].is_null()
+                && protocol["executor"]["default_script"].is_null(),
+            "executor.script is conformance-only"
+        );
+        let host = codex_host_config(root, &config["codex"])?;
+        Provider::with_host(root, protocol, Some(host))?
+    } else if durable {
         anyhow::ensure!(
             config["format"] == "pio-fake-service/1",
             "invalid fake service config"

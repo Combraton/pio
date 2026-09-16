@@ -40,6 +40,7 @@ git diff --exit-code -- Cargo.lock
 python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3
 python3 scripts/public_host_matrix.py --out target/public-host --repetitions 3
 python3 scripts/client_recovery.py --out target/client-recovery
+python3 scripts/codex_host_matrix.py --out target/codex-host --repetitions 3
 python3 scripts/packaging_check.py --out target/packaging
 python3 scripts/conformance.py --out target/conformance
 ```
@@ -121,3 +122,22 @@ The public matrix adds `capacity_refusal_no_spawn` (23 cases × 3 = 69 attempts 
 Cargo tests (with labeled fake executables, so CI needs no Codex) cover canonical JSON, parsed-equal/raw-different acceptance, changed/added/removed schema refusal naming files, the isolated `CODEX_HOME`, an unsupported version never receiving Codex arguments, a missing executable refused as data, three npm wrapper layouts, the checked-in identity's own listing digest, and configuration trust-entry disclosure.
 
 `python3 scripts/codex_offline_probe.py --executable PATH --out FRESH_DIR` needs an installed Codex and is not part of CI. It qualifies, then sends only `initialize` and `thread/start` for a throwaway fixture repository under an isolated `CODEX_HOME` with credential variables removed, and records the configuration difference. Workstation evidence and findings are in [codex-qualification](work/m2/codex-qualification/README.md). None of this is a live run, real journey or model-backed result.
+
+## M2 Codex adapter offline matrix
+
+`target/debug/pio serve-codex --data-dir DIR --config FILE --socket PATH` serves the public Unix API with the ADR 003 Codex adapter. A `pio-codex-service/1` configuration names the selected executable, its explicit environment, the Codex home, the fixture root, and optional thread settings (`danger-full-access` and approval policy `never` are refused). For a real executable, startup qualifies it and refuses with `codex_not_qualified` before any native work. `labeled_fake: true` runs the labeled test double `pio codex fake-app-server` instead; its evidence is labeled `pio-fake-app-server`, and discovery reports it as not Codex and never usable.
+
+`python3 scripts/codex_host_matrix.py --out target/codex-host --repetitions 3` runs 13 cases × 3 (39 attempts) against the fake app-server, with independent markers written by the fake, read-only journal and host events, and the process table:
+
+- a J1-shaped turn: `provider_ack_id` delivery from the `turn/start` response, spooled output, observed token usage, exit 0, fixture trust-entry disclosure, and brief bytes kept out of the journal;
+- approval decline and accept delivered natively, with a repeat answer `not_found`;
+- interrupt observed as `cancelled`;
+- steering acknowledged with behavior `not_observed`;
+- the suppressed-acknowledgment control never claiming `acknowledged`;
+- a missing brief, a fixture outside the root, and a content digest mismatch refused before any app-server starts;
+- an unqualified executable refused at service start;
+- daemon restart with the same host and app-server, one turn and an advanced generation;
+- a lost host after acknowledgment reported `unknown` with no respawn;
+- discovery reporting authentication only after a launch observed it.
+
+The matrix proves adapter plumbing only. It runs no real Codex, uses no model and establishes no journey.
