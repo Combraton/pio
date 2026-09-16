@@ -1,6 +1,6 @@
 # Standalone journey verification
 
-Status: planned, 2026-09-16; **all product journeys are `not_evaluated`**. No PIO runtime exists at the readiness base. Use the shared [verification model](https://github.com/Combraton/combraton/blob/9af69ce966bfacf0deb03606d99f28a355d1f944/docs/architecture/VERIFICATION.md), not a new verification protocol. [Release plan](work/standalone-0.1/PLAN.md) maps these journeys to milestones; [verification commands](VERIFICATION.md) distinguish documentation/integrity from runtime evidence.
+Status: planned, 2026-09-16; **all product journeys are `not_evaluated`**. No PIO runtime existed at the readiness base, and no real harness has run through PIO as of M2 start (`9cf7047`). Harness test scope per the owner amendment: Codex, Claude Code, OpenCode and Hermes Agent. Use the shared [verification model](https://github.com/Combraton/combraton/blob/9af69ce966bfacf0deb03606d99f28a355d1f944/docs/architecture/VERIFICATION.md), not a new verification protocol. [Release plan](work/standalone-0.1/PLAN.md) maps these journeys to milestones; [verification commands](VERIFICATION.md) distinguish documentation/integrity from runtime evidence.
 
 ## Record each real run
 
@@ -9,7 +9,8 @@ Store a small run record and redacted artifacts under the owning task's evidence
 Every record must contain:
 
 - User intent, success criteria, contract revision and required properties by shared layer: static/build, component, integration, journey, runtime path, qualitative/domain.
-- Actual CLI command or TUI entry action; prerequisites and environment: OS/architecture, terminal/size, repository/base/dirty snapshot, selected grant and restrictions, model/provider and authentication class without secrets.
+- Actual CLI command or TUI entry action; prerequisites and environment: OS/architecture, terminal/size, repository/base/dirty snapshot, selected grant and restrictions, the model/provider that actually served the run as observed from the harness (PIO never selects or injects one), and authentication class/route without secrets.
+- Token usage from the harness's own reports, counted against the owner's per-harness cap in [PLAN](work/standalone-0.1/PLAN.md#owner-amendment-after-m1-acceptance-2026-09-16); missing usage is unknown liability, never zero. Harness configuration digests before and after the run where the harness writes durable configuration, with raw snapshots kept outside Git.
 - Exact PIO Git commit **and dirty-tree digest if applicable**, build/artifact hash, Protocol pin, adapter version, resolved harness version/binary hash and configuration identity. A source SHA alone is not runtime identity.
 - Correlated test-run, caller command/request, execution, invocation/effect/delivery, native session/turn, installation/store incarnation, host slot/process-start generation, controller epoch, workspace lease and completion identities. Use `unavailable` with a reason where the adapter exposes none; do not fabricate IDs.
 - Ordered steps; expected visible and durable outcomes; actual observations with timestamps/cursors; artifact paths/digests and exact reproducible commands with exit status. Redact credentials and private task content without hiding capture gaps.

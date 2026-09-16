@@ -1,18 +1,47 @@
 # Current session state — PIO
 
-Dated snapshot; reconcile Git with [M1 issue #3](https://github.com/Combraton/pio/issues/3) and [draft PR #4](https://github.com/Combraton/pio/pull/4). Issues own live progress.
+Dated snapshot; reconcile Git with [M2 issue #5](https://github.com/Combraton/pio/issues/5) and the [M2 task packet](m2/TASK.md). Issues own live progress.
 
-- **Updated:** 2026-09-16. **Owner:** Codex, standalone PIO implementation lead.
-- **Branch/base/head:** `codex/m1-core-host`, one implementation worktree; base `900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe`. **Tested implementation head:** `7b05342cbcaaa1813b2da02cf6bdb01a1ddc2673` (corrections `52e1240`, reconciliation follow-up `7b05342`). **Accepted milestone head:** `2048e84b0e77b258444f8f30333f4b76584cdccc`. This final documentation-only successor records owner acceptance and prepares the fresh-session handoff; its own SHA is in Git/PR history. No sibling repository modified.
-- **Owner verdict:** M0 accepted and merged. **M1 accepted by the owner at `2048e84`**, after reproducing the full documented sequence from a clean clone, actual launchd start/stop on a workstation, both CI platforms and an independent reorder mutant killed on the named ordering property. [Acceptance record on issue #3](https://github.com/Combraton/pio/issues/3#issuecomment-5699087663); [unchanged report and acceptance mapping](m1/ACCEPTANCE-CORRECTIONS.md).
-- **Authority:** [PLAN](standalone-0.1/PLAN.md), [ADR 001](../decisions/001-standalone-stack.md), [ADR 002](../decisions/002-protocol-journal.md), issue #3. Shared architecture inspected at `9af69ce966bfacf0deb03606d99f28a355d1f944`; Protocol pin `cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc`.
-- **Corrections:** journal-sequence ordering oracle, actual reordering mutant, crash cut between commits (exit 95), wrong-reason crash control; truthful process discovery; collision-safe private packaging and user jobs; durable recovery/host-change events; distinct `child_release_marker` evidence and frozen reconciliation outcomes. Parked recovery does not reopen ambiguity. No schema changes.
-- **Evidence:** [CI 35096491269](https://github.com/Combraton/pio/actions/runs/35096491269) is green on macOS 15 arm64 and Ubuntu 24.04 x86_64 at `7b05342`. A fresh HTTPS clone at that head completes the exact documented sequence with fresh stores/downloaded assets, exit 0. **20 Cargo tests**, fmt, build, Clippy, docs and lockfile checks pass; all 64 vendored schemas match. [Receipt index](m1/evidence/acceptance-corrections.json).
-- **Runner:** **206 pass / 73 unsupported / 1 skipped**, zero fail/timeout/harness_error; two supplemental passes separately. Core 134 pass/1 unsupported, stream 24 pass, socket 12 pass/1 unsupported, Execution 36 pass/15 unsupported; other directory classes and explicit reasons in report. All 280 official classes agree across clone and CI.
-- **Matrices:** public **66 attempted = 45 pass + 6 intended property failures + 9 named defense refusals + 6 expected classifier failures**; diagnostic **54 attempted = 39 + 3 + 9 + 3**. Three repetitions per case; every class agrees across all three environments. Public API plus read-only journal/kernel witnesses; no process acceptance case depends only on diagnostics.
-- **Caller/packaging:** caller recovery proves one child and digest-only output journal references. Actual launchd/systemd user-job start/stop passes; installed alias collision and modified binary/manifest refusals preserve unrelated `pio`, config and state. Packaging remains a skeleton with documented interruption/partial-uninstall limits.
-- **Limits:** fake-process discovery reports native authentication unknown and usability false. No real harness, native authentication or end-to-end journey; **all six journeys remain `not_evaluated`**. Process cancellation/workspace/usage adapters remain unavailable; scripted feature conformance is separate. Protocol #9 and undeclared subscription recheck barrier remain coverage limits; Protocol #10 explains typed witness limits. No release, throughput, total spool/disk or universal exactly-once claim.
-- **Carry-forward:** before M2 enforce ADR 002's 32 MiB / 32,768-record commit bound; canonical-JSON drift checks and Codex trust-config side effect; M3 credential-source observation and refusal without configured credentials despite cached login. No M2 implementation started.
-- **Resources/next:** read-only helpers completed; test-owned processes and user jobs stopped. Temporary clean clones/stores/artifacts remain outside Git. Next is separately authorized PR #4 merge, then close issue #3 and open the M2 issue linking the [durable task packet](m2/TASK.md). The [fresh-session kickoff](m2/KICKOFF.md) prepares a new builder; **do not start M2 in this session**. M2 base SHA remains pending the actual merge; observed pre-merge main is `900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe`, not the M2 base. PR remains draft; no M1 merge/tag/publication authorization. User source attachment preserved. Historical receipts remain linked from [PUBLIC-HOST](m1/PUBLIC-HOST.md).
+- **Updated:** 2026-09-16. **Owner:** Claude Code session, standalone PIO M2 builder (assigned by the owner). Independent review and owner acceptance remain separate.
+- **Task:** M2 — Codex 0.146.0 app-server adapter with real J1/J3/J4/J5. Issue [#5](https://github.com/Combraton/pio/issues/5).
+- **Branch/base/head:** `codex/m2-codex-app-server` in the single `pio-m2` worktree. **Base `9cf70474c28f549650e6b48e8be20ae88426a1b0`**, the merge of [PR #4](https://github.com/Combraton/pio/pull/4) on main. Its tree equals reviewed head `a34c408864e8f87abefd6d820518902b31b6a724`, and accepted M1 head `2048e84b0e77b258444f8f30333f4b76584cdccc` is an ancestor. The branch started at `9cf7047`; its first commit is documentation only (owner decisions, MIT LICENSE, records), and its SHA is in Git history. The earlier `pio` and `pio-m1` worktrees are preserved; no sibling repository modified.
+- **Transitions done:** owner authorized the PR #4 merge; it was merged with `--match-head-commit a34c408` after both CI workflows passed on that head (push and pull_request). Issue #3 closed on merge; a successor comment links #5.
 
-- **Final documentation check:** ordinary and sibling-link documentation checks plus diff validation pass (exit 0); no runtime implementation, schema, test, CI or evidence-file change is part of this acceptance/handoff commit. Historical reports and evidence remain intact.
+## Owner decisions recorded at M2 start
+
+Full text: [ADR 001 amendment](../decisions/001-standalone-stack.md#amendment--owner-decisions-after-m1-acceptance-2026-09-16) and [PLAN amendment](standalone-0.1/PLAN.md#owner-amendment-after-m1-acceptance-2026-09-16).
+
+- PIO drives each harness **as the user installed and configured it**; it never selects or injects a model or provider. A same-day kickoff draft routing MiniMax through a Codex custom provider was **withdrawn by the owner**; nothing was configured for it.
+- Test scope: Codex 0.146.0 (M2), Claude Code 2.1.273 (M3), OpenCode v2.0.1 as `opencode2` and Hermes Agent v0.20.1 (PLAN row M3b, placement proposed). OpenCode preferred for heavy-usage testing.
+- Codex live runs use the user's real Codex home with before/after configuration capture on every run.
+- Claude Code (M3): user's own login, or API key when configured; Anthropic caveat visible; route evidence, precedence rule and missing-route refusal.
+- MIT license; M4 reviewer mockup design step; M6 reviewer walkthrough; thresholds unchanged.
+- Reserved: evaluation thresholds/rubric, merge, tag, publication.
+
+## Live-run spend ledger
+
+Counted from each harness's own usage reports; missing usage is unknown liability, not zero. Stop and report at 80 percent. At most three concurrent live sessions.
+
+| Cap | Limit (tokens) | Stop at | Used | Runs |
+| --- | ---: | ---: | ---: | ---: |
+| Codex, all tests | 1,000,000 | 800,000 | 0 | 0 |
+| Claude Code, all tests | 1,000,000 | 800,000 | 0 | 0 |
+| MiniMax via OpenCode + Hermes (GLM/Kimi via OpenCode counted here until a separate cap) | 300,000,000 | 240,000,000 | 0 | 0 |
+
+## Accepted baseline and limits (unchanged from M1)
+
+- M1 owner-accepted at `2048e84`: journal-backed Core/Execution slice, public durable labeled fake-process host, caller operation ledger, content-addressed output, recovery/order fences, truthful fake discovery and packaging skeleton. Evidence: [acceptance corrections](m1/ACCEPTANCE-CORRECTIONS.md), [CHECKPOINTS](m1/CHECKPOINTS.md), issue #3.
+- Baseline counts: 20 Cargo tests; runner **206 pass / 73 unsupported / 1 skipped** plus two supplemental passes separately; public matrix **66** (45/6/9/6); diagnostic matrix **54** (39/3/9/3); three repetitions per case.
+- **No real harness has run through PIO; all six journeys remain `not_evaluated`.** No native authentication, real-adapter support, end-to-end/TUI journey, release qualification, throughput, total-disk/spool-GC bound or universal exactly-once property. Process cancellation/workspace/usage adapters unavailable. Protocol #9, #10 and the undeclared subscription authorization-recheck barrier remain coverage limits.
+
+## Checks at this checkpoint
+
+This documentation-only commit changes no runtime code, schema, test, CI or evidence file. Documentation checks are recorded in the commit message and issue #5; runtime evidence is the M1 baseline above.
+
+Read-only research before the owner's correction (not a live run, no configuration touched): pinned Codex `e363b08` accepts only `wire_api = "responses"` for custom providers. It is moot for M2 now that PIO never configures providers.
+
+## Resources and next action
+
+- **Active resources:** worktree `pio-m2`; no PIO daemons, hosts, user jobs or live harness sessions running; no temporary stores created yet.
+- **Next:** implement and test ADR 002's **32 MiB / 32,768-record pre-commit admission bound** offline (exact boundaries, event/dedupe accounting, explicit capacity refusal, no effect or spawn on refusal); record that checkpoint with clean-clone and two-platform CI evidence before Codex qualification or any live run.
+- Resuming session: read the [continuation prompt](m2/KICKOFF.md), then this file and the task packet.
