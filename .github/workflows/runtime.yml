@@ -38,6 +38,10 @@ jobs:
           git diff --exit-code -- Cargo.lock
       - name: Experimental fake-host fault matrix
         run: python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3
+      - name: Public Unix process matrix and caller recovery
+        run: |
+          python3 scripts/public_host_matrix.py --out target/public-host --repetitions 3
+          python3 scripts/client_recovery.py --out target/client-recovery
       - name: Pinned Protocol runner against PIO
         env:
           GH_TOKEN: ${{ github.token }}
@@ -50,4 +54,6 @@ jobs:
           path: |
             target/conformance
             target/fake-host
+            target/public-host
+            target/client-recovery
           if-no-files-found: error

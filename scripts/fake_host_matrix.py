@@ -189,14 +189,14 @@ def run_case(case, name):
         _, restarted = case.start()
         replay = case.submit()
         state = case.inspect()
-        assert replay['replay'] and state['recovery'] == 'not_released_pending'
+        assert replay['replay'] and state['recovery'] == 'known_not_released'
         assert records(case.root / 'spawn.jsonl') == []
         return {'outcome':'pass', 'before_generation':status, 'after_generation':restarted,
                 'after':state, 'spawn_count':0, 'fault_exit':91}
     if name in ('after_claim','after_release','after_receipt'):
         duration = 100 if name == 'after_receipt' else 10000
         case.submit(name, duration)
-        phase = {'after_claim':'host_claimed','after_release':'released','after_receipt':'completed'}[name]
+        phase = {'after_claim':'known_not_released','after_release':'released','after_receipt':'completed'}[name]
         state = poll(case.inspect, lambda r: r.get('invocation',{}).get('phase') == phase and not r.get('host_alive'))
         expected = 0 if name == 'after_claim' else 1
         markers = poll(lambda:records(case.root/'spawn.jsonl'), lambda r:len(r)==expected)

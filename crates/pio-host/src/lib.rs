@@ -242,29 +242,77 @@ fn create_launch_guard(root: &Path, state: &pio_core::Invocation) -> Result<()> 
     Ok(())
 }
 
-pub fn daemon(root: &Path) -> Result<()> {
-    let root = secure_root(root)?;
-    let _lock = Lock::acquire(&root.join("daemon.lock"))?;
-    let controller_gate = Lock::acquire_mode(&root.join("controller-gate.lock"), libc::LOCK_EX)?;
-    let mut store = Store::open(&root)?;
-    check_launch_guards(&root, &store)?;
-    let before = store.identity()?;
-    let witness = root.join("controller-witness.json");
-    if witness.exists() {
-        let recorded: Value = serde_json::from_slice(&std::fs::read(&witness)?)?;
-        ensure!(
-            recorded == json!({"store_id":before.0,"generation":before.1}),
-            "restore_barrier: journal differs from external controller witness"
-        );
-    } else {
-        ensure!(before.1 == 0, "restore_barrier: controller witness missing");
+/// Lifetime owner shared by the public service and diagnostic test daemon.
+pub struct Controller {
+    pub root: PathBuf,
+    pub generation: u64,
+    _lock: Lock,
+}
+impl Controller {
+    pub fn open(root: &Path) -> Result<Self> {
+        let root = secure_root(root)?;
+        let lock = Lock::acquire(&root.join("daemon.lock"))?;
+        let controller_gate =
+            Lock::acquire_mode(&root.join("controller-gate.lock"), libc::LOCK_EX)?;
+        let mut store = Store::open(&root)?;
+        check_launch_guards(&root, &store)?;
+        let before = store.identity()?;
+        let witness = root.join("controller-witness.json");
+        if witness.exists() {
+            let recorded: Value = serde_json::from_slice(&std::fs::read(&witness)?)?;
+            ensure!(
+                recorded == json!({"store_id":before.0,"generation":before.1}),
+                "restore_barrier: journal differs from external controller witness"
+            );
+        } else {
+            ensure!(before.1 == 0, "restore_barrier: controller witness missing");
+        }
+        let (store_id, generation) = store.advance_controller()?;
+        atomic_json(
+            &witness,
+            &json!({"store_id":store_id,"generation":generation}),
+        )?;
+        drop(controller_gate);
+        Ok(Self {
+            root,
+            generation,
+            _lock: lock,
+        })
     }
-    let (store_id, generation) = store.advance_controller()?;
-    atomic_json(
-        &witness,
-        &json!({"store_id":store_id,"generation":generation}),
-    )?;
-    drop(controller_gate);
+    pub fn submit(&self, command: &str, payload: Value, fault: &str) -> Result<Value> {
+        let mut store = Store::open(&self.root)?;
+        dispatch(
+            &self.root,
+            &mut store,
+            self.generation,
+            &json!({"op":"submit","id":command,"payload":payload,"fault":fault}),
+        )
+    }
+    pub fn inspect(&self, command: &str) -> Result<Value> {
+        let mut store = Store::open(&self.root)?;
+        let mut observation = dispatch(
+            &self.root,
+            &mut store,
+            self.generation,
+            &json!({"op":"inspect","id":command}),
+        )?;
+        let invocation = observation["invocation"]["invocation_id"]
+            .as_str()
+            .context("invocation id")?;
+        observation["release_observed"] = self
+            .root
+            .join(format!("release-{invocation}.jsonl"))
+            .exists()
+            .into();
+        Ok(observation)
+    }
+}
+pub fn daemon(root: &Path) -> Result<()> {
+    let controller = Controller::open(root)?;
+    let root = controller.root.clone();
+    let generation = controller.generation;
+    let mut store = Store::open(&root)?;
+    let store_id = store.identity()?.0;
     let socket = root.join("daemon.sock");
     if let Ok(meta) = std::fs::symlink_metadata(&socket) {
         ensure!(
@@ -389,7 +437,19 @@ fn dispatch(root: &Path, store: &mut Store, generation: u64, request: &Value) ->
             )
         }
         "inspect" => {
-            let state = store.get(command)?.context("not_found")?;
+            let mut state = store.get(command)?.context("not_found")?;
+            let marker = root.join(format!("release-{}.jsonl", state.invocation_id));
+            let fenced_unclaimed =
+                state.phase == "intent" && state.controller_generation < generation;
+            let dead_claimed = matches!(state.phase.as_str(), "host_claimed" | "parked")
+                && state.host.as_ref().is_some_and(|p| !is_same_process(p))
+                && !state.child.as_ref().is_some_and(is_same_process);
+            if (fenced_unclaimed || dead_claimed) && !marker.exists() {
+                // A recorded dead host cannot release its pipe. For an unclaimed
+                // intent the newer controller fences any delayed host claim.
+                state = store.transition(&state,"known_not_released",None,None,
+                    Some(json!({"source":"fake-host/controller","kind":"known_not_released","release_marker_absent":true,"reason":if fenced_unclaimed{"controller_fenced_before_claim"}else{"owner_lost_before_release"}})))?;
+            }
             let host_alive = state.host.as_ref().is_some_and(is_same_process);
             let child_alive = state.child.as_ref().is_some_and(is_same_process);
             let recovery = if state.phase == "known_not_released" {
@@ -445,21 +505,21 @@ pub fn host(root: &Path, command: &str, invocation_id: &str, fault: &str) -> Res
     }
     let mut children = Vec::new();
     let count = if fault == "duplicate_launch" { 2 } else { 1 };
-    for _ in 0..count {
-        let child = Command::new(std::env::current_exe()?)
-            .args(["fake", "child"])
-            .arg(&root)
-            .arg(command)
-            .arg(invocation_id)
-            .env_clear()
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()?;
-        children.push(child);
-    }
     let mut release_attempted = false;
     let outcome = (|| -> Result<()> {
+        for _ in 0..count {
+            let child = Command::new(std::env::current_exe()?)
+                .args(["fake", "child"])
+                .arg(&root)
+                .arg(command)
+                .arg(invocation_id)
+                .env_clear()
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()?;
+            children.push(child);
+        }
         // Child is parked behind stdin. Capture kernel identity before releasing work.
         let child_id = identity(children[0].id())?;
         state = store.transition(&state, "parked", None, Some(child_id), None)?;
@@ -491,21 +551,30 @@ pub fn host(root: &Path, command: &str, invocation_id: &str, fault: &str) -> Res
         if fault == "after_release" {
             std::process::exit(93);
         }
-        let spool_path = root.join(format!("output-{}.jsonl", state.invocation_id));
-        let mut spool = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .mode(0o600)
-            .open(&spool_path)?;
+        let spool = pio_core::spool::Spool::open(&root)?;
+        let manifest = root.join(format!("output-{}.refs.jsonl", state.invocation_id));
+        let mut offset = 0u64;
         let mut statuses = Vec::new();
+        let mut all_output = Vec::new();
         for child in &mut children {
             let mut output = child.stdout.take().context("missing output")?;
-            std::io::copy(&mut output, &mut spool)?;
+            let mut buffer = [0u8; 8192];
+            loop {
+                let n = output.read(&mut buffer)?;
+                if n == 0 {
+                    break;
+                }
+                let digest = spool.put(&buffer[..n])?;
+                append_json(
+                    &manifest,
+                    &json!({"digest":digest,"offset":offset,"length":n}),
+                )?;
+                offset += n as u64;
+                all_output.extend_from_slice(&buffer[..n]);
+            }
             statuses.push(child.wait()?.code());
         }
-        spool.sync_all()?;
-        let bytes = std::fs::read(&spool_path)?;
-        let receipt = json!({"source":"fake-host","kind":"observed_process_exit","exit_codes":statuses,"output_digest":pio_core::digest(&bytes),"output_bytes":bytes.len(),"completion_is_acceptance":false});
+        let receipt = json!({"source":"fake-host","kind":"observed_process_exit","exit_codes":statuses,"output_digest":pio_core::digest(&all_output),"output_bytes":offset,"completion_is_acceptance":false});
         store.transition(&state, "completed", None, None, Some(receipt))?;
         if fault == "after_receipt" {
             std::process::exit(94);

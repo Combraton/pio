@@ -112,7 +112,7 @@ impl Provider {
                 .as_u64()
                 .unwrap_or(u64::MAX) as usize
     }
-    fn update_execution(&mut self, e: &Value) {
+    pub(crate) fn update_execution(&mut self, e: &Value) {
         let v = &e["view"];
         self.data.subjects.insert(
             key(&v["execution"]),
@@ -127,7 +127,7 @@ impl Provider {
             .executions
             .insert(text(&v["execution"]["id"]).to_owned(), e.clone());
     }
-    fn execution_event(
+    pub(crate) fn execution_event(
         &mut self,
         e: &mut Value,
         kind: &str,
@@ -178,16 +178,17 @@ impl Provider {
         if class == "idempotent_key" {
             descriptor["idempotency_key"] = id.into();
         }
-        self.data.effects.insert(id.into(),json!({"effect":descriptor,"revision":1,"status":"pending","observations":[{"status":"pending","evidence":evidence("recorded_before_dispatch"),"recorded_at":self.now}],"attempts":[],"obligations":[{"id":format!("{id}.{expects}"),"expects":expects,"deadline":deadline,"state":"open"}]}));
+        self.data.effects.insert(id.into(),json!({"effect":descriptor,"revision":1,"status":"pending","observations":[{"status":"pending","evidence":self.host_evidence("recorded_before_dispatch"),"recorded_at":self.now}],"attempts":[],"obligations":[{"id":format!("{id}.{expects}"),"expects":expects,"deadline":deadline,"state":"open"}]}));
         push(&mut e["view"]["effects"], json!(id));
     }
     fn observe_effect(&mut self, id: &str, status: &str, class: &str, close: bool) {
+        let proof = self.host_evidence(class);
         let r = self.data.effects.get_mut(id).unwrap();
         r["revision"] = (num(&r["revision"]) + 1).into();
         r["status"] = status.into();
         push(
             &mut r["observations"],
-            json!({"status":status,"evidence":evidence(class),"recorded_at":self.now}),
+            json!({"status":status,"evidence":proof,"recorded_at":self.now}),
         );
         if close {
             for o in r["obligations"].as_array_mut().unwrap() {
@@ -259,7 +260,7 @@ impl Provider {
             );
         }
         let mut e = if method == "execution.submit" {
-            json!({"source":script::SOURCE,"view":{"execution":subject(id),"revision":0,"admission":"queued","delivery":"pending","runtime":"not_started","result":"absent","exit":"unavailable","evaluation":"not_requested","deliveries":[],"completions":[],"effects":[],"host":{"id":self.execution_host(),"generation":1},"recovery":[],"usage":{"observations":[],"liability":"none"}},"submit":p,"principal":session.principal,"operation_ref":op,"script":script::select(&self.config["executor"],id),"step":0,"dispatched":false,"created_at":self.now,"order":self.data.sequence,"last_observed":self.now,"timeouts_passed":[],"output":[],"output_end":0,"output_lost":[],"annotations":[]})
+            json!({"source":script::SOURCE,"view":{"execution":subject(id),"revision":0,"admission":"queued","delivery":"pending","runtime":"not_started","result":"absent","exit":"unavailable","evaluation":"not_requested","deliveries":[],"completions":[],"effects":[],"host":{"id":self.execution_host(),"generation":1},"recovery":[],"usage":{"observations":[],"liability":"none"}},"submit":p,"principal":session.principal,"operation_ref":op,"script":script::select(&self.config["executor"],id),"step":0,"dispatched":false,"created_at":self.now,"order":self.data.sequence,"last_observed":self.now,"timeouts_passed":[],"output_ref":null,"output_end":0,"output_lost":[],"annotations":[]})
         } else {
             self.data
                 .executions
@@ -267,6 +268,30 @@ impl Provider {
                 .cloned()
                 .ok_or_else(|| err("not_found", json!({})))?
         };
+        if method == "execution.submit" {
+            let script = e.as_object_mut().unwrap().remove("script").unwrap();
+            let digest = pio_core::spool::Spool::open(&self.root)
+                .and_then(|spool| spool.put(&serde_json::to_vec(&script)?))
+                .map_err(|_| err("unavailable", json!({"reason":"script spool unavailable"})))?;
+            e["script_digest"] = digest.into();
+        }
+        if self.durable.is_some() {
+            e["source"] = "fake-host/process".into();
+            if method == "execution.submit"
+                && (p["payload"].get("workspace").is_some() || p["payload"].get("budget").is_some())
+            {
+                return Err(err(
+                    "capability_unavailable",
+                    json!({"reason":"durable fake host has no workspace or usage adapter"}),
+                ));
+            }
+            if method != "execution.submit" {
+                return Err(err(
+                    "capability_unavailable",
+                    json!({"reason":"durable fake host supports submit and observation only"}),
+                ));
+            }
+        }
         let mut effects = vec![];
         let outcome = match method {
             "execution.submit" => {
@@ -525,7 +550,9 @@ impl Provider {
     }
     fn execution_output(&self, e: &Value, p: &Value) -> Reply {
         use base64::Engine;
-        let bytes: Vec<u8> = list(&e["output"]).iter().map(|v| num(v) as u8).collect();
+        let bytes = self
+            .output_bytes(e)
+            .map_err(|error| err("unavailable", json!({"reason":error.to_string()})))?;
         let end = num(&e["output_end"]);
         let oldest = end - bytes.len() as u64;
         let offset = num(&p["payload"]["offset"]).max(oldest).min(end);
@@ -536,7 +563,7 @@ impl Provider {
             json!({"execution":e["view"]["execution"],"offset":offset,"data_base64":base64::engine::general_purpose::STANDARD.encode(data),"next_offset":offset+data.len() as u64,"end_offset":end,"lost_ranges":e["output_lost"],"coverage":if list(&e["output_lost"]).is_empty(){"complete"}else{"incomplete"},"policy":{"spool_bytes":self.config["executor"]["output_spool_bytes"].as_u64().unwrap_or(65536),"overflow":"discard_oldest"}}),
         )
     }
-    fn lost_output(&mut self, e: &mut Value, loss: Value) {
+    pub(crate) fn lost_output(&mut self, e: &mut Value, loss: Value) {
         self.execution_event(e, "execution.output.lost", loss.clone(), None);
         let previous = e["output_lost"]
             .as_array_mut()
@@ -555,7 +582,7 @@ impl Provider {
             push(&mut e["output_lost"], loss);
         }
     }
-    fn delivery_observed(
+    pub(crate) fn delivery_observed(
         &mut self,
         e: &mut Value,
         determination: &str,
@@ -575,7 +602,7 @@ impl Provider {
             push(&mut record["history"], history);
         }
         record["delivery"] = determination.into();
-        record["evidence"] = evidence(class);
+        record["evidence"] = self.host_evidence(class);
         record["determined_at"] = self.now.clone().into();
         record.as_object_mut().unwrap().remove("proof_class");
         if let Some(proof) = proof {
@@ -593,7 +620,7 @@ impl Provider {
         };
         self.observe_effect(&id, status, class, close);
         let mut payload =
-            json!({"delivery_id":id,"delivery":determination,"evidence":evidence(class)});
+            json!({"delivery_id":id,"delivery":determination,"evidence":self.host_evidence(class)});
         if let Some(proof) = proof {
             payload["proof_class"] = proof.into();
         }
@@ -780,7 +807,7 @@ impl Provider {
         }
         self.save()
     }
-    fn commit_execution(&mut self, e: &Value) -> anyhow::Result<()> {
+    pub(crate) fn commit_execution(&mut self, e: &Value) -> anyhow::Result<()> {
         self.update_execution(e);
         if let Err(error) = self.save() {
             self.reload()?;
@@ -788,12 +815,18 @@ impl Provider {
         }
         Ok(())
     }
-    fn dispatch_marker(&mut self, e: &mut Value) -> anyhow::Result<()> {
+    pub(crate) fn dispatch_marker(&mut self, e: &mut Value) -> anyhow::Result<()> {
         if e["dispatched"] != true {
             e["dispatched"] = true.into();
             e["dispatch_generation"] = e["view"]["host"]["generation"].clone();
             let id = format!("{}.delivery-1", text(&e["view"]["execution"]["id"]));
             self.observe_effect(&id, "pending", "dispatch_intent", false);
+            if self.durable.is_some() {
+                push(
+                    &mut self.data.effects.get_mut(&id).unwrap()["attempts"],
+                    json!({"attempt":1,"outcome":"unknown","recorded_at":self.now}),
+                );
+            }
             // This synchronous FULL journal commit is the authority to deliver.
             // A failed commit never reaches the scripted host observation below.
             self.commit_execution(e)?;
@@ -826,11 +859,14 @@ impl Provider {
         completed
     }
     fn run_script(&mut self, e: &mut Value) -> anyhow::Result<()> {
+        let script: Value = serde_json::from_slice(
+            &pio_core::spool::Spool::open(&self.root)?.read(text(&e["script_digest"]))?,
+        )?;
         let id = text(&e["view"]["execution"]["id"]).to_owned();
         let delivery = format!("{id}.delivery-1");
         loop {
             let i = num(&e["step"]) as usize;
-            let Some(step) = e["script"].as_array().and_then(|a| a.get(i)).cloned() else {
+            let Some(step) = script.as_array().and_then(|a| a.get(i)).cloned() else {
                 break;
             };
             if step["stall"] == true {
@@ -1045,19 +1081,7 @@ impl Provider {
                         .take(num(&output["bytes"]) as usize)
                         .collect()
                 };
-                let old_end = num(&e["output_end"]);
-                let old_start = old_end - list(&e["output"]).len() as u64;
-                let retained = e["output"].as_array_mut().unwrap();
-                retained.extend(bytes.iter().map(|b| json!(b)));
-                let bound = self.config["executor"]["output_spool_bytes"]
-                    .as_u64()
-                    .unwrap_or(65536) as usize;
-                let drop = retained.len().saturating_sub(bound);
-                retained.drain(..drop);
-                e["output_end"] = (old_end + bytes.len() as u64).into();
-                if drop > 0 {
-                    self.lost_output(e,json!({"from":old_start,"to":old_start+drop as u64,"bytes":drop,"reason":"spool_limit","coverage":"incomplete"}));
-                }
+                self.append_output(e, &bytes)?;
             } else if let Some(loss) = step.get("output_lost") {
                 let mut loss = loss.clone();
                 loss["from"] = e["output_end"].clone();
@@ -1109,6 +1133,13 @@ impl Provider {
         Ok(())
     }
     pub fn execution_tick(&mut self) -> anyhow::Result<()> {
+        if let Err(error) = self.execution_tick_inner() {
+            self.reload()?;
+            return Err(error);
+        }
+        Ok(())
+    }
+    fn execution_tick_inner(&mut self) -> anyhow::Result<()> {
         let mut ids: Vec<_> = self
             .data
             .executions
@@ -1120,7 +1151,11 @@ impl Provider {
             let mut e = self.data.executions[id].clone();
             self.execution_timeouts(&mut e);
             if e["view"]["admission"] == "admitted" {
-                self.run_script(&mut e)?;
+                if self.durable.is_some() {
+                    self.run_durable(&mut e)?;
+                } else {
+                    self.run_script(&mut e)?;
+                }
             }
             self.commit_execution(&e)?;
         }
@@ -1129,7 +1164,11 @@ impl Provider {
             if e["view"]["admission"] == "queued" && self.capacity_available() {
                 self.admit_execution(&mut e, None);
                 self.commit_execution(&e)?;
-                self.run_script(&mut e)?;
+                if self.durable.is_some() {
+                    self.run_durable(&mut e)?;
+                } else {
+                    self.run_script(&mut e)?;
+                }
                 self.commit_execution(&e)?;
             }
         }

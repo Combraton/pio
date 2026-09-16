@@ -234,6 +234,7 @@ impl Store {
                     | ("released", "completed")
                     | ("parked", "known_not_released")
                     | ("host_claimed", "known_not_released")
+                    | ("intent", "known_not_released")
             ),
             "invalid transition"
         );
@@ -308,3 +309,5 @@ pub fn require_payload(payload: &Value) -> Result<u64> {
 
 #[cfg(test)]
 mod tests;
+
+pub mod spool;

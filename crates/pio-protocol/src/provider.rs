@@ -115,6 +115,9 @@ pub struct Data {
     pub executions: BTreeMap<String, Value>,
 }
 pub struct Provider {
+    pub root: std::path::PathBuf,
+    pub durable: Option<pio_host::Controller>,
+    pub host_config: Value,
     pub config: Value,
     pub data: Data,
     pub store: Store,
@@ -128,6 +131,9 @@ pub struct Provider {
 }
 impl Provider {
     pub fn new(root: &Path, config: Value) -> Result<Self> {
+        Self::with_host(root, config, None)
+    }
+    pub fn with_host(root: &Path, config: Value, host: Option<Value>) -> Result<Self> {
         let resources = schemas::resources();
         let registry = jsonschema::Registry::new()
             .extend(
@@ -193,6 +199,16 @@ impl Provider {
         let store = Store::open(root)?;
         let (store_revision, records) = store.protocol_records()?;
         let data = Data::from_records(&records)?;
+        for execution in data.executions.values() {
+            ensure!(
+                execution.get("output").is_none(),
+                "legacy inline output requires explicit migration"
+            );
+            ensure!(
+                (execution["source"] == "fake-host/process") == host.is_some(),
+                "cannot switch persisted execution adapter mode"
+            );
+        }
         let mut credentials = vec![];
         for c in list(&config["credentials"]) {
             let raw = text(&c["credential"]);
@@ -223,7 +239,15 @@ impl Provider {
             .as_str()
             .unwrap_or("conformance-provider")
             .to_owned();
+        let durable = if host.is_some() {
+            Some(pio_host::Controller::open(root)?)
+        } else {
+            None
+        };
         let mut p = Self {
+            root: root.to_owned(),
+            durable,
+            host_config: host.unwrap_or(Value::Null),
             config,
             data,
             store,
@@ -247,7 +271,9 @@ impl Provider {
         p.events_start();
         p.capabilities_start();
         p.save()?;
-        p.execution_recover()?;
+        if p.durable.is_none() {
+            p.execution_recover()?;
+        }
         Ok(p)
     }
     pub fn capabilities_start(&mut self) {
@@ -317,8 +343,15 @@ impl Provider {
     pub fn window(&self) -> Value {
         json!({"oldest_retained":self.data.oldest,"current":self.data.generation})
     }
+    pub fn execution_features(&self) -> &'static [&'static str] {
+        if self.durable.is_some() {
+            &["execution.controller", "execution.output"]
+        } else {
+            crate::execution::FEATURES
+        }
+    }
     pub fn manifest(&self) -> Value {
-        json!({"provider":{"name":"pio-journal-fake-executor","version":"0.1.0-dev"},"profiles":[{"name":"core","majors":[1],"features":FEATURES,"depends_on":[]},{"name":"core-test","majors":[1],"features":[],"depends_on":["core"]},{"name":"execution","majors":[1],"features":crate::execution::FEATURES,"depends_on":["core"]}],"unsupported_profiles":[{"name":"coordination","reason":"not_in_release"},{"name":"remote-trust","reason":"not_in_release"}],"limits":self.limits,"dedupe_window":self.window(),"unknown_extensions":"drop"})
+        json!({"provider":{"name":"pio-journal-fake-executor","version":"0.1.0-dev"},"profiles":[{"name":"core","majors":[1],"features":FEATURES,"depends_on":[]},{"name":"core-test","majors":[1],"features":[],"depends_on":["core"]},{"name":"execution","majors":[1],"features":self.execution_features(),"depends_on":["core"]}],"unsupported_profiles":[{"name":"coordination","reason":"not_in_release"},{"name":"remote-trust","reason":"not_in_release"}],"limits":self.limits,"dedupe_window":self.window(),"unknown_extensions":"drop"})
     }
     pub fn handle(&mut self, session: &mut Session, method: &str, p: &Value) -> Reply {
         let _ = self.clock(false);
@@ -699,7 +732,7 @@ impl Provider {
             } else {
                 for f in list(&p["required_features"]) {
                     if !(name == "core" && FEATURES.contains(&text(&f))
-                        || name == "execution" && crate::execution::FEATURES.contains(&text(&f)))
+                        || name == "execution" && self.execution_features().contains(&text(&f)))
                     {
                         items.push(json!({"profile":name,"feature":f,"reason":"unknown_feature"}));
                     }
@@ -711,7 +744,7 @@ impl Provider {
                         .chain(list(&p["optional_features"]))
                     {
                         if name == "core" && FEATURES.contains(&text(&f))
-                            || name == "execution" && crate::execution::FEATURES.contains(&text(&f))
+                            || name == "execution" && self.execution_features().contains(&text(&f))
                         {
                             if !features.contains(&text(&f).to_owned()) {
                                 features.push(text(&f).to_owned());

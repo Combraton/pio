@@ -38,6 +38,8 @@ cargo clippy --workspace --locked -- -D warnings
 python3 scripts/check_docs.py
 git diff --exit-code -- Cargo.lock
 python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3
+python3 scripts/public_host_matrix.py --out target/public-host --repetitions 3
+python3 scripts/client_recovery.py --out target/client-recovery
 python3 scripts/conformance.py --out target/conformance
 ```
 
@@ -78,3 +80,16 @@ target/debug/pio fake request /tmp/pio-fake-example '{"op":"inspect","id":"demo"
 ```
 
 This diagnostic JSON interface is not Core/Execution or an installable product CLI. Every execution is labeled `fake-host`. The child performs only bounded deterministic output and waiting. The journal-backed conformance participant separately implements Core/Execution and scripted discovery/workspaces/usage. Durable caller operations, content-addressed payloads and integration with the surviving-process host remain M1 work. Neither the scripted observations nor the lower-level matrix alone establish the complete public durable-host path. Persistent launch guards and an external controller witness hold detected rollback; comprehensive backup/restore and storage-failure certification remain separate work. Do not remove guard/witness files to bypass a refusal.
+
+
+## Public process and caller checkpoint
+
+`target/debug/pio serve-fake --data-dir PRIVATE_DIR --config SERVICE_JSON --socket PRIVATE_DIR/public.sock` serves the public Unix binding independently of terminal stdin. Its explicit local configuration is `{"format":"pio-fake-service/1","protocol":{"format":"combraton-conformance-config/1","principal":"owner","credentials":[{"credential":"ccred1.owner.<43-character-test-token>"}],"executor":{"host_id":"durable-fake-host"}},"fake_host":{"duration_ms":10000,"fault":""}}`. Use an actual 43-character credential suffix. The matrix generates isolated configurations, credentials and stores; none are external provider credentials. `executor.script` is rejected in this mode. The conformance participant continues to use the separately labeled scripted test adapter.
+
+The public process mode supports submit, inspect, reconcile, output and controller claims. Workspace/budget adapter behavior and cancellation are explicitly unavailable there; the five-feature runner claim belongs to the scripted participant, not a native adapter. The shared mutex service loop still serializes commands; durable child ownership is in detached `pio-host` processes. The process daemon also polls independently of connected clients, so detach does not stop observation.
+
+`target/debug/pio client submit --store CALLER_DIR --socket PRIVATE_DIR/public.sock --credential-file CREDENTIAL_FILE --request ENVELOPE_JSON [--basis BASIS_JSON]` first commits the exact frozen command envelope and optional user-selected scope/policy basis. `target/debug/pio client reconcile --store CALLER_DIR --socket PRIVATE_DIR/public.sock --credential-file CREDENTIAL_FILE` reconciles pending identities after restart. An empty reconciliation stays pending; it does not create a new command. Use a separate private caller directory. This is a low-level attributed CLI, not the planned TUI or a completed product journey.
+
+Public matrix artifacts include authenticated command/query transcripts, result-schema validation against unchanged vendored schemas, journal/outbox witnesses, child-created spawn/release markers and kernel start identities. The native schema cannot expose those detailed identities in `inspect`; they remain independent artifact witnesses. Each case records attempt/repetition and named property/refusal class. The diagnostic matrix remains separate test tooling.
+
+`client_recovery.py` proves write-before-network on an absent endpoint, no spawn on empty reconciliation, recovery from a committed-but-lost response with one child, real fake-child output/exit, and digest-only output references in the journal. CAS object corruption is a Cargo test. These results do not qualify a real harness, native authentication or any end-to-end journey.

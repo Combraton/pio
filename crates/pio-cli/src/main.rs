@@ -9,7 +9,7 @@ fn run() -> Result<()> {
             pio_host::IMPLEMENTATION
         ),
         Some("participant") => println!("{}", pio_core::participant()),
-        Some("conformance") => {
+        Some("conformance" | "serve-fake") => {
             let option = |name: &str| -> Result<&Path> {
                 let index = args
                     .iter()
@@ -19,11 +19,60 @@ fn run() -> Result<()> {
                     args.get(index + 1).context("missing option value")?,
                 ))
             };
-            pio_protocol::serve(
+            let serve = if args[0] == "serve-fake" {
+                pio_protocol::serve_fake
+            } else {
+                pio_protocol::serve
+            };
+            serve(
                 option("--data-dir")?,
                 option("--config")?,
                 option("--socket")?,
             )?;
+        }
+        Some("check-transcript") => {
+            println!(
+                "{} schema-valid public results",
+                pio_protocol::transcript::check(Path::new(
+                    args.get(1).context("missing transcript")?
+                ))?
+            );
+        }
+        Some("client") => {
+            let option = |name: &str| -> Result<&Path> {
+                let index = args
+                    .iter()
+                    .position(|a| a == name)
+                    .context("missing client option")?;
+                Ok(Path::new(
+                    args.get(index + 1).context("missing option value")?,
+                ))
+            };
+            let action = args.get(1).context("client requires submit or reconcile")?;
+            anyhow::ensure!(
+                ["submit", "reconcile"].contains(&action.as_str()),
+                "unknown client action"
+            );
+            let request = if action == "submit" {
+                Some(option("--request")?)
+            } else {
+                None
+            };
+            let basis = if args.iter().any(|a| a == "--basis") {
+                Some(option("--basis")?)
+            } else {
+                None
+            };
+            println!(
+                "{}",
+                pio_protocol::client::run(
+                    option("--store")?,
+                    option("--socket")?,
+                    option("--credential-file")?,
+                    request,
+                    basis
+                )?
+            );
         }
         Some("fake") => {
             let action = args
@@ -59,7 +108,7 @@ fn run() -> Result<()> {
             }
         }
         _ => {
-            bail!("PIO public Protocol service is not implemented; experimental fake commands only")
+            bail!("expected conformance, serve-fake, client, or diagnostic fake command")
         }
     }
     Ok(())

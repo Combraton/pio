@@ -18,9 +18,66 @@ use tokio::{
 };
 
 pub fn serve(root: &Path, config: &Path, socket: &Path) -> Result<()> {
+    serve_mode(root, config, socket, false)
+}
+pub fn serve_fake(root: &Path, config: &Path, socket: &Path) -> Result<()> {
+    serve_mode(root, config, socket, true)
+}
+fn serve_mode(root: &Path, config: &Path, socket: &Path, durable: bool) -> Result<()> {
+    pio_host::secure_root(root)?;
     pio_host::secure_root(socket.parent().context("socket parent")?)?;
     let _lock = StoreLock::acquire(root)?;
-    let provider = Provider::new(root, serde_json::from_slice(&std::fs::read(config)?)?)?;
+    let config: Value = serde_json::from_slice(&std::fs::read(config)?)?;
+    let provider = if durable {
+        anyhow::ensure!(
+            config["format"] == "pio-fake-service/1",
+            "invalid fake service config"
+        );
+        let host = config
+            .get("fake_host")
+            .context("fake_host required")?
+            .clone();
+        for name in host.as_object().context("fake_host object")?.keys() {
+            anyhow::ensure!(
+                ["duration_ms", "fault"].contains(&name.as_str()),
+                "unsupported fake host setting: {name}"
+            );
+        }
+        anyhow::ensure!(
+            [
+                "",
+                "after_intent",
+                "after_claim",
+                "after_release",
+                "after_receipt",
+                "duplicate_launch",
+                "replay_relaunch",
+                "replay_without_launch_guard",
+                "replay_without_host_phase",
+                "before_release"
+            ]
+            .contains(&host["fault"].as_str().unwrap_or("")),
+            "unsupported host launch fault"
+        );
+        pio_core::require_payload(&json!({"duration_ms":host["duration_ms"]}))?;
+        let protocol = config["protocol"].clone();
+        anyhow::ensure!(
+            protocol["executor"]["scripts"].is_null()
+                && protocol["executor"]["default_script"].is_null(),
+            "executor.script is conformance-only"
+        );
+        Provider::with_host(root, protocol, Some(host))?
+    } else {
+        Provider::new(root, config)?
+    };
+    if durable && socket.exists() {
+        use std::os::unix::fs::FileTypeExt;
+        anyhow::ensure!(
+            std::fs::symlink_metadata(socket)?.file_type().is_socket(),
+            "refusing non-socket"
+        );
+        std::fs::remove_file(socket)?;
+    }
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async {
         let listener = UnixListener::bind(socket)?;
@@ -28,14 +85,25 @@ pub fn serve(root: &Path, config: &Path, socket: &Path) -> Result<()> {
         let provider = Arc::new(Mutex::new(provider));
         let (done_tx, mut done_rx) = tokio::sync::oneshot::channel();
         std::thread::spawn(move || {
+            if durable {
+                loop {
+                    std::thread::park();
+                }
+            }
             let mut input = std::io::stdin().lock();
             let mut buffer = [0u8; 256];
             while matches!(input.read(&mut buffer), Ok(n) if n > 0) {}
             let _ = done_tx.send(());
         });
+        let mut tick = tokio::time::interval(Duration::from_millis(25));
         loop {
             tokio::select! {
                 _ = &mut done_rx => break,
+                _ = tick.tick(), if durable => {
+                    let mut p = provider.lock().unwrap();
+                    let _ = p.clock(false);
+                    if let Err(error) = p.execution_tick() { eprintln!("PIO host observation: {error:#}"); }
+                },
                 accepted = listener.accept() => {
                     let (stream, _) = accepted?;
                     let stream = stream.into_std()?;

@@ -46,3 +46,6 @@ Read [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), [the documentation map](doc
 ## Standalone-first validation
 
 Own the standalone CLI/TUI and its user-attributed optional CBR client. Keep caller context policy separate from execution-core admission; discovery is not proof of capability. Core use must pass with CBR absent. See [release gates](https://github.com/Combraton/combraton/blob/main/docs/STANDALONE-RELEASES.md), [PIO client semantics](https://github.com/Combraton/pio/blob/main/docs/spec/STANDALONE-CLIENT.md) and [benchmarks](https://github.com/Combraton/benchmarks). PIO and CBR develop in parallel against the agreed Protocol release surface; accepted standalone releases precede thin Combraton implementation.
+
+
+The current development checkpoint also exposes `serve-fake` over the public Unix API: it launches an explicitly labeled fake OS process through the durable host. A separate caller ledger and content-addressed output spool are implemented. See [verification](docs/VERIFICATION.md) for commands and exact limits. This is not a real harness adapter or release; all six product journeys remain `not_evaluated`.
