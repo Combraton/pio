@@ -355,3 +355,49 @@ fn forwarding_intent_pins_its_own_payload_and_key_before_attempt() {
     assert_eq!(effect["effect"]["idempotency_key"], "e.cancel-1");
     assert_eq!(effect["effect"]["payload_digest"], pio_core::digest(b"{}"));
 }
+
+#[test]
+fn reconciliation_events_use_frozen_outcomes_and_survive_journal_rebuild() {
+    for (determination, outcome) in [
+        ("acknowledged", "delivered"),
+        ("failed_before_delivery", "not_delivered"),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let mut cfg = config();
+        cfg["executor"] = json!({"default_script":[{"stall":true}]});
+        let mut p = Provider::new(root.path(), cfg).unwrap();
+        let mut s = session();
+        s.selected
+            .as_mut()
+            .unwrap()
+            .insert("execution".into(), vec![]);
+        let submit = command(
+            "execution.submit",
+            json!({"kind":"execution.execution","id":"e"}),
+            0,
+            json!({"brief":{"digest":pio_core::digest(b"brief"),"media_type":"text/plain"}}),
+        );
+        p.handle(&mut s, "execution.submit", &submit).unwrap();
+        p.execution_tick().unwrap();
+        let mut e = p.data.executions["e"].clone();
+        p.delivery_observed(&mut e, "ambiguous", "recovery", None, false, false);
+        p.delivery_observed(&mut e, determination, "later_evidence", None, true, true);
+        p.commit_execution(&e).unwrap();
+        p.store.rebuild_protocol().unwrap();
+        p.reload().unwrap();
+        let event = p
+            .data
+            .events
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "execution.delivery.reconciled")
+            .unwrap();
+        assert_eq!(event["payload"]["outcome"], outcome);
+        assert_eq!(event["payload"]["delivery"], determination);
+        assert!(
+            list(&p.data.executions["e"]["view"]["deliveries"][0]["history"])
+                .iter()
+                .any(|h| h["delivery"] == "ambiguous")
+        );
+    }
+}

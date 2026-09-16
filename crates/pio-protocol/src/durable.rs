@@ -25,7 +25,12 @@ impl Provider {
         let command = command.trim_start_matches("sha256:");
         // A persisted marker with no host admission is conservatively ambiguous
         // after restart. Never infer permission to launch from a missing process.
-        if e["recovery_no_admit"] == true || e["view"]["delivery"] == "failed_before_delivery" {
+        if e["recovery_no_admit"] == true
+            || matches!(
+                text(&e["view"]["delivery"]),
+                "failed_before_delivery" | "not_delivered"
+            )
+        {
             return Ok(());
         }
         let payload = json!({"duration_ms":self.host_config["duration_ms"]});
@@ -89,9 +94,15 @@ impl Provider {
         let invocation = &observed["invocation"];
         let phase = text(&invocation["phase"]);
         let determination = if phase == "known_not_released" {
-            "failed_before_delivery"
+            if e["view"]["delivery"] == "ambiguous" {
+                "not_delivered"
+            } else {
+                "failed_before_delivery"
+            }
         } else if observed["release_observed"] == true {
-            "acknowledged"
+            // A later child-written receipt establishes arrival; it is not a
+            // provider_ack_id from a native harness (EXECUTION section 3.1).
+            "delivered"
         } else if observed["recovery"] == "uncertain_no_respawn"
             || e["view"]["delivery"] == "ambiguous"
         {
@@ -112,7 +123,10 @@ impl Provider {
                 determination,
                 delivery_class,
                 None,
-                matches!(determination, "acknowledged" | "failed_before_delivery"),
+                matches!(
+                    determination,
+                    "delivered" | "not_delivered" | "failed_before_delivery"
+                ),
                 e["view"]["delivery"] == "ambiguous" && determination != "ambiguous",
             );
             e["view"]["deliveries"][0]["evidence"] = self.host_evidence(delivery_class);

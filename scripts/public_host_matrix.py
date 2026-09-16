@@ -186,6 +186,13 @@ def run_case(case,name):
         assert len(records(case.root/'spawn.jsonl'))==1
         return dict(outcome='pass',reason=result.stderr,surviving_child=witness.process_identity(before['invocation']['child']['pid']),spawn_count=1)
     result=witness.run_case(case,name)
+    if name=='fenced_release_known_not_released':
+        with Client(case.root/'public.sock',case.transcript) as c:
+            response=c.query('core.events.read',{'from':'start','limit':1000})
+        events=[i['event'] for i in response['result']['items'] if 'event' in i]
+        reconciled=[e for e in events if e['type']=='execution.delivery.reconciled']
+        assert len(reconciled)==1 and reconciled[0]['payload']['outcome']=='not_delivered' and reconciled[0]['payload']['delivery']=='not_delivered',reconciled
+        result['reconciliation_events']=reconciled
     if name=='detach_restart_reattach':
         with Client(case.root/'public.sock',case.transcript) as c:
             view=c.query('execution.inspect',{'execution':'work'})['result']
@@ -199,7 +206,7 @@ def run_case(case,name):
         assert recovery[0]['payload']['host']==changes[0]['payload']['host']==view['host']
         assert view['host']['generation']==result['after']['controller_generation']
         assert view['deliveries'][0]['evidence']['class']=='child_release_marker',view
-        assert view['delivery']=='acknowledged'
+        assert view['delivery']=='delivered'
         result.update(recovery_events=recovery,host_change_events=changes,delivery_evidence=view['deliveries'][0]['evidence'])
     return result
 

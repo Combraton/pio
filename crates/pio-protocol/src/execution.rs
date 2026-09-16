@@ -632,10 +632,10 @@ impl Provider {
             payload["proof_class"] = proof.into();
         }
         let kind = if reconcile {
-            payload["outcome"] = if determination == "ambiguous" {
-                "unknown"
-            } else {
-                determination
+            payload["outcome"] = match determination {
+                "acknowledged" | "delivered" => "delivered",
+                "failed_before_delivery" | "not_delivered" => "not_delivered",
+                _ => "unknown",
             }
             .into();
             "execution.delivery.reconciled"
@@ -746,7 +746,10 @@ impl Provider {
             let pending = e["view"]["delivery"] == "pending";
             let live_durable = self.durable.is_some()
                 && e["view"]["runtime"] != "exited"
-                && e["view"]["delivery"] != "failed_before_delivery";
+                && !matches!(
+                    text(&e["view"]["delivery"]),
+                    "failed_before_delivery" | "not_delivered"
+                );
             if e["view"]["admission"] != "admitted" || (!pending && !live_durable) {
                 continue;
             }
