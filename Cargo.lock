@@ -653,6 +653,7 @@ dependencies = [
  "pio-host",
  "pio-protocol",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

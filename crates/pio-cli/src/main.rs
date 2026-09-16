@@ -66,6 +66,9 @@ fn run() -> Result<()> {
                         std::process::exit(3);
                     }
                 }
+                // Labeled offline test double; accepts the `app-server` argument
+                // a real Codex executable receives.
+                Some("fake-app-server") => pio_codex::fake::run()?,
                 Some("config-snapshot") => println!(
                     "{}",
                     serde_json::to_string_pretty(&pio_codex::config_snapshot(option(

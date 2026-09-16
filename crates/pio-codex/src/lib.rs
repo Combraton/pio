@@ -526,5 +526,8 @@ pub fn inherited_path() -> Option<OsString> {
     std::env::var_os("PATH")
 }
 
+pub mod fake;
+pub mod rpc;
+
 #[cfg(test)]
 mod tests;
