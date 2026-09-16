@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core-test/1/core-test.authority.claim.result.schema.json",
+  "title": "core-test.authority.claim result",
+  "type": "object",
+  "required": [
+    "acknowledgment",
+    "outcome",
+    "replay"
+  ],
+  "properties": {
+    "acknowledgment": {
+      "$ref": "../../core/1/common.schema.json#/$defs/acknowledgment"
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "epoch"
+      ],
+      "properties": {
+        "epoch": {
+          "$ref": "../../core/1/common.schema.json#/$defs/safe_nonnegative_integer"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "replay": {
+      "type": "boolean"
+    }
+  },
+  "unevaluatedProperties": false
+}

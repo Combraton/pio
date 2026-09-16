@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.grant.issue.result.schema.json",
+  "title": "core.grant.issue result",
+  "type": "object",
+  "required": [
+    "acknowledgment",
+    "outcome",
+    "replay"
+  ],
+  "properties": {
+    "acknowledgment": {
+      "$ref": "../../core/1/common.schema.json#/$defs/acknowledgment"
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "grant"
+      ],
+      "properties": {
+        "grant": {
+          "$ref": "../../core/1/common.schema.json#/$defs/grant_record"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "replay": {
+      "type": "boolean"
+    }
+  },
+  "unevaluatedProperties": false
+}

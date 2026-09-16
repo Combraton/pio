@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.steer.result.schema.json",
+  "title": "execution.steer result",
+  "type": "object",
+  "required": [
+    "acknowledgment",
+    "outcome",
+    "replay"
+  ],
+  "properties": {
+    "acknowledgment": {
+      "$ref": "../../core/1/common.schema.json#/$defs/acknowledgment"
+    },
+    "replay": {
+      "type": "boolean"
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "steer_id",
+        "request"
+      ],
+      "properties": {
+        "steer_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "request": {
+          "enum": [
+            "recorded",
+            "not_supported"
+          ]
+        },
+        "delivery_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "alternative": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "unevaluatedProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "request": {
+              "const": "recorded"
+            },
+            "alternative": false
+          },
+          "required": [
+            "delivery_id"
+          ]
+        },
+        {
+          "properties": {
+            "request": {
+              "const": "not_supported"
+            },
+            "delivery_id": false
+          },
+          "required": [
+            "alternative"
+          ]
+        }
+      ]
+    }
+  },
+  "unevaluatedProperties": false
+}

@@ -1,0 +1,187 @@
+{
+  "format": "combraton-conformance-fixture/1",
+  "id": "pio.execution-core-dependencies",
+  "version": 2,
+  "title": "Execution-only provider dependencies agree with negotiation without other product profiles",
+  "requirements": [
+    "CMP-5",
+    "CORE-3"
+  ],
+  "spec_refs": [
+    "docs/spec/profiles/CORE.md#43-corefeature_dependencies-query-m6-q1",
+    "docs/spec/profiles/CORE.md#42-corenegotiate-query",
+    "docs/spec/profiles/EXECUTION.md#1-dependencies-and-negotiation"
+  ],
+  "role": "provider",
+  "profiles": [
+    {
+      "name": "execution",
+      "major": 1
+    }
+  ],
+  "features": [
+    "core.events",
+    "core.capabilities",
+    "core.effects"
+  ],
+  "requires_controls": [
+    "executor.script"
+  ],
+  "polarity": "positive",
+  "steps": [
+    {
+      "step": "start",
+      "config": {
+        "principal": "owner",
+        "authority_principals": [
+          "owner"
+        ],
+        "executor": {}
+      }
+    },
+    {
+      "step": "query",
+      "operation": "core.feature_dependencies",
+      "payload": {},
+      "expect": {
+        "ok": {
+          "dependencies": {
+            "$contains": {
+              "profile": "execution",
+              "major": 1,
+              "trigger": {
+                "$exact": {
+                  "kind": "profile"
+                }
+              },
+              "requires": [
+                {
+                  "$exact": {
+                    "profile": "core",
+                    "major": 1,
+                    "features": [
+                      "core.events",
+                      "core.capabilities",
+                      "core.effects"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "step": "query",
+      "operation": "core.capabilities",
+      "payload": {},
+      "expect": {
+        "error": "negotiation_required"
+      }
+    },
+    {
+      "step": "negotiate",
+      "payload": {
+        "caller": {
+          "name": "fixture",
+          "version": "1"
+        },
+        "receive_limits": {
+          "max_frame_bytes": 1048576
+        },
+        "profiles": [
+          {
+            "name": "core",
+            "majors": [
+              1
+            ],
+            "required": true,
+            "required_features": [],
+            "optional_features": []
+          },
+          {
+            "name": "execution",
+            "majors": [
+              1
+            ],
+            "required": true,
+            "required_features": [],
+            "optional_features": []
+          }
+        ]
+      },
+      "expect": {
+        "error": "unsupported_profile",
+        "details": {
+          "unsatisfied": [
+            {
+              "profile": "execution",
+              "feature": "core.events",
+              "reason": "dependency_not_selected"
+            },
+            {
+              "profile": "execution",
+              "feature": "core.capabilities",
+              "reason": "dependency_not_selected"
+            },
+            {
+              "profile": "execution",
+              "feature": "core.effects",
+              "reason": "dependency_not_selected"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "negotiate",
+      "payload": {
+        "caller": {
+          "name": "fixture",
+          "version": "1"
+        },
+        "receive_limits": {
+          "max_frame_bytes": 1048576
+        },
+        "profiles": [
+          {
+            "name": "core",
+            "majors": [
+              1
+            ],
+            "required": true,
+            "required_features": [
+              "core.events",
+              "core.capabilities",
+              "core.effects"
+            ],
+            "optional_features": []
+          },
+          {
+            "name": "execution",
+            "majors": [
+              1
+            ],
+            "required": true,
+            "required_features": [],
+            "optional_features": []
+          }
+        ]
+      },
+      "expect": {
+        "ok": {
+          "selected": {
+            "$contains": {
+              "name": "execution",
+              "major": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "step": "stop"
+    }
+  ]
+}

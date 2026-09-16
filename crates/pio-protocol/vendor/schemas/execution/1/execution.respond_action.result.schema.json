@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.respond_action.result.schema.json",
+  "title": "execution.respond_action result",
+  "type": "object",
+  "required": [
+    "acknowledgment",
+    "outcome",
+    "replay"
+  ],
+  "properties": {
+    "acknowledgment": {
+      "$ref": "../../core/1/common.schema.json#/$defs/acknowledgment"
+    },
+    "replay": {
+      "type": "boolean"
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "action_id",
+        "state",
+        "response_effect"
+      ],
+      "properties": {
+        "action_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "state": {
+          "const": "answered"
+        },
+        "response_effect": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

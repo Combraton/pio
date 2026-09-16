@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core-test/1/core-test.subject.put.params.schema.json",
+  "title": "core-test.subject.put params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/command.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "core-test.subject.put"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "object",
+          "maxProperties": 32,
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "core-test.subject"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "preconditions": {
+      "minItems": 1
+    }
+  },
+  "unevaluatedProperties": false,
+  "required": [
+    "authority_epoch"
+  ]
+}

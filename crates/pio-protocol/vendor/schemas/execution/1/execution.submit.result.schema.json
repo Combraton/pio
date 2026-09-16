@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.submit.result.schema.json",
+  "title": "execution.submit result",
+  "type": "object",
+  "required": [
+    "acknowledgment",
+    "outcome",
+    "replay"
+  ],
+  "properties": {
+    "acknowledgment": {
+      "$ref": "../../core/1/common.schema.json#/$defs/acknowledgment"
+    },
+    "replay": {
+      "type": "boolean"
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "execution",
+        "admission"
+      ],
+      "properties": {
+        "execution": {
+          "$ref": "common.schema.json#/$defs/execution_subject"
+        },
+        "admission": {
+          "$ref": "common.schema.json#/$defs/admission"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "alternative": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "delivery_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "queue_reason": {
+          "$ref": "common.schema.json#/$defs/queue_reason"
+        },
+        "continuation": {
+          "$ref": "common.schema.json#/$defs/continuation"
+        }
+      },
+      "unevaluatedProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "admission": {
+              "const": "admitted"
+            },
+            "reason": false,
+            "alternative": false,
+            "queue_reason": false
+          },
+          "required": [
+            "delivery_id"
+          ]
+        },
+        {
+          "properties": {
+            "admission": {
+              "const": "queued"
+            },
+            "reason": false,
+            "alternative": false,
+            "delivery_id": false
+          },
+          "required": [
+            "queue_reason"
+          ]
+        },
+        {
+          "properties": {
+            "admission": {
+              "const": "refused"
+            },
+            "delivery_id": false,
+            "queue_reason": false
+          },
+          "required": [
+            "reason"
+          ]
+        }
+      ]
+    }
+  },
+  "unevaluatedProperties": false
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core-test/1/core-test.authority.claim.params.schema.json",
+  "title": "core-test.authority.claim params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/command.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "core-test.authority.claim"
+    },
+    "payload": {
+      "type": "object",
+      "maxProperties": 0
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "core-test.authority"
+        },
+        "id": {
+          "const": "core-test"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "preconditions": {
+      "minItems": 1,
+      "maxItems": 1
+    },
+    "authority_epoch": false
+  },
+  "unevaluatedProperties": false
+}

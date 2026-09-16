@@ -1,0 +1,888 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/common.schema.json",
+  "title": "Core/1 shared definitions (Protocol 0.1 draft)",
+  "$defs": {
+    "safe_nonnegative_integer": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "identifier": {
+      "description": "Caller- or provider-chosen opaque identifier. Printable ASCII subset avoids Unicode normalization ambiguity.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:~-]{0,127}$"
+    },
+    "dotted_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9_-]*)+$",
+      "maxLength": 128
+    },
+    "operation_name": {
+      "$ref": "#/$defs/dotted_name"
+    },
+    "subject_kind": {
+      "$ref": "#/$defs/dotted_name"
+    },
+    "profile_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+    },
+    "profile_major": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "feature_name": {
+      "description": "<profile>.<feature>; never contains a slash.",
+      "$ref": "#/$defs/dotted_name"
+    },
+    "extension_key": {
+      "description": "<domain>/<name>; exactly one slash.",
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+/[a-z][a-z0-9_.-]{0,63}$"
+    },
+    "digest": {
+      "description": "Algorithm-qualified lowercase-hex digest (ENCODING section 3). Length per algorithm is checked semantically.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+([+._-][a-z0-9]+)*:[0-9a-f]+$",
+      "maxLength": 256
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/subject_kind"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "revision": {
+      "$ref": "#/$defs/safe_nonnegative_integer"
+    },
+    "precondition": {
+      "type": "object",
+      "required": [
+        "subject",
+        "revision"
+      ],
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "requires": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 64,
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/feature_name"
+          },
+          {
+            "$ref": "#/$defs/extension_key"
+          }
+        ]
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/extension_key"
+      },
+      "maxProperties": 64
+    },
+    "party": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "required": [
+        "max_frame_bytes",
+        "max_payload_bytes",
+        "max_string_bytes",
+        "max_array_items",
+        "max_depth"
+      ],
+      "properties": {
+        "max_frame_bytes": {
+          "type": "integer",
+          "minimum": 1048576,
+          "maximum": 9007199254740991
+        },
+        "max_payload_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "max_string_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "max_array_items": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "max_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "max_pending_notification_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "Present only in core.negotiate results when core.events.backpressure was negotiated."
+        },
+        "backpressure_notice_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600000,
+          "description": "Present only in core.negotiate results when core.events.backpressure was negotiated."
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "dedupe_window": {
+      "type": "object",
+      "required": [
+        "oldest_retained",
+        "current"
+      ],
+      "properties": {
+        "oldest_retained": {
+          "$ref": "#/$defs/safe_nonnegative_integer"
+        },
+        "current": {
+          "$ref": "#/$defs/safe_nonnegative_integer"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "acknowledgment": {
+      "type": "object",
+      "required": [
+        "command_id",
+        "command_digest",
+        "operation_ref",
+        "subject",
+        "revision",
+        "effect_refs"
+      ],
+      "properties": {
+        "command_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "command_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "operation_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "effect_refs": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "description": "Effects recorded by this command (CORE section 19); empty for commands that record none."
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "principal": {
+      "$ref": "#/$defs/identifier"
+    },
+    "instant": {
+      "description": "UTC instant, second precision, evaluated against the provider's clock.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"
+    },
+    "right_name": {
+      "$ref": "#/$defs/dotted_name"
+    },
+    "resource": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/subject_kind"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "id_prefix": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:~-]{1,128}$"
+        }
+      },
+      "not": {
+        "required": [
+          "id",
+          "id_prefix"
+        ]
+      },
+      "unevaluatedProperties": false
+    },
+    "grant_terms": {
+      "type": "object",
+      "required": [
+        "holder",
+        "audience",
+        "rights",
+        "resources",
+        "delegation"
+      ],
+      "properties": {
+        "holder": {
+          "$ref": "#/$defs/principal"
+        },
+        "audience": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rights": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/right_name"
+          }
+        },
+        "resources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/resource"
+          }
+        },
+        "expires_at": {
+          "$ref": "#/$defs/instant"
+        },
+        "authority_binding": {
+          "type": "object",
+          "required": [
+            "scope",
+            "epoch"
+          ],
+          "properties": {
+            "scope": {
+              "$ref": "#/$defs/identifier"
+            },
+            "epoch": {
+              "$ref": "#/$defs/safe_nonnegative_integer"
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "delegation": {
+          "type": "object",
+          "required": [
+            "allowed",
+            "max_depth"
+          ],
+          "properties": {
+            "allowed": {
+              "type": "boolean"
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "parent": {
+          "$ref": "#/$defs/identifier"
+        },
+        "constraints": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "description": "Typed grant constraints (CORE section 15.6). Each kind is defined by a profile feature; a provider refuses kinds it does not implement.",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "$ref": "#/$defs/dotted_name"
+              },
+              "work": {
+                "$ref": "#/$defs/subject"
+              }
+            },
+            "unevaluatedProperties": false,
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "evidence.work_binding"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "work"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "grant_record": {
+      "type": "object",
+      "required": [
+        "id",
+        "issuer",
+        "holder",
+        "audience",
+        "rights",
+        "resources",
+        "delegation",
+        "state"
+      ],
+      "allOf": [
+        {
+          "$ref": "#/$defs/grant_terms"
+        }
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "issuer": {
+          "$ref": "#/$defs/principal"
+        },
+        "state": {
+          "enum": [
+            "active",
+            "revoked"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "stream_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:~-]{1,128}$"
+    },
+    "cursor": {
+      "description": "Opaque; callers must not construct or interpret it.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "position": {
+      "type": "object",
+      "required": [
+        "epoch",
+        "sequence"
+      ],
+      "properties": {
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "sequence": {
+          "$ref": "#/$defs/safe_nonnegative_integer"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "stream",
+        "epoch",
+        "sequence",
+        "type",
+        "subject",
+        "revision",
+        "origin",
+        "caused_by",
+        "recorded_at",
+        "payload"
+      ],
+      "properties": {
+        "stream": {
+          "$ref": "#/$defs/stream_id"
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "$ref": "#/$defs/dotted_name"
+        },
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "origin": {
+          "enum": [
+            "command",
+            "provider"
+          ]
+        },
+        "operation_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "command_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "caused_by": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "recorded_at": {
+          "$ref": "#/$defs/instant"
+        },
+        "payload": {
+          "type": "object"
+        }
+      },
+      "unevaluatedProperties": false,
+      "if": {
+        "properties": {
+          "origin": {
+            "const": "command"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "operation_ref",
+          "command_id"
+        ]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "operation_ref"
+              ]
+            },
+            {
+              "required": [
+                "command_id"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "stream_item": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "event"
+          ],
+          "properties": {
+            "event": {
+              "$ref": "#/$defs/event"
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "epoch_change"
+          ],
+          "properties": {
+            "epoch_change": {
+              "type": "object",
+              "required": [
+                "from_epoch",
+                "to_epoch",
+                "vouched_through"
+              ],
+              "properties": {
+                "from_epoch": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "to_epoch": {
+                  "type": "integer",
+                  "minimum": 2
+                },
+                "vouched_through": {
+                  "$ref": "#/$defs/safe_nonnegative_integer"
+                }
+              },
+              "unevaluatedProperties": false
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "gap"
+          ],
+          "properties": {
+            "gap": {
+              "type": "object",
+              "required": [
+                "kind",
+                "from",
+                "to",
+                "snapshot"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "retention"
+                },
+                "from": {
+                  "$ref": "#/$defs/position"
+                },
+                "to": {
+                  "$ref": "#/$defs/position"
+                },
+                "snapshot": {
+                  "type": "object",
+                  "required": [
+                    "as_of",
+                    "subjects"
+                  ],
+                  "properties": {
+                    "as_of": {
+                      "$ref": "#/$defs/position"
+                    },
+                    "subjects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "subject",
+                          "revision",
+                          "state"
+                        ],
+                        "properties": {
+                          "subject": {
+                            "$ref": "#/$defs/subject"
+                          },
+                          "revision": {
+                            "$ref": "#/$defs/revision"
+                          },
+                          "state": {
+                            "type": "object"
+                          }
+                        },
+                        "unevaluatedProperties": false
+                      }
+                    }
+                  },
+                  "unevaluatedProperties": false
+                }
+              },
+              "unevaluatedProperties": false
+            }
+          },
+          "unevaluatedProperties": false
+        }
+      ]
+    },
+    "stream_ref": {
+      "type": "object",
+      "required": [
+        "id",
+        "epoch"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stream_id"
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "capability_predicate": {
+      "type": "object",
+      "required": [
+        "name",
+        "status",
+        "evidence"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/dotted_name"
+        },
+        "status": {
+          "enum": [
+            "supported",
+            "unsupported",
+            "unknown"
+          ]
+        },
+        "enforcement": {
+          "enum": [
+            "enforced",
+            "mediated",
+            "cooperative"
+          ]
+        },
+        "evidence": {
+          "type": "object",
+          "required": [
+            "source"
+          ],
+          "properties": {
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "observed_at": {
+              "$ref": "#/$defs/instant"
+            }
+          },
+          "unevaluatedProperties": false
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "credential": {
+      "description": "Format of issued principal credentials (CORE section 18.1). core.authenticate params deliberately accept any string, because a malformed credential is authentication_failed, not invalid_envelope.",
+      "type": "string",
+      "pattern": "^ccred1\\.[A-Za-z0-9][A-Za-z0-9._:~-]{0,127}\\.[A-Za-z0-9_-]{43}$",
+      "maxLength": 200
+    },
+    "retry_class": {
+      "enum": [
+        "pure",
+        "read",
+        "idempotent_key",
+        "compensatable",
+        "non_repeatable"
+      ]
+    },
+    "effect_status": {
+      "enum": [
+        "pending",
+        "succeeded",
+        "failed",
+        "unknown"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "class",
+        "source"
+      ],
+      "properties": {
+        "class": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "effect_descriptor": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "target",
+        "payload_digest",
+        "authorization",
+        "retry_class",
+        "operation_ref"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "$ref": "#/$defs/dotted_name"
+        },
+        "target": {
+          "$ref": "#/$defs/subject"
+        },
+        "payload_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "authorization": {
+          "type": "object",
+          "required": [
+            "principal"
+          ],
+          "properties": {
+            "principal": {
+              "$ref": "#/$defs/principal"
+            },
+            "grant": {
+              "$ref": "#/$defs/identifier"
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "retry_class": {
+          "$ref": "#/$defs/retry_class"
+        },
+        "operation_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "idempotency_key": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "effect_observation": {
+      "type": "object",
+      "required": [
+        "status",
+        "evidence",
+        "recorded_at"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/effect_status"
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
+        "recorded_at": {
+          "$ref": "#/$defs/instant"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "obligation": {
+      "type": "object",
+      "required": [
+        "id",
+        "expects",
+        "deadline",
+        "state"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "expects": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "deadline": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/instant"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "open",
+            "satisfied",
+            "overdue",
+            "aborted"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "effect_attempt": {
+      "type": "object",
+      "required": [
+        "attempt",
+        "outcome",
+        "recorded_at"
+      ],
+      "properties": {
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "idempotency_key": {
+          "$ref": "#/$defs/identifier"
+        },
+        "outcome": {
+          "enum": [
+            "completed",
+            "failed",
+            "unknown"
+          ]
+        },
+        "recorded_at": {
+          "$ref": "#/$defs/instant"
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

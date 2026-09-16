@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.events.subscribe.result.schema.json",
+  "title": "core.events.subscribe result",
+  "type": "object",
+  "required": [
+    "subscription",
+    "stream"
+  ],
+  "properties": {
+    "subscription": {
+      "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+    },
+    "stream": {
+      "$ref": "../../core/1/common.schema.json#/$defs/stream_ref"
+    }
+  },
+  "unevaluatedProperties": false
+}

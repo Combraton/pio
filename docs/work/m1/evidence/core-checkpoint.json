@@ -1,0 +1,157 @@
+{
+  "base": "900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe",
+  "tested_head": "eff952ddf875d506cb000f16f8ddcd1f82f099b7",
+  "ci_run": "https://github.com/Combraton/pio/actions/runs/35081058490",
+  "acceptance": "Core implementation checkpoint only; not M1 acceptance",
+  "real_adapter": false,
+  "cargo_unit_tests": 9,
+  "platforms": [
+    {
+      "artifact": "pio-m1-macos-15-arm64-eff952ddf875d506cb000f16f8ddcd1f82f099b7",
+      "environment": {
+        "pio_head": "eff952ddf875d506cb000f16f8ddcd1f82f099b7",
+        "pio_dirty": false,
+        "os": "Darwin",
+        "arch": "arm64",
+        "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+        "execution_source": "fake-host",
+        "real_adapter": false
+      },
+      "conformance_classes": {
+        "skipped": 1,
+        "unsupported": 115,
+        "pass": 164
+      },
+      "by_directory": {
+        "compat": {
+          "skipped": 1
+        },
+        "composition": {
+          "unsupported": 14
+        },
+        "context": {
+          "unsupported": 11
+        },
+        "core": {
+          "pass": 130,
+          "unsupported": 5
+        },
+        "evidence": {
+          "unsupported": 16
+        },
+        "execution": {
+          "unsupported": 51
+        },
+        "knowledge": {
+          "unsupported": 10
+        },
+        "socket": {
+          "pass": 10,
+          "unsupported": 3
+        },
+        "stream": {
+          "pass": 24
+        },
+        "verification": {
+          "unsupported": 5
+        }
+      },
+      "schema_verification": {
+        "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+        "unchanged_schema_files": 40
+      },
+      "matrix_attempted": 54,
+      "matrix_outcomes": {
+        "pass": 39,
+        "expected_property_failure": 3,
+        "expected_defense_refusal": 9,
+        "expected_classifier_failure": 3
+      },
+      "source_tree_sha256": "fad37dcf63d1f0bda8197e8c520bb4b927bb1bbddfecd61dbcd6d4af32bc4b2e",
+      "binary_sha256": "96e3b9f74c7d73fd0fbad297bd28ba4a51a10e841d11fff6f7bbd616414293ed",
+      "manifest_sha256": "26c591b53cddcde2290b54eee9e3f0c2851bc1b3df50b9e74245fc5bb64f3d4e"
+    },
+    {
+      "artifact": "pio-m1-ubuntu-24.04-x86_64-eff952ddf875d506cb000f16f8ddcd1f82f099b7",
+      "environment": {
+        "pio_head": "eff952ddf875d506cb000f16f8ddcd1f82f099b7",
+        "pio_dirty": false,
+        "os": "Linux",
+        "arch": "x86_64",
+        "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+        "execution_source": "fake-host",
+        "real_adapter": false
+      },
+      "conformance_classes": {
+        "skipped": 1,
+        "unsupported": 115,
+        "pass": 164
+      },
+      "by_directory": {
+        "compat": {
+          "skipped": 1
+        },
+        "composition": {
+          "unsupported": 14
+        },
+        "context": {
+          "unsupported": 11
+        },
+        "core": {
+          "pass": 130,
+          "unsupported": 5
+        },
+        "evidence": {
+          "unsupported": 16
+        },
+        "execution": {
+          "unsupported": 51
+        },
+        "knowledge": {
+          "unsupported": 10
+        },
+        "socket": {
+          "pass": 10,
+          "unsupported": 3
+        },
+        "stream": {
+          "pass": 24
+        },
+        "verification": {
+          "unsupported": 5
+        }
+      },
+      "schema_verification": {
+        "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+        "unchanged_schema_files": 40
+      },
+      "matrix_attempted": 54,
+      "matrix_outcomes": {
+        "pass": 39,
+        "expected_property_failure": 3,
+        "expected_defense_refusal": 9,
+        "expected_classifier_failure": 3
+      },
+      "source_tree_sha256": "fad37dcf63d1f0bda8197e8c520bb4b927bb1bbddfecd61dbcd6d4af32bc4b2e",
+      "binary_sha256": "b62abf6ecff2142f1cf68d2dd73df8a7a058c9e8b11bdfa520039b8cf745a1a7",
+      "manifest_sha256": "e4cc6834c836195cab3a707771a253f9f7f32df69740dde7c7bdf99f384f658d"
+    }
+  ],
+  "clean_clone": {
+    "head": "eff952ddf875d506cb000f16f8ddcd1f82f099b7",
+    "platform": "macOS arm64",
+    "fresh_protocol_downloads": true,
+    "documented_sequence_exit": 0,
+    "conformance_classes": {
+      "skipped": 1,
+      "unsupported": 115,
+      "pass": 164
+    },
+    "matrix_outcomes": {
+      "pass": 39,
+      "expected_property_failure": 3,
+      "expected_defense_refusal": 9,
+      "expected_classifier_failure": 3
+    }
+  }
+}

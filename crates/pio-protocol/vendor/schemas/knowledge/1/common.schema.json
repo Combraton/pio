@@ -1,0 +1,699 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/knowledge/1/common.schema.json",
+  "title": "knowledge/1 common definitions",
+  "$defs": {
+    "claim_subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "knowledge.claim"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "decision_subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "knowledge.decision"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "evaluation_subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "knowledge.evaluation"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "conflict_subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "knowledge.conflict"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "authority_subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "knowledge.authority"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "claim_reference": {
+      "type": "object",
+      "required": [
+        "provider",
+        "claim",
+        "revision",
+        "digest"
+      ],
+      "properties": {
+        "provider": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "claim": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "digest": {
+          "$ref": "../../core/1/common.schema.json#/$defs/digest"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "evidence_reference": {
+      "allOf": [
+        {
+          "$ref": "../../evidence/1/common.schema.json#/$defs/reference"
+        }
+      ],
+      "required": [
+        "provider"
+      ]
+    },
+    "receipt_reference": {
+      "type": "object",
+      "required": [
+        "provider",
+        "receipt",
+        "artifact"
+      ],
+      "properties": {
+        "provider": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "receipt": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "artifact": {
+          "$ref": "#/$defs/evidence_reference"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "plane": {
+      "enum": [
+        "normative",
+        "observed",
+        "interpretive"
+      ]
+    },
+    "statement": {
+      "type": "object",
+      "required": [
+        "subject",
+        "predicate",
+        "value",
+        "cardinality"
+      ],
+      "properties": {
+        "subject": {
+          "$ref": "../../core/1/common.schema.json#/$defs/subject"
+        },
+        "predicate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "value": {},
+        "cardinality": {
+          "enum": [
+            "single",
+            "multiple",
+            "unknown"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "id",
+        "qualifiers"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "qualifiers": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "validity": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "from": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        },
+        "until": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "basis": {
+      "type": "object",
+      "required": [
+        "repositories",
+        "completeness"
+      ],
+      "properties": {
+        "repositories": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "tree"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "tree": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "dirty": {
+                "type": "object",
+                "required": [
+                  "snapshot_digest"
+                ],
+                "properties": {
+                  "snapshot_digest": {
+                    "$ref": "../../core/1/common.schema.json#/$defs/digest"
+                  }
+                },
+                "unevaluatedProperties": false
+              }
+            },
+            "unevaluatedProperties": false
+          }
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "build": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "completeness": {
+          "enum": [
+            "complete",
+            "partial"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "root": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "provider",
+            "artifact",
+            "digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "evidence"
+            },
+            "provider": {
+              "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+            },
+            "artifact": {
+              "$ref": "../../evidence/1/common.schema.json#/$defs/artifact_subject"
+            },
+            "digest": {
+              "$ref": "../../core/1/common.schema.json#/$defs/digest"
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "provider",
+            "claim",
+            "revision",
+            "digest"
+          ],
+          "properties": {
+            "kind": {
+              "const": "claim"
+            },
+            "provider": {
+              "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+            },
+            "claim": {
+              "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "digest": {
+              "$ref": "../../core/1/common.schema.json#/$defs/digest"
+            }
+          },
+          "unevaluatedProperties": false
+        }
+      ]
+    },
+    "support_entry": {
+      "type": "object",
+      "required": [
+        "support_id",
+        "evidence",
+        "ancestry"
+      ],
+      "properties": {
+        "support_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence_reference"
+        },
+        "ancestry": {
+          "type": "object",
+          "required": [
+            "completeness",
+            "roots"
+          ],
+          "properties": {
+            "completeness": {
+              "enum": [
+                "complete",
+                "partial",
+                "unknown"
+              ]
+            },
+            "roots": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "$ref": "#/$defs/root"
+              }
+            }
+          },
+          "unevaluatedProperties": false
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "derivation": {
+      "type": "object",
+      "required": [
+        "kind",
+        "inputs"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "deterministic",
+            "model_assisted",
+            "human"
+          ]
+        },
+        "record": {
+          "$ref": "#/$defs/evidence_reference"
+        },
+        "inputs": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/evidence_reference"
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "condition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "condition_id",
+            "kind",
+            "repository",
+            "expected"
+          ],
+          "properties": {
+            "condition_id": {
+              "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+            },
+            "kind": {
+              "enum": [
+                "repository_tree",
+                "dirty_snapshot"
+              ]
+            },
+            "repository": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "expected": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "condition_id",
+            "kind",
+            "expected"
+          ],
+          "properties": {
+            "condition_id": {
+              "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+            },
+            "kind": {
+              "const": "environment_digest"
+            },
+            "expected": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "unevaluatedProperties": false
+        }
+      ]
+    },
+    "health": {
+      "enum": [
+        "healthy",
+        "degraded",
+        "failing",
+        "unknown"
+      ]
+    },
+    "position": {
+      "$ref": "../../core/1/common.schema.json#/$defs/position"
+    },
+    "record": {
+      "type": "object",
+      "required": [
+        "format",
+        "provider",
+        "claim",
+        "revision",
+        "producer",
+        "plane",
+        "statement",
+        "scope",
+        "validity",
+        "basis",
+        "support",
+        "derivation",
+        "dependencies",
+        "conditions",
+        "health",
+        "supersedes"
+      ],
+      "properties": {
+        "format": {
+          "const": "combraton-knowledge-claim/1"
+        },
+        "provider": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "claim": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "producer": {
+          "$ref": "../../core/1/common.schema.json#/$defs/principal"
+        },
+        "plane": {
+          "$ref": "#/$defs/plane"
+        },
+        "statement": {
+          "$ref": "#/$defs/statement"
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "validity": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/validity"
+            }
+          ]
+        },
+        "basis": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/basis"
+            }
+          ]
+        },
+        "support": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "common.schema.json#/$defs/support_entry"
+          }
+        },
+        "derivation": {
+          "$ref": "#/$defs/derivation"
+        },
+        "dependencies": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "common.schema.json#/$defs/claim_reference"
+          }
+        },
+        "conditions": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "common.schema.json#/$defs/condition"
+          }
+        },
+        "health": {
+          "enum": [
+            "healthy",
+            "degraded",
+            "failing",
+            "unknown",
+            "not_applicable"
+          ]
+        },
+        "supersedes": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "revision",
+                "digest"
+              ],
+              "properties": {
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "digest": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/digest"
+                }
+              },
+              "unevaluatedProperties": false
+            }
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "reliance_state": {
+      "enum": [
+        "proposed",
+        "accepted_for_use",
+        "rejected",
+        "superseded"
+      ]
+    },
+    "permitted_use": {
+      "enum": [
+        "binding",
+        "evidence",
+        "hypothesis",
+        "reference"
+      ]
+    },
+    "applicability_result": {
+      "enum": [
+        "applicable",
+        "needs_check",
+        "invalid_for_target",
+        "unknown"
+      ]
+    },
+    "evaluator": {
+      "type": "object",
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "conflict_kind": {
+      "enum": [
+        "conflict",
+        "drift"
+      ]
+    },
+    "conflict_status": {
+      "enum": [
+        "potential",
+        "demonstrated"
+      ]
+    },
+    "resolution": {
+      "enum": [
+        "select",
+        "narrow_scope",
+        "reject_support",
+        "supersede",
+        "request_observation",
+        "not_a_conflict"
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "finding"
+      ],
+      "properties": {
+        "condition_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "dependency": {
+          "$ref": "#/$defs/claim_reference"
+        },
+        "finding": {
+          "enum": [
+            "match",
+            "mismatch",
+            "missing_anchor",
+            "unsupported",
+            "unchecked"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "self_reference",
+            "remote_dependency",
+            "unresolved",
+            "not_evaluated",
+            "not_established"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

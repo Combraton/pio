@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.submit.params.schema.json",
+  "title": "execution.submit params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/command.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "execution.submit"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "brief"
+      ],
+      "properties": {
+        "brief": {
+          "type": "object",
+          "required": [
+            "digest",
+            "media_type"
+          ],
+          "properties": {
+            "digest": {
+              "$ref": "../../core/1/common.schema.json#/$defs/digest"
+            },
+            "media_type": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "adapter": {
+          "type": "object",
+          "required": [
+            "requires"
+          ],
+          "properties": {
+            "requires": {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "../../core/1/common.schema.json#/$defs/dotted_name"
+              }
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "restrictions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "common.schema.json#/$defs/restriction"
+          }
+        },
+        "timeouts": {
+          "$ref": "common.schema.json#/$defs/timeouts"
+        },
+        "predecessor": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "correlation": {
+          "type": "object",
+          "maxProperties": 64
+        },
+        "workspace": {
+          "$ref": "common.schema.json#/$defs/workspace_request"
+        },
+        "budget": {
+          "$ref": "common.schema.json#/$defs/budget_request"
+        },
+        "context_bindings": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "common.schema.json#/$defs/context_binding_request"
+          }
+        },
+        "continuation": {
+          "type": "object",
+          "required": [
+            "of",
+            "mode"
+          ],
+          "properties": {
+            "of": {
+              "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+            },
+            "mode": {
+              "enum": [
+                "resume",
+                "fork"
+              ]
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "origin": {
+          "$ref": "common.schema.json#/$defs/origin"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "subject": {
+      "$ref": "common.schema.json#/$defs/execution_subject"
+    },
+    "preconditions": {
+      "minItems": 1,
+      "maxItems": 1
+    }
+  },
+  "unevaluatedProperties": false
+}

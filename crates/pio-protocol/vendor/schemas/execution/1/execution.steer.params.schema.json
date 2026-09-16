@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.steer.params.schema.json",
+  "title": "execution.steer params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/command.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "execution.steer"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "message"
+      ],
+      "properties": {
+        "message": {
+          "type": "object",
+          "required": [
+            "digest",
+            "media_type"
+          ],
+          "properties": {
+            "digest": {
+              "$ref": "../../core/1/common.schema.json#/$defs/digest"
+            },
+            "media_type": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "unevaluatedProperties": false
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "subject": {
+      "$ref": "common.schema.json#/$defs/execution_subject"
+    },
+    "preconditions": {
+      "minItems": 1,
+      "maxItems": 1
+    }
+  },
+  "unevaluatedProperties": false
+}

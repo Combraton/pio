@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/command.schema.json",
+  "title": "Core/1 command envelope (CORE section 5)",
+  "type": "object",
+  "required": [
+    "operation",
+    "message_id",
+    "command_id",
+    "dedupe_generation",
+    "subject",
+    "preconditions",
+    "requires",
+    "command_digest",
+    "payload"
+  ],
+  "properties": {
+    "operation": {
+      "$ref": "common.schema.json#/$defs/operation_name"
+    },
+    "message_id": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "command_id": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "dedupe_generation": {
+      "$ref": "common.schema.json#/$defs/safe_nonnegative_integer"
+    },
+    "subject": {
+      "$ref": "common.schema.json#/$defs/subject"
+    },
+    "preconditions": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "common.schema.json#/$defs/precondition"
+      }
+    },
+    "authority_epoch": {
+      "$ref": "common.schema.json#/$defs/safe_nonnegative_integer"
+    },
+    "requires": {
+      "$ref": "common.schema.json#/$defs/requires"
+    },
+    "correlation": {
+      "type": "object",
+      "maxProperties": 64
+    },
+    "caused_by": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      }
+    },
+    "extensions": {
+      "$ref": "common.schema.json#/$defs/extensions"
+    },
+    "grant": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "command_digest": {
+      "$ref": "common.schema.json#/$defs/digest"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "unevaluatedProperties": false
+}

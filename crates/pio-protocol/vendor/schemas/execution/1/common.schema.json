@@ -1,0 +1,1353 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/common.schema.json",
+  "title": "execution/1 common definitions",
+  "$defs": {
+    "execution_subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "execution.execution"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "enforcement": {
+      "enum": [
+        "enforced",
+        "mediated",
+        "cooperative"
+      ]
+    },
+    "restriction": {
+      "type": "object",
+      "required": [
+        "scope",
+        "enforcement"
+      ],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "enforcement": {
+          "$ref": "#/$defs/enforcement"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 31536000
+    },
+    "timeouts": {
+      "type": "object",
+      "properties": {
+        "queue": {
+          "$ref": "#/$defs/seconds"
+        },
+        "delivery": {
+          "$ref": "#/$defs/seconds"
+        },
+        "execution_deadline": {
+          "$ref": "#/$defs/seconds"
+        },
+        "inactivity": {
+          "$ref": "#/$defs/seconds"
+        },
+        "reconciliation": {
+          "$ref": "#/$defs/seconds"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "admission": {
+      "enum": [
+        "queued",
+        "admitted",
+        "refused"
+      ]
+    },
+    "delivery": {
+      "enum": [
+        "pending",
+        "acknowledged",
+        "delivered",
+        "not_delivered",
+        "failed_before_delivery",
+        "ambiguous"
+      ],
+      "description": "Current delivery determination (EXECUTION section 3): pending awaits evidence; acknowledged and delivered confirm arrival (neither proves comprehension or success); not_delivered and failed_before_delivery are terminal; ambiguous means dispatch may have happened and the outcome is unknown."
+    },
+    "proof_class": {
+      "enum": [
+        "provider_ack_id",
+        "echo",
+        "transport_only",
+        "bytes_written"
+      ]
+    },
+    "runtime": {
+      "enum": [
+        "not_started",
+        "preparing",
+        "active",
+        "requires_action",
+        "quiescent",
+        "exited",
+        "unknown"
+      ]
+    },
+    "result": {
+      "enum": [
+        "absent",
+        "partial",
+        "returned"
+      ]
+    },
+    "exit": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "code"
+          ],
+          "properties": {
+            "code": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "signal"
+          ],
+          "properties": {
+            "signal": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        {
+          "enum": [
+            "forced_termination",
+            "unavailable"
+          ]
+        }
+      ]
+    },
+    "evaluation": {
+      "oneOf": [
+        {
+          "const": "not_requested"
+        },
+        {
+          "type": "object",
+          "required": [
+            "reference"
+          ],
+          "properties": {
+            "reference": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "unevaluatedProperties": false
+        }
+      ]
+    },
+    "delivery_record": {
+      "type": "object",
+      "required": [
+        "delivery_id",
+        "delivery",
+        "history"
+      ],
+      "properties": {
+        "delivery_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "delivery": {
+          "$ref": "#/$defs/delivery"
+        },
+        "evidence": {
+          "$ref": "../../core/1/common.schema.json#/$defs/evidence"
+        },
+        "proof_class": {
+          "$ref": "#/$defs/proof_class"
+        },
+        "determined_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        },
+        "history": {
+          "type": "array",
+          "description": "Earlier determinations, oldest first; never rewritten.",
+          "items": {
+            "type": "object",
+            "required": [
+              "delivery",
+              "recorded_at"
+            ],
+            "properties": {
+              "delivery": {
+                "$ref": "#/$defs/delivery"
+              },
+              "evidence": {
+                "$ref": "../../core/1/common.schema.json#/$defs/evidence"
+              },
+              "recorded_at": {
+                "$ref": "../../core/1/common.schema.json#/$defs/instant"
+              }
+            },
+            "unevaluatedProperties": false
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "completion_record": {
+      "type": "object",
+      "required": [
+        "completion_id",
+        "digest",
+        "generation",
+        "status"
+      ],
+      "properties": {
+        "completion_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "digest": {
+          "$ref": "../../core/1/common.schema.json#/$defs/digest"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "enum": [
+            "recorded",
+            "duplicate",
+            "conflict",
+            "superseded_attempt"
+          ]
+        },
+        "outputs": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": [
+              "role",
+              "evidence"
+            ],
+            "properties": {
+              "role": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "evidence": {
+                "$ref": "../../evidence/1/common.schema.json#/$defs/reference"
+              }
+            },
+            "unevaluatedProperties": false
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "cancellation": {
+      "type": "object",
+      "required": [
+        "receipt"
+      ],
+      "properties": {
+        "receipt": {
+          "$ref": "#/$defs/cancel_receipt"
+        },
+        "outcome": {
+          "enum": [
+            "cancelled",
+            "refused",
+            "not_supported",
+            "unknown"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "cancel_receipt": {
+      "type": "object",
+      "required": [
+        "state",
+        "operation_ref"
+      ],
+      "properties": {
+        "state": {
+          "const": "cancel_requested"
+        },
+        "operation_ref": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "recovery_decision": {
+      "type": "object",
+      "required": [
+        "delivery_id",
+        "decision",
+        "reason",
+        "recorded_at"
+      ],
+      "properties": {
+        "delivery_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "decision": {
+          "enum": [
+            "dispatch_resumed",
+            "ambiguous",
+            "failed_before_delivery"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "provably_not_dispatched",
+            "dispatch_may_have_begun",
+            "journal_not_intact",
+            "cancelled",
+            "authorization_lost",
+            "deadline_passed",
+            "recovery_policy"
+          ]
+        },
+        "recorded_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "tri_state": {
+      "enum": [
+        "yes",
+        "no",
+        "unknown"
+      ]
+    },
+    "queue_reason": {
+      "enum": [
+        "capacity",
+        "context_binding_unsatisfied",
+        "context_binding_stale",
+        "context_binding_unknown"
+      ]
+    },
+    "steering_entry": {
+      "type": "object",
+      "required": [
+        "steer_id",
+        "request",
+        "recorded_at"
+      ],
+      "properties": {
+        "steer_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "request": {
+          "enum": [
+            "recorded",
+            "not_supported"
+          ]
+        },
+        "recorded_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        },
+        "alternative": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "delivery_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "delivery": {
+          "enum": [
+            "pending",
+            "acknowledged",
+            "ambiguous"
+          ]
+        },
+        "proof_class": {
+          "$ref": "#/$defs/proof_class"
+        },
+        "evidence": {
+          "$ref": "../../core/1/common.schema.json#/$defs/evidence"
+        },
+        "behavior": {
+          "enum": [
+            "not_observed",
+            "observed"
+          ]
+        },
+        "behavior_evidence": {
+          "$ref": "../../core/1/common.schema.json#/$defs/evidence"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "action_entry": {
+      "type": "object",
+      "required": [
+        "action_id",
+        "owner",
+        "state",
+        "requested_at"
+      ],
+      "properties": {
+        "action_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "answered"
+          ]
+        },
+        "requested_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        },
+        "answered_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        },
+        "response_effect": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "runtime_detail": {
+      "type": "object",
+      "required": [
+        "action_id",
+        "owner"
+      ],
+      "properties": {
+        "action_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "workspace_request": {
+      "type": "object",
+      "required": [
+        "repository",
+        "base",
+        "cleanup"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "base": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "permitted_paths": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "permitted_effects": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "../../core/1/common.schema.json#/$defs/dotted_name"
+          }
+        },
+        "cleanup": {
+          "enum": [
+            "retain",
+            "remove"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "workspace_lease": {
+      "type": "object",
+      "required": [
+        "lease_id",
+        "repository",
+        "base",
+        "writer",
+        "lease_epoch",
+        "cleanup"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "base": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "permitted_paths": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "permitted_effects": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "../../core/1/common.schema.json#/$defs/dotted_name"
+          }
+        },
+        "cleanup": {
+          "enum": [
+            "retain",
+            "remove"
+          ]
+        },
+        "lease_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "writer": {
+          "$ref": "../../core/1/common.schema.json#/$defs/principal"
+        },
+        "lease_epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "annotation": {
+      "type": "object",
+      "required": [
+        "kind",
+        "value",
+        "basis",
+        "recorded_at"
+      ],
+      "properties": {
+        "kind": {
+          "const": "agent_reported_commit"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "basis": {
+          "const": "agent_report"
+        },
+        "recorded_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "checkpoint": {
+      "type": "object",
+      "required": [
+        "checkpoint_id",
+        "lease_epoch",
+        "recorded_at",
+        "coverage",
+        "complete",
+        "annotations"
+      ],
+      "properties": {
+        "checkpoint_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "lease_epoch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "recorded_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        },
+        "probed_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        },
+        "head": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "coverage": {
+          "type": "object",
+          "required": [
+            "tracked",
+            "dirty",
+            "untracked"
+          ],
+          "properties": {
+            "tracked": {
+              "enum": [
+                "probed",
+                "not_probed"
+              ]
+            },
+            "dirty": {
+              "enum": [
+                "probed",
+                "not_probed"
+              ]
+            },
+            "untracked": {
+              "enum": [
+                "probed",
+                "not_probed"
+              ]
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "dirty_paths": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "untracked_paths": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "annotations": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/annotation"
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "budget_request": {
+      "type": "object",
+      "required": [
+        "pool",
+        "ceiling"
+      ],
+      "properties": {
+        "pool": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "ceiling": {
+          "enum": [
+            "hard",
+            "soft"
+          ]
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "usage_basis": {
+      "enum": [
+        "observed",
+        "estimated",
+        "unknown",
+        "enforced_bound"
+      ]
+    },
+    "usage_observation": {
+      "type": "object",
+      "required": [
+        "invocation_id",
+        "basis",
+        "recorded_at"
+      ],
+      "properties": {
+        "invocation_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "basis": {
+          "$ref": "#/$defs/usage_basis"
+        },
+        "measure": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "recorded_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "usage": {
+      "type": "object",
+      "required": [
+        "observations",
+        "liability"
+      ],
+      "properties": {
+        "observations": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/$defs/usage_observation"
+          }
+        },
+        "liability": {
+          "enum": [
+            "none",
+            "resolved",
+            "unresolved"
+          ]
+        },
+        "budget": {
+          "type": "object",
+          "required": [
+            "pool",
+            "ceiling",
+            "amount",
+            "reservation"
+          ],
+          "properties": {
+            "pool": {
+              "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+            },
+            "ceiling": {
+              "enum": [
+                "hard",
+                "soft"
+              ]
+            },
+            "amount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "measure": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "reservation": {
+              "enum": [
+                "not_reserved",
+                "reserved",
+                "settled",
+                "released"
+              ]
+            }
+          },
+          "unevaluatedProperties": false
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "context_binding_request": {
+      "type": "object",
+      "required": [
+        "binding_id",
+        "packet",
+        "obligation",
+        "selected_by"
+      ],
+      "properties": {
+        "binding_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "packet": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "ref",
+                "digest"
+              ],
+              "properties": {
+                "ref": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+                },
+                "digest": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/digest"
+                }
+              },
+              "unevaluatedProperties": false
+            },
+            {
+              "$ref": "../../context/1/common.schema.json#/$defs/packet_reference"
+            }
+          ]
+        },
+        "obligation": {
+          "enum": [
+            "advisory",
+            "required_before_start",
+            "required_before_transition"
+          ]
+        },
+        "transition": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "selected_by": {
+          "$ref": "../../core/1/common.schema.json#/$defs/principal"
+        },
+        "request": {
+          "$ref": "../../context/1/common.schema.json#/$defs/request_subject"
+        },
+        "conditions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "../../context/1/common.schema.json#/$defs/condition"
+          }
+        },
+        "fetch": {
+          "type": "object",
+          "required": [
+            "evidence"
+          ],
+          "properties": {
+            "context": {
+              "type": "object",
+              "required": [
+                "provider",
+                "grant"
+              ],
+              "properties": {
+                "provider": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+                },
+                "grant": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+                }
+              },
+              "unevaluatedProperties": false
+            },
+            "evidence": {
+              "type": "object",
+              "required": [
+                "provider",
+                "grant"
+              ],
+              "properties": {
+                "provider": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+                },
+                "grant": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+                }
+              },
+              "unevaluatedProperties": false
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "require_current": {
+          "type": "boolean"
+        }
+      },
+      "unevaluatedProperties": false,
+      "if": {
+        "properties": {
+          "obligation": {
+            "const": "required_before_transition"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "transition"
+        ]
+      }
+    },
+    "context_binding": {
+      "type": "object",
+      "required": [
+        "binding_id",
+        "packet",
+        "obligation",
+        "selected_by",
+        "state"
+      ],
+      "properties": {
+        "binding_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "packet": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "ref",
+                "digest"
+              ],
+              "properties": {
+                "ref": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+                },
+                "digest": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/digest"
+                }
+              },
+              "unevaluatedProperties": false
+            },
+            {
+              "$ref": "../../context/1/common.schema.json#/$defs/packet_reference"
+            }
+          ]
+        },
+        "obligation": {
+          "enum": [
+            "advisory",
+            "required_before_start",
+            "required_before_transition"
+          ]
+        },
+        "transition": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "selected_by": {
+          "$ref": "../../core/1/common.schema.json#/$defs/principal"
+        },
+        "state": {
+          "enum": [
+            "satisfied",
+            "gap",
+            "unsatisfied"
+          ]
+        },
+        "request": {
+          "$ref": "../../context/1/common.schema.json#/$defs/request_subject"
+        },
+        "conditions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "../../context/1/common.schema.json#/$defs/condition"
+          }
+        },
+        "fetch": {
+          "type": "object",
+          "required": [
+            "evidence"
+          ],
+          "properties": {
+            "context": {
+              "type": "object",
+              "required": [
+                "provider",
+                "grant"
+              ],
+              "properties": {
+                "provider": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+                },
+                "grant": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+                }
+              },
+              "unevaluatedProperties": false
+            },
+            "evidence": {
+              "type": "object",
+              "required": [
+                "provider",
+                "grant"
+              ],
+              "properties": {
+                "provider": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+                },
+                "grant": {
+                  "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+                }
+              },
+              "unevaluatedProperties": false
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "revalidation": {
+          "enum": [
+            "current",
+            "stale",
+            "unknown"
+          ]
+        },
+        "require_current": {
+          "type": "boolean"
+        }
+      },
+      "unevaluatedProperties": false,
+      "if": {
+        "properties": {
+          "obligation": {
+            "const": "required_before_transition"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "transition"
+        ]
+      }
+    },
+    "context_delivery": {
+      "type": "object",
+      "required": [
+        "binding_id",
+        "digest",
+        "target",
+        "boundary",
+        "outcome",
+        "recorded_at"
+      ],
+      "properties": {
+        "binding_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "digest": {
+          "$ref": "../../core/1/common.schema.json#/$defs/digest"
+        },
+        "target": {
+          "type": "object",
+          "required": [
+            "execution"
+          ],
+          "properties": {
+            "execution": {
+              "$ref": "#/$defs/execution_subject"
+            },
+            "native_session": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "boundary": {
+          "enum": [
+            "initial_prompt",
+            "turn_steering",
+            "context_request"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "queued",
+            "delivered",
+            "acknowledged",
+            "late",
+            "unavailable",
+            "unknown"
+          ]
+        },
+        "recorded_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "continuation": {
+      "type": "object",
+      "required": [
+        "of",
+        "requested",
+        "label"
+      ],
+      "properties": {
+        "of": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "requested": {
+          "enum": [
+            "resume",
+            "fork"
+          ]
+        },
+        "label": {
+          "enum": [
+            "resumed",
+            "forked",
+            "fresh_continuation"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "lost_range": {
+      "type": "object",
+      "required": [
+        "from",
+        "to",
+        "reason",
+        "coverage"
+      ],
+      "properties": {
+        "from": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "to": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "reason": {
+          "enum": [
+            "spool_limit",
+            "harness_dropped",
+            "capture_unavailable"
+          ]
+        },
+        "coverage": {
+          "const": "incomplete"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "context_check": {
+      "type": "object",
+      "required": [
+        "binding_id",
+        "boundary",
+        "checked_at",
+        "observed_basis",
+        "held",
+        "results",
+        "state"
+      ],
+      "properties": {
+        "binding_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "boundary": {
+          "enum": [
+            "admission",
+            "dispatch",
+            "transition"
+          ]
+        },
+        "transition": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "checked_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        },
+        "observed_basis": {
+          "type": "object"
+        },
+        "held": {
+          "type": "boolean"
+        },
+        "fetch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "results": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": [
+              "condition_id",
+              "result",
+              "evidence"
+            ],
+            "properties": {
+              "condition_id": {
+                "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+              },
+              "result": {
+                "enum": [
+                  "match",
+                  "mismatch",
+                  "unavailable"
+                ]
+              },
+              "observed": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "evidence": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            },
+            "unevaluatedProperties": false
+          }
+        },
+        "state": {
+          "enum": [
+            "current",
+            "stale",
+            "unknown"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "context_block": {
+      "type": "object",
+      "required": [
+        "boundary",
+        "binding_id",
+        "reason"
+      ],
+      "properties": {
+        "boundary": {
+          "enum": [
+            "dispatch",
+            "transition"
+          ]
+        },
+        "binding_id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "transition": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "reason": {
+          "enum": [
+            "context_binding_stale",
+            "context_binding_unknown",
+            "context_binding_unsatisfied"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "origin": {
+      "type": "object",
+      "required": [
+        "initiator",
+        "depth",
+        "call_budget"
+      ],
+      "properties": {
+        "initiator": {
+          "$ref": "../../core/1/common.schema.json#/$defs/subject"
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "call_budget": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "scheduling": {
+      "type": "object",
+      "required": [
+        "capacity"
+      ],
+      "properties": {
+        "capacity": {
+          "enum": [
+            "held",
+            "released"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "context_binding_stale",
+            "context_binding_unknown",
+            "context_binding_unsatisfied",
+            "capacity",
+            "cancelled",
+            "authorization_lost",
+            "deadline_passed"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

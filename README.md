@@ -2,7 +2,7 @@
 
 Independent execution and recovery for existing agentic harnesses.
 
-> Bootstrap documentation only. No product runtime, released API, installation command or performance claim is established here. The reviewed architecture is `architecture-v1-20260912`, published as `public-development-v1-20260913`. Canonical specifications are available through [the documentation map](docs/README.md). This README is an overview, not the full specification.
+> M1 has an experimental fake-host recovery slice and a journal-backed Core/Execution conformance participant. The scripted fake executor implements the five planned Execution features, public effects and bounded event output. Real adapters remain unimplemented. **M1 is accepted by the owner at `2048e84` (2026-09-16).** This is milestone acceptance, not a released API, real-adapter qualification or a performance claim. The reviewed architecture is `architecture-v1-20260912`, published as `public-development-v1-20260913`. Canonical specifications are available through [the documentation map](docs/README.md). This README is an overview, not the full specification.
 
 PIO supervises real harnesses without replacing their native reasoning, investigation, editing and testing loops. A CLI, CI job, CBR memory investigation or another control plane can use PIO without Combraton or CBR being installed.
 
@@ -23,7 +23,7 @@ Implement the relevant [protocol](https://github.com/Combraton/protocol) Core/Ex
 
 ## First milestone
 
-Protocol [v0.1.0](https://github.com/Combraton/protocol/releases/tag/v0.1.0) is released and its exact commit/assets are recorded in [protocol.lock.json](protocol.lock.json). The [standalone readiness plan](docs/work/standalone-0.1/PLAN.md) is accepted as the M0 documentation checkpoint, with Codex-first followed by Claude Code; both remain in the full standalone release target. Stack and platform scope are accepted, with build and conformance CI on macOS arm64 and Linux x86_64 from M1 onward. No PIO runtime or adapter support is established yet.
+Protocol [v0.1.0](https://github.com/Combraton/protocol/releases/tag/v0.1.0) is released and its exact commit/assets are recorded in [protocol.lock.json](protocol.lock.json). The [standalone readiness plan](docs/work/standalone-0.1/PLAN.md) is accepted as the M0 documentation checkpoint, with Codex-first followed by Claude Code; both remain in the full standalone release target. Stack and platform scope are accepted, with build and conformance CI on macOS arm64 and Linux x86_64 from M1 onward. The [M1 acceptance corrections](docs/work/m1/ACCEPTANCE-CORRECTIONS.md) record the accepted public-process work and its pre-acceptance evidence, following the scripted [Execution checkpoint](docs/work/m1/EXECUTION.md) and [Core checkpoint](docs/work/m1/CORE.md). No real-adapter support is established yet.
 
 Test interruption, lost acknowledgment, a surviving worker, late/conflicting completion and cancellation races. Report actual enforced/mediated/cooperative capabilities by tested version. The [journey matrix](docs/JOURNEYS.md) separates real CLI/TUI, recovery and optional CBR evidence.
 
@@ -31,9 +31,9 @@ Develop alongside CBR; neither project waits for the other's complete feature se
 
 ## Stack and status
 
-Rust/Tokio, SQLite/content-addressed payloads and Ratatui are [accepted implementation choices](docs/decisions/001-standalone-stack.md), not installed dependencies or a validated runtime. The Claude Python bridge remains conditional on the M3 experiment. Exact adapter candidates and bounded experiments are recorded there. Puppetmaster supplies evaluated execution ideas, not an adopted controller/workflow engine.
+Rust/Tokio, SQLite/content-addressed payloads and Ratatui are [accepted implementation choices](docs/decisions/001-standalone-stack.md), with an experimental fake-host slice now present; real-adapter behavior remains unvalidated. The Claude Python bridge remains conditional on the M3 experiment. Exact adapter candidates and bounded experiments are recorded there. Puppetmaster supplies evaluated execution ideas, not an adopted controller/workflow engine.
 
-For the shared sequence and self-development boundary, read [BOOTSTRAP](https://github.com/Combraton/combraton/blob/main/BOOTSTRAP.md). No runtime or license is provided by this bootstrap; the repository is public and its project license remains to be selected.
+For the shared sequence and self-development boundary, read [BOOTSTRAP](https://github.com/Combraton/combraton/blob/main/BOOTSTRAP.md). No supported runtime release or license is provided; the repository is public and its project license remains to be selected.
 
 ## Claude authentication boundary
 
@@ -46,3 +46,8 @@ Read [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), [the documentation map](doc
 ## Standalone-first validation
 
 Own the standalone CLI/TUI and its user-attributed optional CBR client. Keep caller context policy separate from execution-core admission; discovery is not proof of capability. Core use must pass with CBR absent. See [release gates](https://github.com/Combraton/combraton/blob/main/docs/STANDALONE-RELEASES.md), [PIO client semantics](https://github.com/Combraton/pio/blob/main/docs/spec/STANDALONE-CLIENT.md) and [benchmarks](https://github.com/Combraton/benchmarks). PIO and CBR develop in parallel against the agreed Protocol release surface; accepted standalone releases precede thin Combraton implementation.
+
+
+The current development checkpoint also exposes `serve-fake` over the public Unix API: it launches an explicitly labeled fake OS process through the durable host. A separate caller ledger and content-addressed output spool are implemented. Process discovery explicitly reports unknown native authentication and `usable: false`. The [private packaging skeleton](packaging/README.md) provides collision-safe installation and native user-job prototypes; it preserves an unrelated `pio` on PATH. See [verification](docs/VERIFICATION.md) for commands and exact limits. This is not a real harness adapter or release; all six product journeys remain `not_evaluated`.
+
+M1 merge remains separately authorized. The prepared [M2 task packet](docs/work/m2/TASK.md) and [fresh-session kickoff](docs/work/m2/KICKOFF.md) are for a new builder after that merge; M2 has not started.

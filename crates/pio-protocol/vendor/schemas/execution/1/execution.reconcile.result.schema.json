@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.reconcile.result.schema.json",
+  "title": "execution.reconcile result",
+  "type": "object",
+  "required": [
+    "executions",
+    "deliveries",
+    "obligations"
+  ],
+  "properties": {
+    "executions": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/execution_subject"
+      }
+    },
+    "deliveries": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/delivery_record"
+      }
+    },
+    "obligations": {
+      "type": "array",
+      "items": {
+        "$ref": "../../core/1/common.schema.json#/$defs/obligation"
+      }
+    }
+  },
+  "unevaluatedProperties": false
+}

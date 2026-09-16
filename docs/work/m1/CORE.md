@@ -1,0 +1,62 @@
+# Core implementation checkpoint (historical)
+
+This continues [issue #3](https://github.com/Combraton/pio/issues/3) and [draft PR #4](https://github.com/Combraton/pio/pull/4) after the owner's review of `4bc8f37`. Base is `900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe`; the correction commit is `38ca3847663d019dd4f97a554c68e97bd5821f19`. [STATE](../STATE.md) records the current tested head. M1 remains incomplete and unaccepted.
+
+## Persistence disposition before Execution
+
+The owner verified this checkpoint at `fa70a63`: 9 tests, matrix 54, runner 164/115/1 on both platforms, plus independent replay and authorization mutants. M1 remains incomplete. At this historical head the provider persists a whole-state JSON blob; its events are held in memory and it clones state per command. This is a conformance stopgap. [ADR 002](../../decisions/002-protocol-journal.md) selects moving Core to the `pio-core` journal before Execution.
+
+The mutex-guarded provider with 25 ms per-connection polling is a **conformance service loop**, not the durable-host design. It does not establish production memory, scheduling or host-supervision properties.
+
+Current successor: [Execution checkpoint](EXECUTION.md). Statements below about unclaimed features describe `fa70a63`, not the current descriptor. The generic Core dependency fixture also requires evidence/context/knowledge/verification and `execution.context`; Execution alone cannot make it apply. [Protocol #9](https://github.com/Combraton/protocol/issues/9) records that correction.
+
+## Implemented surface
+
+The independently implemented `pio-protocol` crate serves the pinned Unix stream binding through the explicit `pio conformance` entrypoint. It authenticates each socket session, negotiates once, validates unchanged released schemas, canonicalizes command intent, and applies authorization, replay, epoch and revision checks in the specified order. The conformance-only core-test profile supplies real commands for testing these semantics; it is not a production API or a native harness adapter.
+
+One process owns the protocol store through a lifetime lock. One processing lock serializes authorization with committed state. SQLite FULL transactions persist subjects, bound command results and their events together. Launch controls simulate commit refusal and response loss; request envelopes cannot invoke these faults. Credentials are hashed for authentication and are not persisted in the protocol store or error messages. No shell or native adapter is launched by the Core service.
+
+Grants implement bounded delegation, holder/issuer visibility, expiry, authority binding, cascade revocation and replay after loss of authority. Events implement durable positions, epoch changes, retention snapshots, visible-subject filtering, receive-size-aware reads, backlog/live subscriptions, and idle authorization rechecks on a shared Unix service. Capability changes retain revision and append provider-origin events. A lost capability refuses new work but preserves earlier command results.
+
+The effect store has internal tests for unknown status, overdue waits, abort without changing outcome, replay after restart, and absent versus forgotten history. **Public `core.effects` remains unclaimed:** the pinned effect-producing and effect-lifecycle fixtures require Execution and `executor.script`. Core-test creates no external effects. Those fixtures must run at the next checkpoint before this claim is enabled. There is no invented public test operation or launch control that seeds domain state.
+
+## Journal migration checkpoint
+
+The ADR 002 migration now uses `pio-core::Store` in `journal.sqlite3`. Each changed subject, command result, effect or event is an individual projection record; metadata is separate. One transaction appends the record delta and identical outbox entry and updates projections. A stale cache revision is fenced. Rebuild replays append-only deltas, including retention deletions; command rollback reloads committed projections instead of cloning the entire provider before every command. Legacy blob files are explicitly refused. The provider still caches and scans retained records, an acknowledged memory/performance limit.
+
+Ten Cargo tests and Clippy pass, including failure between projection writes and outbox insertion, rebuild equivalence and stale-writer refusal. The pinned runner reproduces **164 pass / 115 unsupported / 1 skipped**, unchanged from the accepted Core checkpoint. Evidence: `target/journal-checkpoint`; parent design head `c6b5b8f`, base `900bc03`.
+
+## Pinned-runner results
+
+Implementation progressed in the requested order: stream/authentication/negotiation/core-test, then grants (124 passes), events, capabilities, then the internal effect store. The final local run reports:
+
+| Fixture directory | Pass | Unsupported | Skipped |
+|---|---:|---:|---:|
+| core | 130 | 5 | 0 |
+| stream | 24 | 0 | 0 |
+| socket | 10 | 3 | 0 |
+| Other directories | 0 | 107 | 1 |
+| Total | 164 | 115 | 1 |
+
+No `fail`, `timeout` or `harness_error` outcomes. The requested Core/stream/socket set is 172 fixtures: 164 pass and 8 are unsupported. Four Core backpressure fixtures and the Core feature-dependency composition fixture need Execution. Two socket lifecycle/obligation fixtures also need Execution. `socket.subscription-recheck-race-regression` needs the undeclared `subscription.recheck.after_authorization` barrier. Idle expiry and revocation across sessions do run and pass; they do not substitute for that deliberately paused race fixture.
+
+The descriptor declares `clock.file` and `store.faults`, no test barriers and no scripted executor. Execution, public effects and `core.events.backpressure` stay unclaimed. Dedupe advancement/retention, event epoch/retention, fixed/file clocks, capability overrides and receive limits come only from the released launch configuration. The full runner manifest retains each unsupported reason; nothing is reclassified as a pass.
+
+## Correction evidence
+
+The fake-host matrix now has 18 cases, each repeated three times: **54 attempted, 39 positive passes, 3 intended J3 count-property failures, 9 expected layer refusals and 3 expected wrong-reason classifier failures**. The three layer mutants bypass admission replay suppression, launch guard and host phase respectively; each must be refused by the next defense with its exact named reason. The J3 marker-count mutant remains a separate property check.
+
+The fenced-release case journals `known_not_released` only after killing/reaping the unreleased child and observing no release marker. Released but unobservable work remains uncertain. The read-only-store case changes filesystem permissions and independently observes no child spawn markers; the request-field query-only simulation remains fake-only.
+
+CI on the correction commit exposed an evidence-collection race: a reaper removed a transient attempt `.pending` file between glob and copy. Collection now copies only durable attempt JSON receipts and stderr, while all behavior assertions remain intact. PR checkout and artifact names use the branch head SHA.
+
+## Reproduction and remaining work
+
+Run the single sequence in [VERIFICATION](../../VERIFICATION.md#m1-build-and-conformance) from a clean clone. It builds the runner from freshly downloaded, verified pinned assets and uploads descriptor, schema verification, native manifest/transcripts, per-directory report and matrix evidence on both platforms. No sibling repository or private local state is required. Unit tests, Clippy, documentation checks and the matrix are separate checks from Protocol conformance. [Both-platform CI](https://github.com/Combraton/pio/actions/runs/35081058490) and a fresh clone reproduced the results at `eff952d`; the [receipt index](evidence/core-checkpoint.json) records artifact names, source/binary digests and per-directory classes. The tested follow-up includes a negotiation regression test for overlapping feature lists and duplicate-profile error precedence.
+
+Next: implement the PLAN Execution subset and scripted executor, connect the verified Core transaction path to process ownership, and exercise public effects, backpressure and remaining controls. Durable caller operations and content-addressed payloads also remain. No real adapter has run; no native credential/configuration has changed. M3 must prove the API/provider authentication source and refuse missing configured credentials even when a cached login exists. M1 merge, tag and publication remain unauthorized.
+
+Final self-review added regression coverage for required/optional feature overlap, duplicate-profile precedence on renegotiation, and non-JSON whitespace frames. Vertical tab and form feed produce a fatal `parse_error`; only space, tab and carriage return qualify as an ignored blank frame. The Cargo suite has nine tests, passing locally and on both CI platforms. A read-only fixture audit informed coverage mapping; a broad MiniMax M3 code review and one narrowed retry were stopped without final reports, so no external code-review verdict is claimed.
+
+
+The public process checkpoint reuses this serialized Protocol service loop with an independent daemon observation tick. Detached `pio-host` processes own real fake-child pipes, locks and process identities; socket polling is still not the durable host. Public and scripted modes use distinct launch configuration and cannot reinterpret one another's persisted executions.

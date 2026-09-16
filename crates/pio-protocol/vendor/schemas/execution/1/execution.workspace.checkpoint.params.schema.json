@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.workspace.checkpoint.params.schema.json",
+  "title": "execution.workspace.checkpoint params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/command.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "execution.workspace.checkpoint"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {},
+      "unevaluatedProperties": false
+    },
+    "subject": {
+      "$ref": "common.schema.json#/$defs/execution_subject"
+    },
+    "preconditions": {
+      "minItems": 1,
+      "maxItems": 1
+    }
+  },
+  "unevaluatedProperties": false
+}

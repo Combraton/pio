@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.events.unsubscribe.params.schema.json",
+  "title": "core.events.unsubscribe params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/query.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "core.events.unsubscribe"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "subscription"
+      ],
+      "properties": {
+        "subscription": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

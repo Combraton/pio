@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/execution/1/execution.inspect.result.schema.json",
+  "title": "execution.inspect result",
+  "type": "object",
+  "required": [
+    "execution",
+    "revision",
+    "admission",
+    "delivery",
+    "runtime",
+    "result",
+    "exit",
+    "evaluation",
+    "deliveries",
+    "completions",
+    "effects",
+    "host",
+    "next_cursor",
+    "recovery"
+  ],
+  "properties": {
+    "execution": {
+      "$ref": "common.schema.json#/$defs/execution_subject"
+    },
+    "revision": {
+      "$ref": "../../core/1/common.schema.json#/$defs/revision"
+    },
+    "admission": {
+      "$ref": "common.schema.json#/$defs/admission"
+    },
+    "delivery": {
+      "$ref": "common.schema.json#/$defs/delivery"
+    },
+    "runtime": {
+      "$ref": "common.schema.json#/$defs/runtime"
+    },
+    "result": {
+      "$ref": "common.schema.json#/$defs/result"
+    },
+    "exit": {
+      "$ref": "common.schema.json#/$defs/exit"
+    },
+    "evaluation": {
+      "$ref": "common.schema.json#/$defs/evaluation"
+    },
+    "predecessor": {
+      "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+    },
+    "correlation": {
+      "type": "object"
+    },
+    "finalized_by": {
+      "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+    },
+    "deliveries": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/delivery_record"
+      }
+    },
+    "completions": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/completion_record"
+      }
+    },
+    "effects": {
+      "type": "array",
+      "items": {
+        "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+      }
+    },
+    "obligations": {
+      "type": "array",
+      "items": {
+        "$ref": "../../core/1/common.schema.json#/$defs/obligation"
+      }
+    },
+    "cancellation": {
+      "$ref": "common.schema.json#/$defs/cancellation"
+    },
+    "host": {
+      "type": "object",
+      "required": [
+        "id",
+        "generation"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "next_cursor": {
+      "$ref": "../../core/1/common.schema.json#/$defs/cursor"
+    },
+    "recovery": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/recovery_decision"
+      }
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "alternative": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "queue_reason": {
+      "$ref": "common.schema.json#/$defs/queue_reason"
+    },
+    "runtime_detail": {
+      "$ref": "common.schema.json#/$defs/runtime_detail"
+    },
+    "steering": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "common.schema.json#/$defs/steering_entry"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "common.schema.json#/$defs/action_entry"
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "required": [
+        "lease",
+        "checkpoints"
+      ],
+      "properties": {
+        "lease": {
+          "$ref": "common.schema.json#/$defs/workspace_lease"
+        },
+        "checkpoints": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "common.schema.json#/$defs/checkpoint"
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "usage": {
+      "$ref": "common.schema.json#/$defs/usage"
+    },
+    "context": {
+      "type": "object",
+      "required": [
+        "bindings",
+        "deliveries"
+      ],
+      "properties": {
+        "bindings": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "common.schema.json#/$defs/context_binding"
+          }
+        },
+        "deliveries": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "common.schema.json#/$defs/context_delivery"
+          }
+        },
+        "checks": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "common.schema.json#/$defs/context_check"
+          }
+        },
+        "blocked": {
+          "$ref": "common.schema.json#/$defs/context_block"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "continuation": {
+      "$ref": "common.schema.json#/$defs/continuation"
+    },
+    "origin": {
+      "$ref": "common.schema.json#/$defs/origin"
+    },
+    "scheduling": {
+      "$ref": "common.schema.json#/$defs/scheduling"
+    }
+  },
+  "unevaluatedProperties": false
+}

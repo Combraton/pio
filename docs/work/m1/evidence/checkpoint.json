@@ -1,0 +1,68 @@
+{
+  "scope": "M1 skeleton and experimental fake-host checkpoint; not complete M1 acceptance",
+  "base": "900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe",
+  "behavior_head": "d1348e168a46430415ef9900d2f225ace4effa5d",
+  "skeleton_head": "0a88612b2f90e4470668de900c4c0d819b826780",
+  "pr": "https://github.com/Combraton/pio/pull/4",
+  "issue": "https://github.com/Combraton/pio/issues/3",
+  "ci": "https://github.com/Combraton/pio/actions/runs/35071561771",
+  "ci_conclusion": "success",
+  "platforms": [
+    {
+      "os": "Darwin",
+      "arch": "arm64",
+      "head": "d1348e168a46430415ef9900d2f225ace4effa5d",
+      "source_tree_sha256": "a17c24f57ae27c9dc75db5f1aad29b4af47b98de9f6026188956197f38a4c1ea",
+      "binary_sha256": "87793533a8942bb8e727779b8b040f2e13381d4a446896474c2bf3c7e7e2eb1a",
+      "fake_matrix": {
+        "attempted": 36,
+        "repetitions_per_case": 3,
+        "outcomes": {
+          "pass": 33,
+          "expected_property_failure": 3
+        }
+      },
+      "protocol_classes": {
+        "skipped": 1,
+        "unsupported": 279
+      },
+      "artifact_name": "pio-m1-macos-15-arm64-d1348e168a46430415ef9900d2f225ace4effa5d"
+    },
+    {
+      "os": "Linux",
+      "arch": "x86_64",
+      "head": "d1348e168a46430415ef9900d2f225ace4effa5d",
+      "source_tree_sha256": "a17c24f57ae27c9dc75db5f1aad29b4af47b98de9f6026188956197f38a4c1ea",
+      "binary_sha256": "a40c7d736b954fb170e1b44f622e7c905b897d5da14ae46c2588a21c1ad3f656",
+      "fake_matrix": {
+        "attempted": 36,
+        "repetitions_per_case": 3,
+        "outcomes": {
+          "pass": 33,
+          "expected_property_failure": 3
+        }
+      },
+      "protocol_classes": {
+        "skipped": 1,
+        "unsupported": 279
+      },
+      "artifact_name": "pio-m1-ubuntu-24.04-x86_64-d1348e168a46430415ef9900d2f225ace4effa5d"
+    }
+  ],
+  "clean_clone": {
+    "head": "d1348e168a46430415ef9900d2f225ace4effa5d",
+    "source_tree_sha256": "a17c24f57ae27c9dc75db5f1aad29b4af47b98de9f6026188956197f38a4c1ea",
+    "binary_sha256": "39027a807d285d5ca068895c17c4c9922f99dda682412718d34cda33c5a44cd3",
+    "attempted": 36,
+    "outcomes": {
+      "pass": 33,
+      "expected_property_failure": 3
+    },
+    "commands_exit": 0,
+    "downloaded_fresh_protocol_assets": true
+  },
+  "real_adapter": false,
+  "protocol_claims": [],
+  "coverage_limit": "279 unsupported and 1 skipped Protocol fixtures; no protocol pass",
+  "remaining": "Public Core/Execution participant, declared PLAN features/test controls, caller operation store and content-addressed payloads; full M1 acceptance remains open."
+}

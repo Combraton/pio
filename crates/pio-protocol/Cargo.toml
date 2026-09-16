@@ -1,0 +1,22 @@
+[package]
+name = "pio-protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+sha2.workspace = true
+uuid.workspace = true
+pio-core = { path = "../pio-core" }
+pio-host = { path = "../pio-host" }
+jsonschema = { version = "0.56.0", default-features = false }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }
+chrono = "0.4"
+base64 = "0.22"
+libc.workspace = true
+[dev-dependencies]
+tempfile = "3"

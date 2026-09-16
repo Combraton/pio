@@ -1,0 +1,107 @@
+{
+  "description": "Schema compatibility demonstration, not an official runner fixture or accepted schema extension. Current inspect validates, proposed kernel identity is rejected by frozen v0.1.0. Independent matrix witnesses therefore stay outside public result fields.",
+  "current": {
+    "admission": "admitted",
+    "completions": [],
+    "deliveries": [
+      {
+        "delivery": "acknowledged",
+        "delivery_id": "work.delivery-1",
+        "determined_at": "2026-09-16T11:18:27Z",
+        "evidence": {
+          "class": "same_process_observed",
+          "source": "fake-host/process"
+        },
+        "history": [
+          {
+            "delivery": "pending",
+            "evidence": {
+              "class": "not_released_pending",
+              "source": "fake-host/process"
+            },
+            "recorded_at": "2026-09-16T11:18:26Z"
+          }
+        ]
+      }
+    ],
+    "delivery": "acknowledged",
+    "effects": [
+      "work.delivery-1"
+    ],
+    "evaluation": "not_requested",
+    "execution": {
+      "id": "work",
+      "kind": "execution.execution"
+    },
+    "exit": "unavailable",
+    "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+    },
+    "next_cursor": "example:1:1",
+    "obligations": [],
+    "recovery": [],
+    "result": "absent",
+    "revision": 7,
+    "runtime": "active",
+    "usage": {
+      "liability": "none",
+      "observations": []
+    }
+  },
+  "proposed": {
+    "admission": "admitted",
+    "completions": [],
+    "deliveries": [
+      {
+        "delivery": "acknowledged",
+        "delivery_id": "work.delivery-1",
+        "determined_at": "2026-09-16T11:18:27Z",
+        "evidence": {
+          "class": "same_process_observed",
+          "source": "fake-host/process"
+        },
+        "history": [
+          {
+            "delivery": "pending",
+            "evidence": {
+              "class": "not_released_pending",
+              "source": "fake-host/process"
+            },
+            "recorded_at": "2026-09-16T11:18:26Z"
+          }
+        ]
+      }
+    ],
+    "delivery": "acknowledged",
+    "effects": [
+      "work.delivery-1"
+    ],
+    "evaluation": "not_requested",
+    "execution": {
+      "id": "work",
+      "kind": "execution.execution"
+    },
+    "exit": "unavailable",
+    "host": {
+      "generation": 1,
+      "id": "durable-fake-host",
+      "process": {
+        "pid": 123,
+        "start": "kernel-boot-and-start-identity",
+        "slot": "durable-slot",
+        "controller_generation": 2
+      }
+    },
+    "next_cursor": "example:1:1",
+    "obligations": [],
+    "recovery": [],
+    "result": "absent",
+    "revision": 7,
+    "runtime": "active",
+    "usage": {
+      "liability": "none",
+      "observations": []
+    }
+  }
+}

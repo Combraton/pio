@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.events.unsubscribe.result.schema.json",
+  "title": "core.events.unsubscribe result",
+  "type": "object",
+  "maxProperties": 0
+}

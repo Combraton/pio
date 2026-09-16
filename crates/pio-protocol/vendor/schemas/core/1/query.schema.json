@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/query.schema.json",
+  "title": "Core/1 query envelope (CORE section 5)",
+  "type": "object",
+  "required": [
+    "operation",
+    "message_id",
+    "payload"
+  ],
+  "properties": {
+    "operation": {
+      "$ref": "common.schema.json#/$defs/operation_name"
+    },
+    "message_id": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "requires": {
+      "$ref": "common.schema.json#/$defs/requires"
+    },
+    "extensions": {
+      "$ref": "common.schema.json#/$defs/extensions"
+    },
+    "grant": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "unevaluatedProperties": false
+}

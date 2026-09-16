@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.capabilities.params.schema.json",
+  "title": "core.capabilities params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/query.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "core.capabilities"
+    },
+    "payload": {
+      "type": "object",
+      "maxProperties": 0
+    }
+  },
+  "unevaluatedProperties": false
+}

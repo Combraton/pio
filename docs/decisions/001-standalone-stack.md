@@ -26,6 +26,8 @@ The public transport implements Protocol's authenticated Unix socket binding. Th
 
 Primary library/OS documentation inspected on 2026-09-16: [Tokio process lifecycle](https://docs.rs/tokio/latest/tokio/process/), [SQLite WAL](https://sqlite.org/wal.html), [SQLite synchronous](https://sqlite.org/pragma.html#pragma_synchronous), [Ratatui](https://ratatui.rs/), [Apple launchd jobs](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html). Linux supervisor semantics need a pinned-source/manual check in M1; the upstream web manual could not be retrieved in this checkpoint. No Linux process experiment has run.
 
+Core/Execution persistence is refined by [ADR 002](002-protocol-journal.md): move Core onto the shared journal before Execution; the earlier blob is a conformance stopgap.
+
 ## Native harness interface findings
 
 ### Codex

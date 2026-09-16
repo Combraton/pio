@@ -1,0 +1,54 @@
+{
+  "status": "implementation target only, not a conformance claim",
+  "profiles": [
+    {
+      "name": "core",
+      "major": 1
+    },
+    {
+      "name": "core-test",
+      "major": 1
+    },
+    {
+      "name": "execution",
+      "major": 1
+    }
+  ],
+  "binding": "unix",
+  "features": [
+    "core.grants",
+    "core.events",
+    "core.capabilities",
+    "core.effects",
+    "core.events.backpressure",
+    "execution.controller",
+    "execution.discovery",
+    "execution.output",
+    "execution.workspaces",
+    "execution.usage"
+  ],
+  "test_controls": [
+    "executor.script",
+    "clock.file",
+    "store.faults"
+  ],
+  "test_barriers": [
+    "session.closed",
+    "backpressure.stall.started",
+    "backpressure.limit.reached",
+    "backpressure.connection.closed"
+  ],
+  "launch_controls": [
+    "dedupe.advance_on_start",
+    "dedupe.retain_generations",
+    "events.new_epoch_on_start",
+    "events.unvouched_last",
+    "events.retain_last",
+    "clock.fixed",
+    "clock.file",
+    "capabilities",
+    "limits"
+  ],
+  "execution_source": "fake-host; no real adapter",
+  "test_profile": "core-test/1 is conformance-only"
+}

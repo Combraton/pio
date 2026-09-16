@@ -1,0 +1,67 @@
+name: M1 build and conformance
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  runtime:
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: ubuntu-24.04
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Verify platform and install pinned toolchain
+        run: |
+          test "$(uname -m)" = '${{ matrix.arch }}'
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+          rustc --version
+          cargo --version
+      - name: Format, build and test
+        run: |
+          cargo fmt --all -- --check
+          cargo build --workspace --locked
+          cargo test --workspace --locked
+          cargo clippy --workspace --locked -- -D warnings
+          python3 scripts/check_docs.py
+          git diff --exit-code -- Cargo.lock
+      - name: Experimental fake-host fault matrix
+        run: python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3
+      - name: Public Unix process matrix and caller recovery
+        run: |
+          python3 scripts/public_host_matrix.py --out target/public-host --repetitions 3
+          python3 scripts/client_recovery.py --out target/client-recovery
+      - name: Start isolated runner user manager
+        if: runner.os == 'Linux'
+        run: |
+          sudo systemctl start "user@$(id -u).service"
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+      - name: Private packaging and native user-job lifecycle
+        run: python3 scripts/packaging_check.py --out target/packaging
+      - name: Pinned Protocol runner against PIO
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/conformance.py --out target/conformance
+      - name: Upload exact descriptor, manifests and transcripts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pio-m1-${{ matrix.os }}-${{ matrix.arch }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            target/conformance
+            target/fake-host
+            target/public-host
+            target/client-recovery
+            target/packaging
+          if-no-files-found: error

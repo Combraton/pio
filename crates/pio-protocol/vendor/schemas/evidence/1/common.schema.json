@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/evidence/1/common.schema.json",
+  "title": "evidence/1 common definitions",
+  "$defs": {
+    "artifact_subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "evidence.artifact"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "hold_subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "evidence.hold"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "reference": {
+      "type": "object",
+      "required": [
+        "artifact",
+        "digest"
+      ],
+      "properties": {
+        "provider": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "artifact": {
+          "$ref": "#/$defs/artifact_subject"
+        },
+        "digest": {
+          "$ref": "../../core/1/common.schema.json#/$defs/digest"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "completeness"
+      ],
+      "properties": {
+        "completeness": {
+          "enum": [
+            "complete",
+            "partial",
+            "unknown"
+          ]
+        },
+        "covered": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "gaps": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "capture": {
+      "type": "object",
+      "required": [
+        "captured_at"
+      ],
+      "properties": {
+        "captured_at": {
+          "$ref": "../../core/1/common.schema.json#/$defs/instant"
+        },
+        "uncertainty": {
+          "type": "object",
+          "required": [
+            "not_before",
+            "not_after"
+          ],
+          "properties": {
+            "not_before": {
+              "$ref": "../../core/1/common.schema.json#/$defs/instant"
+            },
+            "not_after": {
+              "$ref": "../../core/1/common.schema.json#/$defs/instant"
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "anchors": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "id"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            },
+            "unevaluatedProperties": false
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "descriptor_request": {
+      "type": "object",
+      "required": [
+        "digest",
+        "size",
+        "media_type",
+        "producer",
+        "source",
+        "scope",
+        "capture",
+        "coverage",
+        "retention_class"
+      ],
+      "properties": {
+        "digest": {
+          "$ref": "../../core/1/common.schema.json#/$defs/digest"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "producer": {
+          "type": "object",
+          "properties": {
+            "principal": {
+              "$ref": "../../core/1/common.schema.json#/$defs/principal"
+            },
+            "producer_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "source": {
+          "type": "object",
+          "required": [
+            "kind",
+            "id"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "capture": {
+          "$ref": "#/$defs/capture"
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        },
+        "work": {
+          "$ref": "../../core/1/common.schema.json#/$defs/subject"
+        },
+        "retention_class": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "availability": {
+      "type": "object",
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "available",
+            "partial",
+            "unavailable",
+            "purge_pending",
+            "purged"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "descriptor": {
+      "type": "object",
+      "required": [
+        "digest",
+        "size",
+        "media_type",
+        "producer",
+        "source",
+        "scope",
+        "capture",
+        "coverage",
+        "retention_class"
+      ],
+      "properties": {
+        "digest": {
+          "$ref": "../../core/1/common.schema.json#/$defs/digest"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "producer": {
+          "type": "object",
+          "required": [
+            "principal"
+          ],
+          "properties": {
+            "principal": {
+              "$ref": "../../core/1/common.schema.json#/$defs/principal"
+            },
+            "producer_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "source": {
+          "type": "object",
+          "required": [
+            "kind",
+            "id"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "capture": {
+          "$ref": "#/$defs/capture"
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        },
+        "work": {
+          "$ref": "../../core/1/common.schema.json#/$defs/subject"
+        },
+        "retention_class": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}
