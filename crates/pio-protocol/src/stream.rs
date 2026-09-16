@@ -24,7 +24,9 @@ pub fn serve_fake(root: &Path, config: &Path, socket: &Path) -> Result<()> {
     serve_mode(root, config, socket, true)
 }
 fn serve_mode(root: &Path, config: &Path, socket: &Path, durable: bool) -> Result<()> {
-    pio_host::secure_root(root)?;
+    if durable {
+        pio_host::secure_root(root)?;
+    }
     pio_host::secure_root(socket.parent().context("socket parent")?)?;
     let _lock = StoreLock::acquire(root)?;
     let config: Value = serde_json::from_slice(&std::fs::read(config)?)?;
