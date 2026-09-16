@@ -8,4 +8,6 @@ Use one small file per meaningful decision. Include title, status (proposed/acce
 
 - [PIO ADR 002 — one journal for Core and Execution](002-protocol-journal.md): selected before Execution; replaces the Core blob stopgap with journal-backed projections.
 
+- [PIO ADR 003 — Codex app-server adapter behind the durable host](003-codex-app-server-adapter.md): proposed builder design for M2, 2026-09-16; content bytes for digest-only fields, host phases and native identities, approvals/steering/interrupt, permission and configuration handling, discovery. Its sandbox/approval request choice is an owner gate before live runs.
+
 Wire/compatibility decisions belong in Protocol; cross-system authority changes belong in Combraton. Link the owning decision instead of maintaining independent copies. An experiment result does not silently select a product direction. Keep ordinary local choices lightweight and record material selections in their implementation PR.
