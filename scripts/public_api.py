@@ -18,9 +18,9 @@ def submit(duration=10000, identity='work'):
     return command('execution.submit',dict(kind='execution.execution',id=identity),dict(brief=dict(digest='sha256:'+hashlib.sha256(f'fake work {duration}'.encode()).hexdigest(),media_type='text/plain')),command_id=identity)
 
 class Client:
-    def __init__(self, path, transcript=None):
+    def __init__(self, path, transcript=None, timeout=3):
         self.stream = socket.socket(socket.AF_UNIX)
-        self.stream.settimeout(3)
+        self.stream.settimeout(timeout)
         self.stream.connect(str(path))
         self.file = self.stream.makefile('rb')
         self.transcript = transcript

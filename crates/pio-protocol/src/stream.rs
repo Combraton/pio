@@ -100,6 +100,9 @@ fn serve_mode(root: &Path, config: &Path, socket: &Path, durable: bool) -> Resul
             let _ = done_tx.send(());
         });
         let mut tick = tokio::time::interval(Duration::from_millis(25));
+        // A slow tick (whole-state commits near the ADR 002 bound) must not
+        // run back-to-back and monopolize the provider lock; delay instead.
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             tokio::select! {
                 _ = &mut done_rx => break,

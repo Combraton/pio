@@ -39,6 +39,9 @@ class Case(witness.Case):
         self.config_path.write_text(json.dumps(self.config))
         self.duration = duration
         self.request = submit(duration)
+        # Near the ADR 002 bound every request pays whole-state commits; the
+        # capacity cases record latency instead of failing a fixed 3 s socket.
+        self.client_timeout = 60 if self.name.startswith('capacity_') else 3
     def argv(self):
         return [str(BINARY),'serve-fake','--data-dir',str(self.root),'--config',str(self.config_path),'--socket',str(self.root/'public.sock')]
     def start(self):
@@ -48,14 +51,14 @@ class Case(witness.Case):
         daemon=subprocess.Popen(self.argv(),stdout=stdout,stderr=stderr)
         self.daemons.append(daemon)
         def ready():
-            with Client(self.root/'public.sock',self.transcript) as c:
+            with Client(self.root/'public.sock',self.transcript,self.client_timeout) as c:
                 return c.query('core.describe',{})
         poll(ready,lambda r:'result' in r)
         with sqlite3.connect(self.root/'journal.sqlite3') as db: generation=db.execute('select generation from meta').fetchone()[0]
         if self.name=='fenced_release_known_not_released' and generation>1:
             # A parked host is still observable, but cannot turn a recovered
             # marker-present ambiguity back into a fresh pending delivery.
-            with Client(self.root/'public.sock',self.transcript) as c:
+            with Client(self.root/'public.sock',self.transcript,self.client_timeout) as c:
                 view=c.query('execution.inspect',{'execution':'work'})['result']
             assert view['delivery']=='ambiguous',view
             (self.out/'parked-recovery.json').write_text(json.dumps(view,indent=2)+'\n')
@@ -69,7 +72,7 @@ class Case(witness.Case):
         finally: super().close()
     def submit(self,fault='',duration=10000,**kwargs):
         p = self.request if duration in (10000,100) else submit(duration)
-        with Client(self.root/'public.sock',self.transcript) as c: response=c.call(p)
+        with Client(self.root/'public.sock',self.transcript,self.client_timeout) as c: response=c.call(p)
         if 'error' in response: return dict(error=response['error']['data']['code'],public=response)
         if fault.startswith('replay_'):
             def mutation():
@@ -80,7 +83,7 @@ class Case(witness.Case):
             return dict(error=v.get('reason') or v.get('outcome',{}).get('reason'),public=response)
         return dict(response['result'],public=response)
     def inspect(self):
-        with Client(self.root/'public.sock',self.transcript) as c: response=c.query('execution.inspect',{'execution':'work'})
+        with Client(self.root/'public.sock',self.transcript,self.client_timeout) as c: response=c.query('execution.inspect',{'execution':'work'})
         if 'error' in response: return dict(error=response['error']['data']['code'],public=response)
         with sqlite3.connect(self.root/'journal.sqlite3') as db:
             row=db.execute('select state from invocations').fetchone()
@@ -110,9 +113,9 @@ def run_case(case,name):
         keys_before=projection_keys()
         daemon,restart=case.start()
         stderr_path=case.out/f'daemon-{len(case.daemons)-1}.stderr'
-        with Client(case.root/'public.sock',case.transcript) as c:
-            admitted=c.call(case.request)
-            refused=c.call(submit(case.duration,identity='headroom-refused'))
+        with Client(case.root/'public.sock',case.transcript,case.client_timeout) as c:
+            started=time.monotonic();admitted=c.call(case.request);admitted_seconds=time.monotonic()-started
+            started=time.monotonic();refused=c.call(submit(case.duration,identity='headroom-refused'));refused_seconds=time.monotonic()-started
         assert 'result' in admitted and admitted['result']['replay'] is False,admitted
         assert refused['error']['data']['code']=='unavailable' and refused['error']['data']['retry']=='same_command',refused
         with sqlite3.connect(uri,uri=True) as db:
@@ -120,9 +123,11 @@ def run_case(case,name):
         admission=next(f for f in facts if any(c['key']=='execution/work' for c in f['changes']))
         new_keys=[c['key'] for c in admission['changes'] if c['key'] not in keys_before and not c.get('delete')]
         assert len(keys_before)+len(new_keys)==MAX_ADMISSION_PROJECTION_RECORDS,(len(keys_before),new_keys)
-        view=poll(lambda:case.inspect()['public']['result'],lambda v:v['runtime']=='exited',seconds=30)
+        started=time.monotonic()
+        view=poll(lambda:case.inspect()['public']['result'],lambda v:v['runtime']=='exited',seconds=120)
+        completion_seconds=time.monotonic()-started
         assert view['delivery']=='delivered' and view['exit']=={'code':0} and view['deliveries'][0]['evidence']['class']=='child_release_marker',view
-        with Client(case.root/'public.sock',case.transcript) as c:
+        with Client(case.root/'public.sock',case.transcript,case.client_timeout) as c:
             absent=c.query('execution.inspect',{'execution':'headroom-refused'})
         assert absent['error']['data']['code']=='not_found',absent
         log=[json.loads(line.split(': ',1)[1]) for line in stderr_path.read_text().splitlines() if line.startswith('PIO capacity refusal: ')]
@@ -136,7 +141,7 @@ def run_case(case,name):
         table=subprocess.check_output(['ps','-axww','-o','pid=','-o','command='],text=True)
         matches=[line for line in table.splitlines() if command_id in line]
         assert len(records(case.root/'spawn.jsonl'))==1 and matches==[]
-        return dict(outcome='pass',fill=fill,admission_records=len(keys_before)+len(new_keys),admission_new_keys=new_keys,admitted_ack=admitted['result']['acknowledgment'],refusal=refused,capacity_log=log,hard_limit_refusals=0,completed_view=dict(runtime=view['runtime'],delivery=view['delivery'],exit=view['exit'],evidence=view['deliveries'][0]['evidence']),final_projection_records=final_records,invocation_rows=invocations,refused_projection_rows=refused_rows,spawn_count=1,refused_process_table_matches=matches,inspect_refused=absent['error']['data'],generations=dict(first=first,restart=restart))
+        return dict(outcome='pass',fill=fill,admission_records=len(keys_before)+len(new_keys),admission_new_keys=new_keys,admitted_ack=admitted['result']['acknowledgment'],refusal=refused,capacity_log=log,hard_limit_refusals=0,completed_view=dict(runtime=view['runtime'],delivery=view['delivery'],exit=view['exit'],evidence=view['deliveries'][0]['evidence']),final_projection_records=final_records,latency_seconds=dict(admitted_submit=round(admitted_seconds,3),refused_submit=round(refused_seconds,3),until_exited_view=round(completion_seconds,3)),invocation_rows=invocations,refused_projection_rows=refused_rows,spawn_count=1,refused_process_table_matches=matches,inspect_refused=absent['error']['data'],generations=dict(first=first,restart=restart))
     if name=='capacity_refusal_no_spawn':
         def fill(target):
             result=json.loads(subprocess.check_output([str(BINARY),'fake','fill-projection',str(case.root),str(target)],text=True))
@@ -158,14 +163,14 @@ def run_case(case,name):
         daemon,capacity_start=case.start()
         stderr_path=case.out/f'daemon-{len(case.daemons)-1}.stderr'
         before=journal_counts()
-        with Client(case.root/'public.sock',case.transcript) as c:
+        with Client(case.root/'public.sock',case.transcript,case.client_timeout) as c:
             refused=c.call(submit(100,identity='capacity-refused'))
             # A command that admits no work uses the hard limit instead.
             claim=c.call(command('execution.controller.claim',dict(kind='execution.controller',id='durable-fake-host'),{},'capacity-claim'))
         assert refused['error']['data']['code']=='unavailable' and refused['error']['data']['retry']=='same_command',refused
         assert claim['error']['data']['code']=='unavailable' and claim['error']['data']['retry']=='same_command',claim
         time.sleep(.5)
-        with Client(case.root/'public.sock',case.transcript) as c:
+        with Client(case.root/'public.sock',case.transcript,case.client_timeout) as c:
             absent=c.query('execution.inspect',{'execution':'capacity-refused'})
         assert absent['error']['data']['code']=='not_found',absent
         log=[json.loads(line.split(': ',1)[1]) for line in stderr_path.read_text().splitlines() if line.startswith('PIO capacity refusal: ')]
@@ -190,7 +195,7 @@ def run_case(case,name):
         return dict(outcome='pass',baseline_records=baseline,fill=filled,refusal=refused,claim_refusal=claim,capacity_log=log,journal_before_refusal=before,journal_after_refusal=after,spawn_count_at_capacity=0,independent_process_table_matches=matches,inspect_refused=absent['error']['data'],shrink=shrunk,positive_control=dict(spawn_count=len(spawned),phase=control['invocation']['phase'],runtime=control['public']['result']['runtime']),generations=dict(first=first,capacity=capacity_start,control=control_start))
     if name=='fake_discovery':
         case.start()
-        with Client(case.root/'public.sock',case.transcript) as c:
+        with Client(case.root/'public.sock',case.transcript,case.client_timeout) as c:
             response=c.query('execution.discovery.list',{})
         installation=response['result']['installations'][0]
         assert installation['installation_id']=='pio-builtin-fake-process' and 'fake' in installation['harness']
@@ -225,7 +230,7 @@ def run_case(case,name):
         assert not any(f['record']['kind']=='invocation.intent' for f in cut['facts'])
         assert records(case.root/'spawn.jsonl')==[]
         _,after=case.start()
-        with Client(case.root/'public.sock',case.transcript) as c:
+        with Client(case.root/'public.sock',case.transcript,case.client_timeout) as c:
             view=c.query('execution.inspect',{'execution':'work'})['result']
         assert view['delivery']=='ambiguous' and view['recovery'][-1]['reason']=='dispatch_may_have_begun',view
         assert case.submit()['replay'] and records(case.root/'spawn.jsonl')==[]
@@ -264,12 +269,12 @@ def run_case(case,name):
             with sqlite3.connect(case.root/'journal.sqlite3') as source,sqlite3.connect(case.root/'backup.sqlite3') as backup:source.backup(backup)
         case.submit();before=case.active()
         if name=='stale_controller':
-            with Client(case.root/'public.sock',case.transcript) as c:
+            with Client(case.root/'public.sock',case.transcript,case.client_timeout) as c:
                 target=dict(kind='execution.controller',id='durable-fake-host')
                 claim=command('execution.controller.claim',target,{},'claim')
                 first=c.call(claim);assert 'result' in first,first
             case.stop_daemon(daemon);_,restarted=case.start()
-            with Client(case.root/'public.sock',case.transcript) as c:
+            with Client(case.root/'public.sock',case.transcript,case.client_timeout) as c:
                 refused=c.call(submit(identity='stale-new'))
             assert refused['error']['data']['code']=='stale_authority_epoch',refused
             assert len(records(case.root/'spawn.jsonl'))==1
@@ -285,14 +290,14 @@ def run_case(case,name):
         return dict(outcome='pass',reason=result.stderr,surviving_child=witness.process_identity(before['invocation']['child']['pid']),spawn_count=1)
     result=witness.run_case(case,name)
     if name=='fenced_release_known_not_released':
-        with Client(case.root/'public.sock',case.transcript) as c:
+        with Client(case.root/'public.sock',case.transcript,case.client_timeout) as c:
             response=c.query('core.events.read',{'from':'start','limit':1000})
         events=[i['event'] for i in response['result']['items'] if 'event' in i]
         reconciled=[e for e in events if e['type']=='execution.delivery.reconciled']
         assert len(reconciled)==1 and reconciled[0]['payload']['outcome']=='not_delivered' and reconciled[0]['payload']['delivery']=='not_delivered',reconciled
         result['reconciliation_events']=reconciled
     if name=='detach_restart_reattach':
-        with Client(case.root/'public.sock',case.transcript) as c:
+        with Client(case.root/'public.sock',case.transcript,case.client_timeout) as c:
             view=c.query('execution.inspect',{'execution':'work'})['result']
         with sqlite3.connect(f'file:{case.root}/journal.sqlite3?mode=ro',uri=True) as db:
             events=[json.loads(row[0]) for row in db.execute("select value from protocol_projection where key like 'event/%'")]
