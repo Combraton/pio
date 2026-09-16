@@ -28,6 +28,12 @@ pub fn validate(config: &Value) -> Result<()> {
             "unsupported executor control: {name}"
         );
     }
+    for name in ["steering", "context_boundaries"] {
+        ensure!(
+            config["adapter"].get(name).is_none(),
+            "unsupported executor adapter control: {name}"
+        );
+    }
     let mut scripts = Vec::new();
     if let Some(script) = config.get("default_script") {
         scripts.push(script);

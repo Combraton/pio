@@ -139,10 +139,25 @@ impl Provider {
             e["view"]["execution"].clone(),
             num(&e["view"]["revision"]),
             kind,
-            payload,
+            payload.clone(),
             command,
         );
-        e["last_observed"] = self.now.clone().into();
+        // Administrative requests and passed waits are not fresh host activity.
+        let observed = matches!(
+            kind,
+            "execution.runtime.changed"
+                | "execution.exit.observed"
+                | "execution.completion.recorded"
+                | "execution.usage.observed"
+                | "execution.delivery.reconciled"
+                | "execution.cancel.observed"
+                | "execution.admission.changed"
+        ) || (kind == "execution.delivery.observed"
+            && !text(&payload["evidence"]["class"]).starts_with("delivery_timeout")
+            && payload["evidence"]["class"] != "recovery");
+        if observed {
+            e["last_observed"] = self.now.clone().into();
+        }
     }
     #[allow(clippy::too_many_arguments)] // mirrors the released effect and obligation fields
     fn record_effect(
@@ -159,7 +174,10 @@ impl Provider {
         if let Some(grant) = e["submit"].get("grant") {
             auth["grant"] = grant.clone();
         }
-        let descriptor = json!({"id":id,"kind":kind,"target":e["view"]["execution"],"payload_digest":e["submit"]["payload"]["brief"]["digest"],"authorization":auth,"retry_class":class,"operation_ref":operation});
+        let mut descriptor = json!({"id":id,"kind":kind,"target":e["view"]["execution"],"payload_digest":e["submit"]["payload"]["brief"]["digest"],"authorization":auth,"retry_class":class,"operation_ref":operation});
+        if class == "idempotent_key" {
+            descriptor["idempotency_key"] = id.into();
+        }
         self.data.effects.insert(id.into(),json!({"effect":descriptor,"revision":1,"status":"pending","observations":[{"status":"pending","evidence":evidence("recorded_before_dispatch"),"recorded_at":self.now}],"attempts":[],"obligations":[{"id":format!("{id}.{expects}"),"expects":expects,"deadline":deadline,"state":"open"}]}));
         push(&mut e["view"]["effects"], json!(id));
     }
@@ -337,6 +355,8 @@ impl Provider {
                     Value::Null,
                     "outcome",
                 );
+                self.data.effects.get_mut(&effect).unwrap()["effect"]["payload_digest"] =
+                    pio_core::digest(&crate::encoding::canonical(&p["payload"])).into();
                 effects.push(json!(effect));
                 e["pending_cancel"] = effect.into();
                 let receipt = json!({"state":"cancel_requested","operation_ref":op});
@@ -859,10 +879,12 @@ impl Provider {
                     if crash == "after_write" {
                         self.dispatch_marker(e)?;
                         let r = self.data.effects.get_mut(&delivery).unwrap();
-                        push(
-                            &mut r["attempts"],
-                            json!({"attempt":1,"outcome":"unknown","recorded_at":self.now}),
-                        );
+                        if list(&r["attempts"]).is_empty() {
+                            push(
+                                &mut r["attempts"],
+                                json!({"attempt":1,"outcome":"unknown","recorded_at":self.now}),
+                            );
+                        }
                     }
                     self.commit_execution(e)?;
                     std::process::exit(86);
@@ -899,8 +921,18 @@ impl Provider {
                 let current = num(&e["view"]["host"]["generation"]);
                 if generation != current {
                     self.execution_event(e,"execution.dispatch.fenced",json!({"delivery_id":delivery,"generation":generation,"current_generation":current}),None);
-                } else if e["view"]["delivery"] == "pending" {
+                } else if e["view"]["delivery"] == "pending" && e["dispatched"] != true {
                     self.dispatch_marker(e)?;
+                    if !self.attempt(e, &delivery, false) {
+                        self.delivery_observed(
+                            e,
+                            "ambiguous",
+                            "transport_error",
+                            None,
+                            false,
+                            false,
+                        );
+                    }
                 }
             } else if let Some(completion) = step.get("complete") {
                 let digest = pio_core::digest(text(&completion["content"]).as_bytes());
@@ -986,6 +1018,8 @@ impl Provider {
                     Value::Null,
                     "result",
                 );
+                self.data.effects.get_mut(&effect).unwrap()["effect"]["payload_digest"] =
+                    pio_core::digest(&crate::encoding::canonical(&json!({"execution":id}))).into();
                 self.commit_execution(e)?;
                 let success = self.attempt(e, &effect, true);
                 self.observe_effect(
@@ -999,6 +1033,7 @@ impl Provider {
                     success,
                 );
             } else if let Some(output) = step.get("output") {
+                e["last_observed"] = self.now.clone().into();
                 let bytes = if let Some(s) = output["text"].as_str() {
                     s.as_bytes().to_vec()
                 } else {

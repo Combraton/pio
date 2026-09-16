@@ -292,3 +292,66 @@ fn legacy_blob_store_is_refused_without_modifying_it() {
     assert_eq!(std::fs::read(file).unwrap(), b"legacy");
     assert!(!root.path().join("journal.sqlite3").exists());
 }
+
+#[test]
+fn delivery_timeout_does_not_postpone_inactivity() {
+    let root = tempfile::tempdir().unwrap();
+    let mut cfg = config();
+    cfg["executor"] = json!({"default_script":[{"deliver":"bytes_written"}]});
+    let mut p = Provider::new(root.path(), cfg).unwrap();
+    let mut s = session();
+    s.selected
+        .as_mut()
+        .unwrap()
+        .insert("execution".into(), vec![]);
+    let submit = command(
+        "execution.submit",
+        json!({"kind":"execution.execution","id":"e"}),
+        0,
+        json!({"brief":{"digest":pio_core::digest(b"brief"),"media_type":"text/plain"},"timeouts":{"delivery":30,"inactivity":60}}),
+    );
+    p.handle(&mut s, "execution.submit", &submit).unwrap();
+    p.execution_tick().unwrap();
+    p.now = "2026-01-01T00:00:30Z".into();
+    p.execution_tick().unwrap();
+    assert_eq!(p.data.executions["e"]["view"]["delivery"], "ambiguous");
+    p.now = "2026-01-01T00:01:00Z".into();
+    p.execution_tick().unwrap();
+    assert!(list(&p.data.executions["e"]["timeouts_passed"]).contains(&json!("inactivity")));
+    assert_eq!(p.data.executions["e"]["view"]["runtime"], "preparing");
+}
+
+#[test]
+fn forwarding_intent_pins_its_own_payload_and_key_before_attempt() {
+    let root = tempfile::tempdir().unwrap();
+    let mut cfg = config();
+    cfg["executor"] = json!({"default_script":[{"stale_dispatch":{"generation":1}},{"deliver":"provider_ack_id"}]});
+    let mut p = Provider::new(root.path(), cfg).unwrap();
+    let mut s = session();
+    s.selected
+        .as_mut()
+        .unwrap()
+        .insert("execution".into(), vec![]);
+    let subject = json!({"kind":"execution.execution","id":"e"});
+    let submit = command(
+        "execution.submit",
+        subject.clone(),
+        0,
+        json!({"brief":{"digest":pio_core::digest(b"brief"),"media_type":"text/plain"}}),
+    );
+    p.handle(&mut s, "execution.submit", &submit).unwrap();
+    p.execution_tick().unwrap();
+    assert_eq!(list(&p.data.effects["e.delivery-1"]["attempts"]).len(), 1);
+    let mut cancel = command(
+        "execution.cancel",
+        subject.clone(),
+        p.revision(&subject),
+        json!({}),
+    );
+    cancel["command_id"] = "cancel".into();
+    p.handle(&mut s, "execution.cancel", &cancel).unwrap();
+    let effect = &p.data.effects["e.cancel-1"];
+    assert!(list(&effect["attempts"]).is_empty());
+    assert_eq!(effect["effect"]["idempotency_key"], "e.cancel-1");
+    assert_eq!(effect["effect"]["payload_digest"], pio_core::digest(b"{}"));
+}

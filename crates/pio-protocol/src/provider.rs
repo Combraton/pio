@@ -318,7 +318,7 @@ impl Provider {
         json!({"oldest_retained":self.data.oldest,"current":self.data.generation})
     }
     pub fn manifest(&self) -> Value {
-        json!({"provider":{"name":"pio-core-conformance","version":"0.1.0-dev"},"profiles":[{"name":"core","majors":[1],"features":FEATURES,"depends_on":[]},{"name":"core-test","majors":[1],"features":[],"depends_on":["core"]},{"name":"execution","majors":[1],"features":crate::execution::FEATURES,"depends_on":["core"]}],"unsupported_profiles":[{"name":"coordination","reason":"not_in_release"},{"name":"remote-trust","reason":"not_in_release"}],"limits":self.limits,"dedupe_window":self.window(),"unknown_extensions":"drop"})
+        json!({"provider":{"name":"pio-journal-fake-executor","version":"0.1.0-dev"},"profiles":[{"name":"core","majors":[1],"features":FEATURES,"depends_on":[]},{"name":"core-test","majors":[1],"features":[],"depends_on":["core"]},{"name":"execution","majors":[1],"features":crate::execution::FEATURES,"depends_on":["core"]}],"unsupported_profiles":[{"name":"coordination","reason":"not_in_release"},{"name":"remote-trust","reason":"not_in_release"}],"limits":self.limits,"dedupe_window":self.window(),"unknown_extensions":"drop"})
     }
     pub fn handle(&mut self, session: &mut Session, method: &str, p: &Value) -> Reply {
         let _ = self.clock(false);
