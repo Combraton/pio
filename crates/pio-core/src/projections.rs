@@ -14,6 +14,13 @@ pub type Records = BTreeMap<String, Value>;
 pub const MAX_PROJECTED_STATE_BYTES: u64 = 32 * 1024 * 1024;
 pub const MAX_PROJECTION_RECORDS: u64 = 32_768;
 
+/// Bench values approved by the owner on 2026-09-16: 95 percent headroom for
+/// new execution admission (31,129.6 records rounded up; 30.4 MiB rounded
+/// down). Facts for already-admitted work may use the room above them, up to
+/// the hard limits.
+pub const MAX_ADMISSION_PROJECTION_RECORDS: u64 = 31_130;
+pub const MAX_ADMISSION_STATE_BYTES: u64 = 31_876_710;
+
 /// Explicit capacity refusal. Nothing is staged, journaled or sent to the outbox.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CapacityExceeded {
@@ -50,7 +57,30 @@ pub fn projection_size(records: &Records) -> Result<(u64, u64)> {
     Ok((bytes, records.len() as u64))
 }
 
-fn within_bound(bytes: u64, count: u64) -> std::result::Result<(), CapacityExceeded> {
+/// Which limits a commit must satisfy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Bound {
+    Hard,
+    Admission,
+}
+
+fn within_bound(bytes: u64, count: u64, bound: Bound) -> std::result::Result<(), CapacityExceeded> {
+    if bound == Bound::Admission {
+        if count > MAX_ADMISSION_PROJECTION_RECORDS {
+            return Err(CapacityExceeded {
+                limit: "admission_projection_records",
+                maximum: MAX_ADMISSION_PROJECTION_RECORDS,
+                projected: count,
+            });
+        }
+        if bytes > MAX_ADMISSION_STATE_BYTES {
+            return Err(CapacityExceeded {
+                limit: "admission_projected_state_bytes",
+                maximum: MAX_ADMISSION_STATE_BYTES,
+                projected: bytes,
+            });
+        }
+    }
     if count > MAX_PROJECTION_RECORDS {
         return Err(CapacityExceeded {
             limit: "projection_records",
@@ -91,6 +121,16 @@ impl Store {
     /// projection is refused with [`CapacityExceeded`] before any row is staged
     /// when the resulting projection would exceed the ADR 002 bound.
     pub fn commit_protocol(&mut self, expected: u64, records: &Records) -> Result<u64> {
+        self.commit_bounded(expected, records, Bound::Hard)
+    }
+
+    /// Commit that admits new execution work. It must also stay within the
+    /// lower admission thresholds, leaving room for already-admitted work.
+    pub fn commit_admission(&mut self, expected: u64, records: &Records) -> Result<u64> {
+        self.commit_bounded(expected, records, Bound::Admission)
+    }
+
+    fn commit_bounded(&mut self, expected: u64, records: &Records, bound: Bound) -> Result<u64> {
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -125,7 +165,7 @@ impl Store {
         if upserts.is_empty() && deletes.is_empty() {
             return Ok(revision);
         }
-        within_bound(bytes, records.len() as u64)?;
+        within_bound(bytes, records.len() as u64, bound)?;
         let mut changes = Vec::new();
         for (key, value, text) in upserts {
             tx.execute("INSERT INTO protocol_projection VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",params![key,text])?;
@@ -318,6 +358,58 @@ mod tests {
             store.protocol_records().unwrap().1.len() as u64,
             MAX_PROJECTION_RECORDS
         );
+    }
+
+    #[test]
+    fn admission_headroom_refuses_only_new_admission_above_bench_thresholds() {
+        // Owner bench values: 95 percent of each hard limit.
+        assert_eq!(
+            MAX_ADMISSION_PROJECTION_RECORDS,
+            (MAX_PROJECTION_RECORDS * 95).div_ceil(100)
+        );
+        assert_eq!(
+            MAX_ADMISSION_STATE_BYTES,
+            MAX_PROJECTED_STATE_BYTES * 95 / 100
+        );
+
+        let root = tempfile::tempdir().unwrap();
+        let mut store = Store::open(root.path()).unwrap();
+        let mut records: Records = (0..MAX_ADMISSION_PROJECTION_RECORDS)
+            .map(|n| (format!("event/{n:020}"), json!(n)))
+            .collect();
+        assert_eq!(store.commit_admission(0, &records).unwrap(), 1);
+        records.insert("execution/new".into(), json!({}));
+        let before = unchanged(&store);
+        assert_eq!(
+            capacity(store.commit_admission(1, &records).unwrap_err()),
+            CapacityExceeded {
+                limit: "admission_projection_records",
+                maximum: MAX_ADMISSION_PROJECTION_RECORDS,
+                projected: MAX_ADMISSION_PROJECTION_RECORDS + 1,
+            }
+        );
+        assert_eq!(unchanged(&store), before);
+        // Facts for already-admitted work may use the remaining room.
+        assert_eq!(store.commit_protocol(1, &records).unwrap(), 2);
+
+        let root = tempfile::tempdir().unwrap();
+        let mut store = Store::open(root.path()).unwrap();
+        let key = "blob/0";
+        let fill = MAX_ADMISSION_STATE_BYTES as usize - key.len() - 2;
+        let at = Records::from([(key.to_owned(), json!("x".repeat(fill)))]);
+        assert_eq!(store.commit_admission(0, &at).unwrap(), 1);
+        let over = Records::from([(key.to_owned(), json!("x".repeat(fill + 1)))]);
+        let before = unchanged(&store);
+        assert_eq!(
+            capacity(store.commit_admission(1, &over).unwrap_err()),
+            CapacityExceeded {
+                limit: "admission_projected_state_bytes",
+                maximum: MAX_ADMISSION_STATE_BYTES,
+                projected: MAX_ADMISSION_STATE_BYTES + 1,
+            }
+        );
+        assert_eq!(unchanged(&store), before);
+        assert_eq!(store.commit_protocol(1, &over).unwrap(), 2);
     }
 
     /// Measurement, not a pass/fail property. Run with

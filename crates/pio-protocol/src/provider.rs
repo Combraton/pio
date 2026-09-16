@@ -317,10 +317,21 @@ impl Provider {
         }
     }
     pub fn save(&mut self) -> Result<()> {
-        match self
-            .store
-            .commit_protocol(self.store_revision, &self.data.records()?)
-        {
+        self.commit(false)
+    }
+    /// Commit that binds a new `execution.submit`; it must stay within the
+    /// ADR 002 admission thresholds as well as the hard limits.
+    pub fn save_admission(&mut self) -> Result<()> {
+        self.commit(true)
+    }
+    fn commit(&mut self, admission: bool) -> Result<()> {
+        let records = self.data.records()?;
+        let result = if admission {
+            self.store.commit_admission(self.store_revision, &records)
+        } else {
+            self.store.commit_protocol(self.store_revision, &records)
+        };
+        match result {
             Ok(revision) => {
                 self.store_revision = revision;
                 Ok(())
@@ -665,7 +676,15 @@ impl Provider {
                         result: result.clone(),
                     },
                 );
-                if self.fault("commit_unavailable", method) || self.save().is_err() {
+                // A launch-configured commit fault short-circuits before any commit.
+                let refused = self.fault("commit_unavailable", method)
+                    || if method == "execution.submit" {
+                        self.save_admission()
+                    } else {
+                        self.save()
+                    }
+                    .is_err();
+                if refused {
                     self.reload()
                         .map_err(|_| err("internal_error", json!({})))?;
                     return Err(err("unavailable", json!({})));

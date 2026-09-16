@@ -402,14 +402,22 @@ fn reconciliation_events_use_frozen_outcomes_and_survive_journal_rebuild() {
     }
 }
 
-use pio_core::projections::{MAX_PROJECTION_RECORDS, projection_size};
+use pio_core::projections::{
+    MAX_ADMISSION_PROJECTION_RECORDS, MAX_PROJECTION_RECORDS, projection_size,
+};
 
 /// Internal store test only: pads the retained projection with inert subjects
 /// so a real command lands on an exact record-count boundary.
 fn fill_records(p: &mut Provider, target: u64) {
     let base = p.data.records().unwrap().len() as u64;
     assert!(base <= target);
-    for n in 0..target - base {
+    let existing = p
+        .data
+        .subjects
+        .values()
+        .filter(|s| s.subject["kind"] == "pio-test.filler")
+        .count() as u64;
+    for n in existing..existing + (target - base) {
         let subject = json!({"kind":"pio-test.filler","id":n.to_string()});
         p.data.subjects.insert(
             key(&subject),
@@ -557,7 +565,7 @@ fn scripted_submit() -> (Value, Session, Value) {
 }
 
 #[test]
-fn capacity_refusal_admits_nothing_and_at_the_limit_stalls_observation_after_the_marker() {
+fn hard_limit_refuses_nothing_bound_and_stalls_admitted_work_after_the_marker() {
     let (cfg, mut s, submit) = scripted_submit();
     // Measure what one admission adds: execution, delivery effect, dedupe
     // outcome and events.
@@ -571,6 +579,8 @@ fn capacity_refusal_admits_nothing_and_at_the_limit_stalls_observation_after_the
         "admission adds execution, effect and dedupe records"
     );
 
+    // Near the hard limit a new submit is refused, first by the admission
+    // threshold, and creates nothing.
     let root = tempfile::tempdir().unwrap();
     let mut p = Provider::new(root.path(), cfg.clone()).unwrap();
     fill_records(&mut p, MAX_PROJECTION_RECORDS - added + 1);
@@ -583,7 +593,7 @@ fn capacity_refusal_admits_nothing_and_at_the_limit_stalls_observation_after_the
     );
     assert_eq!(
         p.capacity_refusal.as_ref().unwrap()["limit"],
-        "projection_records"
+        "admission_projection_records"
     );
     assert!(p.data.executions.is_empty() && p.data.effects.is_empty());
     assert!(p.data.commands.is_empty() && p.data.events.is_empty());
@@ -594,18 +604,14 @@ fn capacity_refusal_admits_nothing_and_at_the_limit_stalls_observation_after_the
         "no admission, effect or dispatch fact"
     );
 
-    // Exactly at the limit the submit is admitted. The dispatch marker only
-    // rewrites existing records and commits; the delivery observation adds an
-    // event and is refused. Delivery stays pending with no determination and
-    // no further fact is recorded until capacity is freed.
+    // Already-admitted work whose facts exhaust the hard limit still stalls:
+    // the dispatch marker only rewrites existing records and commits; the
+    // delivery observation adds an event and is refused. Delivery stays
+    // pending and no further fact is recorded until capacity is freed.
     let root = tempfile::tempdir().unwrap();
     let mut p = Provider::new(root.path(), cfg).unwrap();
-    fill_records(&mut p, MAX_PROJECTION_RECORDS - added);
     p.handle(&mut s, "execution.submit", &submit).unwrap();
-    assert_eq!(
-        p.data.records().unwrap().len() as u64,
-        MAX_PROJECTION_RECORDS
-    );
+    fill_records(&mut p, MAX_PROJECTION_RECORDS);
     let journal = p.store.journal().unwrap();
     let events = p.data.events.len();
     assert!(p.execution_tick().is_err());
@@ -633,12 +639,10 @@ fn capacity_refusal_admits_nothing_and_at_the_limit_stalls_observation_after_the
     assert_eq!(p.data.executions["e"]["dispatched"], true);
     assert_eq!(p.data.executions["e"]["view"]["delivery"], "pending");
     assert_eq!(p.data.events.len(), events);
-    // Scripted progression does not advance on idle ticks; whatever a later
-    // tick attempts, it records no new fact and no delivery determination.
     let _ = p.execution_tick();
     assert_eq!(p.store.journal().unwrap(), facts);
     assert_eq!(p.data.executions["e"]["view"]["delivery"], "pending");
-    // A bound replay needs no commit; a new command is refused unbound.
+    // A bound replay needs no commit.
     assert_eq!(
         p.handle(&mut s, "execution.submit", &submit).unwrap()["replay"],
         true
@@ -730,4 +734,102 @@ fn capacity_refused_background_commit_keeps_queries_and_replays_available() {
         "unavailable"
     );
     assert_eq!(p.capacity_refusal, None);
+}
+
+fn submit_for(id: &str) -> Value {
+    let mut p = command(
+        "execution.submit",
+        json!({"kind":"execution.execution","id":id}),
+        0,
+        json!({"brief":{"digest":pio_core::digest(id.as_bytes()),"media_type":"text/plain"}}),
+    );
+    p["command_id"] = id.into();
+    p
+}
+
+#[test]
+fn admission_headroom_refuses_new_submit_while_admitted_work_completes() {
+    let mut cfg = config();
+    cfg["executor"] = json!({"default_script":[{"deliver":"provider_ack_id"},{"runtime":"active"},{"exit":{"code":0}}]});
+    let mut s = session();
+    s.selected
+        .as_mut()
+        .unwrap()
+        .insert("execution".into(), vec![]);
+    let scratch = tempfile::tempdir().unwrap();
+    let mut p = Provider::new(scratch.path(), cfg.clone()).unwrap();
+    let base = p.data.records().unwrap().len() as u64;
+    p.handle(&mut s, "execution.submit", &submit_for("e"))
+        .unwrap();
+    let added = p.data.records().unwrap().len() as u64 - base;
+
+    // One over the admission threshold: refused and unbound, although the
+    // hard limit still has room.
+    let root = tempfile::tempdir().unwrap();
+    let mut p = Provider::new(root.path(), cfg.clone()).unwrap();
+    fill_records(&mut p, MAX_ADMISSION_PROJECTION_RECORDS - added + 1);
+    let journal = p.store.journal().unwrap();
+    assert_eq!(
+        p.handle(&mut s, "execution.submit", &submit_for("e"))
+            .unwrap_err()
+            .code,
+        "unavailable"
+    );
+    assert_eq!(
+        p.capacity_refusal,
+        Some(
+            json!({"limit":"admission_projection_records","maximum":MAX_ADMISSION_PROJECTION_RECORDS,"projected":MAX_ADMISSION_PROJECTION_RECORDS+1})
+        )
+    );
+    assert!(p.data.executions.is_empty() && p.data.commands.is_empty());
+    assert_eq!(p.store.journal().unwrap(), journal);
+    // The admission threshold applies only to new execution admission.
+    p.capacity_refusal = None;
+    fill_records(&mut p, MAX_ADMISSION_PROJECTION_RECORDS);
+    p.handle(&mut s, "core-test.subject.put", &put("other"))
+        .unwrap();
+    assert!(p.data.records().unwrap().len() as u64 > MAX_ADMISSION_PROJECTION_RECORDS);
+
+    // Exactly at the threshold: admitted. Its observations then use the
+    // remaining room, it reaches exit without a stall, and a new submit is
+    // refused at the admission threshold.
+    let root = tempfile::tempdir().unwrap();
+    let mut p = Provider::new(root.path(), cfg).unwrap();
+    fill_records(&mut p, MAX_ADMISSION_PROJECTION_RECORDS - added);
+    p.handle(&mut s, "execution.submit", &submit_for("e"))
+        .unwrap();
+    assert_eq!(
+        p.data.records().unwrap().len() as u64,
+        MAX_ADMISSION_PROJECTION_RECORDS
+    );
+    assert_eq!(
+        p.handle(&mut s, "execution.submit", &submit_for("f"))
+            .unwrap_err()
+            .code,
+        "unavailable"
+    );
+    assert_eq!(
+        p.capacity_refusal.as_ref().unwrap()["limit"],
+        "admission_projection_records"
+    );
+    p.capacity_refusal = None;
+    for _ in 0..4 {
+        p.execution_tick().unwrap();
+    }
+    let view = &p.data.executions["e"]["view"];
+    assert_eq!(view["delivery"], "acknowledged");
+    assert_eq!(view["runtime"], "exited");
+    assert_eq!(view["exit"], json!({"code":0}));
+    assert_eq!(
+        p.capacity_refusal, None,
+        "no hard-limit stall for admitted work"
+    );
+    let records = p.data.records().unwrap().len() as u64;
+    assert!(records > MAX_ADMISSION_PROJECTION_RECORDS && records <= MAX_PROJECTION_RECORDS);
+    assert!(!p.data.executions.contains_key("f"));
+    assert_eq!(
+        p.handle(&mut s, "execution.submit", &submit_for("e"))
+            .unwrap()["replay"],
+        true
+    );
 }

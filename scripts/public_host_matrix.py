@@ -15,12 +15,15 @@ import fake_host_matrix as witness
 from public_api import Client, CREDENTIAL, submit, command
 from journal_order import ordering, classify_mutant, ORDER_REASON
 
-# ADR 002 hard bound on retained projection records (pio-core projections).
+# ADR 002 hard bound and new-admission threshold on retained projection
+# records (pio-core projections), and the records one durable submit adds.
 MAX_PROJECTION_RECORDS = 32768
+MAX_ADMISSION_PROJECTION_RECORDS = 31130
+DURABLE_SUBMIT_RECORDS = 5
 
 ROOT, BINARY = witness.ROOT, witness.BINARY
 poll, records = witness.poll, witness.records
-CASES = ['detach_restart_reattach','duplicate_and_conflicting_command','journal_failure_no_spawn','after_intent','after_claim','after_release','after_receipt','lost_host_no_respawn','stale_controller','restore_barrier','same_generation_restore','j3_duplicate_launch_mutant','mutant_admit_replay_flag','mutant_launch_guard','mutant_host_phase','mutant_wrong_reason_control','fenced_release_known_not_released','store_readonly_no_spawn','after_dispatch_marker','mutant_dispatch_order','mutant_dispatch_wrong_reason','fake_discovery','capacity_refusal_no_spawn']
+CASES = ['detach_restart_reattach','duplicate_and_conflicting_command','journal_failure_no_spawn','after_intent','after_claim','after_release','after_receipt','lost_host_no_respawn','stale_controller','restore_barrier','same_generation_restore','j3_duplicate_launch_mutant','mutant_admit_replay_flag','mutant_launch_guard','mutant_host_phase','mutant_wrong_reason_control','fenced_release_known_not_released','store_readonly_no_spawn','after_dispatch_marker','mutant_dispatch_order','mutant_dispatch_wrong_reason','fake_discovery','capacity_refusal_no_spawn','capacity_headroom_admitted_completes']
 FAULTS = dict(j3_duplicate_launch_mutant='duplicate_launch',mutant_admit_replay_flag='replay_relaunch',mutant_launch_guard='replay_without_launch_guard',mutant_host_phase='replay_without_host_phase',mutant_wrong_reason_control='replay_relaunch',fenced_release_known_not_released='before_release',after_dispatch_marker='after_dispatch_marker',mutant_dispatch_order='reorder_dispatch_intent',mutant_dispatch_wrong_reason='after_intent')
 
 class Case(witness.Case):
@@ -28,12 +31,13 @@ class Case(witness.Case):
         super().__init__(out,name)
         self.name = name.rsplit('-',1)[0]
         self.transcript = self.out/'public-transcript.jsonl'
-        duration = 100 if self.name in ('after_receipt','capacity_refusal_no_spawn') else 10000
+        duration = {'after_receipt':100,'capacity_refusal_no_spawn':100,'capacity_headroom_admitted_completes':1500}.get(self.name,10000)
         protocol = dict(format='combraton-conformance-config/1',principal='owner',credentials=[dict(credential=CREDENTIAL)],executor=dict(host_id='durable-fake-host'))
         if self.name=='journal_failure_no_spawn': protocol['faults']={'commit_unavailable':[{'operation':'execution.submit','times':1}]}
         self.config = dict(format='pio-fake-service/1',protocol=protocol,fake_host=dict(duration_ms=duration,fault=FAULTS.get(self.name,self.name if self.name in ('after_intent','after_claim','after_release','after_receipt') else '')))
         self.config_path=self.root/'service.json'
         self.config_path.write_text(json.dumps(self.config))
+        self.duration = duration
         self.request = submit(duration)
     def argv(self):
         return [str(BINARY),'serve-fake','--data-dir',str(self.root),'--config',str(self.config_path),'--socket',str(self.root/'public.sock')]
@@ -93,6 +97,46 @@ class Case(witness.Case):
 # Reuse identity/count property definitions, not diagnostic calls. The process
 # cut points remain launch configuration, never fields in public commands.
 def run_case(case,name):
+    if name=='capacity_headroom_admitted_completes':
+        uri=f'file:{case.root}/journal.sqlite3?mode=ro'
+        def projection_keys():
+            with sqlite3.connect(uri,uri=True) as db:return {row[0] for row in db.execute('select key from protocol_projection')}
+        daemon,first=case.start();case.stop_daemon(daemon)
+        # Pad the execution-free store so one durable admission lands exactly
+        # on the new-admission threshold.
+        target=MAX_ADMISSION_PROJECTION_RECORDS-DURABLE_SUBMIT_RECORDS
+        fill=json.loads(subprocess.check_output([str(BINARY),'fake','fill-projection',str(case.root),str(target)],text=True))
+        assert fill['after']['records']==target,fill
+        keys_before=projection_keys()
+        daemon,restart=case.start()
+        stderr_path=case.out/f'daemon-{len(case.daemons)-1}.stderr'
+        with Client(case.root/'public.sock',case.transcript) as c:
+            admitted=c.call(case.request)
+            refused=c.call(submit(case.duration,identity='headroom-refused'))
+        assert 'result' in admitted and admitted['result']['replay'] is False,admitted
+        assert refused['error']['data']['code']=='unavailable' and refused['error']['data']['retry']=='same_command',refused
+        with sqlite3.connect(uri,uri=True) as db:
+            facts=[json.loads(row[0]) for row in db.execute("select record from journal where record like '%protocol.commit%' order by sequence")]
+        admission=next(f for f in facts if any(c['key']=='execution/work' for c in f['changes']))
+        new_keys=[c['key'] for c in admission['changes'] if c['key'] not in keys_before and not c.get('delete')]
+        assert len(keys_before)+len(new_keys)==MAX_ADMISSION_PROJECTION_RECORDS,(len(keys_before),new_keys)
+        view=poll(lambda:case.inspect()['public']['result'],lambda v:v['runtime']=='exited',seconds=30)
+        assert view['delivery']=='delivered' and view['exit']=={'code':0} and view['deliveries'][0]['evidence']['class']=='child_release_marker',view
+        with Client(case.root/'public.sock',case.transcript) as c:
+            absent=c.query('execution.inspect',{'execution':'headroom-refused'})
+        assert absent['error']['data']['code']=='not_found',absent
+        log=[json.loads(line.split(': ',1)[1]) for line in stderr_path.read_text().splitlines() if line.startswith('PIO capacity refusal: ')]
+        assert len(log)==1 and log[0]['limit']=='admission_projection_records' and log[0]['maximum']==MAX_ADMISSION_PROJECTION_RECORDS and log[0]['projected']>MAX_ADMISSION_PROJECTION_RECORDS,log
+        with sqlite3.connect(uri,uri=True) as db:
+            invocations=db.execute('select count(*) from invocations').fetchone()[0]
+            refused_rows=db.execute("select count(*) from protocol_projection where key like '%headroom-refused%'").fetchone()[0]
+            final_records=db.execute('select count(*) from protocol_projection').fetchone()[0]
+        assert invocations==1 and refused_rows==0 and MAX_ADMISSION_PROJECTION_RECORDS<final_records<=MAX_PROJECTION_RECORDS,(invocations,refused_rows,final_records)
+        command_id=hashlib.sha256(b'headroom-refused').hexdigest()
+        table=subprocess.check_output(['ps','-axww','-o','pid=','-o','command='],text=True)
+        matches=[line for line in table.splitlines() if command_id in line]
+        assert len(records(case.root/'spawn.jsonl'))==1 and matches==[]
+        return dict(outcome='pass',fill=fill,admission_records=len(keys_before)+len(new_keys),admission_new_keys=new_keys,admitted_ack=admitted['result']['acknowledgment'],refusal=refused,capacity_log=log,hard_limit_refusals=0,completed_view=dict(runtime=view['runtime'],delivery=view['delivery'],exit=view['exit'],evidence=view['deliveries'][0]['evidence']),final_projection_records=final_records,invocation_rows=invocations,refused_projection_rows=refused_rows,spawn_count=1,refused_process_table_matches=matches,inspect_refused=absent['error']['data'],generations=dict(first=first,restart=restart))
     if name=='capacity_refusal_no_spawn':
         def fill(target):
             result=json.loads(subprocess.check_output([str(BINARY),'fake','fill-projection',str(case.root),str(target)],text=True))
