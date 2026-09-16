@@ -30,7 +30,7 @@ Disposable prompt, rewritten 2026-09-16 after M2 started. It replaces the fresh-
 
 ## 4. Next action
 
-Owner review 1 of the capacity-bound checkpoint is done and its corrections are verified at `6a9d11a`. Follow TASK plan step 3: qualify the selected Codex executable, exact version, binary hash and per-file canonical schema identity; build before/after capture of the user's Codex configuration; connect app-server through the durable host. No live run until those exist, and none until the owner says go on issue #5 after you post the fixture path, task text, expected token cost and run plan. Then steps 4–5.
+Owner review 1 is done (corrections verified at `6a9d11a`). Codex qualification (`ea6bf17`) and the offline adapter (`5095f06`, offline matrix 39/39) are in; ADR 003 is proposed. **A live-run plan is posted on issue #5 and waits for the owner's go.** Check #5 for the go and the thread-settings gate before anything live. The original step 3 text follows for reference: qualify the selected Codex executable, exact version, binary hash and per-file canonical schema identity; build before/after capture of the user's Codex configuration; connect app-server through the durable host. No live run until those exist, and none until the owner says go on issue #5 after you post the fixture path, task text, expected token cost and run plan. Then steps 4–5.
 
 ## 5. Protocol and Codex pins
 
