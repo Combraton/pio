@@ -2,7 +2,7 @@
 
 Independent execution and recovery for existing agentic harnesses.
 
-> M1 implementation has started with a Cargo skeleton and reproducible build/conformance pipeline. No protocol support, real adapter, released API or performance claim is established here. The reviewed architecture is `architecture-v1-20260912`, published as `public-development-v1-20260913`. Canonical specifications are available through [the documentation map](docs/README.md). This README is an overview, not the full specification.
+> M1 implementation has started with a Cargo workspace, experimental fake-host recovery slice and reproducible build/conformance pipeline. No protocol support, real adapter, released API or performance claim is established here. The reviewed architecture is `architecture-v1-20260912`, published as `public-development-v1-20260913`. Canonical specifications are available through [the documentation map](docs/README.md). This README is an overview, not the full specification.
 
 PIO supervises real harnesses without replacing their native reasoning, investigation, editing and testing loops. A CLI, CI job, CBR memory investigation or another control plane can use PIO without Combraton or CBR being installed.
 
@@ -31,7 +31,7 @@ Develop alongside CBR; neither project waits for the other's complete feature se
 
 ## Stack and status
 
-Rust/Tokio, SQLite/content-addressed payloads and Ratatui are [accepted implementation choices](docs/decisions/001-standalone-stack.md), with a Cargo skeleton now present; behavior remains unvalidated. The Claude Python bridge remains conditional on the M3 experiment. Exact adapter candidates and bounded experiments are recorded there. Puppetmaster supplies evaluated execution ideas, not an adopted controller/workflow engine.
+Rust/Tokio, SQLite/content-addressed payloads and Ratatui are [accepted implementation choices](docs/decisions/001-standalone-stack.md), with an experimental fake-host slice now present; real-adapter behavior remains unvalidated. The Claude Python bridge remains conditional on the M3 experiment. Exact adapter candidates and bounded experiments are recorded there. Puppetmaster supplies evaluated execution ideas, not an adopted controller/workflow engine.
 
 For the shared sequence and self-development boundary, read [BOOTSTRAP](https://github.com/Combraton/combraton/blob/main/BOOTSTRAP.md). No supported runtime release or license is provided; the repository is public and its project license remains to be selected.
 

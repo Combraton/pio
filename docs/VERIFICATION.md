@@ -1,6 +1,6 @@
 # Verification available now
 
-PIO now has an M1 Cargo skeleton and pinned conformance pipeline. Its participant advertises no implemented profiles yet. Protocol v0.1.0 is released separately. Documentation checks validate structure only.
+PIO now has an M1 Cargo workspace, experimental fake-host process slice and pinned conformance pipeline. Its participant advertises no implemented profiles yet. Protocol v0.1.0 is released separately. Documentation checks validate structure only.
 
 From this repository's root:
 
@@ -34,14 +34,16 @@ cargo --version
 cargo fmt --all -- --check
 cargo build --workspace --locked
 cargo test --workspace --locked
+cargo clippy --workspace --locked -- -D warnings
 python3 scripts/check_docs.py
 git diff --exit-code -- Cargo.lock
+python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3
 python3 scripts/conformance.py --out target/conformance
 ```
 
-These are the commands in [runtime CI](../.github/workflows/runtime.yml). CI uses macOS 15 arm64 and Ubuntu 24.04 x86_64 and asserts the architecture. These are tested CI environments, not a broader minimum-OS support claim. Use `target/debug/pio` explicitly: an unrelated historical `pio` may already be installed on PATH. The skeleton only supports `--version` and `participant`; its conformance service refuses startup.
+These are the commands in [runtime CI](../.github/workflows/runtime.yml). CI uses macOS 15 arm64 and Ubuntu 24.04 x86_64 and asserts the architecture. These are tested CI environments, not a broader minimum-OS support claim. Use `target/debug/pio` explicitly: an unrelated historical `pio` may already be installed on PATH. The binary supports `--version`, `participant` and the experimental `fake` namespace. The public conformance service still refuses startup; actual protocol claims remain empty.
 
-The conformance command downloads the six pinned release assets into a fresh temporary directory, runs the existing integrity verifier, extracts the verified source archive, builds `combraton-conformance` with its released lockfile, runs runner self-tests and fixture validation, and runs all fixtures against PIO's descriptor. No sibling clone or pre-existing cache is required. It preserves the runner's exit status and unmodified manifest/transcripts; `pio-report.json` reports native outcome classes and every unsupported/skipped coverage limit. CI uploads the rendered descriptor, target, pin receipt, environment, manifest and transcripts even on failures. Empty claims in this first skeleton mean no protocol coverage, not M1 acceptance. Cargo tests currently contain no behavior tests.
+The conformance command downloads the six pinned release assets into a fresh temporary directory, runs the existing integrity verifier, extracts the verified source archive, builds `combraton-conformance` with its released lockfile, runs runner self-tests and fixture validation, and runs all fixtures against PIO's descriptor. No sibling clone or pre-existing cache is required. It preserves the runner's exit status and unmodified manifest/transcripts; `pio-report.json` reports native outcome classes and every unsupported/skipped coverage limit. CI uploads the rendered descriptor, target, pin receipt, environment, manifest and transcripts even on failures. Empty claims mean no protocol coverage, not M1 acceptance. Cargo unit/doc suites currently contain no behavior tests. Process behavior is exercised by the separate fake-host matrix command; its failures fail CI.
 
 For offline asset reuse, append `--assets "$PIO_RELEASE_DIR"`; verification still runs. Choose a fresh output path for every run: existing evidence directories are never overwritten. Cargo downloads still need either network access or an existing registry cache. No real adapter, UI, memory-evaluation or end-to-end journey has passed.
 
@@ -58,3 +60,21 @@ python3 scripts/verify_protocol_pin.py --assets "$PIO_RELEASE_DIR"
 This checks pinned asset hashes, 539 bundle files and the released 420-file normative inventory. It does not build Protocol, run conformance or test PIO. A temporary modified-manifest negative control was refused with exit 1 for the expected checksum mismatch; see [pin evidence](work/standalone-0.1/evidence/pin-checks.json).
 
 Follow [standalone release gates](https://github.com/Combraton/combraton/blob/main/docs/STANDALONE-RELEASES.md). Core no-optional-service tests, protocol conformance, real-adapter integration, comparative outcomes and UI usability are separate evidence classes. The [benchmarks repository](https://github.com/Combraton/benchmarks) owns cross-product scenarios/results, not this service's normative contract. No runtime benchmark has been implemented or run by the documentation setup.
+
+## Experimental fake-host evidence
+
+The matrix runs twelve cases three times (36 attempted runs): caller detach/daemon restart/reattach; duplicate and conflicting commands; SQLite write refusal before spawn; crashes after intent, host claim, release and receipt; lost host; stale controller; controller-generation rollback; lost-admission rollback within the same generation; and the J3 duplicate-launch mutant. Each case records its attempted repetition, observations and result. The mutant must fail the same `single_launch_identity_count` property used by the positive recovery case, specifically because two actual child starts were observed. A timeout, crashed test runner or unrelated assertion fails the matrix.
+
+`matrix.json` includes source-file inventory and binary digests, platform, attempts and outcome counts. Per-case files preserve the journal/outbox, child-written append-only spawn/release markers, before/after identities and generations, and daemon logs. The journal-failure case also inspects the OS process table independently. CI uploads these beside the Protocol artifacts. Temporary stores are isolated under `/tmp` and retained for diagnosis; owned fake processes are killed only after comparing their kernel start identity. These tests use no real adapter, CBR, Combraton or user harness configuration.
+
+To inspect the experimental path manually, use a new private directory and separate terminals:
+
+```sh
+mkdir -m 700 /tmp/pio-fake-example
+target/debug/pio fake daemon /tmp/pio-fake-example
+# In another terminal (each request connection closes after its response):
+target/debug/pio fake request /tmp/pio-fake-example '{"op":"submit","id":"demo","payload":{"duration_ms":10000}}'
+target/debug/pio fake request /tmp/pio-fake-example '{"op":"inspect","id":"demo"}'
+```
+
+This diagnostic JSON interface is not Core/Execution or an installable product CLI. Every execution is labeled `fake-host`. The child performs only bounded deterministic output and waiting. Core/Execution, grants, capabilities, event subscriptions, caller operation persistence, discovery/workspaces/usage and the released test controls remain to implement. Persistent launch guards and an external controller witness hold detected rollback; comprehensive backup/restore and storage-failure certification remain separate work. Do not remove guard/witness files to bypass a refusal.
