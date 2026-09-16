@@ -1,0 +1,92 @@
+{
+  "format": "pio-codex-offline-probe/1",
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "turn_started": false,
+  "model_request_sent": false,
+  "user_codex_home_used": false,
+  "qualification": {
+    "exit": 0,
+    "qualified": true,
+    "refusals": [],
+    "native_sha256": "ae1d3ffe6d48aec6a4dc3f50e7eb8e0d11962485a6a9406c5a7012139383da02",
+    "wrapper_sha256": "134063e133f0b4244fa3b251acf973d4fe4b4aeeacbdc135211bf480f59f1477",
+    "node": {
+      "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+      "version": "v22.23.0"
+    },
+    "canonical_listing_sha256": "65c3badeb422b8f04355ddf1cb9fdd000162f22a9d024f04394690b4f1d4f8b3"
+  },
+  "app_server": {
+    "argv": [
+      "<selected executable>",
+      "app-server"
+    ],
+    "exit": 0,
+    "seconds": 1.396,
+    "credential_environment_removed": true,
+    "initialize": {
+      "ok": true,
+      "result_keys": [
+        "codexHome",
+        "platformFamily",
+        "platformOs",
+        "userAgent"
+      ]
+    },
+    "thread_start": {
+      "ok": true,
+      "error": null,
+      "result_keys": [
+        "activePermissionProfile",
+        "approvalPolicy",
+        "approvalsReviewer",
+        "cwd",
+        "instructionSources",
+        "model",
+        "modelProvider",
+        "multiAgentMode",
+        "reasoningEffort",
+        "runtimeWorkspaceRoots",
+        "sandbox",
+        "serviceTier",
+        "thread"
+      ],
+      "thread_id_present": true,
+      "sandbox_projection": {
+        "type": "workspaceWrite",
+        "writableRoots": [],
+        "networkAccess": false,
+        "excludeTmpdirEnvVar": false,
+        "excludeSlashTmp": false
+      },
+      "approval_policy": "on-request",
+      "model_provider": "openai"
+    },
+    "notifications": [
+      "remoteControl/status/changed",
+      "thread/started"
+    ],
+    "server_requests": [],
+    "transcript_sha256": "f4700c4fb99f0cced8dd282e3ce67c94efd62d4857532cdf2d5cc30c50cf2197"
+  },
+  "config_diff": {
+    "existed_before": false,
+    "exists_after": true,
+    "format": "pio-codex-config-diff/1",
+    "other_changes": false,
+    "projects_added": [
+      {
+        "location": "fixture",
+        "path_sha256": "99e3b9cb9bff5285297581c6ff1d4aa5174d4aabcf3abbc8243aad156e27217e",
+        "trust_level": "trusted"
+      }
+    ],
+    "projects_changed": [],
+    "projects_removed": [],
+    "raw_sha256": {
+      "after": "81a5161e0d476119a9c359f1a9fa11fa8c4d1088fe61fbcfc2c8bcc50a51de2c",
+      "before": null
+    },
+    "unchanged": false
+  }
+}
