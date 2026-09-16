@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.capabilities.result.schema.json",
+  "title": "core.capabilities result",
+  "type": "object",
+  "required": [
+    "revision",
+    "predicates"
+  ],
+  "properties": {
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "predicates": {
+      "type": "array",
+      "items": {
+        "$ref": "../../core/1/common.schema.json#/$defs/capability_predicate"
+      }
+    }
+  },
+  "unevaluatedProperties": false
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core-test/1/core-test.subject.applied_count.result.schema.json",
+  "title": "core-test.subject.applied_count result",
+  "type": "object",
+  "required": [
+    "subject",
+    "applied_count"
+  ],
+  "properties": {
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "core-test.subject"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "applied_count": {
+      "$ref": "../../core/1/common.schema.json#/$defs/safe_nonnegative_integer"
+    }
+  },
+  "unevaluatedProperties": false
+}

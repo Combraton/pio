@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.effects.abort_obligation.result.schema.json",
+  "title": "core.effects.abort_obligation result",
+  "type": "object",
+  "required": [
+    "acknowledgment",
+    "outcome",
+    "replay"
+  ],
+  "properties": {
+    "acknowledgment": {
+      "$ref": "../../core/1/common.schema.json#/$defs/acknowledgment"
+    },
+    "replay": {
+      "type": "boolean"
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "effect",
+        "obligation",
+        "status"
+      ],
+      "properties": {
+        "effect": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "obligation": {
+          "type": "object",
+          "required": [
+            "id",
+            "state"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+            },
+            "state": {
+              "const": "aborted"
+            }
+          },
+          "unevaluatedProperties": false
+        },
+        "status": {
+          "$ref": "../../core/1/common.schema.json#/$defs/effect_status"
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

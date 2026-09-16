@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.effects.get.result.schema.json",
+  "title": "core.effects.get result",
+  "type": "object",
+  "required": [
+    "effect",
+    "revision",
+    "status",
+    "observations",
+    "attempts",
+    "obligations"
+  ],
+  "properties": {
+    "effect": {
+      "$ref": "../../core/1/common.schema.json#/$defs/effect_descriptor"
+    },
+    "revision": {
+      "$ref": "../../core/1/common.schema.json#/$defs/revision"
+    },
+    "status": {
+      "$ref": "../../core/1/common.schema.json#/$defs/effect_status"
+    },
+    "observations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "../../core/1/common.schema.json#/$defs/effect_observation"
+      }
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "$ref": "../../core/1/common.schema.json#/$defs/effect_attempt"
+      }
+    },
+    "obligations": {
+      "type": "array",
+      "items": {
+        "$ref": "../../core/1/common.schema.json#/$defs/obligation"
+      }
+    }
+  },
+  "unevaluatedProperties": false
+}

@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.events.notify.notification.schema.json",
+  "title": "core.events.notify notification frame",
+  "type": "object",
+  "required": [
+    "jsonrpc",
+    "method",
+    "params"
+  ],
+  "properties": {
+    "jsonrpc": {
+      "const": "2.0"
+    },
+    "method": {
+      "const": "core.events.notify"
+    },
+    "params": {
+      "type": "object",
+      "required": [
+        "subscription",
+        "items",
+        "next_cursor"
+      ],
+      "properties": {
+        "subscription": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "../../core/1/common.schema.json#/$defs/stream_item"
+          }
+        },
+        "next_cursor": {
+          "$ref": "../../core/1/common.schema.json#/$defs/cursor"
+        },
+        "ended": {
+          "type": "object",
+          "required": [
+            "reason"
+          ],
+          "properties": {
+            "reason": {
+              "enum": [
+                "authorization_lost",
+                "item_too_large",
+                "consumer_too_slow"
+              ],
+              "description": "consumer_too_slow is sent only to sessions that negotiated core.events.backpressure (CORE section 16.5)."
+            }
+          },
+          "unevaluatedProperties": false
+        }
+      },
+      "unevaluatedProperties": false,
+      "if": {
+        "required": [
+          "ended"
+        ]
+      },
+      "then": {
+        "properties": {
+          "items": {
+            "maxItems": 0
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "items": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  },
+  "unevaluatedProperties": false
+}

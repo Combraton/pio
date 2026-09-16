@@ -14,3 +14,4 @@ pio-core = { path = "../pio-core" }
 pio-host = { path = "../pio-host" }
 anyhow.workspace = true
 serde_json.workspace = true
+pio-protocol = { path = "../pio-protocol" }

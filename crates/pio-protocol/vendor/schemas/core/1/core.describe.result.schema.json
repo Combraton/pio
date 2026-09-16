@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.describe.result.schema.json",
+  "title": "core.describe result",
+  "type": "object",
+  "required": [
+    "provider",
+    "profiles",
+    "unsupported_profiles",
+    "limits",
+    "dedupe_window",
+    "unknown_extensions"
+  ],
+  "properties": {
+    "provider": {
+      "$ref": "../../core/1/common.schema.json#/$defs/party"
+    },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "majors",
+          "features",
+          "depends_on"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "../../core/1/common.schema.json#/$defs/profile_name"
+          },
+          "majors": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "../../core/1/common.schema.json#/$defs/profile_major"
+            }
+          },
+          "features": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "../../core/1/common.schema.json#/$defs/feature_name"
+            }
+          },
+          "depends_on": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "../../core/1/common.schema.json#/$defs/profile_name"
+            }
+          }
+        },
+        "unevaluatedProperties": false
+      }
+    },
+    "unsupported_profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "reason"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "../../core/1/common.schema.json#/$defs/profile_name"
+          },
+          "reason": {
+            "enum": [
+              "not_in_release",
+              "not_implemented"
+            ]
+          }
+        },
+        "unevaluatedProperties": false
+      }
+    },
+    "limits": {
+      "$ref": "../../core/1/common.schema.json#/$defs/limits"
+    },
+    "dedupe_window": {
+      "$ref": "../../core/1/common.schema.json#/$defs/dedupe_window"
+    },
+    "unknown_extensions": {
+      "enum": [
+        "preserve",
+        "drop"
+      ]
+    }
+  },
+  "unevaluatedProperties": false
+}

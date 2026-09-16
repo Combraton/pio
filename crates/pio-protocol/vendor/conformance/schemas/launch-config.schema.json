@@ -1,0 +1,1325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/conformance/schemas/launch-config.schema.json",
+  "title": "Conformance launch configuration (combraton-conformance-config/1)",
+  "type": "object",
+  "required": [
+    "format"
+  ],
+  "properties": {
+    "format": {
+      "const": "combraton-conformance-config/1"
+    },
+    "principal": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "authority_principals": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "provider_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "max_frame_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_payload_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_string_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_array_items": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_depth": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "dedupe": {
+      "type": "object",
+      "properties": {
+        "advance_on_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retain_generations": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "events": {
+      "type": "object",
+      "properties": {
+        "new_epoch_on_start": {
+          "type": "boolean"
+        },
+        "unvouched_last": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retain_last": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_pending_notification_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Per-connection bound on produced but unwritten output (default 8 MiB)."
+        },
+        "backpressure_notice_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Bound on waiting for room and for the ending notice (default 1000)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "supported",
+          "unsupported",
+          "unknown"
+        ]
+      }
+    },
+    "clock": {
+      "type": "object",
+      "properties": {
+        "fixed": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path of a clock file the runner replaces atomically (decision 007)."
+        }
+      },
+      "additionalProperties": false,
+      "maxProperties": 1
+    },
+    "credentials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "credential"
+        ],
+        "properties": {
+          "credential": {
+            "type": "string",
+            "pattern": "^ccred1\\.[A-Za-z0-9][A-Za-z0-9._:~-]{0,127}\\.[A-Za-z0-9_-]{43}$",
+            "maxLength": 200
+          },
+          "revoked": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "test_barriers": {
+      "type": "object",
+      "required": [
+        "directory",
+        "enabled"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+          }
+        }
+      },
+      "description": "Implementation-specific barriers enabled for this launch (decision 007)."
+    },
+    "executor": {
+      "type": "object",
+      "description": "Scripted executor test adapter (decision 007, owner decision Q4): adapter capabilities and per-execution harness scripts. Normative only for the conformance tests that use it.",
+      "properties": {
+        "adapter": {
+          "type": "object",
+          "properties": {
+            "enforcement": {
+              "enum": [
+                "enforced",
+                "mediated",
+                "cooperative"
+              ]
+            },
+            "echo_proves_delivery": {
+              "type": "boolean"
+            },
+            "predicates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "status"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "supported",
+                      "unsupported",
+                      "unknown"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "steering": {
+              "enum": [
+                "live",
+                "unsupported"
+              ],
+              "description": "Whether the scripted harness accepts live steering (default unsupported)."
+            },
+            "enforced_bounds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Budget measures the adapter enforces as hard bounds."
+            },
+            "context_boundaries": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "initial_prompt",
+                  "turn_steering",
+                  "context_request"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "scripts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/script"
+          }
+        },
+        "default_script": {
+          "$ref": "#/$defs/script"
+        },
+        "recovery_policy": {
+          "enum": [
+            "resume",
+            "terminate"
+          ],
+          "description": "Recovery policy for provably undispatched deliveries after a restart (default resume)."
+        },
+        "host_id": {
+          "type": "string",
+          "description": "The scripted host slot's ID (default scripted-host)."
+        },
+        "capacity": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Admitted executions that may run at once; later submissions queue with reason capacity."
+        },
+        "budget_pools": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "measure",
+              "limit"
+            ],
+            "properties": {
+              "measure": {
+                "type": "string"
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "context_packets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "oneOf": [
+              {
+                "required": [
+                  "ref",
+                  "digest"
+                ]
+              },
+              {
+                "required": [
+                  "reference"
+                ]
+              }
+            ],
+            "properties": {
+              "ref": {
+                "type": "string"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "reference": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Context packets the executor holds, by M3 reference and exact digest, or by packet reference (EXECUTION 13.1)."
+        },
+        "installations": {
+          "type": "array",
+          "description": "Scripted installations for execution.discovery (owner decision Q2).",
+          "items": {
+            "type": "object",
+            "required": [
+              "installation_id",
+              "harness",
+              "detected"
+            ],
+            "properties": {
+              "installation_id": {
+                "type": "string"
+              },
+              "harness": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "detected": {
+                "type": "boolean"
+              },
+              "adapter_recognized": {
+                "enum": [
+                  "yes",
+                  "no",
+                  "unknown"
+                ]
+              },
+              "version_supported": {
+                "enum": [
+                  "yes",
+                  "no",
+                  "unknown"
+                ]
+              },
+              "authentication": {
+                "enum": [
+                  "authenticated",
+                  "unauthenticated",
+                  "unknown"
+                ]
+              },
+              "reachable": {
+                "enum": [
+                  "yes",
+                  "no",
+                  "unknown"
+                ]
+              },
+              "last_verified": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "output_spool_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Bytes of output the executor keeps per execution (default 65536)."
+        },
+        "peers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "provider_id",
+              "socket",
+              "credential"
+            ],
+            "properties": {
+              "provider_id": {
+                "type": "string"
+              },
+              "socket": {
+                "type": "string"
+              },
+              "credential": {
+                "type": "string"
+              },
+              "grant": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Separately running providers the executor reaches over their public sockets to fetch packets (owner decision M4-Q3)."
+        },
+        "evidence_outputs": {
+          "type": "object",
+          "required": [
+            "provider_id",
+            "socket",
+            "credential"
+          ],
+          "properties": {
+            "provider_id": {
+              "type": "string"
+            },
+            "socket": {
+              "type": "string"
+            },
+            "credential": {
+              "type": "string"
+            },
+            "grant": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "description": "The evidence provider where the executor seals completion outputs under its work-bound grant (EXECUTION 13.2)."
+        },
+        "observed_basis": {
+          "type": "object",
+          "properties": {
+            "repositories": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "tree": {
+                    "type": "string"
+                  },
+                  "dirty_snapshot": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "environment_digest": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "description": "The basis the executor can observe for revalidation; conditions on anything else are unavailable."
+        },
+        "basis_changes": {
+          "type": "array",
+          "description": "Scheduled changes to what the executor observes, applied at the controlled clock (test control; EXECUTION 15).",
+          "items": {
+            "type": "object",
+            "required": [
+              "at",
+              "observed_basis"
+            ],
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "observed_basis": {
+                "type": "object",
+                "properties": {
+                  "repositories": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "tree": {
+                          "type": "string"
+                        },
+                        "dirty_snapshot": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "environment_digest": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "description": "The basis the executor can observe for revalidation; conditions on anything else are unavailable."
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "faults": {
+      "type": "object",
+      "description": "Injected store faults (decision 007): commit_unavailable makes the next owner transactions for an operation fail and roll back; response_internal_error commits them and answers internal_error.",
+      "properties": {
+        "commit_unavailable": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "operation",
+              "times"
+            ],
+            "properties": {
+              "operation": {
+                "type": "string"
+              },
+              "times": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "response_internal_error": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "operation",
+              "times"
+            ],
+            "properties": {
+              "operation": {
+                "type": "string"
+              },
+              "times": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence_store": {
+      "type": "object",
+      "description": "Scripted evidence store controls (decision 007): corrupt stored bytes, unavailable artifacts, staging timeout, deferred physical deletion.",
+      "properties": {
+        "corrupt": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unavailable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "staging_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "deletion_delay_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serve_altered_bytes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Adversarial control: fetch returns these artifacts' bytes altered while keeping the sealed digest and availability metadata."
+        }
+      },
+      "additionalProperties": false
+    },
+    "context": {
+      "type": "object",
+      "description": "Scripted context preparation (decision 007; CONTEXT section 12).",
+      "properties": {
+        "scripts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/context_step"
+            }
+          }
+        },
+        "default_script": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/context_step"
+          }
+        },
+        "evidence_provider": {
+          "type": "object",
+          "description": "A separately running evidence provider that seals this provider's packets, reached over its public socket (owner decision M4-Q3).",
+          "required": [
+            "provider_id",
+            "socket",
+            "credential"
+          ],
+          "properties": {
+            "provider_id": {
+              "type": "string"
+            },
+            "socket": {
+              "type": "string"
+            },
+            "credential": {
+              "type": "string"
+            },
+            "grant": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "executor": {
+          "type": "object",
+          "description": "A separately running executor where the context provider runs its own investigation executions (CTX-18, CTX-19).",
+          "required": [
+            "provider_id",
+            "socket",
+            "credential"
+          ],
+          "properties": {
+            "provider_id": {
+              "type": "string"
+            },
+            "socket": {
+              "type": "string"
+            },
+            "credential": {
+              "type": "string"
+            },
+            "grant": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "knowledge_provider": {
+          "type": "object",
+          "description": "A separately running knowledge provider the context provider reads claims at, as an ordinary authenticated reader (CONTEXT section 14).",
+          "required": [
+            "provider_id",
+            "socket",
+            "credential"
+          ],
+          "properties": {
+            "provider_id": {
+              "type": "string"
+            },
+            "socket": {
+              "type": "string"
+            },
+            "credential": {
+              "type": "string"
+            },
+            "grant": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "knowledge": {
+      "type": "object",
+      "description": "Knowledge evaluator and adversarial store controls (decision 007; KNOWLEDGE section 13).",
+      "properties": {
+        "evaluator": {
+          "type": "object",
+          "required": [
+            "id",
+            "version"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "condition_kinds": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "repository_tree",
+                  "dirty_snapshot",
+                  "environment_digest"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "serve_altered_claims": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Adversarial control: knowledge.claim.inspect returns these claims' records altered while keeping the reference and digest."
+        }
+      },
+      "additionalProperties": false
+    },
+    "verifier": {
+      "type": "object",
+      "description": "Scripted evaluator (decision 007; VERIFICATION section 11).",
+      "properties": {
+        "evaluators": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "version"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[a-z0-9_-]{1,32}$"
+              },
+              "status": {
+                "enum": [
+                  "supported",
+                  "unsupported",
+                  "unknown"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "scripts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 1,
+              "properties": {
+                "wait_until": {
+                  "type": "string"
+                },
+                "property": {
+                  "type": "object",
+                  "required": [
+                    "property_id",
+                    "result"
+                  ],
+                  "properties": {
+                    "property_id": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "enum": [
+                        "pass",
+                        "fail",
+                        "not_evaluated",
+                        "indeterminate"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "if": {
+                    "properties": {
+                      "result": {
+                        "enum": [
+                          "not_evaluated",
+                          "indeterminate"
+                        ]
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "reason"
+                    ]
+                  },
+                  "else": {
+                    "not": {
+                      "required": [
+                        "reason"
+                      ]
+                    }
+                  }
+                },
+                "observe": {
+                  "type": "object",
+                  "required": [
+                    "anchors"
+                  ],
+                  "properties": {
+                    "anchors": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "valid_until": {
+                  "type": "string"
+                },
+                "complete": {
+                  "const": true
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "default_script": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 1,
+            "properties": {
+              "wait_until": {
+                "type": "string"
+              },
+              "property": {
+                "type": "object",
+                "required": [
+                  "property_id",
+                  "result"
+                ],
+                "properties": {
+                  "property_id": {
+                    "type": "string"
+                  },
+                  "result": {
+                    "enum": [
+                      "pass",
+                      "fail",
+                      "not_evaluated",
+                      "indeterminate"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "if": {
+                  "properties": {
+                    "result": {
+                      "enum": [
+                        "not_evaluated",
+                        "indeterminate"
+                      ]
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "reason"
+                  ]
+                },
+                "else": {
+                  "not": {
+                    "required": [
+                      "reason"
+                    ]
+                  }
+                }
+              },
+              "observe": {
+                "type": "object",
+                "required": [
+                  "anchors"
+                ],
+                "properties": {
+                  "anchors": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "valid_until": {
+                "type": "string"
+              },
+              "complete": {
+                "const": true
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "script": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "minProperties": 1,
+        "maxProperties": 1,
+        "properties": {
+          "deliver": {
+            "enum": [
+              "provider_ack_id",
+              "echo",
+              "transport_only",
+              "bytes_written"
+            ]
+          },
+          "crash": {
+            "enum": [
+              "before_dispatch",
+              "after_write"
+            ]
+          },
+          "reconcile_finds": {
+            "enum": [
+              "delivered",
+              "not_delivered",
+              "unknown"
+            ]
+          },
+          "runtime": {
+            "enum": [
+              "preparing",
+              "active",
+              "requires_action",
+              "quiescent",
+              "exited",
+              "unknown"
+            ]
+          },
+          "host_restart": {
+            "const": true
+          },
+          "complete": {
+            "type": "object",
+            "required": [
+              "completion_id",
+              "content"
+            ],
+            "properties": {
+              "completion_id": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "exit": {
+            "type": "object"
+          },
+          "on_cancel": {
+            "enum": [
+              "cancelled",
+              "refused",
+              "not_supported",
+              "unknown"
+            ]
+          },
+          "wait_until": {
+            "type": "string"
+          },
+          "wait_for": {
+            "enum": [
+              "cancel",
+              "steer",
+              "action"
+            ]
+          },
+          "stall": {
+            "const": true
+          },
+          "stale_dispatch": {
+            "type": "object",
+            "required": [
+              "generation"
+            ],
+            "properties": {
+              "generation": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "steer_deliver": {
+            "enum": [
+              "provider_ack_id",
+              "echo",
+              "transport_only",
+              "bytes_written"
+            ]
+          },
+          "steer_behavior": {
+            "const": "observed"
+          },
+          "request_action": {
+            "type": "object",
+            "required": [
+              "action_id",
+              "owner"
+            ],
+            "properties": {
+              "action_id": {
+                "type": "string"
+              },
+              "owner": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "workspace": {
+            "type": "object",
+            "required": [
+              "probes"
+            ],
+            "properties": {
+              "head": {
+                "type": "string"
+              },
+              "dirty_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "untracked_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "probes": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "tracked",
+                    "dirty",
+                    "untracked"
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "agent_reports_commit": {
+            "type": "string"
+          },
+          "usage": {
+            "type": "object",
+            "required": [
+              "invocation_id",
+              "basis"
+            ],
+            "properties": {
+              "invocation_id": {
+                "type": "string"
+              },
+              "basis": {
+                "enum": [
+                  "observed",
+                  "estimated",
+                  "unknown",
+                  "enforced_bound"
+                ]
+              },
+              "measure": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "context_delivery": {
+            "type": "object",
+            "required": [
+              "binding_id",
+              "boundary",
+              "harness"
+            ],
+            "properties": {
+              "binding_id": {
+                "type": "string"
+              },
+              "boundary": {
+                "enum": [
+                  "initial_prompt",
+                  "turn_steering",
+                  "context_request"
+                ]
+              },
+              "harness": {
+                "enum": [
+                  "acknowledged",
+                  "accepted",
+                  "queued",
+                  "lost"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "transition": {
+            "type": "string"
+          },
+          "transport_errors": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The next effect attempts fail with an unknown outcome this many times."
+          },
+          "probe_status": {
+            "const": true
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "repeat": {
+                "type": "string",
+                "minLength": 1
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "output_lost": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "enum": [
+                  "harness_dropped",
+                  "capture_unavailable"
+                ]
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "runtime_burst": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Emit this many alternating runtime observations at once."
+          },
+          "observe_basis": {
+            "type": "object",
+            "properties": {
+              "repositories": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "tree": {
+                      "type": "string"
+                    },
+                    "dirty_snapshot": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "environment_digest": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "The basis the executor can observe for revalidation; conditions on anything else are unavailable."
+          },
+          "observe_host_basis": {
+            "type": "object",
+            "properties": {
+              "repositories": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "tree": {
+                      "type": "string"
+                    },
+                    "dirty_snapshot": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "environment_digest": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "The basis the executor can observe for revalidation; conditions on anything else are unavailable."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "context_step": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "wait_until": {
+          "type": "string"
+        },
+        "investigate": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "section": {
+          "type": "object",
+          "required": [
+            "section_id",
+            "label",
+            "content"
+          ]
+        },
+        "coverage": {
+          "type": "object",
+          "required": [
+            "producer",
+            "frontier",
+            "gaps"
+          ]
+        },
+        "unmet": {
+          "type": "object",
+          "required": [
+            "item_id",
+            "reason"
+          ]
+        },
+        "omit": {
+          "type": "object",
+          "required": [
+            "reason"
+          ]
+        },
+        "correction": {
+          "type": "object",
+          "required": [
+            "item_id",
+            "authority_revision"
+          ]
+        },
+        "conditions": {
+          "type": "array"
+        },
+        "publish": {
+          "type": "object"
+        },
+        "end": {
+          "type": "string"
+        },
+        "stall": {
+          "const": true
+        },
+        "execute": {
+          "type": "object",
+          "required": [
+            "execution"
+          ],
+          "properties": {
+            "execution": {
+              "type": "string"
+            },
+            "brief": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "call_budget": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

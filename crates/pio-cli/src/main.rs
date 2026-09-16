@@ -9,6 +9,22 @@ fn run() -> Result<()> {
             pio_host::IMPLEMENTATION
         ),
         Some("participant") => println!("{}", pio_core::participant()),
+        Some("conformance") => {
+            let option = |name: &str| -> Result<&Path> {
+                let index = args
+                    .iter()
+                    .position(|a| a == name)
+                    .context("missing conformance option")?;
+                Ok(Path::new(
+                    args.get(index + 1).context("missing option value")?,
+                ))
+            };
+            pio_protocol::serve(
+                option("--data-dir")?,
+                option("--config")?,
+                option("--socket")?,
+            )?;
+        }
         Some("fake") => {
             let action = args
                 .get(1)

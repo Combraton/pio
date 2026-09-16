@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.grant.revoke.result.schema.json",
+  "title": "core.grant.revoke result",
+  "type": "object",
+  "required": [
+    "acknowledgment",
+    "outcome",
+    "replay"
+  ],
+  "properties": {
+    "acknowledgment": {
+      "$ref": "../../core/1/common.schema.json#/$defs/acknowledgment"
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "revoked"
+      ],
+      "properties": {
+        "revoked": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "replay": {
+      "type": "boolean"
+    }
+  },
+  "unevaluatedProperties": false
+}

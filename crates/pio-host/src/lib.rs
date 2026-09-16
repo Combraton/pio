@@ -150,7 +150,7 @@ fn append_json(path: &Path, value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn same_user(stream: &UnixStream) -> bool {
+pub fn same_user(stream: &UnixStream) -> bool {
     #[cfg(target_os = "linux")]
     {
         let mut cred: libc::ucred = unsafe { std::mem::zeroed() };

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core-test/1/core-test.subject.get.params.schema.json",
+  "title": "core-test.subject.get params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/query.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "core-test.subject.get"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "subject"
+      ],
+      "properties": {
+        "subject": {
+          "type": "object",
+          "required": [
+            "kind",
+            "id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "core-test.subject"
+            },
+            "id": {
+              "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+            }
+          },
+          "unevaluatedProperties": false
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

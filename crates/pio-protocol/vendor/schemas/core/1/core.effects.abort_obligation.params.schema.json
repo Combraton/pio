@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.effects.abort_obligation.params.schema.json",
+  "title": "core.effects.abort_obligation params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/command.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "core.effects.abort_obligation"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "obligation"
+      ],
+      "properties": {
+        "obligation": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "core.effect"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "preconditions": {
+      "minItems": 1,
+      "maxItems": 1
+    }
+  },
+  "unevaluatedProperties": false
+}

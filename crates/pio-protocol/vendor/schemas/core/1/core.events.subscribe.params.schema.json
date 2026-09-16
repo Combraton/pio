@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.events.subscribe.params.schema.json",
+  "title": "core.events.subscribe params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/query.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "core.events.subscribe"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "$ref": "../../core/1/common.schema.json#/$defs/cursor"
+        },
+        "from": {
+          "enum": [
+            "start",
+            "now"
+          ]
+        },
+        "kinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../core/1/common.schema.json#/$defs/subject_kind"
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "cursor"
+          ],
+          "not": {
+            "required": [
+              "from"
+            ]
+          }
+        },
+        {
+          "required": [
+            "from"
+          ],
+          "not": {
+            "required": [
+              "cursor"
+            ]
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

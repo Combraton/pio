@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/error-data.schema.json",
+  "title": "Error data object (CORE section 12, STREAM section 3)",
+  "type": "object",
+  "required": [
+    "code",
+    "retry",
+    "details"
+  ],
+  "properties": {
+    "code": {
+      "enum": [
+        "parse_error",
+        "invalid_utf8",
+        "frame_too_large",
+        "invalid_request",
+        "overloaded",
+        "invalid_envelope",
+        "limit_exceeded",
+        "negotiation_required",
+        "already_negotiated",
+        "method_not_found",
+        "profile_not_negotiated",
+        "unsupported_version",
+        "unsupported_profile",
+        "unsupported_required_feature",
+        "unsupported_digest_algorithm",
+        "digest_mismatch",
+        "idempotency_conflict",
+        "dedupe_history_unavailable",
+        "effect_history_unavailable",
+        "stale_authority_epoch",
+        "unknown_authority_epoch",
+        "precondition_failed",
+        "not_found",
+        "permission_denied",
+        "unavailable",
+        "internal_error",
+        "invalid_cursor",
+        "capability_unavailable",
+        "authentication_required",
+        "authentication_failed",
+        "already_authenticated",
+        "upload_offset_mismatch",
+        "upload_size_exceeded",
+        "upload_incomplete",
+        "content_digest_mismatch",
+        "artifact_digest_mismatch",
+        "hold_active",
+        "claims_not_comparable",
+        "contract_unavailable"
+      ]
+    },
+    "retry": {
+      "enum": [
+        "no",
+        "same_command",
+        "after_reconcile",
+        "after_renegotiate"
+      ]
+    },
+    "details": {
+      "type": "object"
+    }
+  },
+  "unevaluatedProperties": false
+}

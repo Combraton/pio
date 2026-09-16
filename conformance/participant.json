@@ -2,13 +2,29 @@
   "format": "combraton-conformance-participant/1",
   "name": "pio-fake-host",
   "version": "0.1.0-dev",
-  "description": "PIO M1 skeleton. Fake host only; no real adapters. No profiles, features or test controls implemented yet. m1-target.json records the accepted target, not claims. The configured pio conformance command is not implemented yet; this descriptor currently launches no participant.",
+  "description": "PIO conformance-only Core and core-test Unix service with fake-host tooling; no real adapters. Execution, public effects and event-backpressure are not claimed. m1-target.json is a future target, not evidence.",
   "role": "provider",
   "binding": "unix",
   "claims": {
-    "profiles": [],
-    "features": [],
-    "test_controls": [],
+    "profiles": [
+      {
+        "name": "core",
+        "major": 1
+      },
+      {
+        "name": "core-test",
+        "major": 1
+      }
+    ],
+    "features": [
+      "core.grants",
+      "core.events",
+      "core.capabilities"
+    ],
+    "test_controls": [
+      "clock.file",
+      "store.faults"
+    ],
     "test_barriers": []
   },
   "launch": {

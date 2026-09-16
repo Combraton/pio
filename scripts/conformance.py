@@ -44,6 +44,16 @@ def main():
         with tarfile.open(assets / 'combraton-protocol-0.1.0-source.tar.gz') as archive:
             archive.extractall(work / 'source', filter='data')
         source = work / 'source/combraton-protocol-0.1.0'
+        # These are unchanged contract schemas, not a fork of Protocol's provider.
+        vendor = ROOT / 'crates/pio-protocol/vendor'
+        schema_files = sorted(vendor.rglob('*.json'))
+        for path in schema_files:
+            released = source / path.relative_to(vendor)
+            if path.read_bytes() != released.read_bytes():
+                raise SystemExit(f'Vendored Protocol schema differs from pinned archive: {path.relative_to(vendor)}')
+        (out / 'schema-verification.json').write_text(json.dumps({
+            'source_commit': pin['source_commit'], 'unchanged_schema_files': len(schema_files)
+        }, indent=2) + '\n')
         build = ROOT / 'target/protocol-runner'
         env = {**os.environ, 'CARGO_TARGET_DIR': str(build)}
         run(['cargo', 'build', '--locked', '-p', 'combraton-conformance',
@@ -72,11 +82,21 @@ def main():
             return result.returncode or 1
         manifest = json.loads((out / 'manifest.json').read_text())
         summary = dict(Counter(item['outcome'] for item in manifest['results']))
+        fixture_directories = {
+            json.loads(path.read_text())['id']: path.relative_to(source / 'conformance/fixtures').parts[0]
+            for path in (source / 'conformance/fixtures').rglob('*.json')
+        }
+        by_directory = {}
+        for item in manifest['results']:
+            directory = fixture_directories[item['fixture']]
+            counts = by_directory.setdefault(directory, Counter())
+            counts[item['outcome']] += 1
         # Preserve runner outcome classes. This additional list includes every excluded fixture.
         limits = [{'fixture': item['fixture'], 'outcome': item['outcome'], 'reason': item['reason']}
                   for item in manifest['results'] if item['outcome'] in ('unsupported', 'skipped')]
-        report = {'classes': summary, 'runner_exit': result.returncode, 'coverage_limits': limits,
-                  'real_adapter': False, 'note': 'Unsupported and skipped are not passes. Empty skeleton claims do not establish M1 acceptance.'}
+        report = {'classes': summary, 'by_directory': by_directory,
+                  'runner_exit': result.returncode, 'coverage_limits': limits,
+                  'real_adapter': False, 'note': 'Unsupported and skipped are not passes. This is a Core checkpoint, not M1 acceptance. Execution, scripted executor, public effects and backpressure are deferred.'}
         (out / 'pio-report.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps({'classes': summary, 'runner_exit': result.returncode}, indent=2))
         return result.returncode

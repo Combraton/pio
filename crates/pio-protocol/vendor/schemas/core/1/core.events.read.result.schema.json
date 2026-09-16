@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.events.read.result.schema.json",
+  "title": "core.events.read result",
+  "type": "object",
+  "required": [
+    "stream",
+    "items",
+    "next_cursor",
+    "filtered"
+  ],
+  "properties": {
+    "stream": {
+      "$ref": "../../core/1/common.schema.json#/$defs/stream_ref"
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "$ref": "../../core/1/common.schema.json#/$defs/stream_item"
+      }
+    },
+    "next_cursor": {
+      "$ref": "../../core/1/common.schema.json#/$defs/cursor"
+    },
+    "filtered": {
+      "type": "boolean"
+    }
+  },
+  "unevaluatedProperties": false
+}

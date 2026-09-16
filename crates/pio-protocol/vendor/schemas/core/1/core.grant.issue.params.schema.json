@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.grant.issue.params.schema.json",
+  "title": "core.grant.issue params",
+  "allOf": [
+    {
+      "$ref": "../../core/1/command.schema.json"
+    }
+  ],
+  "properties": {
+    "operation": {
+      "const": "core.grant.issue"
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "core.grant"
+        },
+        "id": {
+          "$ref": "../../core/1/common.schema.json#/$defs/identifier"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "preconditions": {
+      "minItems": 1,
+      "maxItems": 1
+    },
+    "payload": {
+      "allOf": [
+        {
+          "$ref": "../../core/1/common.schema.json#/$defs/grant_terms"
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core-test/1/core-test.subject.put.result.schema.json",
+  "title": "core-test.subject.put result",
+  "type": "object",
+  "required": [
+    "acknowledgment",
+    "outcome",
+    "replay"
+  ],
+  "properties": {
+    "acknowledgment": {
+      "$ref": "../../core/1/common.schema.json#/$defs/acknowledgment"
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "replay": {
+      "type": "boolean"
+    }
+  },
+  "unevaluatedProperties": false
+}

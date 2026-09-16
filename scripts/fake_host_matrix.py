@@ -48,7 +48,10 @@ def process_identity(pid):
 
 def terminate(identity):
     if identity and process_identity(identity['pid']) == identity:
-        os.kill(identity['pid'], signal.SIGKILL)
+        try:
+            os.kill(identity['pid'], signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # The identity-matched process exited between observation and kill.
 
 
 def records(path):
@@ -107,7 +110,7 @@ class Case:
 
     def close(self):
         # Preserve independent observations and canonical store rows before cleanup.
-        for path in list(self.root.glob('*.jsonl')) + list(self.root.glob('launch-*.json')) + list(self.root.glob('attempt-*')):
+        for path in list(self.root.glob('*.jsonl')) + list(self.root.glob('launch-*.json')) + list(self.root.glob('attempt-*.json')) + list(self.root.glob('attempt-*.stderr')):
             (self.out / path.name).write_bytes(path.read_bytes())
         db = sqlite3.connect(self.root / 'journal.sqlite3')
         try:

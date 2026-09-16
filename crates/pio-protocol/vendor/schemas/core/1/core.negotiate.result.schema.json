@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Combraton/protocol/schemas/core/1/core.negotiate.result.schema.json",
+  "title": "core.negotiate result",
+  "type": "object",
+  "required": [
+    "selected",
+    "unselected",
+    "limits",
+    "dedupe_window"
+  ],
+  "properties": {
+    "selected": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "major",
+          "features"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "../../core/1/common.schema.json#/$defs/profile_name"
+          },
+          "major": {
+            "$ref": "../../core/1/common.schema.json#/$defs/profile_major"
+          },
+          "features": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "../../core/1/common.schema.json#/$defs/feature_name"
+            }
+          }
+        },
+        "unevaluatedProperties": false
+      }
+    },
+    "unselected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "profile",
+          "reason"
+        ],
+        "properties": {
+          "profile": {
+            "$ref": "../../core/1/common.schema.json#/$defs/profile_name"
+          },
+          "feature": {
+            "$ref": "../../core/1/common.schema.json#/$defs/feature_name"
+          },
+          "reason": {
+            "enum": [
+              "unknown_profile",
+              "declared_unsupported",
+              "no_common_major",
+              "unknown_feature",
+              "dependency_not_selected"
+            ]
+          }
+        },
+        "unevaluatedProperties": false
+      }
+    },
+    "limits": {
+      "$ref": "../../core/1/common.schema.json#/$defs/limits"
+    },
+    "dedupe_window": {
+      "$ref": "../../core/1/common.schema.json#/$defs/dedupe_window"
+    }
+  },
+  "unevaluatedProperties": false
+}
