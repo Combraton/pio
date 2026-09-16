@@ -40,3 +40,30 @@ Five local mutants were each killed for their named reason: inclusive limit, che
 ## Next
 
 Qualify the selected Codex executable, version, hash and per-file canonical schema identity, and build before/after capture of the user's Codex configuration. Then connect the app-server through the durable host. Live runs use throwaway fixture repositories within the 1,000,000-token Codex bound.
+
+## Owner review 1 and corrections (2026-09-16)
+
+The owner reviewed PR #6 at `0f8685b` and reproduced it from a clean clone: 28 tests, public matrix 69 with the capacity case passing, diagnostic matrix 54, caller recovery, and the runner at 206 / 73 / 1 with two supplemental passes. The owner's own check-after-staging and off-by-one mutants were killed by the intended unit tests. **Verdict: continue.** The report above is left unchanged as the record of `5be40f9`. The decisions were implemented as follows; tested head is **`6a9d11a344e50de45a2e60d441026a90cad80f86`**, and receipts are in [review-1-corrections.json](evidence/review-1-corrections.json).
+
+1. **Admission headroom (bench values).** A new `execution.submit` commit must also stay within **31,130 records** and **31,876,710 bytes** (95 percent of the hard limits). Observations, recovery facts and every other commit keep the hard limits, so admitted work can finish in the remaining room. See [ADR 002](../../decisions/002-protocol-journal.md#capacity-bound-2026-09-16). New exact-boundary unit tests; the public case `capacity_headroom_admitted_completes` admits one durable submit exactly at 31,130 and refuses a second submit at `admission_projection_records`. The admitted child is delivered and exits 0 while the projection grows past 31,130, with no hard-limit refusal and no stall. `capacity_refusal_no_spawn` now expects the submit to hit the admission threshold and shows the hard limit through a public `execution.controller.claim`.
+2. **Incremental commits** that process only changed keys are recorded as a prerequisite in PLAN's M3b and M4 rows. No throughput claim.
+3. **[Protocol #13](https://github.com/Combraton/protocol/issues/13)** filed, with `conformance/proposals/capacity-refusal.json` and a Cargo test showing the capacity and transient-commit errors are identical under the frozen schema. PIO does not wait on it.
+
+**Two intermediate CI failures, both fixed, with evidence kept.**
+
+- **`aa7ad78`:** the older capacity case still expected the hard-limit reason. After adding headroom, only the new case had been rerun before committing. Fixed in `df069bf`, and the full matrix is now run locally before each commit.
+- **`df069bf`:** the headroom case exceeded the harness's fixed 3-second socket timeout on CI after the service had already logged the refusal. Near the bound every request pays whole-state commits. `b217936` spaces slow ticks (`MissedTickBehavior::Delay`), gives the two capacity cases a 60-second client timeout and records latency.
+
+**Evidence at `6a9d11a`.** [CI 35130616765](https://github.com/Combraton/pio/actions/runs/35130616765) passes on macOS 15 arm64 and Ubuntu 24.04 x86_64 for push and pull request, and a fresh clone ran all 14 documented commands with exit 0.
+
+| Check | Result (identical in clean clone, macOS CI and Linux CI) |
+| --- | --- |
+| Cargo | **31** tests pass, 1 ignored probe |
+| Runner | 206 pass / 73 unsupported / 1 skipped, 2 supplemental passes; all 280 fixture classes agree |
+| Public matrix | **72** = 24 cases × 3: 51 pass, 6 intended property failures, 9 defense refusals, 6 classifier controls |
+| Diagnostic matrix | **54** = 39 / 3 / 9 / 3 |
+| Capacity cases | both pass ×3 in every environment |
+
+Measured headroom-case latency for the refused submit: 1.6 s in the clean clone, 2.2–3.5 s on macOS CI, 3.0 s on Linux CI, and 4.9 s under deliberate local CPU contention. Three local headroom mutants were killed: threshold never applied, threshold applied to every commit, and an inclusive boundary.
+
+Remaining limits are unchanged from above, except that a new submit can no longer cause the at-limit stall; only facts from already-admitted work can still exhaust the hard limit. 0 live tokens; no real harness has run.
