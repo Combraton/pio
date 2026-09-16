@@ -32,7 +32,12 @@
     "clock.file",
     "store.faults"
   ],
-  "test_barriers": [],
+  "test_barriers": [
+    "session.closed",
+    "backpressure.stall.started",
+    "backpressure.limit.reached",
+    "backpressure.connection.closed"
+  ],
   "launch_controls": [
     "dedupe.advance_on_start",
     "dedupe.retain_generations",

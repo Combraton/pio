@@ -1,4 +1,4 @@
-# Core implementation checkpoint
+# Core implementation checkpoint (historical)
 
 This continues [issue #3](https://github.com/Combraton/pio/issues/3) and [draft PR #4](https://github.com/Combraton/pio/pull/4) after the owner's review of `4bc8f37`. Base is `900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe`; the correction commit is `38ca3847663d019dd4f97a554c68e97bd5821f19`. [STATE](../STATE.md) records the current tested head. M1 remains incomplete and unaccepted.
 
@@ -7,6 +7,8 @@ This continues [issue #3](https://github.com/Combraton/pio/issues/3) and [draft 
 The owner verified this checkpoint at `fa70a63`: 9 tests, matrix 54, runner 164/115/1 on both platforms, plus independent replay and authorization mutants. M1 remains incomplete. At this historical head the provider persists a whole-state JSON blob; its events are held in memory and it clones state per command. This is a conformance stopgap. [ADR 002](../../decisions/002-protocol-journal.md) selects moving Core to the `pio-core` journal before Execution.
 
 The mutex-guarded provider with 25 ms per-connection polling is a **conformance service loop**, not the durable-host design. It does not establish production memory, scheduling or host-supervision properties.
+
+Current successor: [Execution checkpoint](EXECUTION.md). Statements below about unclaimed features describe `fa70a63`, not the current descriptor. The generic Core dependency fixture also requires evidence/context/knowledge/verification and `execution.context`; Execution alone cannot make it apply. [Protocol #9](https://github.com/Combraton/protocol/issues/9) records that correction.
 
 ## Implemented surface
 

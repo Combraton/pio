@@ -2,7 +2,7 @@
 
 Independent execution and recovery for existing agentic harnesses.
 
-> M1 has an experimental fake-host recovery slice and a conformance-only Unix Core participant. Core, core-test, grants, events and capabilities have pinned-runner evidence; Execution and real adapters remain unimplemented. This is a development checkpoint, not M1 acceptance, a released API or a performance claim. The reviewed architecture is `architecture-v1-20260912`, published as `public-development-v1-20260913`. Canonical specifications are available through [the documentation map](docs/README.md). This README is an overview, not the full specification.
+> M1 has an experimental fake-host recovery slice and a journal-backed Core/Execution conformance participant. The scripted fake executor implements the five planned Execution features, public effects and bounded event output. Real adapters remain unimplemented. This is a development checkpoint, not M1 acceptance, a released API or a performance claim. The reviewed architecture is `architecture-v1-20260912`, published as `public-development-v1-20260913`. Canonical specifications are available through [the documentation map](docs/README.md). This README is an overview, not the full specification.
 
 PIO supervises real harnesses without replacing their native reasoning, investigation, editing and testing loops. A CLI, CI job, CBR memory investigation or another control plane can use PIO without Combraton or CBR being installed.
 
@@ -23,7 +23,7 @@ Implement the relevant [protocol](https://github.com/Combraton/protocol) Core/Ex
 
 ## First milestone
 
-Protocol [v0.1.0](https://github.com/Combraton/protocol/releases/tag/v0.1.0) is released and its exact commit/assets are recorded in [protocol.lock.json](protocol.lock.json). The [standalone readiness plan](docs/work/standalone-0.1/PLAN.md) is accepted as the M0 documentation checkpoint, with Codex-first followed by Claude Code; both remain in the full standalone release target. Stack and platform scope are accepted, with build and conformance CI on macOS arm64 and Linux x86_64 from M1 onward. The [Core checkpoint](docs/work/m1/CORE.md) records the current runtime evidence and coverage limits; no real-adapter support is established yet.
+Protocol [v0.1.0](https://github.com/Combraton/protocol/releases/tag/v0.1.0) is released and its exact commit/assets are recorded in [protocol.lock.json](protocol.lock.json). The [standalone readiness plan](docs/work/standalone-0.1/PLAN.md) is accepted as the M0 documentation checkpoint, with Codex-first followed by Claude Code; both remain in the full standalone release target. Stack and platform scope are accepted, with build and conformance CI on macOS arm64 and Linux x86_64 from M1 onward. The [Execution checkpoint](docs/work/m1/EXECUTION.md) records current runtime evidence and coverage limits, following the verified [Core checkpoint](docs/work/m1/CORE.md); no real-adapter support is established yet.
 
 Test interruption, lost acknowledgment, a surviving worker, late/conflicting completion and cancellation races. Report actual enforced/mediated/cooperative capabilities by tested version. The [journey matrix](docs/JOURNEYS.md) separates real CLI/TUI, recovery and optional CBR evidence.
 

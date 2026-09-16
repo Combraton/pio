@@ -13,7 +13,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::AsyncReadExt,
     net::{UnixListener, UnixStream},
 };
 
@@ -52,23 +52,15 @@ pub fn serve(root: &Path, config: &Path, socket: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn send(stream: &mut UnixStream, value: Value, limit: usize) -> Result<()> {
-    let mut bytes = serde_json::to_vec(&value)?;
-    if bytes.len() > limit {
-        bytes = serde_json::to_vec(&err("internal_error", json!({})).frame(value["id"].clone()))?;
-    }
-    bytes.push(b'\n');
-    tokio::time::timeout(Duration::from_secs(1), stream.write_all(&bytes)).await??;
-    Ok(())
-}
-
 async fn connection(mut stream: UnixStream, provider: Arc<Mutex<Provider>>) -> Result<()> {
+    let mut output = crate::output::Output::new(&provider.lock().unwrap().config);
     let mut session = Session {
         receive: 1048576,
         ..Session::default()
     };
     let mut frame = Vec::new();
     loop {
+        output.flush_ready(&mut stream)?;
         let limit = if session.selected.is_some() {
             provider.lock().unwrap().limits["max_frame_bytes"]
                 .as_u64()
@@ -84,23 +76,25 @@ async fn connection(mut stream: UnixStream, provider: Arc<Mutex<Provider>>) -> R
             result = stream.read(&mut buffer[..available]) => result?,
             _ = tokio::time::sleep(Duration::from_millis(25)) => {
                 let frames = provider.lock().unwrap().notifications(&mut session);
-                for notification in frames { send(&mut stream, notification, session.receive).await?; }
+                for notification in frames { output.send(&mut stream, notification, &session).await?; }
                 continue;
             }
         };
         if count == 0 {
+            output.signal("session.closed")?;
             return Ok(());
         }
         for byte in &buffer[..count] {
             if *byte != b'\n' {
                 frame.push(*byte);
                 if frame.len() > limit {
-                    send(
-                        &mut stream,
-                        err("frame_too_large", json!({})).frame(Value::Null),
-                        session.receive,
-                    )
-                    .await?;
+                    output
+                        .send(
+                            &mut stream,
+                            err("frame_too_large", json!({})).frame(Value::Null),
+                            &session,
+                        )
+                        .await?;
                     return Ok(());
                 }
                 continue;
@@ -121,12 +115,13 @@ async fn connection(mut stream: UnixStream, provider: Arc<Mutex<Provider>>) -> R
             let value = match parsed {
                 Ok(value) => value,
                 Err(code) => {
-                    send(
-                        &mut stream,
-                        err(code, json!({})).frame(Value::Null),
-                        session.receive,
-                    )
-                    .await?;
+                    output
+                        .send(
+                            &mut stream,
+                            err(code, json!({})).frame(Value::Null),
+                            &session,
+                        )
+                        .await?;
                     return Ok(());
                 }
             };
@@ -166,10 +161,10 @@ async fn connection(mut stream: UnixStream, provider: Arc<Mutex<Provider>>) -> R
                     Err(e) => e.frame(value["id"].clone()),
                 }
             };
-            send(&mut stream, response, session.receive).await?;
+            output.send(&mut stream, response, &session).await?;
             let frames = provider.lock().unwrap().notifications(&mut session);
             for notification in frames {
-                send(&mut stream, notification, session.receive).await?;
+                output.send(&mut stream, notification, &session).await?;
             }
         }
     }
@@ -207,7 +202,7 @@ impl Drop for StoreLock {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     #[tokio::test]
     async fn non_json_whitespace_is_a_fatal_parse_error() {
         for byte in [0x0b, 0x0c] {

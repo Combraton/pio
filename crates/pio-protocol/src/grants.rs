@@ -48,14 +48,13 @@ impl Provider {
             return Err(denied("expired"));
         }
         if let Some(binding) = grant.get("authority_binding") {
-            let epoch = self
-                .data
-                .subjects
-                .get(&key(
-                    &json!({"kind":"core-test.authority","id":binding["scope"]}),
-                ))
-                .map(|s| s.revision)
-                .unwrap_or(0);
+            let scope = text(&binding["scope"]);
+            let subject = if let Some(host) = scope.strip_prefix("execution.controller:") {
+                json!({"kind":"execution.controller","id":host})
+            } else {
+                json!({"kind":"core-test.authority","id":scope})
+            };
+            let epoch = self.revision(&subject);
             if binding["epoch"] != epoch {
                 return Err(denied("authority_epoch_stale"));
             }
@@ -78,6 +77,8 @@ impl Provider {
             }
             if child.get("authority_binding").is_some()
                 && child["authority_binding"]["scope"] != "core-test"
+                && child["authority_binding"]["scope"]
+                    != format!("execution.controller:{}", self.execution_host())
             {
                 return Err(invalid("/payload/authority_binding/scope"));
             }

@@ -2,7 +2,7 @@
   "format": "combraton-conformance-participant/1",
   "name": "pio-journal-fake-executor",
   "version": "0.1.0-dev",
-  "description": "PIO journal-backed Core and Execution conformance service with an explicitly labeled executor.script fake host; no real adapter. Claims cover the five PLAN Execution features and public effect lifecycle. Event backpressure remains unclaimed. The polling service is not the durable-host design.",
+  "description": "PIO journal-backed Core and Execution conformance service with the labeled executor.script fake host; no real adapters. Claims cover the five PLAN Execution features, public effects and bounded event output. The mutex/polling service loop is conformance-only, not the durable-host design. See the manifest for unsupported features and barriers.",
   "role": "provider",
   "binding": "unix",
   "claims": {
@@ -29,14 +29,20 @@
       "execution.discovery",
       "execution.output",
       "execution.workspaces",
-      "execution.usage"
+      "execution.usage",
+      "core.events.backpressure"
     ],
     "test_controls": [
       "clock.file",
       "store.faults",
       "executor.script"
     ],
-    "test_barriers": []
+    "test_barriers": [
+      "session.closed",
+      "backpressure.stall.started",
+      "backpressure.limit.reached",
+      "backpressure.connection.closed"
+    ]
   },
   "launch": {
     "argv": [

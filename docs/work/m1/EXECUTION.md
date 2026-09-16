@@ -15,3 +15,11 @@ The five PLAN features implement controller epochs, separate discovery facts, bo
 At parent `5f2e386` plus this implementation, the pinned runner's 51 Execution fixtures report **36 pass, 15 unsupported, zero fail/timeout/harness_error**. The unsupported fixtures require features outside PLAN's selected subset. Artifact: `/tmp/pio-execution-third/manifest.json` and transcripts. Public `core.effects` is claimed only after those effect-producing and lifecycle fixtures ran, including unknown outcomes, retry classes, abortion, authority filtering and restart/replay. Twelve Cargo tests and Clippy pass; the new test verifies same-transaction admission records, failure rollback, one attempt across restart/replay and reconstruction from the journal.
 
 Next: bounded per-connection event output and the seven Execution-dependent Core/stream/socket cases. Full per-directory and both-platform CI receipts follow. M1 remains incomplete and unaccepted. No real adapter claim.
+
+## Bounded event output and coverage boundary
+
+The connection writer bounds pending output. A full queue starts a fixed room deadline; partial progress never extends it. A slow negotiated consumer gets ending notices within one shared budget, then the connection closes. Older consumers close without that new notice. Events remain in the journal and reconnect uses the caller's durably processed cursor. A normal draining-consumer test verifies frames stay ordered without forced closure.
+
+All four frozen backpressure cases pass locally, and sockets report 12 pass / 1 unsupported. The requested seven remaining cases have a scope correction: six fit PIO, while `core.feature-dependencies-match-negotiation` also requires evidence, context, knowledge, verification and `execution.context`. It remains officially unsupported. [Protocol issue #9](https://github.com/Combraton/protocol/issues/9) contains a demonstrating component-scoped fixture; `conformance/regressions/` runs it separately with the pinned runner. Its pass is never counted among the 280 release fixtures. `socket.subscription-recheck-race-regression` still requires an undeclared barrier.
+
+The descriptor is now `pio-journal-fake-executor`. Full exact-head receipts follow in this record; the earlier Core handoff is historical. No real adapter claim.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build the pinned released runner and preserve its unmodified PIO results."""
 import argparse
+import hashlib
 from collections import Counter
 import json
 import os
@@ -70,7 +71,8 @@ def main():
         descriptor.write_text(json.dumps(participant, indent=2) + '\n')
         shutil.copyfile(ROOT / 'conformance/m1-target.json', out / 'm1-target.json')
         head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-        environment = {'pio_head': head, 'pio_dirty': bool(subprocess.check_output(
+        pio_digest = hashlib.sha256((ROOT / 'target/debug/pio').read_bytes()).hexdigest()
+        environment = {'pio_binary_sha256': pio_digest, 'pio_head': head, 'pio_dirty': bool(subprocess.check_output(
             ['git', 'status', '--porcelain'], cwd=ROOT)), 'os': platform.system(),
             'arch': platform.machine(), 'rustc': subprocess.check_output(
                 ['rustc', '--version'], text=True).strip(), 'execution_source': 'fake-host',
@@ -96,10 +98,22 @@ def main():
                   for item in manifest['results'] if item['outcome'] in ('unsupported', 'skipped')]
         report = {'classes': summary, 'by_directory': by_directory,
                   'runner_exit': result.returncode, 'coverage_limits': limits,
-                  'real_adapter': False, 'note': 'Unsupported and skipped are not passes. This is a Core checkpoint, not M1 acceptance. Execution, scripted executor, public effects and backpressure are deferred.'}
+                  'real_adapter': False, 'note': 'Unsupported and skipped are not passes. This is a journal-backed fake Execution checkpoint, not M1 acceptance or a real adapter. Supplemental PIO fixtures are counted separately.'}
         (out / 'pio-report.json').write_text(json.dumps(report, indent=2) + '\n')
-        print(json.dumps({'classes': summary, 'runner_exit': result.returncode}, indent=2))
-        return result.returncode
+        supplemental = subprocess.run([str(binary), 'run', '--repo', str(source),
+                                       '--participant', str(descriptor), '--fixtures',
+                                       str(ROOT / 'conformance/regressions'),
+                                       '--out', str(out / 'pio-regressions')])
+        if (out / 'pio-regressions/manifest.json').is_file():
+            extra = json.loads((out / 'pio-regressions/manifest.json').read_text())
+            report['supplemental_pio_classes'] = dict(Counter(item['outcome'] for item in extra['results']))
+        report['supplemental_runner_exit'] = supplemental.returncode
+        (out / 'pio-report.json').write_text(json.dumps(report, indent=2) + '\n')
+        if hashlib.sha256((ROOT / 'target/debug/pio').read_bytes()).hexdigest() != pio_digest:
+            raise SystemExit('PIO binary changed during verification; results are not a single-build receipt')
+        print(json.dumps({'classes': summary, 'runner_exit': result.returncode,
+                          'supplemental_pio_classes': report.get('supplemental_pio_classes')}, indent=2))
+        return result.returncode or supplemental.returncode
 
 
 if __name__ == '__main__':

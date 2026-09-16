@@ -13,6 +13,7 @@ pub const FEATURES: &[&str] = &[
     "core.events",
     "core.capabilities",
     "core.effects",
+    "core.events.backpressure",
 ];
 pub fn text(v: &Value) -> &str {
     v.as_str().unwrap_or("")
@@ -170,16 +171,17 @@ impl Provider {
                     "faults",
                     "events",
                     "capabilities",
-                    "executor"
+                    "executor",
+                    "test_barriers"
                 ]
                 .contains(&k.as_str()),
                 "unsupported launch control: {k}"
             )
         }
-        for control in ["max_pending_notification_bytes", "backpressure_notice_ms"] {
+        for barrier in list(&config["test_barriers"]["enabled"]) {
             ensure!(
-                config["events"].get(control).is_none(),
-                "unsupported launch control: events.{control}"
+                barrier == "session.closed",
+                "unsupported test barrier: {barrier}"
             );
         }
         pio_host::script::validate(&config["executor"])?;
@@ -755,8 +757,20 @@ impl Provider {
         }
         session.receive = num(&p["receive_limits"]["max_frame_bytes"]) as usize;
         session.selected = Some(selected.clone());
+        let mut limits = self.limits.clone();
+        if session.feature("core.events.backpressure") {
+            limits["max_pending_notification_bytes"] =
+                self.config["events"]["max_pending_notification_bytes"]
+                    .as_u64()
+                    .unwrap_or(2097152)
+                    .into();
+            limits["backpressure_notice_ms"] = self.config["events"]["backpressure_notice_ms"]
+                .as_u64()
+                .unwrap_or(1000)
+                .into();
+        }
         Ok(
-            json!({"selected":selected.into_iter().map(|(name,features)|json!({"name":name,"major":1,"features":features})).collect::<Vec<_>>(),"unselected":unselected,"limits":self.limits,"dedupe_window":self.window()}),
+            json!({"selected":selected.into_iter().map(|(name,features)|json!({"name":name,"major":1,"features":features})).collect::<Vec<_>>(),"unselected":unselected,"limits":limits,"dedupe_window":self.window()}),
         )
     }
     fn query(&self, session: &Session, method: &str, p: &Value) -> Reply {
