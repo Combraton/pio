@@ -2,7 +2,7 @@
 
 Updated 2026-09-16. Owner: Codex, PIO implementation lead. Task: [issue #1](https://github.com/Combraton/pio/issues/1). Branch: `codex/standalone-readiness`; base `e65b7c02318e71e848ab7c8b3f8efab3489fb2d2`. Read the branch/PR's actual head on resume; the readiness documents do not claim their own future commit ID.
 
-Reviewable delivery: [draft PR #2](https://github.com/Combraton/pio/pull/2). The substantive readiness commit is `de05afb4217ea47dec1fc445ddbf67790cdfd6f0`; the follow-up links the created PR. No merge, tag or release was performed.
+Reviewable delivery: [PR #2](https://github.com/Combraton/pio/pull/2). The substantive readiness commit is `de05afb4217ea47dec1fc445ddbf67790cdfd6f0`; the follow-up links the created PR. No merge, tag or release was performed.
 
 ## Reconciled state
 
@@ -21,9 +21,9 @@ Protocol [issue #1](https://github.com/Combraton/protocol/issues/1) is closed; [
 
 ## Delivered and pending
 
-Delivered: [release plan](PLAN.md), [proposed stack ADR](../../decisions/001-standalone-stack.md), [journey matrix](../../JOURNEYS.md), [public integration map](PROTOCOL.md), [Protocol lock](../../../protocol.lock.json), release verifier and sanitized [inspection evidence](evidence/readiness.json). Entry points link them. No substantial product implementation or dependency installation occurred.
+Delivered: [release plan](PLAN.md), [stack ADR](../../decisions/001-standalone-stack.md), [journey matrix](../../JOURNEYS.md), [public integration map](PROTOCOL.md), [Protocol lock](../../../protocol.lock.json), release verifier and sanitized [inspection evidence](evidence/readiness.json). Entry points link them. No substantial product implementation or dependency installation occurred.
 
-Pending owner judgment: stack/host and Claude bridge approach; two-adapter/platform scope; supported Claude authentication. Confirmatory thresholds and license are later reserved decisions. Codex 0.146.0 and Claude 2.1.273 are validation candidates, not supported releases. Authentication and native behavior remain unknown. The installed historical `pio` is not this product; avoid PATH collision during installation.
+Owner dispositions now accepted: stack/hosting, two-adapter/platform scope with both-platform build/conformance CI from M1, and explicit Claude API-key/provider authentication. Python bridge remains conditional on M3; claude.ai login is unsupported until an approved route exists. Confirmatory thresholds and license are later reserved decisions. Codex 0.146.0 and Claude 2.1.273 are validation candidates, not supported releases. Authentication and native behavior remain unknown. The installed historical `pio` is not this product; avoid PATH collision during installation.
 
 ## Checks and limits
 
@@ -50,6 +50,12 @@ Existing Codex/Claude/Hermes processes were observed and left untouched. No proc
 
 The attached kickoff is user source material and stays intact. This handoff preserves its useful outcomes and remaining work. No owned disposable kickoff was found in PIO. The workspace Protocol kickoff belongs to its owner and was neither edited nor retired. Its status is not decided by this task.
 
+## Owner acceptance and follow-up
+
+The owner accepted M0 as documentation after review at `85255d9` against `e65b7c0`, reporting independent reproduction of both documentation checks on a clean export, separately downloaded Protocol assets/verifier, two tamper controls, Codex tag peel, pinned source claims, and local harness versions/hashes. This is attributed owner evidence, not a claim that this follow-up reran those checks. Runtime properties remain not evaluated.
+
+All three dispositions are recorded in ADR 001 and PLAN. The README records unsupported claude.ai authentication. Corrections for M1 are preserved: byte-nondeterministic aggregate Codex schema with canonical per-file M2 comparison; Codex trusted-project configuration side effect; explicit participant subset, runner control declarations and unsupported-coverage reporting. PLAN now contains the owner's M1 acceptance evidence contract. Follow-up documentation/diff checks are in [validation-followup.json](evidence/validation-followup.json).
+
 ## Next action
 
-Settle the three initial owner decisions in the plan; record answers before M1. Then implement core/host and packaging experiments, inspect live resources again, and present M1 with actual evidence. Preserve failed experiments and unsupported full-release obligations. Do not install over the historical dispatcher, merge, tag or publish without the applicable explicit authority.
+This follow-up records the dispositions on the readiness branch for the owner-authorized ready transition of PR #2; consult its live state. Await separate merge authorization. Merge, tag and publish remain separate authorizations. After the merge, branch M1 from main; implement its named contract, preserve sibling repositories and update STATE at each checkpoint. Do not begin M1 on this readiness branch or install over the historical dispatcher.

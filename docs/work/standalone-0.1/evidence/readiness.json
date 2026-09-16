@@ -39,6 +39,14 @@
   "inspection": {
     "schema_files": 275,
     "schema_listing_sha256": "631aa18a0f9ee21e0827d0272f020a8ac6c85805da3dc19b8fa4b9f7d9802b56",
+    "schema_listing_note": {
+      "basis": "owner independent review of M0 at 85255d9 against e65b7c0",
+      "nondeterministic_file": "codex_app_server_protocol.v2.schemas.json",
+      "observation": "Raw bytes differ across runs of the same Codex 0.146.0 binary; parsed JSON is identical.",
+      "digest_scope": "Historical raw-byte capture only; not a stable compatibility fingerprint.",
+      "m2_drift_rule": "Compare canonical parsed JSON per file, preserving array order and values and normalizing object key order; never compare raw bytes of this file to decide schema drift.",
+      "followup_reproduction": "Not rerun in this documentation follow-up."
+    },
     "binaries": {
       "codex_launcher": {
         "sha256": "134063e133f0b4244fa3b251acf973d4fe4b4aeeacbdc135211bf480f59f1477"

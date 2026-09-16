@@ -18,7 +18,7 @@ For cross-repository work, also read the affected public contracts: [PIO](https:
 ## Active implementation-readiness checkpoint
 
 - [Standalone 0.1 plan](work/standalone-0.1/PLAN.md) — scope, milestones and owner decisions.
-- [Proposed stack](decisions/001-standalone-stack.md) — primary sources, exact harness candidates and validating experiments.
+- [Accepted stack](decisions/001-standalone-stack.md) — primary sources, exact harness candidates and validating experiments.
 - [Journey verification](JOURNEYS.md) — required observations; all runtime journeys are currently not evaluated.
 - [Released Protocol boundary](work/standalone-0.1/PROTOCOL.md) — verified pin and exact optional CBR interactions.
 - [Current state](work/STATE.md) and [task handoff](work/standalone-0.1/HANDOFF.md).

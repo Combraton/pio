@@ -23,7 +23,7 @@ Implement the relevant [protocol](https://github.com/Combraton/protocol) Core/Ex
 
 ## First milestone
 
-Protocol [v0.1.0](https://github.com/Combraton/protocol/releases/tag/v0.1.0) is released and its exact commit/assets are recorded in [protocol.lock.json](protocol.lock.json). The [standalone readiness plan](docs/work/standalone-0.1/PLAN.md) proposes a Codex-first real-adapter milestone followed by Claude Code; both remain in the full standalone release target. Stack/platform/authentication choices await owner judgment. No PIO runtime or adapter support is established yet.
+Protocol [v0.1.0](https://github.com/Combraton/protocol/releases/tag/v0.1.0) is released and its exact commit/assets are recorded in [protocol.lock.json](protocol.lock.json). The [standalone readiness plan](docs/work/standalone-0.1/PLAN.md) is accepted as the M0 documentation checkpoint, with Codex-first followed by Claude Code; both remain in the full standalone release target. Stack and platform scope are accepted, with build and conformance CI on macOS arm64 and Linux x86_64 from M1 onward. No PIO runtime or adapter support is established yet.
 
 Test interruption, lost acknowledgment, a surviving worker, late/conflicting completion and cancellation races. Report actual enforced/mediated/cooperative capabilities by tested version. The [journey matrix](docs/JOURNEYS.md) separates real CLI/TUI, recovery and optional CBR evidence.
 
@@ -31,9 +31,13 @@ Develop alongside CBR; neither project waits for the other's complete feature se
 
 ## Stack and status
 
-Rust/Tokio, SQLite/content-addressed payloads and Ratatui are [proposed choices](docs/decisions/001-standalone-stack.md), not installed dependencies or an accepted implementation. Exact adapter candidates and bounded experiments are recorded there. Puppetmaster supplies evaluated execution ideas, not an adopted controller/workflow engine.
+Rust/Tokio, SQLite/content-addressed payloads and Ratatui are [accepted implementation choices](docs/decisions/001-standalone-stack.md), not installed dependencies or a validated runtime. The Claude Python bridge remains conditional on the M3 experiment. Exact adapter candidates and bounded experiments are recorded there. Puppetmaster supplies evaluated execution ideas, not an adopted controller/workflow engine.
 
 For the shared sequence and self-development boundary, read [BOOTSTRAP](https://github.com/Combraton/combraton/blob/main/BOOTSTRAP.md). No runtime or license is provided by this bootstrap; the repository is public and its project license remains to be selected.
+
+## Claude authentication boundary
+
+PIO will invoke the user-selected, already-installed Claude Code executable when its version is qualified. The selected authentication path is an explicit API key or supported provider configuration. **claude.ai login/subscription authentication is unsupported in PIO until an approved route exists**, including when the installed CLI is already logged in. Selecting that executable does not establish support for its cached credentials. M3 must verify the selected authentication route and prevent silent fallback while preserving the user’s normal CLI login and native permissions. No Claude adapter/authentication journey has passed yet. See [the ADR](docs/decisions/001-standalone-stack.md) and [Anthropic’s SDK guidance](https://code.claude.com/docs/en/agent-sdk/overview).
 
 ## Working on this repository
 

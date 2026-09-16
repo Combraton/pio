@@ -1,10 +1,10 @@
-# ADR 001 — proposed standalone implementation stack
+# ADR 001 — standalone implementation stack
 
-- Status: **proposed**, not owner-accepted and not a runtime claim.
-- Date: 2026-09-16. Author: Codex. Authority: owner decision requested by the implementation-readiness task.
+- Status: **accepted by the owner**, 2026-09-16, following review of PR #2 at `85255d9` against `e65b7c0`. The Python bridge remains conditional on the M3 experiment. This is a design decision, not runtime acceptance.
+- Date: 2026-09-16. Author: Codex. Authority: explicit owner acceptance in the implementation-readiness task; recorded in the [plan dispositions](../work/standalone-0.1/PLAN.md#owner-decision-dispositions).
 - Scope: PIO internals and distribution; preserves [accepted baseline](https://github.com/Combraton/combraton/blob/9af69ce966bfacf0deb03606d99f28a355d1f944/docs/architecture/BASELINE.md). It changes no released Protocol artifact.
 
-## Recommendation
+## Accepted direction
 
 Use Rust 1.97.1 as the initial build-toolchain candidate, Tokio for bounded asynchronous I/O, SQLite through rusqlite for the journal/projections/outbox, content-addressed output files, Clap for CLI parsing and Ratatui/Crossterm for terminal presentation. Pin resolved package versions/checksums in the M1 lockfile; no dependencies have been installed by this checkpoint. The installed Rust toolchain and Protocol toolchain both report 1.97.1; that is compatibility evidence for investigation, not a successful PIO build.
 
@@ -32,6 +32,10 @@ Primary library/OS documentation inspected on 2026-09-16: [Tokio process lifecyc
 
 Candidate: **0.146.0**, tag `rust-v0.146.0`, peeled source `e363b08c9175ac1cbe5893615dd2cb9ddf95043b`. Read the [pinned app-server source documentation](https://github.com/openai/codex/blob/e363b08c9175ac1cbe5893615dd2cb9ddf95043b/codex-rs/app-server/README.md) and [current official documentation](https://learn.chatgpt.com/docs/app-server). Local `generate-json-schema` exited 0: 275 JSON files, listing digest in [inspection evidence](../work/standalone-0.1/evidence/readiness.json). The installed binary was hashed; no reproducible-build equivalence to the Git source is claimed.
 
+Owner review reproduced byte-nondeterminism in `codex_app_server_protocol.v2.schemas.json` across runs of that same binary, with identical parsed JSON. The raw listing digest identifies the original capture, not a stable schema compatibility fingerprint. M2 must compare canonical parsed JSON per file (preserve arrays and values, normalize object-key order), never the raw bytes of that file; retain raw hashes only as capture provenance.
+
+Owner source review also found that `thread/start` with `cwd` and a `workspace-write` sandbox at this pinned commit writes a trusted-project entry into the user's `~/.codex/config.toml`. This is a durable native side effect outside the task worktree. PIO must disclose it and either avoid it through a validated configuration path that preserves native policy, or explicitly account for it in the launch/effect contract and evidence. Experiment 3 must observe before/after configuration state in an isolated test environment; do not exercise it against the user's real configuration merely to probe discovery. This follow-up records the owner's evidence; it did not run a live thread or modify configuration.
+
 Recommend a host-owned app-server over stdio, using explicit thread/turn IDs, streaming events, native approval requests and interrupt. Native resume is historical-session continuation, not proof a killed live turn continued. Advertise steering only after real acknowledgment/outcome tests. Never select the unrestricted `thread/shellCommand` or experimental process API to evade the execution grant. Current documentation and local help label app-server experimental; qualify the exact surface and treat version drift as requiring re-probe. Stable schema fields do not make every transport or endpoint production-supported upstream.
 
 ### Claude Code
@@ -48,7 +52,9 @@ Pinned source establishes three consequential details:
 
 [Official Python reference](https://code.claude.com/docs/en/agent-sdk/python) documents explicit CLI selection and permission callbacks; [permission documentation](https://code.claude.com/docs/en/agent-sdk/permissions) establishes that callbacks are not universal interception of already allowed tools. Preserve effective native rules; no bypass mode, fabricated approvals or global hooks. Admission reports actual enforcement coverage.
 
-[Anthropic's SDK overview](https://code.claude.com/docs/en/agent-sdk/overview) restricts offering claude.ai login/rate limits through third-party SDK products without prior approval and points to API-key authentication. Recommend an explicitly qualified API/provider route. Do not imply that switching from SDK to raw CLI automatically resolves this product constraint. Subscription reuse needs a supported route before it is promised.
+[Anthropic's SDK overview](https://code.claude.com/docs/en/agent-sdk/overview) restricts offering claude.ai login/rate limits through third-party SDK products without prior approval and points to API-key authentication. The owner accepted API-key or provider authentication as PIO's qualified route; **claude.ai login is unsupported until an approved route exists**. This limitation is also in the README. Switching from SDK to raw CLI does not itself establish an approved product authentication route.
+
+PIO will invoke the user-selected installed CLI via explicit `cli_path`, conditional on version qualification. Executable selection and authentication selection are separate. M3 must verify explicit API/provider authentication for that child process and reject missing or ambiguous configuration rather than silently falling back to cached claude.ai credentials. Preserve the user's normal interactive login and native permission/settings behavior; do not log them out, copy their tokens or change global configuration as a convenience. Whether a cached login technically works is not evidence that PIO can advertise it as supported.
 
 Alternatives: direct Rust CLI streaming removes the Python bridge but requires validated native control/approval semantics; TypeScript SDK bridge is viable with a Node runtime. A generic PTY wrapper can preserve interactive text but cannot supply equivalent acknowledgment or recovery guarantees. Reconsider only after the bounded M3 trial, without shrinking the two-harness release silently.
 
@@ -58,4 +64,4 @@ Persist launch intent before spawn; acquire a fenced host slot; record host/proc
 
 Semantic events and completion receipts require durable retention. Spool limits may lose telemetry only with explicit dropped-range evidence; semantic-store failure stops new effects. Observed tokens, native reported cost, estimates, subscription coverage and unknown liability remain separate. Native controls may refuse cancellation; cancellation does not settle external effects.
 
-No supersession of accepted architecture. This ADR will supersede only the README's unresolved stack preference after acceptance and successful validating experiments. Failed experiments remain in the task evidence; new choices require an explicit amendment.
+The accepted stack supersedes the README's unresolved stack preference; it does not supersede architectural boundaries or turn experiments into passes. macOS arm64 and Linux x86_64 are accepted targets, with both-platform build and conformance CI required from M1 onward. The Python bridge remains conditional on M3. Failed experiments remain in the task evidence; a changed direction requires an explicit amendment. M0 is accepted only as a documentation checkpoint; merge, tag and publication remain separate authorizations.
