@@ -228,7 +228,13 @@ fn create_launch_guard(root: &Path, state: &pio_core::Invocation) -> Result<()> 
         .create_new(true)
         .mode(0o600)
         .open(&path)
-        .context("restore_barrier: launch guard already exists or unavailable")?;
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                anyhow::anyhow!("duplicate_launch_guard: launch already recorded")
+            } else {
+                anyhow::anyhow!("launch_guard_unavailable: {error}")
+            }
+        })?;
     file.write_all(&serde_json::to_vec(&json!({"command_id":state.command_id,"invocation_id":state.invocation_id,"store_id":state.store_id,"digest":state.digest}))?)?;
     file.sync_all()?;
     File::open(root)?.sync_all()?;
@@ -314,6 +320,10 @@ fn dispatch(root: &Path, store: &mut Store, generation: u64, request: &Value) ->
                         | "after_release"
                         | "after_receipt"
                         | "duplicate_launch"
+                        | "replay_relaunch"
+                        | "replay_without_launch_guard"
+                        | "replay_without_host_phase"
+                        | "before_release"
                 ),
                 "unknown fake fault"
             );
@@ -329,11 +339,30 @@ fn dispatch(root: &Path, store: &mut Store, generation: u64, request: &Value) ->
                 requested_generation,
                 fault == "journal_failure",
             )?;
-            if inserted {
+            let mutated_replay = matches!(
+                fault,
+                "replay_relaunch" | "replay_without_launch_guard" | "replay_without_host_phase"
+            );
+            let mut attempt = None;
+            if inserted || mutated_replay {
                 if fault == "after_intent" {
                     std::process::exit(91);
                 }
-                create_launch_guard(root, &invocation)?;
+                if !matches!(
+                    fault,
+                    "replay_without_launch_guard" | "replay_without_host_phase"
+                ) {
+                    create_launch_guard(root, &invocation)?;
+                }
+                let attempt_id = uuid::Uuid::new_v4().to_string();
+                attempt = Some(attempt_id.clone());
+                let stderr_path = root.join(format!("attempt-{attempt_id}.stderr"));
+                let stderr_file = OpenOptions::new()
+                    .create_new(true)
+                    .write(true)
+                    .mode(0o600)
+                    .open(&stderr_path)?;
+                let outcome_path = root.join(format!("attempt-{attempt_id}.json"));
                 let mut child = Command::new(std::env::current_exe()?)
                     .args(["fake", "host"])
                     .arg(root)
@@ -343,21 +372,30 @@ fn dispatch(root: &Path, store: &mut Store, generation: u64, request: &Value) ->
                     .env_clear()
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
-                    .stderr(Stdio::null())
+                    .stderr(Stdio::from(stderr_file))
                     .spawn()?;
                 std::thread::spawn(move || {
-                    let _ = child.wait();
+                    let result = child.wait();
+                    let error = std::fs::read_to_string(&stderr_path).unwrap_or_default();
+                    let _ = atomic_json(
+                        &outcome_path,
+                        &json!({"source":"fake-host","exit_code":result.ok().and_then(|s|s.code()),"reason":error.trim().strip_prefix("PIO: ").unwrap_or(error.trim())}),
+                    );
                 });
             }
             Ok(
-                json!({"source":"fake-host","replay":!inserted,"invocation":invocation,"controller_generation":generation}),
+                json!({"source":"fake-host","replay":!inserted,"launch_attempt":attempt,"launch_decision":if inserted || mutated_replay {"attempted"}else{"admit_replay_suppressed"},"invocation":invocation,"controller_generation":generation}),
             )
         }
         "inspect" => {
             let state = store.get(command)?.context("not_found")?;
             let host_alive = state.host.as_ref().is_some_and(is_same_process);
             let child_alive = state.child.as_ref().is_some_and(is_same_process);
-            let recovery = if state.receipt.is_some() {
+            let recovery = if state.phase == "known_not_released" {
+                "known_not_released"
+            } else if matches!(state.phase.as_str(), "intent" | "host_claimed" | "parked") {
+                "not_released_pending"
+            } else if state.receipt.is_some() {
                 "receipt_recorded"
             } else if child_alive && host_alive {
                 "same_process_observed"
@@ -386,8 +424,14 @@ pub fn host(root: &Path, command: &str, invocation_id: &str, fault: &str) -> Res
         "invocation_identity_fenced"
     );
     check_launch_guards(&root, &store)?;
-    ensure!(state.phase == "intent", "launch attempt already recorded");
-    let _slot = Lock::acquire(&root.join(format!("slot-{}.lock", state.host_slot)))?;
+    if fault != "replay_without_host_phase" {
+        ensure!(
+            state.phase == "intent",
+            "host_phase_fence: launch attempt already recorded"
+        );
+    }
+    let _slot = Lock::acquire(&root.join(format!("slot-{}.lock", state.host_slot)))
+        .map_err(|_| anyhow::anyhow!("host_slot_fence: slot already owned"))?;
     state = store.transition(
         &state,
         "host_claimed",
@@ -413,12 +457,28 @@ pub fn host(root: &Path, command: &str, invocation_id: &str, fault: &str) -> Res
             .spawn()?;
         children.push(child);
     }
+    let mut release_attempted = false;
     let outcome = (|| -> Result<()> {
         // Child is parked behind stdin. Capture kernel identity before releasing work.
         let child_id = identity(children[0].id())?;
         state = store.transition(&state, "parked", None, Some(child_id), None)?;
+        if fault == "before_release" {
+            atomic_json(
+                &root.join("before-release.ready"),
+                &json!({"source":"fake-host","invocation_id":state.invocation_id}),
+            )?;
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            while !root.join("before-release.continue").exists() {
+                ensure!(
+                    std::time::Instant::now() < deadline,
+                    "fake release barrier timeout"
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
         let release_gate = Lock::acquire_mode(&root.join("controller-gate.lock"), libc::LOCK_SH)?;
         state = store.transition(&state, "released", None, None, None)?;
+        release_attempted = true;
         for child in &mut children {
             child
                 .stdin
@@ -453,9 +513,18 @@ pub fn host(root: &Path, command: &str, invocation_id: &str, fault: &str) -> Res
     })();
     if outcome.is_err() {
         // Use owned Child handles, never a bare PID from a journal lookup.
+        let mut reaped = true;
         for child in &mut children {
             let _ = child.kill();
-            let _ = child.wait();
+            reaped &= child.wait().is_ok();
+        }
+        let marker = root.join(format!("release-{}.jsonl", state.invocation_id));
+        if !release_attempted
+            && reaped
+            && !marker.exists()
+            && matches!(state.phase.as_str(), "host_claimed" | "parked")
+        {
+            store.transition(&state,"known_not_released",None,None,Some(json!({"source":"fake-host","kind":"known_not_released","release_attempted":false,"children_reaped":true,"release_marker_absent":true,"reason":outcome.as_ref().err().map(ToString::to_string)})))?;
         }
     }
     outcome

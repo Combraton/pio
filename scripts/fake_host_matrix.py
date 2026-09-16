@@ -107,7 +107,7 @@ class Case:
 
     def close(self):
         # Preserve independent observations and canonical store rows before cleanup.
-        for path in list(self.root.glob('*.jsonl')) + list(self.root.glob('launch-*.json')):
+        for path in list(self.root.glob('*.jsonl')) + list(self.root.glob('launch-*.json')) + list(self.root.glob('attempt-*')):
             (self.out / path.name).write_bytes(path.read_bytes())
         db = sqlite3.connect(self.root / 'journal.sqlite3')
         try:
@@ -131,8 +131,41 @@ class Case:
         # No recursive removal: isolated stores remain for diagnosis outside the repository.
 
 
+def refusal_property(expected, observed):
+    return {'property':'defense_layer_refusal','expected_reason':expected,'observed_reason':observed,
+            'outcome':'pass' if observed == expected else 'wrong_reason'}
+
+
 def run_case(case, name):
     daemon, status = case.start()
+    if name == 'store_readonly_no_spawn':
+        case.stop_daemon(daemon)
+        files = list(case.root.glob('journal.sqlite3*'))
+        modes = {str(p.name): oct(p.stat().st_mode & 0o777) for p in files}
+        try:
+            for path in files: path.chmod(0o400)
+            case.root.chmod(0o500)
+            result = subprocess.run([str(BINARY),'fake','daemon',str(case.root)],capture_output=True,text=True,timeout=3)
+        finally:
+            case.root.chmod(0o700)
+            for path in files: path.chmod(0o600)
+        reason = result.stderr.strip()
+        observed = records(case.root/'spawn.jsonl')
+        assert result.returncode == 2 and 'readonly' in reason, reason
+        assert observed == []
+        return {'outcome':'pass','fault_source':'filesystem permissions','database_mode':'0400','directory_mode':'0500',
+                'original_modes':modes,'startup_exit':result.returncode,'refusal_reason':reason,'independent_spawn_markers':observed,'spawn_count':0}
+    if name == 'fenced_release_known_not_released':
+        case.submit('before_release')
+        poll(lambda:(case.root/'before-release.ready').exists(),bool)
+        before = case.inspect()
+        case.stop_daemon(daemon)
+        _,new = case.start()
+        (case.root/'before-release.continue').write_text('continue\n')
+        after = poll(case.inspect,lambda r:r.get('recovery')=='known_not_released' and not r.get('child_alive'))
+        release = records(case.root/f"release-{after['invocation']['invocation_id']}.jsonl")
+        assert release == [] and after['invocation']['receipt']['release_attempted'] is False
+        return {'outcome':'pass','before':before,'after':after,'after_generation':new,'release_markers':release}
     if name == 'journal_failure_no_spawn':
         before = records(case.root / 'spawn.jsonl')
         result = case.submit('journal_failure')
@@ -153,7 +186,7 @@ def run_case(case, name):
         _, restarted = case.start()
         replay = case.submit()
         state = case.inspect()
-        assert replay['replay'] and state['recovery'] == 'uncertain_no_respawn'
+        assert replay['replay'] and state['recovery'] == 'not_released_pending'
         assert records(case.root / 'spawn.jsonl') == []
         return {'outcome':'pass', 'before_generation':status, 'after_generation':restarted,
                 'after':state, 'spawn_count':0, 'fault_exit':91}
@@ -172,6 +205,28 @@ def run_case(case, name):
             source.backup(backup)
     case.submit('duplicate_launch' if name == 'j3_duplicate_launch_mutant' else '')
     before = case.active()
+    if name.startswith('mutant_'):
+        variants = {
+            'mutant_admit_replay_flag':('replay_relaunch','duplicate_launch_guard: launch already recorded'),
+            'mutant_launch_guard':('replay_without_launch_guard','host_phase_fence: launch attempt already recorded'),
+            'mutant_host_phase':('replay_without_host_phase','host_slot_fence: slot already owned'),
+            'mutant_wrong_reason_control':('replay_relaunch','host_phase_fence: launch attempt already recorded'),
+        }
+        fault, expected = variants[name]
+        response = case.submit(fault)
+        observed = response.get('error')
+        if not observed and response.get('launch_attempt'):
+            outcome = poll(lambda:json.loads((case.root/f"attempt-{response['launch_attempt']}.json").read_text()),lambda r:'exit_code' in r)
+            observed = outcome.get('reason') if outcome.get('exit_code') != 0 else 'mutant unexpectedly succeeded'
+        check = refusal_property(expected, observed or 'no refusal observation')
+        markers = records(case.root/'spawn.jsonl')
+        assert len(markers) == 1, markers
+        if name == 'mutant_wrong_reason_control':
+            assert check['outcome']=='wrong_reason',check
+            outcome_name = 'expected_classifier_failure'
+        else:
+            outcome_name = 'expected_defense_refusal' if check['outcome']=='pass' else 'wrong_reason'
+        return {'outcome':outcome_name,'mutant':fault,'check':check,'spawn_count':len(markers),'markers':markers}
     if name == 'detach_restart_reattach':
         # Each RPC caller disconnects. Kill only daemon; dedicated host and child survive.
         case.stop_daemon(daemon)
@@ -248,7 +303,7 @@ def main():
     args = parser.parse_args()
     assert args.repetitions > 0
     args.out.mkdir(parents=True,exist_ok=False)
-    cases = ['detach_restart_reattach','duplicate_and_conflicting_command','journal_failure_no_spawn','after_intent','after_claim','after_release','after_receipt','lost_host_no_respawn','stale_controller','restore_barrier','same_generation_restore','j3_duplicate_launch_mutant']
+    cases = ['detach_restart_reattach','duplicate_and_conflicting_command','journal_failure_no_spawn','after_intent','after_claim','after_release','after_receipt','lost_host_no_respawn','stale_controller','restore_barrier','same_generation_restore','j3_duplicate_launch_mutant','mutant_admit_replay_flag','mutant_launch_guard','mutant_host_phase','mutant_wrong_reason_control','fenced_release_known_not_released','store_readonly_no_spawn']
     results = []
     for name in cases:
         for repetition in range(1,args.repetitions+1):
@@ -257,7 +312,7 @@ def main():
             try:
                 result.update(run_case(case,name))
             except Exception as error:
-                result.update(outcome='harness_or_assertion_failure',reason=f'{type(error).__name__}: {error}')
+                result.update(outcome='wrong_reason' if name.startswith('mutant_') else 'harness_or_assertion_failure',reason=f'{type(error).__name__}: {error}')
             finally:
                 try:
                     case.close()
@@ -276,7 +331,7 @@ def main():
               'repetitions_per_case':args.repetitions,'planned_attempts':len(cases)*args.repetitions,'attempted':len(results),
               'outcomes':dict(Counter(r['outcome'] for r in results)), 'results':results}
     (args.out/'matrix.json').write_text(json.dumps(report,indent=2)+'\n')
-    return int(any(r['outcome'] not in ('pass','expected_property_failure') for r in results))
+    return int(any(r['outcome'] not in ('pass','expected_property_failure','expected_defense_refusal','expected_classifier_failure') for r in results))
 
 
 if __name__ == '__main__':

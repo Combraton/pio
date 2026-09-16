@@ -2,7 +2,7 @@
   "format": "combraton-conformance-participant/1",
   "name": "pio-fake-host",
   "version": "0.1.0-dev",
-  "description": "PIO M1 skeleton. Fake host only; no real adapters. No profiles, features or test controls implemented yet. m1-target.json records the accepted target, not claims.",
+  "description": "PIO M1 skeleton. Fake host only; no real adapters. No profiles, features or test controls implemented yet. m1-target.json records the accepted target, not claims. The configured pio conformance command is not implemented yet; this descriptor currently launches no participant.",
   "role": "provider",
   "binding": "unix",
   "claims": {
