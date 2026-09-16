@@ -18,6 +18,7 @@ For cross-repository work, also read the affected public contracts: [PIO](https:
 ## Active implementation
 
 - [Current state](work/STATE.md) and [M2 task packet](work/m2/TASK.md) — active M2 Codex adapter work, [issue #5](https://github.com/Combraton/pio/issues/5).
+- [M2 capacity-bound checkpoint](work/m2/COMMIT-BOUND.md) — ADR 002 projection limits, refusal behavior, two-platform evidence and findings.
 - [Standalone 0.1 plan](work/standalone-0.1/PLAN.md) — scope, milestones and owner decisions, including the 2026-09-16 owner amendment.
 - [Accepted stack](decisions/001-standalone-stack.md) — primary sources, exact harness candidates, validating experiments and the owner amendment on harness scope, spend bounds, Claude Code authentication and license.
 - [Journey verification](JOURNEYS.md) — required observations; all runtime journeys are currently not evaluated.

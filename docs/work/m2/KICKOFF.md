@@ -5,8 +5,8 @@ Disposable prompt, rewritten 2026-09-16 after M2 started. It replaces the fresh-
 ## 1. Where M2 stands
 
 - Repository `https://github.com/Combraton/pio`; branch **`codex/m2-codex-app-server`** in the single `pio-m2` worktree. Base **`9cf70474c28f549650e6b48e8be20ae88426a1b0`** (merge of PR #4). Do not create another M2 writer or branch.
-- PR #4 is merged, issue #3 is closed with a successor comment, and issue #5 tracks M2. The branch's first commit records the owner decisions and MIT license and is documentation only.
-- **No M2 runtime work exists yet. No real harness has run through PIO; all six journeys remain `not_evaluated`.** M1's accepted evidence and limits are unchanged; do not turn them into wider claims.
+- PR #4 is merged, issue #3 is closed with a successor comment, and issue #5 tracks M2 with a draft PR. Owner decisions and the MIT license are recorded.
+- **The ADR 002 capacity bound is implemented and checkpointed** at `5be40f9` ([report](COMMIT-BOUND.md)). **No real harness has run through PIO; all six journeys remain `not_evaluated`.** M1's accepted evidence and limits are unchanged; do not turn them into wider claims.
 
 ## 2. Read, in order
 
@@ -30,7 +30,7 @@ Disposable prompt, rewritten 2026-09-16 after M2 started. It replaces the fresh-
 
 ## 4. Next action
 
-Implement and test ADR 002's **32 MiB canonical projected-state / 32,768-record pre-commit admission bound** with offline fixtures: exact boundaries, event/dedupe accounting, explicit capacity refusal and no new effect or spawn on refusal. Record the checkpoint (STATE, issue #5, clean-clone sequence, two-platform CI) **before** qualifying Codex or starting any live run. Then follow TASK's plan steps 3–5.
+Check the draft PR for independent review of the capacity-bound checkpoint. Then follow TASK plan step 3: qualify the selected Codex executable, exact version, binary hash and per-file canonical schema identity; build before/after capture of the user's Codex configuration; connect app-server through the durable host. No live run until those exist. Then steps 4–5.
 
 ## 5. Protocol and Codex pins
 

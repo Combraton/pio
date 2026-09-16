@@ -73,8 +73,8 @@ The PR #4 merge and issue transition are complete. Live testing additionally req
 ## Plan and next step
 
 1. **Done 2026-09-16:** merge verified; worktree and branch created from `9cf7047`; issue #3 closed on merge with a successor comment; [issue #5](https://github.com/Combraton/pio/issues/5) opened; owner decisions, MIT LICENSE and records committed as the branch's first, documentation-only commit.
-2. **Next:** implement and test ADR 002's 32 MiB / 32,768-record pre-commit gate using offline fixtures, exact-boundary and no-effect refusal evidence. Do not launch a real harness to do this. Record the bounded checkpoint.
-3. Qualify the Codex version/binary/schema and build the configuration capture, then connect app-server through the durable host without relaxing existing fences or permissions.
+2. **Done 2026-09-16:** ADR 002's 32 MiB / 32,768-record pre-staging gate, tested at `5be40f9` with exact boundaries, event/dedupe accounting, typed refusal and a public no-spawn process case. Clean clone and both CI platforms agree; see the [checkpoint report](COMMIT-BOUND.md). It leaves an at-limit observation stall and commit-cost limits, recorded there.
+3. **Next:** qualify the Codex version/binary/schema and build the configuration capture, then connect app-server through the durable host without relaxing existing fences or permissions.
 4. Execute token-frugal real Codex J1/J3/J4/J5 plus deny/allow and drift controls within the bound. Follow PLAN's one focused experiment cycle and one repair/retest before a checkpoint; unresolved invariants remain explicit limits or owner decisions.
 5. Reproduce checkpoint evidence, request independent review and hand off the exact candidate. Do not self-accept M2 or merge/publish.
 
