@@ -15,9 +15,12 @@ import fake_host_matrix as witness
 from public_api import Client, CREDENTIAL, submit, command
 from journal_order import ordering, classify_mutant, ORDER_REASON
 
+# ADR 002 hard bound on retained projection records (pio-core projections).
+MAX_PROJECTION_RECORDS = 32768
+
 ROOT, BINARY = witness.ROOT, witness.BINARY
 poll, records = witness.poll, witness.records
-CASES = ['detach_restart_reattach','duplicate_and_conflicting_command','journal_failure_no_spawn','after_intent','after_claim','after_release','after_receipt','lost_host_no_respawn','stale_controller','restore_barrier','same_generation_restore','j3_duplicate_launch_mutant','mutant_admit_replay_flag','mutant_launch_guard','mutant_host_phase','mutant_wrong_reason_control','fenced_release_known_not_released','store_readonly_no_spawn','after_dispatch_marker','mutant_dispatch_order','mutant_dispatch_wrong_reason','fake_discovery']
+CASES = ['detach_restart_reattach','duplicate_and_conflicting_command','journal_failure_no_spawn','after_intent','after_claim','after_release','after_receipt','lost_host_no_respawn','stale_controller','restore_barrier','same_generation_restore','j3_duplicate_launch_mutant','mutant_admit_replay_flag','mutant_launch_guard','mutant_host_phase','mutant_wrong_reason_control','fenced_release_known_not_released','store_readonly_no_spawn','after_dispatch_marker','mutant_dispatch_order','mutant_dispatch_wrong_reason','fake_discovery','capacity_refusal_no_spawn']
 FAULTS = dict(j3_duplicate_launch_mutant='duplicate_launch',mutant_admit_replay_flag='replay_relaunch',mutant_launch_guard='replay_without_launch_guard',mutant_host_phase='replay_without_host_phase',mutant_wrong_reason_control='replay_relaunch',fenced_release_known_not_released='before_release',after_dispatch_marker='after_dispatch_marker',mutant_dispatch_order='reorder_dispatch_intent',mutant_dispatch_wrong_reason='after_intent')
 
 class Case(witness.Case):
@@ -25,7 +28,7 @@ class Case(witness.Case):
         super().__init__(out,name)
         self.name = name.rsplit('-',1)[0]
         self.transcript = self.out/'public-transcript.jsonl'
-        duration = 100 if self.name=='after_receipt' else 10000
+        duration = 100 if self.name in ('after_receipt','capacity_refusal_no_spawn') else 10000
         protocol = dict(format='combraton-conformance-config/1',principal='owner',credentials=[dict(credential=CREDENTIAL)],executor=dict(host_id='durable-fake-host'))
         if self.name=='journal_failure_no_spawn': protocol['faults']={'commit_unavailable':[{'operation':'execution.submit','times':1}]}
         self.config = dict(format='pio-fake-service/1',protocol=protocol,fake_host=dict(duration_ms=duration,fault=FAULTS.get(self.name,self.name if self.name in ('after_intent','after_claim','after_release','after_receipt') else '')))
@@ -90,6 +93,50 @@ class Case(witness.Case):
 # Reuse identity/count property definitions, not diagnostic calls. The process
 # cut points remain launch configuration, never fields in public commands.
 def run_case(case,name):
+    if name=='capacity_refusal_no_spawn':
+        def fill(target):
+            result=json.loads(subprocess.check_output([str(BINARY),'fake','fill-projection',str(case.root),str(target)],text=True))
+            assert result['after']['records']==target,result
+            return result
+        def journal_counts():
+            with sqlite3.connect(f'file:{case.root}/journal.sqlite3?mode=ro',uri=True) as db:
+                return dict(facts=db.execute('select count(*) from journal').fetchone()[0],outbox=db.execute('select count(*) from outbox').fetchone()[0],invocations=db.execute('select count(*) from invocations').fetchone()[0],refused_rows=db.execute("select count(*) from protocol_projection where key like '%capacity-refused%'").fetchone()[0],projection_records=db.execute('select count(*) from protocol_projection').fetchone()[0])
+        def process_matches():
+            command_id=hashlib.sha256(b'capacity-refused').hexdigest()
+            table=subprocess.check_output(['ps','-axww','-o','pid=','-o','command='],text=True)
+            return [line for line in table.splitlines() if f'fake child {case.root}' in line or f'fake host {case.root}' in line or command_id in line]
+        daemon,first=case.start();case.stop_daemon(daemon)
+        baseline=journal_counts()['projection_records']
+        # Test tooling pads the stopped store, which has no executions, through
+        # the bounded journal commit to one record below the ADR 002 limit.
+        # Any admission adds at least three records.
+        filled=fill(MAX_PROJECTION_RECORDS-1)
+        daemon,capacity_start=case.start()
+        stderr_path=case.out/f'daemon-{len(case.daemons)-1}.stderr'
+        before=journal_counts()
+        with Client(case.root/'public.sock',case.transcript) as c:
+            refused=c.call(submit(100,identity='capacity-refused'))
+        assert refused['error']['data']['code']=='unavailable' and refused['error']['data']['retry']=='same_command',refused
+        time.sleep(.5)
+        with Client(case.root/'public.sock',case.transcript) as c:
+            absent=c.query('execution.inspect',{'execution':'capacity-refused'})
+        assert absent['error']['data']['code']=='not_found',absent
+        log=[json.loads(line.split(': ',1)[1]) for line in stderr_path.read_text().splitlines() if line.startswith('PIO capacity refusal: ')]
+        assert len(log)==1 and log[0]['limit']=='projection_records' and log[0]['maximum']==MAX_PROJECTION_RECORDS and log[0]['projected']>MAX_PROJECTION_RECORDS,log
+        after=journal_counts();matches=process_matches()
+        assert after==before and after['invocations']==0 and after['refused_rows']==0 and after['projection_records']==MAX_PROJECTION_RECORDS-1,(before,after)
+        assert records(case.root/'spawn.jsonl')==[] and matches==[]
+        case.stop_daemon(daemon)
+        # Positive control through the same store and configuration once the
+        # filler is removed: ordinary admission spawns exactly one child.
+        shrunk=fill(baseline)
+        daemon,control_start=case.start()
+        accepted=case.submit(duration=100)
+        assert 'acknowledgment' in accepted,accepted
+        control=poll(case.inspect,lambda r:r.get('invocation',{}).get('phase')=='completed' and r['public'].get('result',{}).get('runtime')=='exited')
+        spawned=records(case.root/'spawn.jsonl')
+        assert len(spawned)==1 and journal_counts()['refused_rows']==0
+        return dict(outcome='pass',baseline_records=baseline,fill=filled,refusal=refused,capacity_log=log,journal_before_refusal=before,journal_after_refusal=after,spawn_count_at_capacity=0,independent_process_table_matches=matches,inspect_refused=absent['error']['data'],shrink=shrunk,positive_control=dict(spawn_count=len(spawned),phase=control['invocation']['phase'],runtime=control['public']['result']['runtime']),generations=dict(first=first,capacity=capacity_start,control=control_start))
     if name=='fake_discovery':
         case.start()
         with Client(case.root/'public.sock',case.transcript) as c:

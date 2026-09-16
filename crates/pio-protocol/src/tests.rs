@@ -401,3 +401,333 @@ fn reconciliation_events_use_frozen_outcomes_and_survive_journal_rebuild() {
         );
     }
 }
+
+use pio_core::projections::{MAX_PROJECTION_RECORDS, projection_size};
+
+/// Internal store test only: pads the retained projection with inert subjects
+/// so a real command lands on an exact record-count boundary.
+fn fill_records(p: &mut Provider, target: u64) {
+    let base = p.data.records().unwrap().len() as u64;
+    assert!(base <= target);
+    for n in 0..target - base {
+        let subject = json!({"kind":"pio-test.filler","id":n.to_string()});
+        p.data.subjects.insert(
+            key(&subject),
+            Subject {
+                subject,
+                revision: 1,
+                state: json!({}),
+                applied: 0,
+            },
+        );
+    }
+    p.save().unwrap();
+    assert_eq!(p.data.records().unwrap().len() as u64, target);
+}
+
+fn put(id: &str) -> Value {
+    let mut p = command(
+        "core-test.subject.put",
+        json!({"kind":"core-test.subject","id":id}),
+        0,
+        json!({"value":"v"}),
+    );
+    p["authority_epoch"] = 0.into();
+    p["command_id"] = id.into();
+    p
+}
+
+#[test]
+fn capacity_counts_subject_event_and_dedupe_records_and_binds_nothing_on_refusal() {
+    // A put adds exactly three records: subject, event and dedupe outcome.
+    // Refusal one record over the limit means all three are counted.
+    let root = tempfile::tempdir().unwrap();
+    let mut p = Provider::new(root.path(), config()).unwrap();
+    let mut s = session();
+    fill_records(&mut p, MAX_PROJECTION_RECORDS - 2);
+    let journal = p.store.journal().unwrap();
+    let error = p
+        .handle(&mut s, "core-test.subject.put", &put("x"))
+        .unwrap_err();
+    assert_eq!(error.code, "unavailable");
+    assert_eq!(
+        error.frame(json!(1))["error"]["data"]["retry"],
+        "same_command"
+    );
+    assert_eq!(
+        p.capacity_refusal,
+        Some(
+            json!({"limit":"projection_records","maximum":MAX_PROJECTION_RECORDS,"projected":MAX_PROJECTION_RECORDS+1})
+        )
+    );
+    let subject = json!({"kind":"core-test.subject","id":"x"});
+    assert_eq!(p.revision(&subject), 0);
+    assert!(p.data.events.is_empty() && p.data.commands.is_empty());
+    assert_eq!(
+        p.store.journal().unwrap(),
+        journal,
+        "refusal records no fact"
+    );
+    // Retransmitting the unbound command is safe and refused the same way.
+    assert_eq!(
+        p.handle(&mut s, "core-test.subject.put", &put("x"))
+            .unwrap_err()
+            .code,
+        "unavailable"
+    );
+    assert_eq!(p.store.journal().unwrap(), journal);
+
+    let root = tempfile::tempdir().unwrap();
+    let mut p = Provider::new(root.path(), config()).unwrap();
+    fill_records(&mut p, MAX_PROJECTION_RECORDS - 3);
+    let ack = p
+        .handle(&mut s, "core-test.subject.put", &put("x"))
+        .unwrap();
+    assert_eq!(ack["replay"], false);
+    assert_eq!(
+        p.data.records().unwrap().len() as u64,
+        MAX_PROJECTION_RECORDS
+    );
+    assert_eq!(p.capacity_refusal, None);
+    // A bound replay needs no commit and still answers at the limit.
+    assert_eq!(
+        p.handle(&mut s, "core-test.subject.put", &put("x"))
+            .unwrap()["replay"],
+        true
+    );
+}
+
+#[test]
+fn configured_event_retention_changes_capacity_accounting() {
+    for (retain_last, second_accepted) in [(Some(1), true), (None, false)] {
+        let root = tempfile::tempdir().unwrap();
+        let mut cfg = config();
+        if let Some(n) = retain_last {
+            cfg["events"] = json!({"retain_last":n});
+        }
+        let mut p = Provider::new(root.path(), cfg).unwrap();
+        let mut s = session();
+        fill_records(&mut p, MAX_PROJECTION_RECORDS - 5);
+        p.handle(&mut s, "core-test.subject.put", &put("a"))
+            .unwrap();
+        assert_eq!(
+            p.data.records().unwrap().len() as u64,
+            MAX_PROJECTION_RECORDS - 2
+        );
+        let second = p.handle(&mut s, "core-test.subject.put", &put("b"));
+        // With one retained event the new event replaces the old one, so the
+        // second put lands exactly on the limit; unretained it is one over.
+        assert_eq!(
+            second.is_ok(),
+            second_accepted,
+            "retain_last={retain_last:?}"
+        );
+        if second_accepted {
+            assert_eq!(
+                p.data.records().unwrap().len() as u64,
+                MAX_PROJECTION_RECORDS
+            );
+            assert_eq!(p.data.events.len(), 1);
+        } else {
+            assert_eq!(second.unwrap_err().code, "unavailable");
+            assert_eq!(
+                p.capacity_refusal.as_ref().unwrap()["projected"],
+                MAX_PROJECTION_RECORDS + 1
+            );
+            assert_eq!(p.data.events.len(), 1);
+        }
+    }
+}
+
+fn scripted_submit() -> (Value, Session, Value) {
+    let mut cfg = config();
+    cfg["executor"] = json!({"default_script":[{"deliver":"provider_ack_id"}]});
+    let mut s = session();
+    s.selected
+        .as_mut()
+        .unwrap()
+        .insert("execution".into(), vec![]);
+    let submit = command(
+        "execution.submit",
+        json!({"kind":"execution.execution","id":"e"}),
+        0,
+        json!({"brief":{"digest":pio_core::digest(b"brief"),"media_type":"text/plain"}}),
+    );
+    (cfg, s, submit)
+}
+
+#[test]
+fn capacity_refusal_admits_nothing_and_at_the_limit_stalls_observation_after_the_marker() {
+    let (cfg, mut s, submit) = scripted_submit();
+    // Measure what one admission adds: execution, delivery effect, dedupe
+    // outcome and events.
+    let scratch = tempfile::tempdir().unwrap();
+    let mut p = Provider::new(scratch.path(), cfg.clone()).unwrap();
+    let base = p.data.records().unwrap().len() as u64;
+    p.handle(&mut s, "execution.submit", &submit).unwrap();
+    let added = p.data.records().unwrap().len() as u64 - base;
+    assert!(
+        added >= 3,
+        "admission adds execution, effect and dedupe records"
+    );
+
+    let root = tempfile::tempdir().unwrap();
+    let mut p = Provider::new(root.path(), cfg.clone()).unwrap();
+    fill_records(&mut p, MAX_PROJECTION_RECORDS - added + 1);
+    let journal = p.store.journal().unwrap();
+    assert_eq!(
+        p.handle(&mut s, "execution.submit", &submit)
+            .unwrap_err()
+            .code,
+        "unavailable"
+    );
+    assert_eq!(
+        p.capacity_refusal.as_ref().unwrap()["limit"],
+        "projection_records"
+    );
+    assert!(p.data.executions.is_empty() && p.data.effects.is_empty());
+    assert!(p.data.commands.is_empty() && p.data.events.is_empty());
+    p.execution_tick().unwrap();
+    assert_eq!(
+        p.store.journal().unwrap(),
+        journal,
+        "no admission, effect or dispatch fact"
+    );
+
+    // Exactly at the limit the submit is admitted. The dispatch marker only
+    // rewrites existing records and commits; the delivery observation adds an
+    // event and is refused. Delivery stays pending with no determination and
+    // no further fact is recorded until capacity is freed.
+    let root = tempfile::tempdir().unwrap();
+    let mut p = Provider::new(root.path(), cfg).unwrap();
+    fill_records(&mut p, MAX_PROJECTION_RECORDS - added);
+    p.handle(&mut s, "execution.submit", &submit).unwrap();
+    assert_eq!(
+        p.data.records().unwrap().len() as u64,
+        MAX_PROJECTION_RECORDS
+    );
+    let journal = p.store.journal().unwrap();
+    let events = p.data.events.len();
+    assert!(p.execution_tick().is_err());
+    assert_eq!(
+        p.capacity_refusal.as_ref().unwrap()["limit"],
+        "projection_records"
+    );
+    let facts = p.store.journal().unwrap();
+    assert_eq!(
+        facts.len(),
+        journal.len() + 1,
+        "only the dispatch marker commits"
+    );
+    let keys: Vec<_> = list(&facts[journal.len()]["changes"])
+        .iter()
+        .map(|c| text(&c["key"]).to_owned())
+        .collect();
+    assert_eq!(keys, ["effect/e.delivery-1", "execution/e"]);
+    let effect = &p.data.effects["e.delivery-1"];
+    assert_eq!(
+        list(&effect["observations"]).last().unwrap()["evidence"]["class"],
+        "dispatch_intent"
+    );
+    assert_eq!(effect["status"], "pending");
+    assert_eq!(p.data.executions["e"]["dispatched"], true);
+    assert_eq!(p.data.executions["e"]["view"]["delivery"], "pending");
+    assert_eq!(p.data.events.len(), events);
+    // Scripted progression does not advance on idle ticks; whatever a later
+    // tick attempts, it records no new fact and no delivery determination.
+    let _ = p.execution_tick();
+    assert_eq!(p.store.journal().unwrap(), facts);
+    assert_eq!(p.data.executions["e"]["view"]["delivery"], "pending");
+    // A bound replay needs no commit; a new command is refused unbound.
+    assert_eq!(
+        p.handle(&mut s, "execution.submit", &submit).unwrap()["replay"],
+        true
+    );
+    assert_eq!(p.store.journal().unwrap(), facts);
+}
+
+#[test]
+fn projected_size_equals_canonical_encoding_length() {
+    let (cfg, mut s, submit) = scripted_submit();
+    let root = tempfile::tempdir().unwrap();
+    let mut p = Provider::new(root.path(), cfg).unwrap();
+    p.handle(&mut s, "execution.submit", &submit).unwrap();
+    p.execution_tick().unwrap();
+    let mut records = p.data.records().unwrap();
+    records.insert(
+        "subject/escapes".into(),
+        json!({"\u{e000}":"\n\"\\","😀":[1,-2,"é"],"a":{"z":null,"b":true}}),
+    );
+    let canonical: u64 = records
+        .iter()
+        .map(|(k, v)| (k.len() + encoding::canonical(v).len()) as u64)
+        .sum();
+    assert_eq!(
+        projection_size(&records).unwrap(),
+        (canonical, records.len() as u64)
+    );
+}
+
+#[test]
+fn capacity_refused_background_commit_keeps_queries_and_replays_available() {
+    let root = tempfile::tempdir().unwrap();
+    let mut p = Provider::new(root.path(), config()).unwrap();
+    let mut s = session();
+    s.selected
+        .as_mut()
+        .unwrap()
+        .get_mut("core")
+        .unwrap()
+        .push("core.effects".into());
+    let replayed = put("bound");
+    p.handle(&mut s, "core-test.subject.put", &replayed)
+        .unwrap();
+    // Internal store test only: an open obligation whose expiry adds an event.
+    p.data.effects.insert("effect".into(),json!({"effect":{"id":"effect","kind":"execution.prompt_submission","target":{"kind":"core-test.subject","id":"x"},"payload_digest":pio_core::digest(b"payload"),"authorization":{"principal":"owner"},"retry_class":"non_repeatable","operation_ref":"source"},"revision":1,"status":"unknown","observations":[],"attempts":[],"obligations":[{"id":"wait","expects":"outcome","deadline":"2026-01-01T00:00:01Z","state":"open"}]}));
+    fill_records(&mut p, MAX_PROJECTION_RECORDS);
+    let journal = p.store.journal().unwrap();
+    p.now = "2026-01-01T00:00:02Z".into();
+    let query = json!({"operation":"core.capabilities","message_id":"q","payload":{}});
+    let answer = p.handle(&mut s, "core.capabilities", &query);
+    assert!(
+        answer.is_ok(),
+        "query refused at capacity: {:?}",
+        answer.err().map(|e| e.code)
+    );
+    assert_eq!(
+        p.capacity_refusal.as_ref().unwrap()["limit"],
+        "projection_records"
+    );
+    assert_eq!(
+        p.effect_get("effect").unwrap()["obligations"][0]["state"],
+        "open"
+    );
+    assert_eq!(
+        p.handle(&mut s, "core-test.subject.put", &replayed)
+            .unwrap()["replay"],
+        true
+    );
+    assert_eq!(
+        p.handle(&mut s, "core-test.subject.put", &put("new"))
+            .unwrap_err()
+            .code,
+        "unavailable"
+    );
+    assert_eq!(p.store.journal().unwrap(), journal);
+    // A non-capacity store failure keeps the conservative behavior.
+    for n in 0..3 {
+        let subject = json!({"kind":"pio-test.filler","id":n.to_string()});
+        p.data.subjects.remove(&key(&subject));
+    }
+    p.save().unwrap();
+    let conn = rusqlite::Connection::open(root.path().join("journal.sqlite3")).unwrap();
+    conn.execute_batch("CREATE TRIGGER refuse_outbox BEFORE INSERT ON outbox BEGIN SELECT RAISE(ABORT,'disk fault'); END;").unwrap();
+    p.capacity_refusal = None;
+    assert_eq!(
+        p.handle(&mut s, "core.capabilities", &query)
+            .unwrap_err()
+            .code,
+        "unavailable"
+    );
+    assert_eq!(p.capacity_refusal, None);
+}

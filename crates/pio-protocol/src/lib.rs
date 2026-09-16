@@ -20,3 +20,5 @@ mod output;
 pub mod client;
 
 pub mod transcript;
+
+pub mod capacity;

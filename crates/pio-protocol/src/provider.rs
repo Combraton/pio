@@ -24,6 +24,11 @@ pub fn num(v: &Value) -> u64 {
 pub fn list(v: &Value) -> Vec<Value> {
     v.as_array().cloned().unwrap_or_default()
 }
+pub fn is_capacity_refusal(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<pio_core::projections::CapacityExceeded>()
+        .is_some()
+}
 pub fn key(v: &Value) -> String {
     serde_json::to_string(v).unwrap()
 }
@@ -128,6 +133,9 @@ pub struct Provider {
     pub now: String,
     pub authorities: Vec<String>,
     pub provider_id: String,
+    /// Last ADR 002 capacity refusal. The frozen public error for a refused
+    /// commit is `unavailable` with nothing bound, so the reason is local.
+    pub capacity_refusal: Option<Value>,
 }
 impl Provider {
     pub fn new(root: &Path, config: Value) -> Result<Self> {
@@ -258,6 +266,7 @@ impl Provider {
             now: String::new(),
             authorities,
             provider_id,
+            capacity_refusal: None,
         };
         p.clock(true)?;
         p.data.generation += num(&p.config["dedupe"]["advance_on_start"]);
@@ -308,10 +317,29 @@ impl Provider {
         }
     }
     pub fn save(&mut self) -> Result<()> {
-        self.store_revision = self
+        match self
             .store
-            .commit_protocol(self.store_revision, &self.data.records()?)?;
-        Ok(())
+            .commit_protocol(self.store_revision, &self.data.records()?)
+        {
+            Ok(revision) => {
+                self.store_revision = revision;
+                Ok(())
+            }
+            Err(error) => {
+                if let Some(refusal) =
+                    error.downcast_ref::<pio_core::projections::CapacityExceeded>()
+                {
+                    let refusal = json!({"limit":refusal.limit,"maximum":refusal.maximum,"projected":refusal.projected});
+                    // Background retries repeat the same refusal every tick;
+                    // log each distinct refusal once.
+                    if self.capacity_refusal.as_ref() != Some(&refusal) {
+                        eprintln!("PIO capacity refusal: {refusal}");
+                    }
+                    self.capacity_refusal = Some(refusal);
+                }
+                Err(error)
+            }
+        }
     }
     pub fn reload(&mut self) -> Result<()> {
         let (revision, records) = self.store.protocol_records()?;
@@ -357,10 +385,16 @@ impl Provider {
     }
     pub fn handle(&mut self, session: &mut Session, method: &str, p: &Value) -> Reply {
         let _ = self.clock(false);
-        self.execution_tick()
-            .map_err(|_| err("unavailable", json!({})))?;
-        self.expire_obligations()
-            .map_err(|_| err("unavailable", json!({})))?;
+        // Background commits reload committed state when refused. A capacity
+        // refusal leaves queries and bound replays answerable from that state;
+        // a new command still needs its own commit and is refused there. Any
+        // other store failure makes the whole request unavailable.
+        let background = |result: Result<()>| match result {
+            Err(error) if !is_capacity_refusal(&error) => Err(err("unavailable", json!({}))),
+            _ => Ok(()),
+        };
+        background(self.execution_tick())?;
+        background(self.expire_obligations())?;
         if session.principal.is_none() && !matches!(method, "core.describe" | "core.authenticate") {
             return Err(err("authentication_required", json!({})));
         }

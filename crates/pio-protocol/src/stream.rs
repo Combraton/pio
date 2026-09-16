@@ -106,7 +106,7 @@ fn serve_mode(root: &Path, config: &Path, socket: &Path, durable: bool) -> Resul
                 _ = tick.tick(), if durable => {
                     let mut p = provider.lock().unwrap();
                     let _ = p.clock(false);
-                    if let Err(error) = p.execution_tick() { eprintln!("PIO host observation: {error:#}"); }
+                    if let Err(error) = p.execution_tick() && !crate::provider::is_capacity_refusal(&error) { eprintln!("PIO host observation: {error:#}"); }
                 },
                 accepted = listener.accept() => {
                     let (stream, _) = accepted?;

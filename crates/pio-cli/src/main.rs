@@ -75,9 +75,9 @@ fn run() -> Result<()> {
             );
         }
         Some("fake") => {
-            let action = args
-                .get(1)
-                .context("fake requires daemon, request, host, child or identity")?;
+            let action = args.get(1).context(
+                "fake requires daemon, request, host, child, identity or fill-projection",
+            )?;
             let value = args.get(2).context("missing fake argument")?;
             match action.as_str() {
                 "daemon" => pio_host::daemon(Path::new(value))?,
@@ -100,6 +100,16 @@ fn run() -> Result<()> {
                     args.get(3).context("missing command id")?,
                     args.get(4).context("missing invocation identity")?,
                 )?,
+                // Test tooling only: pads a stopped store up to a record count.
+                "fill-projection" => println!(
+                    "{}",
+                    pio_protocol::capacity::fill_projection_records(
+                        Path::new(value),
+                        args.get(3)
+                            .context("missing target record count")?
+                            .parse()?,
+                    )?
+                ),
                 "identity" => println!(
                     "{}",
                     serde_json::to_string(&pio_host::identity(value.parse()?)?)?
