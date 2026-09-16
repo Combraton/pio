@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-09-16T06:20:25.921972+00:00",
+  "base": "85255d95ce82ffba4479605717020d0dc0fdd3b1",
+  "subject": "owner-disposition follow-up working tree; final commit recorded by Git/PR",
+  "checks": [
+    {
+      "command": "python3 scripts/check_docs.py",
+      "exit_code": 0,
+      "stdout": "pio: 18 Markdown files, 74 file links, 0 errors; 32 cross-repository links not checked\nChecks entrypoints, local imports, ordinary file links and fences. Does not validate remote URLs, fragments, Mermaid syntax or product behavior.",
+      "stderr": ""
+    },
+    {
+      "command": "python3 scripts/check_docs.py --workspace ..",
+      "exit_code": 0,
+      "stdout": "pio: 18 Markdown files, 106 file links, 0 errors; 0 cross-repository links not checked\nChecks entrypoints, local imports, ordinary file links and fences. Does not validate remote URLs, fragments, Mermaid syntax or product behavior.",
+      "stderr": ""
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "limits": "Documentation follow-up only. Release verifier and native schema generation were unchanged and not rerun. Owner-reported independent M0 review remains attributed owner evidence. No runtime or authentication trial, config mutation, M1 implementation, merge, tag or publication."
+}

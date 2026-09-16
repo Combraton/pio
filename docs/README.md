@@ -14,3 +14,11 @@ For cross-repository work, also read the affected public contracts: [PIO](https:
 - [Standalone release gates](https://github.com/Combraton/combraton/blob/main/docs/STANDALONE-RELEASES.md) and [accepted sequencing decision](https://github.com/Combraton/combraton/blob/main/docs/decisions/001-standalone-first-and-evaluation.md).
 - [PIO standalone client contract](https://github.com/Combraton/pio/blob/main/docs/spec/STANDALONE-CLIENT.md).
 - [Cross-product benchmarks](https://github.com/Combraton/benchmarks).
+
+## Active implementation-readiness checkpoint
+
+- [Standalone 0.1 plan](work/standalone-0.1/PLAN.md) — scope, milestones and owner decisions.
+- [Accepted stack](decisions/001-standalone-stack.md) — primary sources, exact harness candidates and validating experiments.
+- [Journey verification](JOURNEYS.md) — required observations; all runtime journeys are currently not evaluated.
+- [Released Protocol boundary](work/standalone-0.1/PROTOCOL.md) — verified pin and exact optional CBR interactions.
+- [Current state](work/STATE.md) and [task handoff](work/standalone-0.1/HANDOFF.md).

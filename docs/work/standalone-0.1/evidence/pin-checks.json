@@ -1,0 +1,14 @@
+{
+  "positive": {
+    "command": "python3 scripts/verify_protocol_pin.py --assets \"$PIO_RELEASE_DIR\"",
+    "exit_code": 0,
+    "scope": "release integrity only"
+  },
+  "negative": {
+    "fault": "append one ASCII space to a temporary copy of release-manifest.json",
+    "exit_code": 1,
+    "stderr": "Protocol pin verification failed: asset checksum mismatch: release-manifest.json",
+    "property": "manifest checksum mismatch is rejected before extraction/execution"
+  },
+  "iteration": "First verifier run falsely rejected paths because macOS /tmp resolves to /private/tmp; canonicalized extraction root and reran successfully. No released files changed."
+}
