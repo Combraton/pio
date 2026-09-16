@@ -37,3 +37,27 @@ A read-only MiniMax M3 inventory completed (13,798 tokens, $0.004564); its class
 | Native adapters/authentication and journeys | Not proven; M2/M3 separate, all six journeys `not_evaluated` |
 
 The diagnostic JSON daemon remains test tooling. No required process case relies exclusively on it now. Detailed PID/start/slot/controller witnesses remain outside frozen public result fields, and runtime cancellation/workspace/usage support in the process mode remains explicitly unavailable. M1 remains incomplete pending owner review and the broader acceptance contract.
+
+## Verified handoff at `0c1fb06`
+
+Base remains `900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe`; tested head is `0c1fb06e44e5b675fd749d65876fb9f60bdabb95`. [CI 35091218825](https://github.com/Combraton/pio/actions/runs/35091218825), both platforms, and an independent fresh clone complete the exact verification sequence with exit 0. [Receipt index](evidence/public-host-checkpoint.json) includes hashes and environment identities. Nineteen tests, both 54-attempt matrices, caller/CAS recovery and all 64 schema inventory checks pass. Public and diagnostic matrices each classify 39 pass, 3 expected property failures, 9 expected defense refusals and 3 expected classifier failures. They are separate evidence sets, not 108 conformance passes.
+
+| Runner directory | Pass | Unsupported | Skipped |
+| --- | ---: | ---: | ---: |
+| core | 134 | 1 | 0 |
+| stream | 24 | 0 | 0 |
+| socket | 12 | 1 | 0 |
+| execution | 36 | 15 | 0 |
+| composition | 0 | 14 | 0 |
+| context | 0 | 11 | 0 |
+| evidence | 0 | 16 | 0 |
+| knowledge | 0 | 10 | 0 |
+| verification | 0 | 5 | 0 |
+| compat | 0 | 0 | 1 |
+| **Official total** | **206** | **73** | **1** |
+
+Zero fail/timeout/harness_error. Two PIO supplemental fixtures pass separately. Every official fixture class and every public matrix case/repetition agrees across clone and CI artifacts. Unsupported reasons remain explicit: other product profiles and out-of-subset Execution features are unclaimed; Core's all-profile dependency fixture and socket's undeclared authorization-recheck barrier remain unavailable. The compatibility fixture targets a different pinned participant.
+
+Verification caught two defects before this handoff: a conformance-directory startup permission regression (`c9d1774`) and Linux writer contention caused by observer opens rerunning schema writes (`0c1fb06`). The latter has a direct unit regression under an active writer transaction; crash cut points now require exit 92/93/94, rather than accepting an unrelated host failure.
+
+Public process cases no longer require diagnostic JSON requests. Kernel identity, host slot and controller generation are independent witnesses because Protocol v0.1.0 cannot carry those fields in `inspect`; the public transcript and local witness are both retained. Scripted feature conformance is still distinct from process-mode behavior. No real adapter/native authentication/end-to-end claim; all six journeys remain `not_evaluated`. M1 remains incomplete pending owner review and broader acceptance.

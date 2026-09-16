@@ -45,3 +45,9 @@ Base remains `900bc03`; predecessor/correction head `38ca384`. The [Core checkpo
 ## Journal and Execution checkpoint after the verified Core review
 
 Base `900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe`; prior reviewed head `fa70a63`. Design recorded before behavior in `c6b5b8f`; journal migration `5f2e386`; scripted Execution subset `4a0ec44`; bounded stream output `c477860`; self-review fixes **`245856a43426422b4271f32156a9e5a08c489ba9`**. The final implementation passes 15 unit tests, matrix 54 (39/3/9/3), frozen runner 206 pass / 73 unsupported / 1 skipped, and 2 supplemental fixtures counted separately. Exact outcomes match the independent clean checkout and both CI platforms. See [Execution report](EXECUTION.md), [receipt index](evidence/execution-checkpoint.json) and [CI](https://github.com/Combraton/pio/actions/runs/35086098791). M1 remains incomplete; no real adapter claim.
+
+## Public process and caller checkpoint — 2026-09-16
+
+Base `900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe`; branch `codex/m1-core-host`; tested head `0c1fb06e44e5b675fd749d65876fb9f60bdabb95`. Implementation `3fbfcee`, conformance-startup correction `c9d1774`, observer-open contention correction `0c1fb06`. [Public-host record](PUBLIC-HOST.md), [exact receipts](evidence/public-host-checkpoint.json), [CI](https://github.com/Combraton/pio/actions/runs/35091218825).
+
+Public durable fake-process launch/observation, content-addressed output and a distinct caller operation ledger now have reproducible proof. Nineteen tests; public and diagnostic matrices each 54 in the four expected classes; runner 206/73/1 plus two separate supplemental passes, matching fresh clone and both CI platforms. M1 remains incomplete; no native adapter/authentication or evaluated product journey.

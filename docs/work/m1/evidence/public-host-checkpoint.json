@@ -1,0 +1,294 @@
+{
+  "base": "900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe",
+  "tested_head": "0c1fb06e44e5b675fd749d65876fb9f60bdabb95",
+  "ci_run": "https://github.com/Combraton/pio/actions/runs/35091218825",
+  "cargo_tests": 19,
+  "source_tree_sha256": "1ae9000d99613bd7f42b5498dc0b590abae44366af8427c30d08ba0180530ad0",
+  "real_adapter": false,
+  "native_authentication": false,
+  "end_to_end_journey": false,
+  "all_six_journeys": "not_evaluated",
+  "milestone": "M1 incomplete; public process checkpoint for owner review",
+  "protocol_process_witness_gap": "https://github.com/Combraton/protocol/issues/10",
+  "receipts": [
+    {
+      "name": "clean-clone",
+      "environment": {
+        "pio_binary_sha256": "7c06ecf74300013a0467f3a1403e4837206765f1b02f1c5db5521e5160f98314",
+        "pio_head": "0c1fb06e44e5b675fd749d65876fb9f60bdabb95",
+        "pio_dirty": false,
+        "os": "Darwin",
+        "arch": "arm64",
+        "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+        "execution_source": "fake-host",
+        "real_adapter": false
+      },
+      "official_classes": {
+        "skipped": 1,
+        "unsupported": 73,
+        "pass": 206
+      },
+      "by_directory": {
+        "compat": {
+          "skipped": 1
+        },
+        "composition": {
+          "unsupported": 14
+        },
+        "context": {
+          "unsupported": 11
+        },
+        "core": {
+          "pass": 134,
+          "unsupported": 1
+        },
+        "evidence": {
+          "unsupported": 16
+        },
+        "execution": {
+          "pass": 36,
+          "unsupported": 15
+        },
+        "knowledge": {
+          "unsupported": 10
+        },
+        "socket": {
+          "pass": 12,
+          "unsupported": 1
+        },
+        "stream": {
+          "pass": 24
+        },
+        "verification": {
+          "unsupported": 5
+        }
+      },
+      "official_manifest_sha256": "90cb43c01bf6b3dc8a61e8f273e96498d4b99719f37bc62eb019c51739cdb6da",
+      "supplemental_classes": {
+        "pass": 2
+      },
+      "supplemental_manifest_sha256": "9a7fa53d029ccd5ea9b7a4fda66bb5d8fffab79fb98729ee3fab7c46e44a5a3d",
+      "schema_inventory": {
+        "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+        "unchanged_schema_files": 64
+      },
+      "public_matrix": {
+        "attempted": 54,
+        "repetitions": 3,
+        "classes": {
+          "pass": 39,
+          "expected_property_failure": 3,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 3
+        },
+        "manifest_sha256": "fadf5d1693b29f8cf0c0f47fecb610b5a453e2ad7dc5f12d08fb1d50cf9b8db7"
+      },
+      "diagnostic_matrix": {
+        "attempted": 54,
+        "classes": {
+          "pass": 39,
+          "expected_property_failure": 3,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 3
+        },
+        "manifest_sha256": "8ef432cad8f42793df412a9903ae6c3ba975c241c68533d5c9adebcfcb458a6c"
+      },
+      "caller_recovery": {
+        "outcome": "pass",
+        "spawn_count": 1,
+        "output_ref": {
+          "digest": "sha256:e040f90c30d63450e9ac8f5be1d4411bec9060a708d92a3b1cddadabb61c9e7a",
+          "length": 253,
+          "offset": 0
+        },
+        "receipt_sha256": "66735d5d3f6cff7899e2aa8f8a59f31f355c16e3a50668410adc4aefc6e925b3"
+      }
+    },
+    {
+      "name": "linux-ci",
+      "environment": {
+        "pio_binary_sha256": "0f2cd0b85b6b9b06cba276f4147a691dbd847f833423efd66f776643821a6584",
+        "pio_head": "0c1fb06e44e5b675fd749d65876fb9f60bdabb95",
+        "pio_dirty": false,
+        "os": "Linux",
+        "arch": "x86_64",
+        "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+        "execution_source": "fake-host",
+        "real_adapter": false
+      },
+      "official_classes": {
+        "skipped": 1,
+        "unsupported": 73,
+        "pass": 206
+      },
+      "by_directory": {
+        "compat": {
+          "skipped": 1
+        },
+        "composition": {
+          "unsupported": 14
+        },
+        "context": {
+          "unsupported": 11
+        },
+        "core": {
+          "pass": 134,
+          "unsupported": 1
+        },
+        "evidence": {
+          "unsupported": 16
+        },
+        "execution": {
+          "pass": 36,
+          "unsupported": 15
+        },
+        "knowledge": {
+          "unsupported": 10
+        },
+        "socket": {
+          "pass": 12,
+          "unsupported": 1
+        },
+        "stream": {
+          "pass": 24
+        },
+        "verification": {
+          "unsupported": 5
+        }
+      },
+      "official_manifest_sha256": "61d63008b3fae27a0343a68932f37889318f9872aa3a264f31e176b87619a06b",
+      "supplemental_classes": {
+        "pass": 2
+      },
+      "supplemental_manifest_sha256": "26a1bc60790474f04d657d8d55203a2e9e532267e1832c7facbda66794954a2b",
+      "schema_inventory": {
+        "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+        "unchanged_schema_files": 64
+      },
+      "public_matrix": {
+        "attempted": 54,
+        "repetitions": 3,
+        "classes": {
+          "pass": 39,
+          "expected_property_failure": 3,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 3
+        },
+        "manifest_sha256": "4890a267718c71ed359fa761fa48f9a61b8f8c493c614ca95ee6f99d645d2b85"
+      },
+      "diagnostic_matrix": {
+        "attempted": 54,
+        "classes": {
+          "pass": 39,
+          "expected_property_failure": 3,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 3
+        },
+        "manifest_sha256": "b35314fd0a8c66ecba7dd3cdcd71b64dee023bf049698d52fa5af743c7d470e7"
+      },
+      "caller_recovery": {
+        "outcome": "pass",
+        "spawn_count": 1,
+        "output_ref": {
+          "digest": "sha256:8aa06843dd7669e30e9e0c61fb9d2ff80643cbbc11ced1a4c6e0f8a5ddc1da31",
+          "length": 241,
+          "offset": 0
+        },
+        "receipt_sha256": "8877b0c34d9de409faa2505e6ac1c01c3da626a3ffec260a1d629a7a7b340b90"
+      }
+    },
+    {
+      "name": "macos-ci",
+      "environment": {
+        "pio_binary_sha256": "cfc7c7d2aca9a11e67da3beae027febf62dd14aff6863b8cf108f6744ffcb89c",
+        "pio_head": "0c1fb06e44e5b675fd749d65876fb9f60bdabb95",
+        "pio_dirty": false,
+        "os": "Darwin",
+        "arch": "arm64",
+        "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+        "execution_source": "fake-host",
+        "real_adapter": false
+      },
+      "official_classes": {
+        "skipped": 1,
+        "unsupported": 73,
+        "pass": 206
+      },
+      "by_directory": {
+        "compat": {
+          "skipped": 1
+        },
+        "composition": {
+          "unsupported": 14
+        },
+        "context": {
+          "unsupported": 11
+        },
+        "core": {
+          "pass": 134,
+          "unsupported": 1
+        },
+        "evidence": {
+          "unsupported": 16
+        },
+        "execution": {
+          "pass": 36,
+          "unsupported": 15
+        },
+        "knowledge": {
+          "unsupported": 10
+        },
+        "socket": {
+          "pass": 12,
+          "unsupported": 1
+        },
+        "stream": {
+          "pass": 24
+        },
+        "verification": {
+          "unsupported": 5
+        }
+      },
+      "official_manifest_sha256": "9d8e2f41024090de3f64a43ea71f53b9a32224fbfe4fbf5b5b3d7c948d375f46",
+      "supplemental_classes": {
+        "pass": 2
+      },
+      "supplemental_manifest_sha256": "9e5b337a395fe9f027f15c305373779e77e4727998a80af164fb9e121f2eb1de",
+      "schema_inventory": {
+        "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+        "unchanged_schema_files": 64
+      },
+      "public_matrix": {
+        "attempted": 54,
+        "repetitions": 3,
+        "classes": {
+          "pass": 39,
+          "expected_property_failure": 3,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 3
+        },
+        "manifest_sha256": "b562004b1a6a4978e2122d4ff287999a07e1cd2c26faf060c034a0002cb40ba8"
+      },
+      "diagnostic_matrix": {
+        "attempted": 54,
+        "classes": {
+          "pass": 39,
+          "expected_property_failure": 3,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 3
+        },
+        "manifest_sha256": "eeb93c877e4734d318cb3480dc913395916974f6e77f316d68adf38407521e96"
+      },
+      "caller_recovery": {
+        "outcome": "pass",
+        "spawn_count": 1,
+        "output_ref": {
+          "digest": "sha256:1b36f1054deb4c2e928aec6b18757fec86904add237e8401e891e6d2e4827485",
+          "length": 254,
+          "offset": 0
+        },
+        "receipt_sha256": "5bd91ee8a9737d97a94baf93a081b78470129da5d36e6aa649ac027914944ba7"
+      }
+    }
+  ]
+}
