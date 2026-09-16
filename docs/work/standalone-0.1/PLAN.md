@@ -2,6 +2,8 @@
 
 Status: proposed for owner review, 2026-09-16. Owner: Codex, PIO implementation lead. This checkpoint authorizes no release and claims no working PIO runtime. The requested first deliverable is this plan, the [proposed stack](../../decisions/001-standalone-stack.md), the [journey matrix](../../JOURNEYS.md), and the [reconciled handoff](HANDOFF.md).
 
+Tracking: [issue #1](https://github.com/Combraton/pio/issues/1), [draft PR #2](https://github.com/Combraton/pio/pull/2).
+
 ## Outcome and fixed boundaries
 
 Ship an installable local execution service with CLI and first-class TUI for **both Codex and Claude Code**. It preserves each harness's native investigate/edit/test loop, provides inspectable execution and workspace identities, and recovers honestly after client or service interruption. A first Codex slice is a milestone, not the full release. Core work must succeed with CBR and Combraton absent.

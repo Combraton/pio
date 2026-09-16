@@ -2,6 +2,8 @@
 
 Updated 2026-09-16. Owner: Codex, PIO implementation lead. Task: [issue #1](https://github.com/Combraton/pio/issues/1). Branch: `codex/standalone-readiness`; base `e65b7c02318e71e848ab7c8b3f8efab3489fb2d2`. Read the branch/PR's actual head on resume; the readiness documents do not claim their own future commit ID.
 
+Reviewable delivery: [draft PR #2](https://github.com/Combraton/pio/pull/2). The substantive readiness commit is `de05afb4217ea47dec1fc445ddbf67790cdfd6f0`; the follow-up links the created PR. No merge, tag or release was performed.
+
 ## Reconciled state
 
 PIO began clean on main, matching remote main, with one worktree and no source runtime, package manifest or product build command. No PIO issues or PRs existed at inspection. Root AGENTS/CLAUDE, README/doc map, STATE, all three PIO specs and verification were read. This branch owns only PIO changes; no concurrent PIO writer was observed. CBR is independently owned and was not modified.

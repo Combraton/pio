@@ -3,7 +3,7 @@
 Dated navigation snapshot; reconcile with Git and [issue #1](https://github.com/Combraton/pio/issues/1) before continuing. Issues own live progress; this file grants no authority.
 
 - **Updated:** 2026-09-16. **Owner:** Codex, standalone PIO implementation lead.
-- **Task/branch:** standalone 0.1 readiness; `codex/standalone-readiness`, based on clean remote-matching `e65b7c02318e71e848ab7c8b3f8efab3489fb2d2`. Read actual Git/PR head on resume.
+- **Task/branch:** standalone 0.1 readiness; [draft PR #2](https://github.com/Combraton/pio/pull/2), `codex/standalone-readiness`, based on clean remote-matching `e65b7c02318e71e848ab7c8b3f8efab3489fb2d2`. Read actual Git/PR head on resume.
 - **Deliverables:** [plan](standalone-0.1/PLAN.md), [proposed stack](../decisions/001-standalone-stack.md), [journeys](../JOURNEYS.md), [Protocol/CBR boundary](standalone-0.1/PROTOCOL.md), [handoff](standalone-0.1/HANDOFF.md).
 - **Protocol correction:** v0.1.0 is released at `cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc`. Tag, manifest/assets, 539 bundle files and 420 normative entries verified. [Pin](../../protocol.lock.json) replaces the earlier pre-release observation; later main is not the contract.
 - **Shared source:** Combraton `9af69ce966bfacf0deb03606d99f28a355d1f944`; other revisions are in the handoff. No sibling repository was edited.
