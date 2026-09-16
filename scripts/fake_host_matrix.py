@@ -200,9 +200,12 @@ def run_case(case, name):
         state = poll(case.inspect, lambda r: r.get('invocation',{}).get('phase') == phase and not r.get('host_alive'))
         expected = 0 if name == 'after_claim' else 1
         markers = poll(lambda:records(case.root/'spawn.jsonl'), lambda r:len(r)==expected)
+        attempts = poll(lambda: [json.loads(p.read_text()) for p in case.root.glob('attempt-*.json')], bool)
+        expected_exit = {'after_claim':92,'after_release':93,'after_receipt':94}[name]
+        assert len(attempts)==1 and attempts[0]['exit_code']==expected_exit, attempts
         replay = case.submit(duration=duration)
         assert replay['replay'] and len(records(case.root/'spawn.jsonl')) == expected
-        return {'outcome':'pass','after':state,'markers':markers,'spawn_count':expected,'replay':True}
+        return {'outcome':'pass','after':state,'markers':markers,'spawn_count':expected,'replay':True,'host_attempts':attempts,'expected_cut_point_exit':expected_exit}
     if name == 'same_generation_restore':
         with sqlite3.connect(case.root/'journal.sqlite3') as source, sqlite3.connect(case.root/'backup.sqlite3') as backup:
             source.backup(backup)

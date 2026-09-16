@@ -50,12 +50,15 @@ impl Store {
     pub fn open(root: &Path) -> Result<Self> {
         let conn = Connection::open(root.join("journal.sqlite3"))?;
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
-        conn.execute_batch(
-            "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA fullfsync=ON;",
-        )?;
+        let mode: String = conn.pragma_query_value(None, "journal_mode", |r| r.get(0))?;
+        if mode != "wal" {
+            conn.pragma_update(None, "journal_mode", "WAL")?;
+        }
+        conn.execute_batch("PRAGMA synchronous=FULL; PRAGMA fullfsync=ON;")?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         ensure!(version <= 2, "unsupported store schema {version}");
-        conn.execute_batch("BEGIN IMMEDIATE;
+        if version < 2 {
+            conn.execute_batch("BEGIN IMMEDIATE;
             CREATE TABLE IF NOT EXISTS meta (singleton INTEGER PRIMARY KEY CHECK(singleton=1), store_id TEXT NOT NULL, generation INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS invocations (command_id TEXT PRIMARY KEY, state TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS journal (sequence INTEGER PRIMARY KEY AUTOINCREMENT, record TEXT NOT NULL);
@@ -64,10 +67,11 @@ impl Store {
             CREATE TABLE IF NOT EXISTS protocol_head (singleton INTEGER PRIMARY KEY CHECK(singleton=1),revision INTEGER NOT NULL);
             INSERT OR IGNORE INTO protocol_head VALUES(1,0);
             PRAGMA user_version=2; COMMIT;")?;
-        conn.execute(
-            "INSERT OR IGNORE INTO meta VALUES (1, ?1, 0)",
-            [Uuid::new_v4().to_string()],
-        )?;
+            conn.execute(
+                "INSERT OR IGNORE INTO meta VALUES (1, ?1, 0)",
+                [Uuid::new_v4().to_string()],
+            )?;
+        }
         Ok(Self { conn })
     }
 

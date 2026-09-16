@@ -76,3 +76,18 @@ fn generation_fences_new_admission_and_release_but_allows_replay() {
     assert!(!s.admit("a", json!({}), g, false).unwrap().1);
     assert_eq!(s.journal().unwrap(), before);
 }
+
+#[test]
+fn existing_store_open_does_not_compete_for_the_writer_lock() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = Store::open(dir.path()).unwrap();
+    let tx = store
+        .conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .unwrap();
+    // A host observation must open/read while the Protocol writer holds an
+    // unrelated transaction. Re-running migrations here used to block/fail.
+    let observer = Store::open(dir.path()).unwrap();
+    assert!(observer.identity().is_ok());
+    drop(tx);
+}
