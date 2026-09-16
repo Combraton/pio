@@ -1,6 +1,6 @@
 {
   "format": "combraton-conformance-participant/1",
-  "name": "pio-fake-host",
+  "name": "pio-core-conformance",
   "version": "0.1.0-dev",
   "description": "PIO conformance-only Core and core-test Unix service with fake-host tooling; no real adapters. Execution, public effects and event-backpressure are not claimed. m1-target.json is a future target, not evidence.",
   "role": "provider",
