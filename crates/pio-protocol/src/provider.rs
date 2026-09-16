@@ -344,6 +344,14 @@ impl Provider {
         if let Some(e) = self.validators[method].iter_errors(p).next() {
             return Err(invalid(&e.instance_path().to_string()));
         }
+        if method == "core.negotiate" {
+            let profiles = list(&p["payload"]["profiles"]);
+            let names: std::collections::BTreeSet<_> =
+                profiles.iter().map(|p| text(&p["name"])).collect();
+            if names.len() != profiles.len() {
+                return Err(invalid("/payload/profiles"));
+            }
+        }
         if p.get("grant").is_some() && !session.feature("core.grants") {
             return Err(invalid("/grant"));
         }
@@ -673,7 +681,9 @@ impl Provider {
                         .chain(list(&p["optional_features"]))
                     {
                         if name == "core" && FEATURES.contains(&text(&f)) {
-                            features.push(text(&f).to_owned())
+                            if !features.contains(&text(&f).to_owned()) {
+                                features.push(text(&f).to_owned());
+                            }
                         } else {
                             unselected.push(
                                 json!({"profile":name,"feature":f,"reason":"unknown_feature"}),

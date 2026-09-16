@@ -183,3 +183,27 @@ fn effects_abort_closes_wait_without_claiming_an_outcome() {
         "effect_history_unavailable"
     );
 }
+
+#[test]
+fn negotiation_treats_features_as_sets_and_validates_before_session_refusal() {
+    let root = tempfile::tempdir().unwrap();
+    let mut store = Provider::new(root.path(), config()).unwrap();
+    let mut s = Session {
+        principal: Some("owner".into()),
+        receive: 1048576,
+        ..Session::default()
+    };
+    let profile = json!({"name":"core","majors":[1],"required":true,"required_features":["core.grants"],"optional_features":["core.grants"]});
+    let mut p = json!({"operation":"core.negotiate","message_id":"m","payload":{"caller":{"name":"test","version":"1"},"receive_limits":{"max_frame_bytes":1048576},"profiles":[profile]}});
+    let result = store.handle(&mut s, "core.negotiate", &p).unwrap();
+    assert_eq!(result["selected"][0]["features"], json!(["core.grants"]));
+    p["payload"]["profiles"]
+        .as_array_mut()
+        .unwrap()
+        .push(profile);
+    p["requires"] = json!(["unknown.feature"]);
+    assert_eq!(
+        store.handle(&mut s, "core.negotiate", &p).unwrap_err().code,
+        "invalid_envelope"
+    );
+}
