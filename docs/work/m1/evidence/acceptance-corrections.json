@@ -1,0 +1,335 @@
+{
+  "base": "900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe",
+  "tested_head": "7b05342cbcaaa1813b2da02cf6bdb01a1ddc2673",
+  "ci_run": "https://github.com/Combraton/pio/actions/runs/35096491269",
+  "cargo_tests": 20,
+  "source_tree_sha256": "176f4af125fee113b0651922e10d65ebd60094f27a85c5f1025858446928365e",
+  "real_adapter": false,
+  "native_authentication": false,
+  "end_to_end_journey": false,
+  "all_six_journeys": "not_evaluated",
+  "milestone": "M1 acceptance candidate; owner acceptance pending",
+  "agreement": {
+    "official_fixture_classes": 280,
+    "public_case_repetitions": 66,
+    "diagnostic_case_repetitions": 54,
+    "packaging_managers": [
+      "launchd",
+      "systemd"
+    ]
+  },
+  "receipts": [
+    {
+      "name": "clean-clone",
+      "environment": {
+        "pio_binary_sha256": "7830064f1101d6266925e1855b70a90f40b24556451afeb3ba6b755bb5e9c9b5",
+        "pio_head": "7b05342cbcaaa1813b2da02cf6bdb01a1ddc2673",
+        "pio_dirty": false,
+        "os": "Darwin",
+        "arch": "arm64",
+        "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+        "execution_source": "fake-host",
+        "real_adapter": false
+      },
+      "official_classes": {
+        "skipped": 1,
+        "unsupported": 73,
+        "pass": 206
+      },
+      "by_directory": {
+        "compat": {
+          "skipped": 1
+        },
+        "composition": {
+          "unsupported": 14
+        },
+        "context": {
+          "unsupported": 11
+        },
+        "core": {
+          "pass": 134,
+          "unsupported": 1
+        },
+        "evidence": {
+          "unsupported": 16
+        },
+        "execution": {
+          "pass": 36,
+          "unsupported": 15
+        },
+        "knowledge": {
+          "unsupported": 10
+        },
+        "socket": {
+          "pass": 12,
+          "unsupported": 1
+        },
+        "stream": {
+          "pass": 24
+        },
+        "verification": {
+          "unsupported": 5
+        }
+      },
+      "official_manifest_sha256": "9ff7f0affcd5469231cb00f7e244bd0c31cdbbc55d132f5d3f682630b080d1c7",
+      "supplemental_classes": {
+        "pass": 2
+      },
+      "supplemental_manifest_sha256": "4efa873551266066298d80dce3d50ecb882e12968dc94a2f2dbe3ad5e36607a7",
+      "schema_inventory": {
+        "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+        "unchanged_schema_files": 64
+      },
+      "public_matrix": {
+        "attempted": 66,
+        "repetitions": 3,
+        "classes": {
+          "pass": 45,
+          "expected_property_failure": 6,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 6
+        },
+        "manifest_sha256": "7958665aad13a32d48958f78fb8b3123b871bc99fee165a21fc5b7d4429a4ecf"
+      },
+      "diagnostic_matrix": {
+        "attempted": 54,
+        "repetitions": 3,
+        "classes": {
+          "pass": 39,
+          "expected_property_failure": 3,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 3
+        },
+        "manifest_sha256": "d9305bd983e2dad445e3390e41e93bbe5e1cef03fff982461480ad9b3f6e5d36"
+      },
+      "caller_recovery": {
+        "outcome": "pass",
+        "spawn_count": 1,
+        "inline_output_in_journal": false,
+        "manifest_sha256": "261a169d5a8e118a5a3c14b4a073f8792cd2f8d4deb57900a86c903e4f073312"
+      },
+      "packaging": {
+        "outcome": "pass",
+        "manager": "launchd",
+        "started_identity": {
+          "pid": 186,
+          "start": "macos:F662E339-E42A-47F9-809D-FEDF268123BB:1789562082:575570"
+        },
+        "stop_observed": true,
+        "collision_preserved": true,
+        "manifest_tampering_refused": true,
+        "modified_binary_refused": true,
+        "state_preserved": true,
+        "manifest_sha256": "f4e8f3f324bd4505fdead0de6215d031e214d85ae9abf8c97a12ccf7ead8f16a"
+      }
+    },
+    {
+      "name": "macos-ci",
+      "environment": {
+        "pio_binary_sha256": "ae79303e6b4d9baa4045b34509d776fbfe98d8564fb1f620edeecce74c20d12a",
+        "pio_head": "7b05342cbcaaa1813b2da02cf6bdb01a1ddc2673",
+        "pio_dirty": false,
+        "os": "Darwin",
+        "arch": "arm64",
+        "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+        "execution_source": "fake-host",
+        "real_adapter": false
+      },
+      "official_classes": {
+        "skipped": 1,
+        "unsupported": 73,
+        "pass": 206
+      },
+      "by_directory": {
+        "compat": {
+          "skipped": 1
+        },
+        "composition": {
+          "unsupported": 14
+        },
+        "context": {
+          "unsupported": 11
+        },
+        "core": {
+          "pass": 134,
+          "unsupported": 1
+        },
+        "evidence": {
+          "unsupported": 16
+        },
+        "execution": {
+          "pass": 36,
+          "unsupported": 15
+        },
+        "knowledge": {
+          "unsupported": 10
+        },
+        "socket": {
+          "pass": 12,
+          "unsupported": 1
+        },
+        "stream": {
+          "pass": 24
+        },
+        "verification": {
+          "unsupported": 5
+        }
+      },
+      "official_manifest_sha256": "9d8e2f41024090de3f64a43ea71f53b9a32224fbfe4fbf5b5b3d7c948d375f46",
+      "supplemental_classes": {
+        "pass": 2
+      },
+      "supplemental_manifest_sha256": "9e5b337a395fe9f027f15c305373779e77e4727998a80af164fb9e121f2eb1de",
+      "schema_inventory": {
+        "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+        "unchanged_schema_files": 64
+      },
+      "public_matrix": {
+        "attempted": 66,
+        "repetitions": 3,
+        "classes": {
+          "pass": 45,
+          "expected_property_failure": 6,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 6
+        },
+        "manifest_sha256": "65405e989044d59cbd0b1ac7f7cbff37790a13cbe853c304dbedd86d1db3cdb9"
+      },
+      "diagnostic_matrix": {
+        "attempted": 54,
+        "repetitions": 3,
+        "classes": {
+          "pass": 39,
+          "expected_property_failure": 3,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 3
+        },
+        "manifest_sha256": "1b6adb9c3ae6b5a2fb11871b57f6e66e50e4e395c9d4ee774e034999d267d6c2"
+      },
+      "caller_recovery": {
+        "outcome": "pass",
+        "spawn_count": 1,
+        "inline_output_in_journal": false,
+        "manifest_sha256": "dd90d70d0c5f725d77469c1f809629d5957b4e4f861e0631f6067ce83dab28ff"
+      },
+      "packaging": {
+        "outcome": "pass",
+        "manager": "launchd",
+        "started_identity": {
+          "pid": 4685,
+          "start": "macos:8093A55A-978F-43D4-B76D-3B9B9FC1416F:1789562124:526194"
+        },
+        "stop_observed": true,
+        "collision_preserved": true,
+        "manifest_tampering_refused": true,
+        "modified_binary_refused": true,
+        "state_preserved": true,
+        "manifest_sha256": "a8c629bda50c09841305171f466e024a79e7283bc93f1b3ae3fbb88ae925d5d1"
+      }
+    },
+    {
+      "name": "linux-ci",
+      "environment": {
+        "pio_binary_sha256": "61846f2fc4b77d12efe5cb98b714a7243a3c5ae37b5aed7d13027e9b281dda68",
+        "pio_head": "7b05342cbcaaa1813b2da02cf6bdb01a1ddc2673",
+        "pio_dirty": false,
+        "os": "Linux",
+        "arch": "x86_64",
+        "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+        "execution_source": "fake-host",
+        "real_adapter": false
+      },
+      "official_classes": {
+        "skipped": 1,
+        "unsupported": 73,
+        "pass": 206
+      },
+      "by_directory": {
+        "compat": {
+          "skipped": 1
+        },
+        "composition": {
+          "unsupported": 14
+        },
+        "context": {
+          "unsupported": 11
+        },
+        "core": {
+          "pass": 134,
+          "unsupported": 1
+        },
+        "evidence": {
+          "unsupported": 16
+        },
+        "execution": {
+          "pass": 36,
+          "unsupported": 15
+        },
+        "knowledge": {
+          "unsupported": 10
+        },
+        "socket": {
+          "pass": 12,
+          "unsupported": 1
+        },
+        "stream": {
+          "pass": 24
+        },
+        "verification": {
+          "unsupported": 5
+        }
+      },
+      "official_manifest_sha256": "61d63008b3fae27a0343a68932f37889318f9872aa3a264f31e176b87619a06b",
+      "supplemental_classes": {
+        "pass": 2
+      },
+      "supplemental_manifest_sha256": "26a1bc60790474f04d657d8d55203a2e9e532267e1832c7facbda66794954a2b",
+      "schema_inventory": {
+        "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+        "unchanged_schema_files": 64
+      },
+      "public_matrix": {
+        "attempted": 66,
+        "repetitions": 3,
+        "classes": {
+          "pass": 45,
+          "expected_property_failure": 6,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 6
+        },
+        "manifest_sha256": "ce9543f75406ee82a72e06406446d2b168921d17c9f8b8e870d8720777efd737"
+      },
+      "diagnostic_matrix": {
+        "attempted": 54,
+        "repetitions": 3,
+        "classes": {
+          "pass": 39,
+          "expected_property_failure": 3,
+          "expected_defense_refusal": 9,
+          "expected_classifier_failure": 3
+        },
+        "manifest_sha256": "a2ed3a3ed654089506df8b1885e0284be43a46be35783d8c5d32d616c5a465d3"
+      },
+      "caller_recovery": {
+        "outcome": "pass",
+        "spawn_count": 1,
+        "inline_output_in_journal": false,
+        "manifest_sha256": "c608d0bca1da8cb36cb1bb92e6297771fdc7a23f986e0d292e59bdca8699756a"
+      },
+      "packaging": {
+        "outcome": "pass",
+        "manager": "systemd",
+        "started_identity": {
+          "pid": 7844,
+          "start": "linux:3c198e3e-0ebd-4c95-9405-33f6777f5129:12836"
+        },
+        "stop_observed": true,
+        "collision_preserved": true,
+        "manifest_tampering_refused": true,
+        "modified_binary_refused": true,
+        "state_preserved": true,
+        "manifest_sha256": "103b72fb060b1ef26f4e665751919a2a37f3d3cbfab234c4dba55b1f6ead77f6"
+      }
+    }
+  ]
+}

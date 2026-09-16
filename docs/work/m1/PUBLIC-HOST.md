@@ -1,4 +1,6 @@
-# Public durable-host checkpoint plan
+# Public durable-host checkpoint (historical)
+
+The owner independently reproduced and accepted this lower-level checkpoint at `baf2fae`. Active work and the updated issue #3 mapping are in [M1 acceptance corrections](ACCEPTANCE-CORRECTIONS.md); the sequence below records the completed implementation plan, not a new kickoff.
 
 Owner: Codex. Base `900bc03cfb0c898faa14f5e8b68afe4ac7ff26fe`; starting head `7a4659f423737a5341e198dd779392e54b797458`, branch `codex/m1-core-host`. One implementation worktree; siblings read-only.
 
