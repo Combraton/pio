@@ -144,11 +144,11 @@ def make_fixture(name):
 
 
 class Service:
-    def __init__(self, run, approval, executable, model=None, limit=RUN_LIMIT):
+    def __init__(self, run, approval, executable, model=None, limit=RUN_LIMIT, store=None):
         self.run = run
         self.limit = limit
         self.private = private_dir(run)
-        self.store = LIVE / 'stores' / f'{run}-{uuid.uuid4().hex[:8]}'
+        self.store = store or LIVE / 'stores' / f'{run}-{uuid.uuid4().hex[:8]}'
         self.store.parent.mkdir(parents=True, exist_ok=True)
         os.chmod(self.store.parent, 0o700)
         self.socket_dir = private_dir(run, 'socket')
@@ -420,6 +420,43 @@ def run_live(run, args):
     return result
 
 
+def discovery(args):
+    """Zero-token discovery, before and after a launch has observed anything.
+
+    J1 and J5 both start by discovering installations. Discovery never starts an
+    app-server, so this costs nothing. It runs twice: once against a fresh store,
+    where authentication is honestly unknown and the installation is therefore
+    not usable, and once against the store a completed run left behind, where a
+    launch did observe authentication.
+    """
+    stores = sorted((LIVE / 'stores').glob('R6-*'), key=lambda p: p.stat().st_mtime)
+    assert stores, 'no completed R6 store to read an observed authentication from'
+    records = {}
+    for name, store in (('fresh_store', None), ('store_of_a_completed_run', stores[-1])):
+        service = Service(f'discovery-{name}', 'on-request', args.executable, TERRA, RUN_LIMIT, store)
+        before = sorted(p.name for p in service.store.glob('codex-*.events.jsonl')) if store else []
+        try:
+            service.start()
+            with service.client() as c:
+                listed = c.query('execution.discovery.list', {})['result']
+        finally:
+            for d in service.daemons:
+                service.stop(d)
+        after = sorted(p.name for p in service.store.glob('codex-*.events.jsonl'))
+        records[name] = dict(installations=len(listed['installations']), installation=listed['installations'][0],
+                             launch_event_files_before=len(before), launch_event_files_after=len(after),
+                             discovery_started_no_app_server=before == after)
+    result = dict(format='pio-m2-live-receipt/1', run='discovery', live=True, turn_started=False, model_calls=0,
+                  recorded_at_utc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                  pio=dict(head=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+                           dirty=bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT))),
+                  **records)
+    out = ROOT / 'docs/work/m2/codex-live'
+    out.mkdir(parents=True, exist_ok=True)
+    (out / 'discovery.json').write_text(json.dumps(result, indent=2).replace(str(HOME), '$HOME') + '\n')
+    print(json.dumps(result, indent=2))
+
+
 def wrong_executable(args):
     service = Service('wrong-executable', 'on-request', HOME / '.local/bin/opencode2')
     daemon = service.start(expect_ready=False)
@@ -488,11 +525,13 @@ def model_list(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--run', required=True, choices=[*RUNS, 'wrong-executable', 'model-list'])
+    parser.add_argument('--run', required=True, choices=[*RUNS, 'wrong-executable', 'model-list', 'discovery'])
     parser.add_argument('--executable', type=Path, default=HOME / '.local/bin/codex')
     args = parser.parse_args()
     if args.run == 'model-list':
         model_list(args)
+    elif args.run == 'discovery':
+        discovery(args)
     elif args.run == 'wrong-executable':
         wrong_executable(args)
     else:
