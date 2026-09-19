@@ -1,0 +1,426 @@
+#!/usr/bin/env python3
+"""Owner-authorized live Codex runs for M2 (issue #5 plan R1-R6).
+
+Drives the user's installed Codex through `pio serve-codex` exactly as the
+plan posted on issue #5 states. Each run uses its own private PIO store and a
+throwaway fixture repository under $HOME/pio-m2-live/fixtures. Raw transcripts,
+task output, configuration copies and paths stay under $HOME/pio-m2-live/private
+(mode 0700). The public receipt written to docs/work/m2/codex-live/<run>.json
+holds digests, identities and observed facts only.
+
+Stops (owner plan): no run starts if cumulative observed Codex usage has reached
+800,000 tokens; a run whose observed usage exceeds 250,000 is interrupted with
+`execution.cancel`; a run that ends without a usage report stops the sequence.
+"""
+import argparse
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import shutil
+import signal
+import sqlite3
+import subprocess
+import sys
+import time
+import uuid
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from public_api import Client, command  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[1]
+BINARY = ROOT / 'target/debug/pio'
+HOME = Path(os.environ['HOME'])
+LIVE = HOME / 'pio-m2-live'
+CONTENT = 'pio.combraton.dev/content'
+FEATURES = ['execution.controller', 'execution.output', 'execution.discovery', 'execution.workspaces', 'execution.usage', 'execution.actions', 'execution.steering']
+CAP = 1_000_000
+STOP_AT = 800_000
+RUN_LIMIT = 250_000
+DEADLINE = 600
+DELIVERY = 120
+
+CALC = 'def subtract(a, b):\n    return a - b\n'
+TEST = '''import unittest
+
+from calc import add, subtract
+
+
+class CalcTest(unittest.TestCase):
+    def test_add(self):
+        self.assertEqual(add(2, 3), 5)
+
+    def test_subtract(self):
+        self.assertEqual(subtract(5, 3), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
+'''
+IMPLEMENT = 'implement the add(a, b) function that test_calc.py expects in calc.py, run python3 -m unittest -q, and reply with the test result in one line.'
+RUNS = {
+    'R1': dict(fixture='r1-j1', journeys=['J1', 'J5'], approval='on-request',
+               brief='In this repository, test_calc.py expects an add(a, b) function in calc.py. Implement it, run python3 -m unittest -q, and reply with the test result in one line.'),
+    'R2': dict(fixture='r2-j3', journeys=['J3'], approval='on-request', brief='Run sleep 20 first. Then, in this repository, ' + IMPLEMENT),
+    'R3': dict(fixture='r3-j4-interrupt', journeys=['J4'], approval='on-request', brief='Run sleep 120 and then reply with the word done.'),
+    'R4': dict(fixture='r4-j4-steer', journeys=['J4'], approval='on-request', brief='Run sleep 30 and then reply with the single word alpha.',
+               steer='Reply with the single word beta instead.'),
+    'R5': dict(fixture='r5-deny', journeys=['approval-deny'], approval='untrusted', brief='Run python3 -m unittest -q and reply with the result in one line.', decision='decline'),
+    'R6': dict(fixture='r6-allow', journeys=['approval-allow'], approval='untrusted', brief='Run python3 -m unittest -q and reply with the result in one line.', decision='accept'),
+}
+
+
+def sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def digest(data):
+    return 'sha256:' + sha(data)
+
+
+def private_dir(*parts):
+    path = LIVE.joinpath('private', *parts)
+    path.mkdir(parents=True, exist_ok=True)
+    for p in [LIVE, LIVE / 'private', path]:
+        os.chmod(p, 0o700)
+    return path
+
+
+class LiveClient(Client):
+    def query(self, operation, payload):
+        if operation == 'core.negotiate':
+            payload = dict(payload, profiles=[dict(name='core', majors=[1], required=True, required_features=['core.events', 'core.capabilities', 'core.effects'], optional_features=[]),
+                                             dict(name='execution', majors=[1], required=True, required_features=FEATURES, optional_features=[])])
+        return super().query(operation, payload)
+
+
+def ledger_path():
+    return private_dir() / 'usage-ledger.json'
+
+
+def ledger():
+    path = ledger_path()
+    return json.loads(path.read_text()) if path.exists() else {'cap': CAP, 'stop_at': STOP_AT, 'runs': {}}
+
+
+def cumulative(book):
+    return sum(r.get('tokens') or 0 for r in book['runs'].values())
+
+
+def git(repo, *args):
+    return subprocess.run(['git', '-C', str(repo), '-c', 'user.email=pio-fixture@example.invalid', '-c', 'user.name=pio fixture', *args], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def make_fixture(name):
+    fixtures = LIVE / 'fixtures'
+    fixtures.mkdir(parents=True, exist_ok=True)
+    repo = fixtures / name
+    if repo.exists():
+        shutil.rmtree(repo)
+    repo.mkdir()
+    (repo / 'calc.py').write_text(CALC)
+    (repo / 'test_calc.py').write_text(TEST)
+    git(repo, 'init', '-q')
+    git(repo, 'add', '.')
+    git(repo, 'commit', '-q', '-m', 'PIO M2 live fixture')
+    return repo, git(repo, 'rev-parse', 'HEAD')
+
+
+class Service:
+    def __init__(self, run, approval, executable):
+        self.run = run
+        self.private = private_dir(run)
+        self.store = LIVE / 'stores' / f'{run}-{uuid.uuid4().hex[:8]}'
+        self.store.parent.mkdir(parents=True, exist_ok=True)
+        os.chmod(self.store.parent, 0o700)
+        self.socket_dir = private_dir(run, 'socket')
+        self.socket = self.socket_dir / 'public.sock'
+        self.transcript = self.private / 'public-transcript.jsonl'
+        env = {'PATH': f'{HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(HOME), 'USER': os.environ.get('USER', ''), 'LANG': 'en_US.UTF-8'}
+        protocol = dict(format='combraton-conformance-config/1', principal='owner', credentials=[dict(credential='ccred1.owner.' + base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip('='))], executor=dict(host_id='codex-host'))
+        self.credential = protocol['credentials'][0]['credential']
+        self.config = dict(format='pio-codex-service/1', protocol=protocol,
+                           codex=dict(executable=str(executable), env=env, codex_home=str(HOME / '.codex'), fixture_root=str(LIVE / 'fixtures'),
+                                      thread=dict(sandbox='workspace-write', approvalPolicy=approval), labeled_fake=False))
+        self.config_path = self.private / 'service.json'
+        self.config_path.write_text(json.dumps(self.config))
+        os.chmod(self.config_path, 0o600)
+        self.daemons = []
+
+    def start(self, expect_ready=True, timeout=180):
+        n = len(self.daemons)
+        stdout = (self.private / f'daemon-{n}.stdout').open('w')
+        stderr = (self.private / f'daemon-{n}.stderr').open('w')
+        daemon = subprocess.Popen([str(BINARY), 'serve-codex', '--data-dir', str(self.store), '--config', str(self.config_path), '--socket', str(self.socket)], stdout=stdout, stderr=stderr)
+        self.daemons.append(daemon)
+        if not expect_ready:
+            return daemon
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if daemon.poll() is not None:
+                raise RuntimeError(f'service exited {daemon.returncode}: {(self.private / f"daemon-{n}.stderr").read_text()[-2000:]}')
+            try:
+                with self.client() as c:
+                    if 'result' in c.query('core.describe', {}):
+                        return daemon
+            except (OSError, ValueError):
+                time.sleep(0.5)
+        raise RuntimeError('service not ready')
+
+    def client(self):
+        import public_api
+        public_api.CREDENTIAL = self.credential
+        return LiveClient(self.socket, self.transcript, 60)
+
+    def inspect(self, identity):
+        with self.client() as c:
+            return c.query('execution.inspect', {'execution': identity})['result']
+
+    def call(self, envelope):
+        with self.client() as c:
+            return c.call(envelope)
+
+    def journal(self):
+        with sqlite3.connect(f'file:{self.store}/journal.sqlite3?mode=ro', uri=True) as db:
+            invocations = [json.loads(r[0]) for r in db.execute('select state from invocations')]
+            row = db.execute("select value from protocol_projection where key='execution/work'").fetchone()
+        return invocations, (json.loads(row[0]) if row else None)
+
+    def events(self):
+        records = []
+        for path in self.store.glob('codex-*.events.jsonl'):
+            records += [json.loads(l) for l in path.read_text().splitlines()]
+        return records
+
+    def stop(self, daemon, sig=signal.SIGTERM):
+        if daemon.poll() is None:
+            daemon.send_signal(sig)
+            try:
+                daemon.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                daemon.kill()
+                daemon.wait(timeout=5)
+
+
+def envelope(operation, identity, payload, command_id, revision=0, content=None, media_type=None):
+    env = command(operation, dict(kind='execution.execution', id=identity), payload, command_id=command_id, revision=revision)
+    if content is not None:
+        env['extensions'] = {CONTENT: dict(media_type=media_type, text=content)}
+    return env
+
+
+def usage_total(events):
+    totals = [e['total']['totalTokens'] for e in events if e['kind'] == 'usage' and isinstance(e.get('total'), dict)]
+    return max(totals) if totals else None
+
+
+def wait(service, predicate, seconds, identity='work'):
+    deadline = time.monotonic() + seconds
+    last = None
+    while time.monotonic() < deadline:
+        last = service.inspect(identity)
+        if predicate(last):
+            return last
+        total = usage_total(service.events())
+        if total is not None and total > RUN_LIMIT and not service.__dict__.get('limit_cancelled'):
+            service.limit_cancelled = True
+            cancel(service, 'usage-limit-cancel')
+        time.sleep(1)
+    raise TimeoutError(f'bounded wait expired; last runtime={last and last.get("runtime")}')
+
+
+def cancel(service, command_id):
+    view = service.inspect('work')
+    return service.call(envelope('execution.cancel', 'work', {}, command_id, revision=view['revision']))
+
+
+def processes(pattern):
+    table = subprocess.check_output(['ps', '-axww', '-o', 'pid=', '-o', 'command='], text=True)
+    return [line.strip() for line in table.splitlines() if pattern in line]
+
+
+def receipt(service, run, spec, repo, base, started, extra):
+    invocations, record = service.journal()
+    events = service.events()
+    kinds = [e['kind'] for e in events]
+    first = lambda kind: next((e for e in events if e['kind'] == kind), None)
+    view = service.inspect('work')
+    with service.client() as c:
+        output = c.query('execution.output.read', {'execution': 'work', 'offset': 0, 'max_bytes': 1048576})['result']
+    out_bytes = base64.b64decode(output['data_base64'])
+    (service.private / 'output.jsonl').write_bytes(out_bytes)
+    agent_text = ''.join(json.loads(l)['params'].get('delta', '') for l in out_bytes.decode(errors='replace').splitlines()
+                         if l.strip() and json.loads(l)['method'] == 'item/agentMessage/delta')
+    (service.private / 'agent-text.txt').write_text(agent_text)
+    qualification = json.loads((service.store / 'qualification.json').read_text())
+    resolution = qualification['resolution']
+    invocation = invocations[0] if invocations else {}
+    thread = first('thread_started') or {}
+    guard = (first('thread_settings_guard') or {}).get('guard', {})
+    tests = subprocess.run([sys.executable, '-m', 'unittest', '-q'], cwd=repo, capture_output=True, text=True)
+    diff_stat = git(repo, 'diff', '--stat', base)
+    status = git(repo, 'status', '--porcelain')
+    check = subprocess.run([str(BINARY), 'check-transcript', str(service.transcript)], capture_output=True, text=True)
+    for path in service.store.glob('codex-*'):
+        shutil.copy2(path, service.private / path.name)
+    usage = usage_total(events)
+    head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    return dict(
+        format='pio-m2-live-receipt/1', run=run, journeys=spec['journeys'], real_codex=True, live=True,
+        recorded_at_utc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), seconds=round(time.monotonic() - started, 1),
+        pio=dict(head=head, dirty=bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT)), binary_sha256=sha(BINARY.read_bytes())),
+        platform=platform.platform(),
+        codex=dict(selected='$HOME/.local/bin/codex', kind=resolution['kind'], wrapper_sha256=resolution['wrapper']['sha256'], wrapper_package_version=resolution['wrapper']['package_version'],
+                   native_sha256=resolution['native']['sha256'], native_layout_version=resolution['native']['layout'].get('version'), node=dict(sha256=resolution['node']['sha256'], version=resolution['node']['version']),
+                   version=qualification['version'], canonical_schema_listing_sha256=qualification['schema']['canonical_listing_sha256'], schema_drift=qualification['schema']['drift_count'],
+                   service_node_resolution=dict(matches_qualification=qualification['service_node_resolution']['matches_qualification'], version=qualification['service_node_resolution']['version'])),
+        environment_passed=sorted(service.config['codex']['env']), credential_variables_passed=False,
+        authentication_type=(first('account') or {}).get('authentication_type'),
+        model=thread.get('model'), model_provider=thread.get('model_provider'),
+        thread_settings=dict(requested=guard.get('requested'), configured=guard.get('configured'), guard_allowed=guard.get('allowed'),
+                             effective_sandbox=thread.get('sandbox'), effective_approval_policy=thread.get('approval_policy')),
+        native=dict(thread_id=thread.get('thread_id'), turn_id=(first('turn_acknowledged') or {}).get('turn_id'), native_process=((first('spawned') or {}).get('native'))),
+        identities=dict(invocation_id=invocation.get('invocation_id'), host=invocation.get('host'), app_server_process=invocation.get('child'), host_slot=invocation.get('host_slot'),
+                        controller_generation_at_admission=invocation.get('controller_generation'), host_generation_now=view['host']['generation'], phase=invocation.get('phase')),
+        delivery=view['deliveries'][0] if view.get('deliveries') else None,
+        runtime=view['runtime'], exit=view.get('exit'), cancellation=view.get('cancellation'), actions=view.get('actions'), steering=view.get('steering'),
+        deadline_stop=(record or {}).get('codex', {}).get('deadline_stop'), timeouts=dict(delivery=DELIVERY, execution_deadline=DEADLINE), timeouts_passed=(record or {}).get('timeouts_passed'),
+        turn_status=(first('turn_completed') or {}).get('status'), turn_error=(first('turn_completed') or {}).get('error'),
+        output=dict(bytes=len(out_bytes), sha256=sha(out_bytes), receipt_output_digest=(invocation.get('receipt') or {}).get('output_digest'), agent_text_sha256=sha(agent_text.encode())),
+        usage=dict(observed_total_tokens=usage, observation=view['usage'], cap=CAP, stop_at=STOP_AT),
+        config_diff=(first('config_after') or {}).get('diff'), config_before_sha256=((first('config_before') or {}).get('snapshot') or {}).get('raw_sha256'),
+        fixture=dict(path=f'$HOME/pio-m2-live/fixtures/{spec["fixture"]}', base=base, brief_sha256=sha(spec['brief'].encode()), diff_stat=diff_stat, status_porcelain_lines=len(status.splitlines()),
+                     unittest_exit_after_run=tests.returncode),
+        event_kinds=kinds, public_transcript_schema_check=dict(exit=check.returncode, summary=check.stdout.strip() or check.stderr.strip()[-300:]),
+        independent_services=dict(cbr_processes=len(processes('cbr ')), combraton_processes=len(processes('combraton')), context_calls='none: PIO has no Context client in this build'),
+        **extra)
+
+
+def run_live(run, args):
+    spec = RUNS[run]
+    book = ledger()
+    if cumulative(book) >= STOP_AT:
+        raise SystemExit(f'stop: cumulative observed usage {cumulative(book)} reached {STOP_AT}')
+    repo, base = make_fixture(spec['fixture'])
+    service = Service(run, spec['approval'], args.executable)
+    daemon = service.start()
+    started = time.monotonic()
+    brief = spec['brief'].encode()
+    payload = dict(brief=dict(digest=digest(brief), media_type='text/plain'), workspace=dict(repository=str(repo), base=base, cleanup='retain'),
+                   timeouts=dict(delivery=DELIVERY, execution_deadline=DEADLINE))
+    submitted = service.call(envelope('execution.submit', 'work', payload, 'work', content=spec['brief'], media_type='text/plain'))
+    extra = dict(submit=dict(admission=submitted.get('result', {}).get('outcome', {}).get('admission'), error=submitted.get('error', {}).get('data')))
+    if 'error' in submitted or submitted['result']['outcome']['admission'] != 'admitted':
+        raise RuntimeError(f'submit not admitted: {submitted}')
+    try:
+        if run == 'R2':
+            wait(service, lambda v: v['delivery'] == 'acknowledged', 180)
+            time.sleep(5)
+            before_invocation, _ = service.journal()
+            before_view = service.inspect('work')
+            service.stop(daemon, signal.SIGKILL)
+            killed_at = time.monotonic()
+            host_alive = bool(processes(f'codex host {service.store}'))
+            daemon = service.start()
+            replay = service.call(envelope('execution.submit', 'work', payload, 'work', content=spec['brief'], media_type='text/plain'))
+            wait(service, lambda v: v['runtime'] == 'exited', DEADLINE + 120)
+            after_invocation, _ = service.journal()
+            after_view = service.inspect('work')
+            sent = [e for e in service.events() if e['kind'] == 'turn_start_sent']
+            extra['j3'] = dict(daemon_killed='SIGKILL', restart_seconds=round(time.monotonic() - killed_at, 1), host_process_alive_during_restart=host_alive,
+                               host_before=before_invocation[0]['host'], host_after=after_invocation[0]['host'], app_server_before=before_invocation[0]['child'], app_server_after=after_invocation[0]['child'],
+                               same_host_and_app_server=before_invocation[0]['host'] == after_invocation[0]['host'] and before_invocation[0]['child'] == after_invocation[0]['child'],
+                               invocations=len(after_invocation), turn_start_sent=len(sent), replay=replay.get('result', {}).get('replay'),
+                               generation_before=before_view['host']['generation'], generation_after=after_view['host']['generation'], recovery=after_view.get('recovery'))
+        elif run == 'R3':
+            wait(service, lambda v: v['delivery'] == 'acknowledged', 180)
+            time.sleep(15)
+            response = cancel(service, 'cancel')
+            wait(service, lambda v: v['runtime'] == 'exited', 300)
+            extra['j4_cancel'] = dict(cancel_command=('result' in response), cancel_error=response.get('error', {}).get('data'))
+        elif run == 'R4':
+            wait(service, lambda v: v['delivery'] == 'acknowledged', 180)
+            time.sleep(8)
+            view = service.inspect('work')
+            message = spec['steer'].encode()
+            response = service.call(envelope('execution.steer', 'work', dict(message=dict(digest=digest(message), media_type='text/plain')), 'steer', revision=view['revision'], content=spec['steer'], media_type='text/plain'))
+            wait(service, lambda v: v['runtime'] == 'exited', DEADLINE + 60)
+            extra['j4_steer'] = dict(steer_request=response.get('result', {}).get('outcome'), steer_error=response.get('error', {}).get('data'), steer_text_sha256=sha(message))
+        elif run in ('R5', 'R6'):
+            view = wait(service, lambda v: v['runtime'] in ('requires_action', 'exited'), 300)
+            if view['runtime'] == 'requires_action':
+                action = view['runtime_detail']['action_id']
+                body = json.dumps({'decision': spec['decision']}).encode()
+                response = service.call(envelope('execution.respond_action', 'work', dict(action_id=action, response=dict(digest=digest(body), media_type='application/json')), 'answer',
+                                                 revision=view['revision'], content=body.decode(), media_type='application/json'))
+                extra['approval'] = dict(action_id=action, decision=spec['decision'], answer=response.get('result', {}).get('outcome'), answer_error=response.get('error', {}).get('data'),
+                                         request=next((e for e in service.events() if e['kind'] == 'action_requested'), None))
+                wait(service, lambda v: v['runtime'] in ('requires_action', 'exited'), DEADLINE + 60)
+                later = service.inspect('work')
+                if later['runtime'] == 'requires_action':
+                    extra['approval']['further_request'] = later['runtime_detail']
+                    body = json.dumps({'decision': 'decline'}).encode()
+                    service.call(envelope('execution.respond_action', 'work', dict(action_id=later['runtime_detail']['action_id'], response=dict(digest=digest(body), media_type='application/json')),
+                                          'answer-further-decline', revision=later['revision'], content=body.decode(), media_type='application/json'))
+                    wait(service, lambda v: v['runtime'] == 'exited', DEADLINE)
+                extra['approval']['item_completed'] = [e for e in service.events() if e['kind'] == 'item_completed']
+            else:
+                extra['approval'] = dict(requested=False, note='no native approval request arrived; this run does not prove deny/allow')
+        else:
+            wait(service, lambda v: v['runtime'] == 'exited', DEADLINE + 60)
+        invocations = None
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            invocations, _ = service.journal()
+            if invocations and invocations[0]['phase'] in ('completed', 'known_not_released'):
+                break
+            time.sleep(1)
+        result = receipt(service, run, spec, repo, base, started, extra)
+    finally:
+        for d in service.daemons:
+            service.stop(d)
+    usage = result['usage']['observed_total_tokens']
+    book['runs'][run] = dict(tokens=usage, basis='observed' if usage is not None else 'unknown', recorded_at_utc=result['recorded_at_utc'])
+    ledger_path().write_text(json.dumps(book, indent=2) + '\n')
+    result['usage']['cumulative_observed_tokens'] = cumulative(book)
+    out = ROOT / 'docs/work/m2/codex-live'
+    out.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(result, indent=2) + '\n'
+    for secret in (str(HOME), service.credential):
+        text = text.replace(secret, '$HOME' if secret == str(HOME) else '<credential redacted>')
+    (out / f'{run}.json').write_text(text)
+    print(text)
+    if usage is None:
+        raise SystemExit('stop: run ended without a usage report (unknown liability)')
+    return result
+
+
+def wrong_executable(args):
+    service = Service('wrong-executable', 'on-request', HOME / '.local/bin/opencode2')
+    daemon = service.start(expect_ready=False)
+    code = daemon.wait(timeout=120)
+    stderr = (service.private / 'daemon-0.stderr').read_text()
+    record = json.loads((service.store / 'qualification.json').read_text()) if (service.store / 'qualification.json').exists() else {}
+    result = dict(format='pio-m2-live-receipt/1', run='wrong-executable', live=True, model_calls=0, selected='$HOME/.local/bin/opencode2', service_exit=code,
+                  refused=('codex_not_qualified' in stderr), refusals=record.get('refusals'), socket_created=service.socket.exists())
+    out = ROOT / 'docs/work/m2/codex-live'
+    out.mkdir(parents=True, exist_ok=True)
+    (out / 'wrong-executable.json').write_text(json.dumps(result, indent=2).replace(str(HOME), '$HOME') + '\n')
+    print(json.dumps(result, indent=2))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--run', required=True, choices=[*RUNS, 'wrong-executable'])
+    parser.add_argument('--executable', type=Path, default=HOME / '.local/bin/codex')
+    args = parser.parse_args()
+    if args.run == 'wrong-executable':
+        wrong_executable(args)
+    else:
+        run_live(args.run, args)
+
+
+if __name__ == '__main__':
+    main()
