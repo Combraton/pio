@@ -1,0 +1,181 @@
+{
+  "cli_surface": {
+    "commands": [
+      "<top>",
+      "agents",
+      "auth",
+      "doctor",
+      "install",
+      "mcp",
+      "plugin",
+      "project"
+    ],
+    "digests": {
+      "<top>": "ae85d661e9c086f05637ebcd868f5702b477ff6e55e2e65b8ada7807cd51a4b6",
+      "agents": "4895bfe1bf2874fa7a3eaddd383e31d311b3cba9be58ac5c66e80c571dd60278",
+      "auth": "07245cbb719ae3b2d0fb0d4700338c41b7a5e7b3f21db70469e40b00f8f2abb0",
+      "doctor": "6975b99fb1910a7fbb1cf9977bbaeca33d9530cc59422788bbb2a200982955ea",
+      "install": "4dc358a42314bf21801781a0fe1d856ba5196a7aa59d48de63fd8e6632dd9505",
+      "mcp": "7119050de7984dc9d616f6b632fa3ee7fef92667eb5298ba57c73051e59cad46",
+      "plugin": "b0214cc3567a6eff8fc62215006a94043c8debaacc89c366d4e0ce8b70a0c5ab",
+      "project": "fa6e79173381d13045aacb1d41e46ed3f0aab4ac9db57ee3ef13f496ac429449"
+    },
+    "surface_listing_sha256": "0dd17ec774e837b830d0800697b0cad251f7c9fdf46c0ea95e1730181b9ff7c5",
+    "top_help_digests_over_3_runs": [
+      "ae85d661e9c086f05637ebcd868f5702b477ff6e55e2e65b8ada7807cd51a4b6"
+    ]
+  },
+  "configured_route": {
+    "account_identity_fields_dropped": [
+      "email",
+      "orgId",
+      "orgName"
+    ],
+    "exit": 0,
+    "observed": {
+      "apiProvider": "firstParty",
+      "authMethod": "claude.ai",
+      "loggedIn": true,
+      "subscriptionType": "max"
+    },
+    "parsed": true
+  },
+  "credentials_read": false,
+  "executable": {
+    "binary_sha256": "bd245662fb8a0e321b3bf133e930371d6563c387527885f30b2613aef3ba14d6",
+    "resolved": "/opt/homebrew/Caskroom/claude-code@latest/2.1.278/claude",
+    "resolved_path_carries_version": true,
+    "selected": "/opt/homebrew/bin/claude",
+    "version": "2.1.278 (Claude Code)"
+  },
+  "format": "pio-claude-offline-probe/1",
+  "missing_route_control": {
+    "account_identity_fields_dropped": [],
+    "exit": 1,
+    "observed": {
+      "apiProvider": "firstParty",
+      "authMethod": "none",
+      "loggedIn": false
+    },
+    "parsed": true
+  },
+  "model_calls": 0,
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "stream": {
+    "authentication_failure": {
+      "error": "authentication_failed",
+      "is_api_error_message": true
+    },
+    "brief_sha256": "b27d6b5a47800233b069297b17d87c244246c3babc973f6522cfbd2c1835e38b",
+    "exit": 1,
+    "init_facts": {
+      "apiKeySource": "none",
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "msg_lifecycle_v1"
+      ],
+      "claude_code_version": "2.1.278",
+      "model": "claude-opus-5[1m]",
+      "permissionMode": "acceptEdits"
+    },
+    "init_keys": [
+      "agents",
+      "analytics_disabled",
+      "apiKeySource",
+      "capabilities",
+      "claude_code_version",
+      "cwd",
+      "fast_mode_disabled_reason",
+      "fast_mode_state",
+      "mcp_servers",
+      "memory_paths",
+      "messaging_socket_path",
+      "model",
+      "output_style",
+      "permissionMode",
+      "plugins",
+      "product_feedback_disabled",
+      "session_id",
+      "skills",
+      "slash_commands",
+      "subtype",
+      "terminal_slash_commands",
+      "tools",
+      "type",
+      "uuid"
+    ],
+    "init_name_lists": {
+      "agents": 5,
+      "mcp_servers": 0,
+      "plugins": 0,
+      "skills": 17,
+      "slash_commands": 46,
+      "tools": 22
+    },
+    "is_error": true,
+    "message_sequence": [
+      "system/init",
+      "user",
+      "assistant",
+      "result/success"
+    ],
+    "model_usage": {},
+    "permission_denials": [],
+    "replay_acknowledged": true,
+    "replay_matches_sent": true,
+    "result_keys": [
+      "api_error_status",
+      "duration_api_ms",
+      "duration_ms",
+      "fast_mode_disabled_reason",
+      "fast_mode_state",
+      "is_error",
+      "modelUsage",
+      "num_turns",
+      "permission_denials",
+      "queued_turn_count",
+      "result",
+      "result_index",
+      "session_id",
+      "stop_reason",
+      "subagent_stats",
+      "subtype",
+      "terminal_reason",
+      "total_cost_usd",
+      "type",
+      "usage",
+      "uuid"
+    ],
+    "terminal_reason": "api_error",
+    "total_cost_usd": 0,
+    "transcript_sha256": "8a1a082123230968f841d199df70cf3e1d833eca0b9ec2309aa31e8f892fe3a6",
+    "usage_at_turn_end": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "inference_geo": "",
+      "input_tokens": 0,
+      "iterations": [],
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "server_tool_use": {
+        "web_fetch_requests": 0,
+        "web_search_requests": 0
+      },
+      "service_tier": "standard",
+      "speed": "standard"
+    }
+  },
+  "turn_completed": false,
+  "user_configuration_digests": {
+    ".claude.json": "99bed58618806d0e15d3f5e0e488a5a6d65dd868fe519ad9b15171d67d2ca1b0",
+    "settings.json": "3e6f8c8f1139169084db47fce90a3fdf8f7544bfe39ec460af692c32f7e96b1d"
+  },
+  "user_configuration_unchanged": true
+}
