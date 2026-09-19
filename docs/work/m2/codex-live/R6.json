@@ -1,0 +1,306 @@
+{
+  "format": "pio-m2-live-receipt/1",
+  "run": "R6",
+  "journeys": [
+    "approval-allow"
+  ],
+  "real_codex": true,
+  "live": true,
+  "recorded_at_utc": "2026-09-19T15:46:26Z",
+  "seconds": 52.4,
+  "pio": {
+    "head": "05608f5b3d5a97c781052e345dd31d199d99fa90",
+    "dirty": false,
+    "binary_sha256": "b37724f259211f86bf82029610a4032bb01d53f32d259c3c6dc248d7d97ed22f"
+  },
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "codex": {
+    "selected": "$HOME/.local/bin/codex",
+    "kind": "npm_node_wrapper",
+    "wrapper_sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+    "wrapper_package_version": "0.155.1",
+    "native_sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e",
+    "native_layout_version": "0.155.1",
+    "node": {
+      "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+      "version": "v22.23.0"
+    },
+    "version": {
+      "native": "0.155.1",
+      "selected": "0.155.1"
+    },
+    "canonical_schema_listing_sha256": "93b723a83b000bffb23a0d0f17dbdc0711f28a35bb000e97306ed004dd4119b8",
+    "schema_drift": 0,
+    "service_node_resolution": {
+      "matches_qualification": true,
+      "version": "v22.23.0"
+    }
+  },
+  "environment_passed": [
+    "HOME",
+    "LANG",
+    "PATH",
+    "USER"
+  ],
+  "credential_variables_passed": false,
+  "authentication_type": "chatgpt",
+  "model": {
+    "configured": "gpt-6-astra",
+    "requested": "gpt-5.6-terra",
+    "effective": "gpt-5.6-terra"
+  },
+  "model_provider": "openai",
+  "thread_settings": {
+    "requested": {
+      "approvalPolicy": "untrusted",
+      "model": "gpt-5.6-terra",
+      "sandbox": "workspace-write"
+    },
+    "configured": {
+      "approval_policy": {
+        "source": "absent_trusted_project_default",
+        "value": "on-request"
+      },
+      "sandbox_mode": {
+        "source": "absent_trusted_project_default",
+        "value": "workspace-write"
+      }
+    },
+    "guard_allowed": true,
+    "effective_sandbox": {
+      "excludeSlashTmp": false,
+      "excludeTmpdirEnvVar": false,
+      "networkAccess": false,
+      "type": "workspaceWrite",
+      "writableRoots": []
+    },
+    "effective_approval_policy": "untrusted"
+  },
+  "native": {
+    "thread_id": "01a0ba58-c766-7880-88ae-cc34d9e26fa9",
+    "turn_id": "01a0ba58-c842-7292-8fab-d44bcb3bff29",
+    "native_process": {
+      "identity": {
+        "pid": 18120,
+        "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832758:828910"
+      },
+      "interpreter": {
+        "applicable": true,
+        "path_matches_qualification": true
+      },
+      "path_matches_qualification": true,
+      "sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e"
+    }
+  },
+  "identities": {
+    "invocation_id": "3b40bda2-882a-442d-b26d-8f660130440a",
+    "host": {
+      "pid": 18042,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832733:835761"
+    },
+    "app_server_process": {
+      "pid": 18117,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832758:753830"
+    },
+    "host_slot": "b9616818-9500-44ea-951b-1df8359d38c4",
+    "controller_generation_at_admission": 1,
+    "host_generation_now": 1,
+    "phase": "completed"
+  },
+  "delivery": {
+    "delivery": "acknowledged",
+    "delivery_id": "work.delivery-1",
+    "determined_at": "2026-09-19T15:46:15Z",
+    "evidence": {
+      "class": "native_turn_acknowledged",
+      "source": "codex-app-server/host"
+    },
+    "history": [
+      {
+        "delivery": "pending",
+        "recorded_at": "2026-09-19T15:46:15Z"
+      }
+    ],
+    "proof_class": "provider_ack_id"
+  },
+  "runtime": "exited",
+  "exit": {
+    "code": 0
+  },
+  "cancellation": null,
+  "actions": [
+    {
+      "action_id": "work.action-1",
+      "answered_at": "2026-09-19T15:46:23Z",
+      "owner": "codex",
+      "requested_at": "2026-09-19T15:46:22Z",
+      "response_effect": "work.response-1",
+      "state": "answered"
+    }
+  ],
+  "steering": null,
+  "deadline_stop": null,
+  "timeouts": {
+    "delivery": 120,
+    "execution_deadline": 600
+  },
+  "timeouts_passed": [],
+  "turn_status": "completed",
+  "turn_error": null,
+  "output": {
+    "bytes": 8327,
+    "sha256": "487f34234511e32ad025925ebf55db27e33e559886fda5b5c080fff3df8f016f",
+    "receipt_output_digest": "sha256:487f34234511e32ad025925ebf55db27e33e559886fda5b5c080fff3df8f016f",
+    "agent_text_sha256": "f1372d2d8de776c92caa9f3e179b0ab544f9be1a73001b0e47105c4842aa0a8d"
+  },
+  "usage": {
+    "observed_total_tokens": 44023,
+    "observation": {
+      "liability": "resolved",
+      "observations": [
+        {
+          "amount": 44023,
+          "basis": "observed",
+          "invocation_id": "3b40bda2-882a-442d-b26d-8f660130440a",
+          "measure": "codex.tokens.total",
+          "recorded_at": "2026-09-19T15:46:25Z"
+        }
+      ]
+    },
+    "cap": 1000000,
+    "stop_at": 800000,
+    "run_limit": 250000,
+    "cumulative_observed_tokens": 421450
+  },
+  "config_diff": {
+    "existed_before": true,
+    "exists_after": true,
+    "format": "pio-codex-config-diff/1",
+    "other_changes": false,
+    "projects_added": [
+      {
+        "location": "fixture",
+        "path_sha256": "3627bddfebfaffc28513ddf3df58e421f594fcc7619327b88446638165e26c26",
+        "trust_level": "trusted"
+      }
+    ],
+    "projects_changed": [],
+    "projects_removed": [],
+    "raw_sha256": {
+      "after": "28b202a290126bc4b375dd182ca948035bd707a095fec8a359a7596af910f757",
+      "before": "c81833cda5552837c5e6a0f7355793ea2dc3bfaa75ba4b3caf2c9f1667d96b2e"
+    },
+    "unchanged": false
+  },
+  "config_before_sha256": "c81833cda5552837c5e6a0f7355793ea2dc3bfaa75ba4b3caf2c9f1667d96b2e",
+  "fixture": {
+    "path": "$HOME/pio-m2-live/fixtures/r6-allow",
+    "base": "6843118478eca579694d6e3118de31223cb5b2d9",
+    "brief_sha256": "2ef2e9fb2c05b8ea76cb9407af0781aa2c72a7104c7888d96b891a26c1d3b80d",
+    "diff_stat": "",
+    "status_porcelain_lines": 1,
+    "unittest_exit_after_run": 1
+  },
+  "event_kinds": [
+    "config_before",
+    "thread_settings_guard",
+    "spawned",
+    "account",
+    "thread_started",
+    "turn_start_sent",
+    "turn_acknowledged",
+    "turn_started",
+    "item_completed",
+    "item_completed",
+    "item_completed",
+    "action_requested",
+    "control_applied",
+    "request_resolved",
+    "item_completed",
+    "usage",
+    "item_completed",
+    "usage",
+    "turn_completed",
+    "app_server_exited",
+    "config_after"
+  ],
+  "public_transcript_schema_check": {
+    "exit": 0,
+    "summary": "177 schema-valid public results"
+  },
+  "independent_services": {
+    "cbr_processes": 0,
+    "combraton_processes": 0,
+    "context_calls": "none: PIO has no Context client in this build"
+  },
+  "submit": {
+    "admission": "admitted",
+    "error": null
+  },
+  "approval": {
+    "action_id": "work.action-1",
+    "decision": "accept",
+    "answer": {
+      "action_id": "work.action-1",
+      "response_effect": "work.response-1",
+      "state": "answered"
+    },
+    "answer_error": null,
+    "request": {
+      "action_seq": 1,
+      "approval_kind": "command",
+      "command": "/bin/zsh -lc 'python3 -m unittest -q'",
+      "cwd_digest": "3627bddfebfaffc28513ddf3df58e421f594fcc7619327b88446638165e26c26",
+      "item_id": "exec-2da53cc9-081c-4c64-b65d-75297c0ce261",
+      "kind": "action_requested",
+      "method": "item/commandExecution/requestApproval",
+      "observed_at_unix_ms": 1789832782977,
+      "reason": null,
+      "request_id": 0,
+      "source": "codex-app-server",
+      "turn_id": "01a0ba58-c842-7292-8fab-d44bcb3bff29"
+    },
+    "item_completed": [
+      {
+        "item_id": "01a0ba58-d5df-7101-b6c1-702d22e7a58a",
+        "item_type": "userMessage",
+        "kind": "item_completed",
+        "observed_at_unix_ms": 1789832779250,
+        "source": "codex-app-server",
+        "status": null
+      },
+      {
+        "item_id": "rs_0c7d8e85fc25e053016aaeae4cb6b887d0abba2d4a8a1522ee",
+        "item_type": "reasoning",
+        "kind": "item_completed",
+        "observed_at_unix_ms": 1789832781321,
+        "source": "codex-app-server",
+        "status": null
+      },
+      {
+        "item_id": "msg_0c7d8e85fc25e053016aaeae4d433c87d0a75d2e088b57ac03",
+        "item_type": "agentMessage",
+        "kind": "item_completed",
+        "observed_at_unix_ms": 1789832781692,
+        "source": "codex-app-server",
+        "status": null
+      },
+      {
+        "item_id": "exec-2da53cc9-081c-4c64-b65d-75297c0ce261",
+        "item_type": "commandExecution",
+        "kind": "item_completed",
+        "observed_at_unix_ms": 1789832784037,
+        "source": "codex-app-server",
+        "status": "failed"
+      },
+      {
+        "item_id": "msg_0c7d8e85fc25e053016aaeae51385c87d0a2cb3dd0895bba13",
+        "item_type": "agentMessage",
+        "kind": "item_completed",
+        "observed_at_unix_ms": 1789832785669,
+        "source": "codex-app-server",
+        "status": null
+      }
+    ]
+  }
+}
