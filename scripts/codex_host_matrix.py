@@ -26,7 +26,8 @@ BINARY = ROOT / 'target/debug/pio'
 CONTENT = 'pio.combraton.dev/content'
 FEATURES = ['execution.controller', 'execution.output', 'execution.discovery', 'execution.workspaces', 'execution.usage', 'execution.actions', 'execution.steering']
 CASES = ['j1_turn_completes', 'approval_decline', 'approval_accept', 'interrupt_cancels_turn', 'steer_acknowledged', 'suppressed_ack_negative_control',
-         'missing_content_refused', 'content_digest_mismatch', 'outside_fixture_refused', 'unqualified_executable_refused', 'restart_reattach_no_duplicate', 'host_lost_no_respawn', 'discovery_reports_observed_authentication']
+         'missing_content_refused', 'content_digest_mismatch', 'outside_fixture_refused', 'unqualified_executable_refused', 'restart_reattach_no_duplicate', 'host_lost_no_respawn', 'discovery_reports_observed_authentication',
+         'widening_decisions_refused', 'deadline_stop_interrupts', 'thread_settings_broader_refused']
 
 
 def poll(action, predicate, seconds=20):
@@ -118,10 +119,12 @@ class Case:
         run('-c', 'user.email=pio@example.invalid', '-c', 'user.name=pio', 'commit', '-q', '-m', 'fixture')
         return repo, run('rev-parse', 'HEAD').stdout.strip()
 
-    def submit(self, identity='work', brief=b'Fixture task: reply with one line.', content=True, repository=None, tamper=False):
+    def submit(self, identity='work', brief=b'Fixture task: reply with one line.', content=True, repository=None, tamper=False, deadline=600):
         repo, base = self.fixture(identity) if repository is None else (repository, 'unused')
+        # Live submits carry a 2 minute delivery timeout and 10 minute deadline.
         payload = dict(brief=dict(digest=digest(brief), media_type='text/plain'),
-                       workspace=dict(repository=str(repo), base=base, cleanup='retain'))
+                       workspace=dict(repository=str(repo), base=base, cleanup='retain'),
+                       timeouts=dict(delivery=120, execution_deadline=deadline))
         envelope = command('execution.submit', dict(kind='execution.execution', id=identity), payload, command_id=identity)
         if content:
             text = brief.decode() + (' tampered' if tamper else '')
@@ -200,6 +203,8 @@ def run_case(out, name):
         suppressed_ack_negative_control={'ack_turn': False, 'delay_ms': 300},
         restart_reattach_no_duplicate={'delay_ms': 4000},
         host_lost_no_respawn={'delay_ms': 60000},
+        widening_decisions_refused={'approval': 'command', 'delay_ms': 100},
+        deadline_stop_interrupts={'delay_ms': 60000},
     ).get(name, {'delay_ms': 100})
     case = Case(out, name, scenario, fake=(name != 'unqualified_executable_refused'))
     try:
@@ -241,8 +246,19 @@ def run_case(out, name):
             assert case.markers_records() == []
             return dict(outcome='pass', refusal=data, spawn_markers=0)
 
+        if name == 'thread_settings_broader_refused':
+            (case.codex_home / 'config.toml').write_text('sandbox_mode = "read-only"\n')
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = poll(lambda: case.inspect()['result'], lambda v: v['delivery'] == 'failed_before_delivery')
+            invocations = poll(lambda: case.journal()[1], lambda i: i and i[0]['phase'] == 'known_not_released')
+            guard = events_of(case, 'thread_settings_guard')[0]['guard']
+            assert guard['allowed'] is False and guard['broader_than_configured'] == [{'setting': 'sandbox_mode', 'requested': 'workspace-write', 'configured': 'read-only'}], guard
+            assert case.markers_records() == [] and events_of(case, 'spawned') == [], 'refused before any app-server starts'
+            assert 'thread_settings_refused' in invocations[0]['receipt']['reason']
+            return dict(outcome='pass', guard=guard, delivery=final['delivery'], app_server_spawned=False)
         brief = b'Fixture task: reply with one line.'
-        response, repo = case.submit(brief=brief)
+        response, repo = case.submit(brief=brief, deadline=3 if name == 'deadline_stop_interrupts' else 600)
         assert response['result']['outcome']['admission'] == 'admitted', response
         if name == 'restart_reattach_no_duplicate':
             view = poll(lambda: case.inspect()['result'], lambda v: v['delivery'] == 'acknowledged')
@@ -277,6 +293,43 @@ def run_case(out, name):
             assert view['delivery'] == 'acknowledged' and view['exit'] == 'unavailable', view
             assert case.app_server_processes() == []
             return dict(outcome='pass', runtime=view['runtime'], delivery=view['delivery'], spawn_markers=1, turn_received=1, recovery=view['recovery'], respawned=False)
+        if name == 'widening_decisions_refused':
+            waiting = poll(lambda: case.inspect()['result'], lambda v: v['runtime'] == 'requires_action')
+            action = waiting['runtime_detail']['action_id']
+            refused = []
+            for n, decision in enumerate(['acceptForSession', {'acceptWithExecpolicyAmendment': {'execpolicy_amendment': ['echo', 'fixture']}},
+                                          {'applyNetworkPolicyAmendment': {'network_policy_amendment': {'host': 'example.com', 'action': 'allow'}}}]):
+                body = json.dumps({'decision': decision}).encode()
+                answer = case.execution_command('execution.respond_action', 'work', dict(action_id=action, response=dict(digest=digest(body), media_type='application/json')), f'widen-{n}', body, 'application/json')
+                data = answer['error']['data']
+                assert data['code'] == 'invalid_envelope' and data['details']['path'] == '/payload/response', answer
+                refused.append(dict(decision=decision, code=data['code']))
+            time.sleep(0.5)
+            assert not list(case.store.glob('codex-*.controls.jsonl')), 'no control reached the host'
+            assert [m for m in case.markers_records() if m['kind'] == 'approval_answered'] == []
+            assert case.inspect()['result']['actions'][0]['state'] == 'pending'
+            body = json.dumps({'decision': 'decline'}).encode()
+            case.execution_command('execution.respond_action', 'work', dict(action_id=action, response=dict(digest=digest(body), media_type='application/json')), 'decline', body, 'application/json')
+            exited(case)
+            answers = [m['decision'] for m in case.markers_records() if m['kind'] == 'approval_answered']
+            assert answers == ['decline'], answers
+            return dict(outcome='pass', refused=refused, native_answers=answers)
+        if name == 'deadline_stop_interrupts':
+            final = exited(case, seconds=60)
+            sent = [e for e in events_of(case, 'control_sent') if e['control_id'].endswith('.deadline-stop')]
+            responses = [e for e in events_of(case, 'control_response') if e['control_id'].endswith('.deadline-stop')]
+            assert len(sent) == 1 and sent[0]['method'] == 'turn/interrupt' and responses and responses[0]['error'] is None, (sent, responses)
+            assert [e['status'] for e in events_of(case, 'turn_completed')] == ['interrupted']
+            assert [e['code'] for e in events_of(case, 'app_server_exited')] == [0], 'app-server exited cleanly, not killed'
+            assert 'cancellation' not in final and final['exit'] == {'code': 0}, final
+            invocations = poll(lambda: case.journal()[1], lambda i: i and i[0]['phase'] == 'completed')
+            with sqlite3.connect(f'file:{case.store}/journal.sqlite3?mode=ro', uri=True) as db:
+                record = json.loads(db.execute("select value from protocol_projection where key='execution/work'").fetchone()[0])
+            stop = record['codex']['deadline_stop']
+            assert stop['request'] == 'turn_interrupt_acknowledged' and stop['outcome'] == 'interrupted', stop
+            assert 'execution_deadline' in record['timeouts_passed']
+            assert invocations[0]['receipt']['turn_status'] == 'interrupted'
+            return dict(outcome='pass', deadline_stop=stop, turn_status='interrupted', app_server_exit=0, host_killed=False)
         if name == 'suppressed_ack_negative_control':
             final = exited(case)
             delivery = final['deliveries'][0]
