@@ -127,7 +127,7 @@ Cargo tests (with labeled fake executables, so CI needs no Codex) cover canonica
 
 `target/debug/pio serve-codex --data-dir DIR --config FILE --socket PATH` serves the public Unix API with the ADR 003 Codex adapter. A `pio-codex-service/1` configuration names the selected executable, its explicit environment, the Codex home, the fixture root, and optional thread settings (`danger-full-access` and approval policy `never` are refused). For a real executable, startup qualifies it and refuses with `codex_not_qualified` before any native work. `labeled_fake: true` runs the labeled test double `pio codex fake-app-server` instead; its evidence is labeled `pio-fake-app-server`, and discovery reports it as not Codex and never usable.
 
-`python3 scripts/codex_host_matrix.py --out target/codex-host --repetitions 3` runs 13 cases × 3 (39 attempts) against the fake app-server, with independent markers written by the fake, read-only journal and host events, and the process table:
+`python3 scripts/codex_host_matrix.py --out target/codex-host --repetitions 3` runs 16 cases × 3 (48 attempts) against the fake app-server, with independent markers written by the fake, read-only journal and host events, and the process table:
 
 - a J1-shaped turn: `provider_ack_id` delivery from the `turn/start` response, spooled output, observed token usage, exit 0, fixture trust-entry disclosure, and brief bytes kept out of the journal;
 - approval decline and accept delivered natively, with a repeat answer `not_found`;
@@ -138,6 +138,11 @@ Cargo tests (with labeled fake executables, so CI needs no Codex) cover canonica
 - an unqualified executable refused at service start;
 - daemon restart with the same host and app-server, one turn and an advanced generation;
 - a lost host after acknowledgment reported `unknown` with no respawn;
-- discovery reporting authentication only after a launch observed it.
+- discovery reporting authentication only after a launch observed it;
+- widening approval decisions (`acceptForSession`, execpolicy and network-policy amendments) refused as `invalid_envelope`, with no control or native answer;
+- a 3-second execution deadline stopping the turn with a real `turn/interrupt`, recorded `deadline_stop` outcome `interrupted` and a clean app-server exit;
+- a configured `read-only` sandbox making a `workspace-write` request refuse before any app-server starts.
+
+Every matrix submit carries the live timeouts (`delivery` 120 s, `execution_deadline` 600 s) unless a case tests the deadline.
 
 The matrix proves adapter plumbing only. It runs no real Codex, uses no model and establishes no journey.

@@ -833,3 +833,82 @@ fn admission_headroom_refuses_new_submit_while_admitted_work_completes() {
         true
     );
 }
+
+#[test]
+fn codex_widening_approval_decisions_are_invalid_and_never_reach_the_host() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("store");
+    std::fs::create_dir(&store).unwrap();
+    std::fs::set_permissions(&store, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+    let host = json!({"adapter":"codex","labeled_fake":true,"executable":"/bin/false","env":{"PATH":"/usr/bin:/bin"},"codex_home":root.path().join("home"),"fixture_root":root.path().join("fixtures"),"thread":{"sandbox":"workspace-write","approvalPolicy":"on-request"},"qualification_binding":null});
+    let mut cfg = config();
+    cfg["executor"] = json!({"host_id":"codex-host"});
+    let mut p = Provider::with_host(&store, cfg, Some(host)).unwrap();
+    let mut s = session();
+    s.selected.as_mut().unwrap().insert(
+        "execution".into(),
+        crate::codex::FEATURES
+            .iter()
+            .map(|f| f.to_string())
+            .collect(),
+    );
+    // Internal store test only: an execution with one pending native action.
+    // Admission is not `admitted`, so no tick launches a host process here.
+    let action = "e.action-1";
+    let e = json!({"source":pio_codex::fake::SOURCE,"principal":"owner","submit":{},"view":{"execution":{"kind":"execution.execution","id":"e"},"revision":3,"admission":"refused","delivery":"pending","runtime":"requires_action","runtime_detail":{"action_id":action,"owner":"codex"},"actions":[{"action_id":action,"owner":"codex","state":"pending","requested_at":"2026-01-01T00:00:00Z"}],"effects":[],"host":{"id":"codex-host","generation":1}},"codex_actions":{action:{"seq":1,"method":"item/commandExecution/requestApproval","request_id":"r1"}}});
+    p.update_execution(&e);
+    p.save().unwrap();
+    let journal = p.store.journal().unwrap();
+    let respond = |decision: Value, id: &str| {
+        let bytes = serde_json::to_vec(&json!({ "decision": decision })).unwrap();
+        let mut c = command(
+            "execution.respond_action",
+            json!({"kind":"execution.execution","id":"e"}),
+            3,
+            json!({"action_id":action,"response":{"digest":pio_core::digest(&bytes),"media_type":"application/json"}}),
+        );
+        c["command_id"] = id.into();
+        c["extensions"] = json!({(crate::codex::CONTENT_EXTENSION):{"media_type":"application/json","text":String::from_utf8(bytes).unwrap()}});
+        c
+    };
+    for (n, decision) in [
+        json!("acceptForSession"),
+        json!({"acceptWithExecpolicyAmendment":{"execpolicy_amendment":["echo","fixture"]}}),
+        json!({"applyNetworkPolicyAmendment":{"network_policy_amendment":{"host":"example.com","action":"allow"}}}),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let error = p
+            .handle(&mut s, "execution.respond_action", &respond(decision.clone(), &format!("widen-{n}")))
+            .unwrap_err();
+        assert_eq!(error.code, "invalid_envelope", "{decision}");
+        assert_eq!(error.details["path"], "/payload/response", "{decision}");
+        assert_eq!(p.store.journal().unwrap(), journal, "nothing committed for {decision}");
+        let stored = &p.data.executions["e"];
+        assert!(stored.get("codex_controls").is_none() && stored["response_count"].is_null());
+        assert_eq!(stored["view"]["actions"][0]["state"], "pending");
+        assert!(!p.data.effects.keys().any(|k| k.contains("response")));
+    }
+    assert!(
+        std::fs::read_dir(&store).unwrap().all(|f| !f
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".controls.jsonl")),
+        "no control ever reaches a host"
+    );
+    // Positive control: a plain decline is answered and queued for the host.
+    let answered = p
+        .handle(
+            &mut s,
+            "execution.respond_action",
+            &respond(json!("decline"), "decline"),
+        )
+        .unwrap();
+    assert_eq!(answered["outcome"]["state"], "answered");
+    assert_eq!(
+        p.data.executions["e"]["codex_controls"][0]["decision"],
+        "decline"
+    );
+}

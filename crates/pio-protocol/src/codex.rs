@@ -402,6 +402,22 @@ impl Provider {
             controls_changed = true;
         }
         let _ = controls_changed;
+        // Owner correction 3: the execution deadline stops work with a real
+        // turn/interrupt whose response and turn outcome are recorded. The host
+        // is never killed for it.
+        if list(&e["timeouts_passed"]).contains(&json!("execution_deadline"))
+            && e["view"]["runtime"] != "exited"
+            && e["codex"]["deadline_stop"].is_null()
+        {
+            let control = format!("{id}.deadline-stop");
+            append_control(
+                &root,
+                &invocation,
+                &json!({"id":control,"kind":"interrupt"}),
+            )?;
+            e["codex"]["deadline_stop"] =
+                json!({"control_id":control,"requested_at":self.now,"request":"appended_for_host"});
+        }
 
         let (events, offset) = read_jsonl(
             &events_path(&root, &invocation),
@@ -519,6 +535,30 @@ impl Provider {
                     None,
                 );
             }
+            "thread_settings_guard" => {
+                e["codex"]["thread_settings"] = event["guard"].clone();
+            }
+            "control_sent" | "control_response" | "control_rejected"
+                if e["codex"]["deadline_stop"]["control_id"] == event["control_id"] =>
+            {
+                let stop = &mut e["codex"]["deadline_stop"];
+                match text(&event["kind"]) {
+                    "control_sent" => stop["request"] = "turn_interrupt_sent".into(),
+                    "control_response" => {
+                        stop["request"] = if event["error"].is_null() {
+                            "turn_interrupt_acknowledged"
+                        } else {
+                            "turn_interrupt_refused"
+                        }
+                        .into();
+                        stop["response_error"] = event["error"].clone();
+                    }
+                    _ => {
+                        stop["request"] = "rejected_by_host".into();
+                        stop["reason"] = event["reason"].clone();
+                    }
+                }
+            }
             "control_applied" => {
                 let control = text(&event["control_id"]).to_owned();
                 self.codex_observe_effect(&control, "pending", "native_response_written", false);
@@ -607,6 +647,12 @@ impl Provider {
             "turn_completed" => {
                 let status = text(&event["status"]).to_owned();
                 e["codex"]["turn_status"] = status.clone().into();
+                if e["codex"]["deadline_stop"].is_object()
+                    && e["codex"]["deadline_stop"]["outcome"].is_null()
+                {
+                    e["codex"]["deadline_stop"]["outcome"] = status.clone().into();
+                    e["codex"]["deadline_stop"]["observed_at"] = self.now.clone().into();
+                }
                 if let Some(cancel) = e["pending_cancel"].as_str().map(str::to_owned)
                     && e["view"]["cancellation"].get("outcome").is_none()
                 {

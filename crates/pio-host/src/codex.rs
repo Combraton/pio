@@ -140,6 +140,28 @@ fn verify_native(spec: &Value, spawned: u32) -> Result<Value> {
     }
 }
 
+/// For the npm wrapper, the launched process becomes the Node interpreter
+/// that `#!/usr/bin/env node` found on the host PATH. It must be the Node the
+/// service qualified.
+fn verify_interpreter(spec: &Value, spawned: u32) -> Result<Value> {
+    let Some(expected) = spec["qualification"]["node_path"].as_str() else {
+        return Ok(json!({"applicable":false}));
+    };
+    let expected = std::fs::canonicalize(expected)?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let observed = executable_path(spawned).and_then(|p| std::fs::canonicalize(p).ok());
+        if observed.as_deref() == Some(expected.as_path()) {
+            return Ok(json!({"applicable":true,"path_matches_qualification":true}));
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "interpreter_mismatch: launched process runs {observed:?}, not the qualified Node"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
 fn recheck_executable(spec: &Value) -> Result<()> {
     let qualification = &spec["qualification"];
     let path = spec["env"]["PATH"].as_str().map(std::ffi::OsStr::new);
@@ -204,6 +226,21 @@ pub fn codex_host(root: &Path, command: &str, invocation_id: &str) -> Result<()>
             &spec,
             json!({"kind":"config_before","snapshot":before}),
         )?;
+        // Owner guard: never request thread settings broader than the user's
+        // configured default. Refused before the app-server is started.
+        let guard = pio_codex::thread_settings_guard(&before, &spec["thread"]);
+        event(
+            &root,
+            &invocation,
+            &spec,
+            json!({"kind":"thread_settings_guard","guard":guard}),
+        )?;
+        ensure!(
+            guard["allowed"] == true,
+            "thread_settings_refused: requested {} is broader than or not comparable with the configured default {}",
+            guard["requested"],
+            json!({"configured":guard["configured"],"broader":guard["broader_than_configured"],"unresolved":guard["unresolved"]})
+        );
         let env: Vec<(String, String)> = spec["env"]
             .as_object()
             .context("env")?
@@ -223,7 +260,9 @@ pub fn codex_host(root: &Path, command: &str, invocation_id: &str) -> Result<()>
         let spawned = app.child.id();
         let child_identity = identity(spawned)?;
         let native = if spec["qualification"].is_object() {
-            verify_native(&spec, spawned)?
+            let mut native = verify_native(&spec, spawned)?;
+            native["interpreter"] = verify_interpreter(&spec, spawned)?;
+            native
         } else {
             json!({"verified":false,"reason":"labeled fake app-server has no qualification record"})
         };

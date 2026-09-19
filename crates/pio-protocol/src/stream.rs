@@ -100,7 +100,47 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
         record["refusals"]
     );
     let resolution = &record["resolution"];
+    // Owner correction 4: the Node the service PATH actually resolves, observed
+    // by running `/usr/bin/env node` with exactly that PATH, must be the Node
+    // that was qualified.
+    let node_resolution = if resolution["kind"] == "npm_node_wrapper" {
+        let output = std::process::Command::new("/usr/bin/env")
+            .env_clear()
+            .envs(
+                env.iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str().unwrap_or_default())),
+            )
+            .args(["node", "-e", "process.stdout.write(process.execPath)"])
+            .output()?;
+        anyhow::ensure!(
+            output.status.success(),
+            "service PATH does not resolve node"
+        );
+        let observed = std::fs::canonicalize(String::from_utf8_lossy(&output.stdout).as_ref())?;
+        let qualified = std::fs::canonicalize(
+            resolution["node"]["path"]
+                .as_str()
+                .context("qualified node path")?,
+        )?;
+        let sha = pio_codex::sha256_file(&observed)?;
+        let matches =
+            observed == qualified && Some(sha.as_str()) == resolution["node"]["sha256"].as_str();
+        let record = json!({"applicable":true,"service_path_exec_path":observed,"qualified_node_path":qualified,"sha256":sha,"version":resolution["node"]["version"],"matches_qualification":matches});
+        anyhow::ensure!(matches, "service_node_mismatch: {record}");
+        record
+    } else {
+        json!({"applicable":false,"reason":"selected executable is native"})
+    };
+    let mut record = record;
+    record["service_node_resolution"] = node_resolution;
+    std::fs::write(
+        root.join("qualification.json"),
+        serde_json::to_vec_pretty(&record)?,
+    )?;
+    let resolution = &record["resolution"];
     host["qualification_binding"] = json!({
+        "node_path":resolution["node"]["path"],
+        "service_node_resolution":record["service_node_resolution"],
         "native_path":resolution["native"]["path"],
         "native_sha256":resolution["native"]["sha256"],
         "wrapper_sha256":resolution["wrapper"]["sha256"],

@@ -337,3 +337,70 @@ fn config_diff_discloses_added_trust_entries_and_other_changes() {
     assert_eq!(diff["projects_added"], json!([]));
     assert_eq!(config_diff(&later, &later, None)["unchanged"], true);
 }
+
+fn guard_for(config: Option<&str>, requested: Value) -> Value {
+    let dir = tempfile::tempdir().unwrap();
+    if let Some(config) = config {
+        write(&dir.path().join("config.toml"), config);
+    }
+    thread_settings_guard(&config_snapshot(dir.path()).unwrap(), &requested)
+}
+
+#[test]
+fn thread_settings_guard_refuses_broader_than_configured_defaults() {
+    let plan = json!({"sandbox":"workspace-write","approvalPolicy":"on-request"});
+    // Absent settings are the trusted-project defaults, so the plan is equal.
+    let absent = guard_for(None, plan.clone());
+    assert_eq!(absent["allowed"], true, "{absent:#}");
+    assert_eq!(
+        absent["configured"]["sandbox_mode"],
+        json!({"value":"workspace-write","source":"absent_trusted_project_default"})
+    );
+    assert_eq!(
+        guard_for(Some("model = \"x\"\n"), plan.clone())["allowed"],
+        true
+    );
+    // Narrower requests are always allowed.
+    let untrusted = json!({"sandbox":"read-only","approvalPolicy":"untrusted"});
+    assert_eq!(guard_for(None, untrusted.clone())["allowed"], true);
+    // Broader than an explicit stricter default is refused, naming the setting.
+    let strict = guard_for(
+        Some("sandbox_mode = \"read-only\"\napproval_policy = \"untrusted\"\n"),
+        plan.clone(),
+    );
+    assert_eq!(strict["allowed"], false);
+    assert_eq!(
+        strict["broader_than_configured"],
+        json!([
+            {"setting":"sandbox_mode","requested":"workspace-write","configured":"read-only"},
+            {"setting":"approval_policy","requested":"on-request","configured":"untrusted"}
+        ])
+    );
+    assert_eq!(
+        guard_for(Some("sandbox_mode = \"read-only\"\n"), untrusted)["allowed"],
+        true
+    );
+    // Keys inside tables are not top-level defaults.
+    assert_eq!(
+        guard_for(
+            Some("[projects.\"/x\"]\nsandbox_mode = \"read-only\"\n"),
+            plan.clone()
+        )["allowed"],
+        true
+    );
+    // Anything the guard cannot resolve refuses.
+    for config in [
+        "profile = \"work\"\n",
+        "default_permissions = \"strict\"\n",
+        "[permissions.strict]\n",
+        "approval_policy = { granular = { rules = true } }\n",
+        "approval_policy = \"on-failure\"\n",
+    ] {
+        let guard = guard_for(Some(config), plan.clone());
+        assert_eq!(guard["allowed"], false, "{config}");
+        assert!(
+            !guard["unresolved"].as_array().unwrap().is_empty(),
+            "{config}"
+        );
+    }
+}

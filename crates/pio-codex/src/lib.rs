@@ -171,10 +171,15 @@ fn platform_package(triple: &str) -> &'static str {
     }
 }
 
+/// First executable regular file named `program` on `path`, as `execvp` finds it.
 fn find_on_path(program: &str, path: Option<&OsStr>) -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
     std::env::split_paths(path?)
         .map(|dir| dir.join(program))
-        .find(|candidate| candidate.is_file())
+        .find(|candidate| {
+            std::fs::metadata(candidate)
+                .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+        })
 }
 
 /// Resolve what the selected executable runs, mirroring the pinned npm
@@ -446,6 +451,114 @@ fn project_tables(text: &str) -> (BTreeMap<String, Option<String>>, String) {
     (projects, other)
 }
 
+/// Top-level settings that decide the thread defaults at 0.146.0. Values are
+/// the raw right-hand side; `tables` lists `[permissions…]` headers and
+/// whether any table was seen before a key (keys after a header belong to it).
+fn top_level_settings(text: &str) -> Value {
+    let mut keys = serde_json::Map::new();
+    let mut permission_tables = false;
+    let mut in_table = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_table = true;
+            if trimmed.starts_with("[permissions") {
+                permission_tables = true;
+            }
+            continue;
+        }
+        if in_table || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = trimmed.split_once('=') {
+            let key = key.trim();
+            if matches!(
+                key,
+                "sandbox_mode" | "approval_policy" | "default_permissions" | "profile"
+            ) {
+                let value = value.trim();
+                let parsed = toml_basic_string(value)
+                    .filter(|(_, rest)| rest.trim().is_empty() || rest.trim().starts_with('#'))
+                    .map(|(v, _)| json!(v))
+                    .unwrap_or_else(|| json!({"unparsed":value}));
+                keys.insert(key.to_owned(), parsed);
+            }
+        }
+    }
+    json!({"keys":keys,"permission_tables":permission_tables})
+}
+
+const SANDBOX_ORDER: &[&str] = &["read-only", "workspace-write", "danger-full-access"];
+/// Fewer approval prompts is broader. `untrusted` asks most; `never` never asks.
+const APPROVAL_ORDER: &[&str] = &["untrusted", "on-request", "never"];
+
+/// Refuse requested thread settings broader than the user's configured default
+/// (owner guard, 2026-09-17). An absent setting is Codex 0.146.0's default for a
+/// trusted project: `workspace-write` and `on-request`
+/// (`ConfigToml::derive_permission_profile` and the approval default in
+/// `core/src/config/mod.rs` at `e363b08`). Settings this scan cannot resolve —
+/// a legacy `profile`, named `default_permissions`, `[permissions]` tables, or
+/// a non-string or unknown value — refuse rather than guess.
+pub fn thread_settings_guard(snapshot: &Value, requested: &Value) -> Value {
+    let settings = &snapshot["settings"];
+    let mut unresolved = Vec::new();
+    for key in ["profile", "default_permissions"] {
+        if settings["keys"].get(key).is_some() {
+            unresolved.push(json!({"setting":key,"reason":"changes defaults in ways this guard does not evaluate"}));
+        }
+    }
+    if settings["permission_tables"] == true {
+        unresolved.push(
+            json!({"setting":"permissions","reason":"named permission profiles are not evaluated"}),
+        );
+    }
+    let mut configured = serde_json::Map::new();
+    let mut broader = Vec::new();
+    for (key, request_key, default, order) in [
+        ("sandbox_mode", "sandbox", "workspace-write", SANDBOX_ORDER),
+        (
+            "approval_policy",
+            "approvalPolicy",
+            "on-request",
+            APPROVAL_ORDER,
+        ),
+    ] {
+        let (value, source) = match settings["keys"].get(key) {
+            Some(Value::String(value)) => (value.clone(), "configured"),
+            Some(other) => {
+                unresolved.push(json!({"setting":key,"reason":"not a plain string","value":other}));
+                continue;
+            }
+            None => (default.to_owned(), "absent_trusted_project_default"),
+        };
+        let Some(configured_rank) = order.iter().position(|v| *v == value) else {
+            unresolved.push(json!({"setting":key,"reason":"unknown value","value":value}));
+            continue;
+        };
+        configured.insert(key.to_owned(), json!({"value":value,"source":source}));
+        if let Some(request) = requested.get(request_key).and_then(Value::as_str) {
+            match order.iter().position(|v| *v == request) {
+                Some(rank) if rank <= configured_rank => {}
+                Some(_) => {
+                    broader.push(json!({"setting":key,"requested":request,"configured":value}))
+                }
+                None => unresolved.push(
+                    json!({"setting":key,"reason":"unknown requested value","value":request}),
+                ),
+            }
+        }
+    }
+    json!({
+        "format":"pio-codex-thread-settings-guard/1",
+        "config_exists":snapshot["exists"],
+        "configured":configured,
+        "requested":requested,
+        "unresolved":unresolved,
+        "broader_than_configured":broader,
+        "allowed":unresolved.is_empty() && broader.is_empty(),
+    })
+}
+
 /// Snapshot of `$CODEX_HOME/config.toml` for before/after disclosure. The
 /// returned record holds digests and project trust entries; callers keep any
 /// raw copy outside Git.
@@ -461,6 +574,7 @@ pub fn config_snapshot(codex_home: &Path) -> Result<Value> {
             "bytes":0,
             "projects":{},
             "outside_projects_sha256":sha256_hex(b""),
+            "settings":top_level_settings(""),
         }));
     }
     let bytes = std::fs::read(&path)?;
@@ -473,6 +587,7 @@ pub fn config_snapshot(codex_home: &Path) -> Result<Value> {
         "bytes":bytes.len(),
         "projects":projects,
         "outside_projects_sha256":sha256_hex(other.as_bytes()),
+        "settings":top_level_settings(&text),
     }))
 }
 
