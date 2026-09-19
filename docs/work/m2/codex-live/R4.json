@@ -1,0 +1,254 @@
+{
+  "format": "pio-m2-live-receipt/1",
+  "run": "R4",
+  "journeys": [
+    "J4"
+  ],
+  "real_codex": true,
+  "live": true,
+  "recorded_at_utc": "2026-09-19T15:42:31Z",
+  "seconds": 81.9,
+  "pio": {
+    "head": "776d74b36cac2530430c40a81b932329513808b9",
+    "dirty": false,
+    "binary_sha256": "b37724f259211f86bf82029610a4032bb01d53f32d259c3c6dc248d7d97ed22f"
+  },
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "codex": {
+    "selected": "$HOME/.local/bin/codex",
+    "kind": "npm_node_wrapper",
+    "wrapper_sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+    "wrapper_package_version": "0.155.1",
+    "native_sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e",
+    "native_layout_version": "0.155.1",
+    "node": {
+      "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+      "version": "v22.23.0"
+    },
+    "version": {
+      "native": "0.155.1",
+      "selected": "0.155.1"
+    },
+    "canonical_schema_listing_sha256": "93b723a83b000bffb23a0d0f17dbdc0711f28a35bb000e97306ed004dd4119b8",
+    "schema_drift": 0,
+    "service_node_resolution": {
+      "matches_qualification": true,
+      "version": "v22.23.0"
+    }
+  },
+  "environment_passed": [
+    "HOME",
+    "LANG",
+    "PATH",
+    "USER"
+  ],
+  "credential_variables_passed": false,
+  "authentication_type": "chatgpt",
+  "model": {
+    "configured": "gpt-6-astra",
+    "requested": "gpt-5.6-terra",
+    "effective": "gpt-5.6-terra"
+  },
+  "model_provider": "openai",
+  "thread_settings": {
+    "requested": {
+      "approvalPolicy": "on-request",
+      "model": "gpt-5.6-terra",
+      "sandbox": "workspace-write"
+    },
+    "configured": {
+      "approval_policy": {
+        "source": "absent_trusted_project_default",
+        "value": "on-request"
+      },
+      "sandbox_mode": {
+        "source": "absent_trusted_project_default",
+        "value": "workspace-write"
+      }
+    },
+    "guard_allowed": true,
+    "effective_sandbox": {
+      "excludeSlashTmp": false,
+      "excludeTmpdirEnvVar": false,
+      "networkAccess": false,
+      "type": "workspaceWrite",
+      "writableRoots": []
+    },
+    "effective_approval_policy": "on-request"
+  },
+  "native": {
+    "thread_id": "01a0ba54-b8cd-72c0-8506-5abd5acc47a2",
+    "turn_id": "01a0ba54-b997-7b22-8579-99df7263c72a",
+    "native_process": {
+      "identity": {
+        "pid": 16148,
+        "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832493:742805"
+      },
+      "interpreter": {
+        "applicable": true,
+        "path_matches_qualification": true
+      },
+      "path_matches_qualification": true,
+      "sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e"
+    }
+  },
+  "identities": {
+    "invocation_id": "3c556e60-40ee-4fe4-9764-9f1243fe3547",
+    "host": {
+      "pid": 16132,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832469:834732"
+    },
+    "app_server_process": {
+      "pid": 16145,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832493:688972"
+    },
+    "host_slot": "bcc25c1a-847e-44a3-b82f-2d12298a0306",
+    "controller_generation_at_admission": 1,
+    "host_generation_now": 1,
+    "phase": "completed"
+  },
+  "delivery": {
+    "delivery": "acknowledged",
+    "delivery_id": "work.delivery-1",
+    "determined_at": "2026-09-19T15:41:49Z",
+    "evidence": {
+      "class": "native_turn_acknowledged",
+      "source": "codex-app-server/host"
+    },
+    "history": [
+      {
+        "delivery": "pending",
+        "recorded_at": "2026-09-19T15:41:49Z"
+      }
+    ],
+    "proof_class": "provider_ack_id"
+  },
+  "runtime": "exited",
+  "exit": {
+    "code": 0
+  },
+  "cancellation": null,
+  "actions": null,
+  "steering": [
+    {
+      "behavior": "not_observed",
+      "delivery": "acknowledged",
+      "delivery_id": "work.steering-1",
+      "evidence": {
+        "class": "native_steer_acknowledged",
+        "source": "codex-app-server/host"
+      },
+      "proof_class": "provider_ack_id",
+      "recorded_at": "2026-09-19T15:41:58Z",
+      "request": "recorded",
+      "steer_id": "work.steer-1"
+    }
+  ],
+  "deadline_stop": null,
+  "timeouts": {
+    "delivery": 120,
+    "execution_deadline": 600
+  },
+  "timeouts_passed": [],
+  "turn_status": "completed",
+  "turn_error": null,
+  "output": {
+    "bytes": 3694,
+    "sha256": "73a2154dac8bd69cd28eb06a5492fa609b724cb38c8be368b780ccdb306dfe10",
+    "receipt_output_digest": "sha256:73a2154dac8bd69cd28eb06a5492fa609b724cb38c8be368b780ccdb306dfe10",
+    "agent_text_sha256": "e7e30067c115855b095d174743ea71def27cd4fac9b15459ce69e67f5e7d44db"
+  },
+  "usage": {
+    "observed_total_tokens": 46588,
+    "observation": {
+      "liability": "resolved",
+      "observations": [
+        {
+          "amount": 46588,
+          "basis": "observed",
+          "invocation_id": "3c556e60-40ee-4fe4-9764-9f1243fe3547",
+          "measure": "codex.tokens.total",
+          "recorded_at": "2026-09-19T15:42:31Z"
+        }
+      ]
+    },
+    "cap": 1000000,
+    "stop_at": 800000,
+    "run_limit": 250000,
+    "cumulative_observed_tokens": 333706
+  },
+  "config_diff": {
+    "existed_before": true,
+    "exists_after": true,
+    "format": "pio-codex-config-diff/1",
+    "other_changes": false,
+    "projects_added": [
+      {
+        "location": "fixture",
+        "path_sha256": "de130155bc0a873dba7e25bd815c872bb0dee862f880bd2f4be2e624dd59d8e0",
+        "trust_level": "trusted"
+      }
+    ],
+    "projects_changed": [],
+    "projects_removed": [],
+    "raw_sha256": {
+      "after": "681ff2ad829df5987ec190814b98d6a6279ffa66909a76bd0aa715890143d11d",
+      "before": "8a135db2446c92afc1f10965be105ea1916c0cdc65abcbc49e7d32e2ddd89d6d"
+    },
+    "unchanged": false
+  },
+  "config_before_sha256": "8a135db2446c92afc1f10965be105ea1916c0cdc65abcbc49e7d32e2ddd89d6d",
+  "fixture": {
+    "path": "$HOME/pio-m2-live/fixtures/r4-j4-steer",
+    "base": "947aaaae107faeecaca939df9d4f9730d4627a3f",
+    "brief_sha256": "79130fffee31437e8c9cc56337b3d7ee13dfc1234b0d443436114bf559f00f3e",
+    "diff_stat": "",
+    "status_porcelain_lines": 1,
+    "unittest_exit_after_run": 1
+  },
+  "event_kinds": [
+    "config_before",
+    "thread_settings_guard",
+    "spawned",
+    "account",
+    "thread_started",
+    "turn_start_sent",
+    "turn_acknowledged",
+    "turn_started",
+    "item_completed",
+    "item_completed",
+    "item_completed",
+    "control_sent",
+    "control_response",
+    "item_completed",
+    "usage",
+    "item_completed",
+    "item_completed",
+    "usage",
+    "turn_completed",
+    "app_server_exited",
+    "config_after"
+  ],
+  "public_transcript_schema_check": {
+    "exit": 0,
+    "summary": "240 schema-valid public results"
+  },
+  "independent_services": {
+    "cbr_processes": 0,
+    "combraton_processes": 0,
+    "context_calls": "none: PIO has no Context client in this build"
+  },
+  "submit": {
+    "admission": "admitted",
+    "error": null
+  },
+  "j4_steer": {
+    "steer_request": {
+      "delivery_id": "work.steering-1",
+      "request": "recorded",
+      "steer_id": "work.steer-1"
+    },
+    "steer_error": null,
+    "steer_text_sha256": "c28eca9e149f8a8d276c01f90f9510dfab3459f5566193f3f2ddbc2cb772d778"
+  }
+}

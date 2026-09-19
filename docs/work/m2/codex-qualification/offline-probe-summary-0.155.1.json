@@ -1,0 +1,366 @@
+{
+  "cases": [
+    {
+      "case": "requested_workspace_write_on_request",
+      "config_diff": {
+        "existed_before": false,
+        "exists_after": true,
+        "format": "pio-codex-config-diff/1",
+        "other_changes": false,
+        "projects_added": [
+          {
+            "location": "fixture",
+            "path_sha256": "be1de5cfa42d1f89cd8d72ecce592cce5200284550171a1b9bc1255657ab7e03",
+            "trust_level": "trusted"
+          }
+        ],
+        "projects_changed": [],
+        "projects_removed": [],
+        "raw_sha256": {
+          "after": "b88265b97017f4f5fe9102abe3c57ae2a5c901c5a80d2df24a2986f7ed8cfd59",
+          "before": null
+        },
+        "unchanged": false
+      },
+      "configured": null,
+      "credential_environment_removed": true,
+      "exit": 0,
+      "initialize": {
+        "ok": true,
+        "result_keys": [
+          "codexHome",
+          "platformFamily",
+          "platformOs",
+          "userAgent"
+        ]
+      },
+      "notifications": [
+        "remoteControl/status/changed",
+        "thread/started"
+      ],
+      "requested": {
+        "approvalPolicy": "on-request",
+        "sandbox": "workspace-write"
+      },
+      "seconds": 1.139,
+      "server_requests": [],
+      "stderr_mentions_untrusted": false,
+      "stderr_sha256": "e2ae4101114fee1b8350dd8ef65190df7653554eb109ecd8fad3988ddb21d10f",
+      "thread_start": {
+        "approval_policy": "on-request",
+        "error": null,
+        "model": "gpt-6-astra",
+        "model_provider": "openai",
+        "ok": true,
+        "result_keys": [
+          "activePermissionProfile",
+          "approvalPolicy",
+          "approvalsReviewer",
+          "cwd",
+          "instructionSources",
+          "model",
+          "modelProvider",
+          "multiAgentMode",
+          "reasoningEffort",
+          "runtimeWorkspaceRoots",
+          "sandbox",
+          "serviceTier",
+          "thread"
+        ],
+        "sandbox_projection": {
+          "excludeSlashTmp": false,
+          "excludeTmpdirEnvVar": false,
+          "networkAccess": false,
+          "type": "workspaceWrite",
+          "writableRoots": []
+        },
+        "thread_id_present": true
+      },
+      "timed_out": null,
+      "transcript_sha256": "f3a3eeeaf009716a4ec1d12d802c8aeec3eb7368d23ef4176c5a71c36b118bda"
+    },
+    {
+      "case": "absent_settings_default",
+      "config_diff": {
+        "existed_before": false,
+        "exists_after": false,
+        "format": "pio-codex-config-diff/1",
+        "other_changes": false,
+        "projects_added": [],
+        "projects_changed": [],
+        "projects_removed": [],
+        "raw_sha256": {
+          "after": null,
+          "before": null
+        },
+        "unchanged": true
+      },
+      "configured": null,
+      "credential_environment_removed": true,
+      "exit": 0,
+      "initialize": {
+        "ok": true,
+        "result_keys": [
+          "codexHome",
+          "platformFamily",
+          "platformOs",
+          "userAgent"
+        ]
+      },
+      "notifications": [
+        "remoteControl/status/changed",
+        "thread/started"
+      ],
+      "requested": {},
+      "seconds": 1.121,
+      "server_requests": [],
+      "stderr_mentions_untrusted": false,
+      "stderr_sha256": "cfa97ad33742fbf568e7b39672441856065fb3729c3794f2b23cd2277e57eeda",
+      "thread_start": {
+        "approval_policy": "on-request",
+        "error": null,
+        "model": "gpt-6-astra",
+        "model_provider": "openai",
+        "ok": true,
+        "result_keys": [
+          "activePermissionProfile",
+          "approvalPolicy",
+          "approvalsReviewer",
+          "cwd",
+          "instructionSources",
+          "model",
+          "modelProvider",
+          "multiAgentMode",
+          "reasoningEffort",
+          "runtimeWorkspaceRoots",
+          "sandbox",
+          "serviceTier",
+          "thread"
+        ],
+        "sandbox_projection": {
+          "networkAccess": false,
+          "type": "readOnly"
+        },
+        "thread_id_present": true
+      },
+      "timed_out": null,
+      "transcript_sha256": "79943ff41de7fcb0d2bb6bcf6898ecdb997a3fd7610c18d2d7aef4bbf9409462"
+    },
+    {
+      "case": "requested_untrusted",
+      "config_diff": {
+        "existed_before": false,
+        "exists_after": true,
+        "format": "pio-codex-config-diff/1",
+        "other_changes": false,
+        "projects_added": [
+          {
+            "location": "fixture",
+            "path_sha256": "c500ec5fb0fb054963b382e3416d50725a8f822bb423fb90d07d8d64bdc11cfb",
+            "trust_level": "trusted"
+          }
+        ],
+        "projects_changed": [],
+        "projects_removed": [],
+        "raw_sha256": {
+          "after": "1e2f84077cec44adfb9818e799e7e62d7b27bb4685ebd6d4bb3e510ed938e8b2",
+          "before": null
+        },
+        "unchanged": false
+      },
+      "configured": null,
+      "credential_environment_removed": true,
+      "exit": 0,
+      "initialize": {
+        "ok": true,
+        "result_keys": [
+          "codexHome",
+          "platformFamily",
+          "platformOs",
+          "userAgent"
+        ]
+      },
+      "notifications": [
+        "remoteControl/status/changed",
+        "thread/started"
+      ],
+      "requested": {
+        "approvalPolicy": "untrusted",
+        "sandbox": "workspace-write"
+      },
+      "seconds": 1.118,
+      "server_requests": [],
+      "stderr_mentions_untrusted": false,
+      "stderr_sha256": "343ee2018da0edbd9b9b53e5bf1a61d1c8b81de97c8e19d839c6b53804cc4ec7",
+      "thread_start": {
+        "approval_policy": "untrusted",
+        "error": null,
+        "model": "gpt-6-astra",
+        "model_provider": "openai",
+        "ok": true,
+        "result_keys": [
+          "activePermissionProfile",
+          "approvalPolicy",
+          "approvalsReviewer",
+          "cwd",
+          "instructionSources",
+          "model",
+          "modelProvider",
+          "multiAgentMode",
+          "reasoningEffort",
+          "runtimeWorkspaceRoots",
+          "sandbox",
+          "serviceTier",
+          "thread"
+        ],
+        "sandbox_projection": {
+          "excludeSlashTmp": false,
+          "excludeTmpdirEnvVar": false,
+          "networkAccess": false,
+          "type": "workspaceWrite",
+          "writableRoots": []
+        },
+        "thread_id_present": true
+      },
+      "timed_out": null,
+      "transcript_sha256": "0e11ab9961d56dda344c5a62567047cf8faf69de4c409451172845693219e644"
+    },
+    {
+      "case": "configured_untrusted",
+      "config_diff": {
+        "existed_before": true,
+        "exists_after": true,
+        "format": "pio-codex-config-diff/1",
+        "other_changes": false,
+        "projects_added": [],
+        "projects_changed": [],
+        "projects_removed": [],
+        "raw_sha256": {
+          "after": "cbececb0c8abf1994a70fe38f5dae1d363d5012fd8db495b28ccd1f10adec0a8",
+          "before": "cbececb0c8abf1994a70fe38f5dae1d363d5012fd8db495b28ccd1f10adec0a8"
+        },
+        "unchanged": true
+      },
+      "configured": "approval_policy = \"untrusted\"\n",
+      "credential_environment_removed": true,
+      "exit": 1,
+      "initialize": {
+        "ok": false,
+        "result_keys": []
+      },
+      "notifications": [],
+      "requested": {
+        "approvalPolicy": "on-request",
+        "sandbox": "workspace-write"
+      },
+      "seconds": 30.002,
+      "server_requests": [],
+      "stderr_mentions_untrusted": true,
+      "stderr_sha256": "381d7e2499c6b4c0dcab4ced2a41bb59b14777fdd5735e7b26cea15f39bd5eef",
+      "thread_start": {
+        "approval_policy": null,
+        "error": null,
+        "model": null,
+        "model_provider": null,
+        "ok": false,
+        "result_keys": [],
+        "sandbox_projection": null,
+        "thread_id_present": false
+      },
+      "timed_out": "no response to request 0",
+      "transcript_sha256": "d703cd78bad7d886a6825ad55ab1e770530ba5433ac689acdaf231b3df5e3078"
+    },
+    {
+      "case": "absent_settings_trusted_project",
+      "config_diff": {
+        "existed_before": true,
+        "exists_after": true,
+        "format": "pio-codex-config-diff/1",
+        "other_changes": false,
+        "projects_added": [],
+        "projects_changed": [],
+        "projects_removed": [],
+        "raw_sha256": {
+          "after": "307dae38abae98f5b063c3a08dfdf9495d2cebf35ec7d942eedb7bc3f146f252",
+          "before": "307dae38abae98f5b063c3a08dfdf9495d2cebf35ec7d942eedb7bc3f146f252"
+        },
+        "unchanged": true
+      },
+      "configured": "[projects.\"<scratch>/probe-0.155.1/private/absent_settings_trusted_project/fixtures/probe-repo\"]\ntrust_level = \"trusted\"\n",
+      "credential_environment_removed": true,
+      "exit": 0,
+      "initialize": {
+        "ok": true,
+        "result_keys": [
+          "codexHome",
+          "platformFamily",
+          "platformOs",
+          "userAgent"
+        ]
+      },
+      "notifications": [
+        "remoteControl/status/changed",
+        "thread/started"
+      ],
+      "requested": {},
+      "seconds": 1.407,
+      "server_requests": [],
+      "stderr_mentions_untrusted": false,
+      "stderr_sha256": "653f96da50e5e250f5e30f1e6d1bf1c004f4dc8eaff7c8611e9fe45556f9e362",
+      "thread_start": {
+        "approval_policy": "on-request",
+        "error": null,
+        "model": "gpt-6-astra",
+        "model_provider": "openai",
+        "ok": true,
+        "result_keys": [
+          "activePermissionProfile",
+          "approvalPolicy",
+          "approvalsReviewer",
+          "cwd",
+          "instructionSources",
+          "model",
+          "modelProvider",
+          "multiAgentMode",
+          "reasoningEffort",
+          "runtimeWorkspaceRoots",
+          "sandbox",
+          "serviceTier",
+          "thread"
+        ],
+        "sandbox_projection": {
+          "excludeSlashTmp": false,
+          "excludeTmpdirEnvVar": false,
+          "networkAccess": false,
+          "type": "workspaceWrite",
+          "writableRoots": []
+        },
+        "thread_id_present": true
+      },
+      "timed_out": null,
+      "transcript_sha256": "a4fbbd5e8c418e0aeaaa2d99ef707eb9c86b1497efdeb05d635684ec97ed42e4"
+    }
+  ],
+  "format": "pio-codex-offline-probe/2",
+  "model_request_sent": false,
+  "pinned": {
+    "source": "be2951ea34f0d295ed0becf97079f92fa5f6950e",
+    "tag": "rust-v0.155.1",
+    "version": "0.155.1"
+  },
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "qualification": {
+    "canonical_listing_sha256": "93b723a83b000bffb23a0d0f17dbdc0711f28a35bb000e97306ed004dd4119b8",
+    "exit": 0,
+    "native_sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e",
+    "node": {
+      "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+      "version": "v22.23.0"
+    },
+    "qualified": true,
+    "refusals": [],
+    "wrapper_sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70"
+  },
+  "turn_started": false,
+  "user_codex_home_used": false
+}

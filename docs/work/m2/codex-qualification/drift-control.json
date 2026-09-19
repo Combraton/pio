@@ -1,0 +1,65 @@
+{
+  "format": "pio-codex-qualification/1",
+  "isolated_codex_home": true,
+  "pinned": {
+    "source": "e363b08c9175ac1cbe5893615dd2cb9ddf95043b",
+    "tag": "rust-v0.146.0",
+    "version": "0.146.0"
+  },
+  "qualified": false,
+  "refusals": [
+    {
+      "files": 1,
+      "reason": "schema_drift"
+    }
+  ],
+  "resolution": {
+    "kind": "npm_node_wrapper",
+    "native": {
+      "layout": {
+        "entrypoint": "bin/codex",
+        "layoutVersion": 1,
+        "pathDir": "codex-path",
+        "resourcesDir": "codex-resources",
+        "target": "aarch64-apple-darwin",
+        "variant": "codex",
+        "version": "0.146.0"
+      },
+      "path": "~/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
+      "sha256": "ae1d3ffe6d48aec6a4dc3f50e7eb8e0d11962485a6a9406c5a7012139383da02"
+    },
+    "node": {
+      "path": "~/.hermes/node/bin/node",
+      "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+      "version": "v22.23.0"
+    },
+    "platform_package": "@openai/codex-darwin-arm64",
+    "resolved": "~/.local/lib/node_modules/@openai/codex/bin/codex.js",
+    "selected": "~/.local/bin/codex",
+    "target": "aarch64-apple-darwin",
+    "wrapper": {
+      "package_version": "0.146.0",
+      "path": "~/.local/lib/node_modules/@openai/codex/bin/codex.js",
+      "sha256": "134063e133f0b4244fa3b251acf973d4fe4b4aeeacbdc135211bf480f59f1477"
+    }
+  },
+  "schema": {
+    "canonical_listing_sha256": "65c3badeb422b8f04355ddf1cb9fdd000162f22a9d024f04394690b4f1d4f8b3",
+    "drift": [
+      {
+        "change": "changed",
+        "file": "ApplyPatchApprovalParams.json"
+      }
+    ],
+    "drift_count": 1,
+    "expected_canonical_listing_sha256": "65c3badeb422b8f04355ddf1cb9fdd000162f22a9d024f04394690b4f1d4f8b3",
+    "file_count": 275,
+    "generator_exit": 0,
+    "raw_listing_sha256": "c9500dfd803b0ccd14dddb5700167bded1f3f51b8f8f6ec079182f06e7c136af"
+  },
+  "selected": "~/.local/bin/codex",
+  "version": {
+    "native": "0.146.0",
+    "selected": "0.146.0"
+  }
+}

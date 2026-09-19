@@ -13,6 +13,7 @@ sha2.workspace = true
 uuid.workspace = true
 pio-core = { path = "../pio-core" }
 pio-host = { path = "../pio-host" }
+pio-codex = { path = "../pio-codex" }
 jsonschema = { version = "0.56.0", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }
 chrono = "0.4"

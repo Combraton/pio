@@ -648,10 +648,22 @@ name = "pio-cli"
 version = "0.1.0-dev"
 dependencies = [
  "anyhow",
+ "pio-codex",
  "pio-core",
  "pio-host",
  "pio-protocol",
  "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "pio-codex"
+version = "0.1.0-dev"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "sha2",
+ "tempfile",
 ]
 
 [[package]]
@@ -673,6 +685,7 @@ version = "0.1.0-dev"
 dependencies = [
  "anyhow",
  "libc",
+ "pio-codex",
  "pio-core",
  "serde",
  "serde_json",
@@ -688,6 +701,7 @@ dependencies = [
  "chrono",
  "jsonschema",
  "libc",
+ "pio-codex",
  "pio-core",
  "pio-host",
  "rusqlite",

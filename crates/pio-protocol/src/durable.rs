@@ -6,6 +6,9 @@ use serde_json::{Value, json};
 
 impl Provider {
     pub(crate) fn host_evidence(&self, class: &str) -> Value {
+        if self.codex() {
+            return json!({"class":class,"source":format!("{}/host", self.codex_source())});
+        }
         let source = if self.durable.is_none() {
             pio_host::script::SOURCE
         } else if class.contains("timeout") {
@@ -21,6 +24,9 @@ impl Provider {
         json!({"class":class,"source":source})
     }
     pub(crate) fn run_durable(&mut self, e: &mut Value) -> Result<()> {
+        if self.codex() {
+            return self.run_codex(e);
+        }
         let command = pio_core::digest(text(&e["view"]["execution"]["id"]).as_bytes());
         let command = command.trim_start_matches("sha256:");
         // A persisted marker with no host admission is conservatively ambiguous
@@ -159,10 +165,12 @@ impl Provider {
             }
             e["process_observation"] = observed.clone();
         }
-        let manifest = self.root.join(format!(
-            "output-{}.refs.jsonl",
-            text(&invocation["invocation_id"])
-        ));
+        let invocation_id = text(&invocation["invocation_id"]).to_owned();
+        self.drain_output(e, &invocation_id)
+    }
+    /// Append newly spooled host output, in offset order, to the execution.
+    pub(crate) fn drain_output(&mut self, e: &mut Value, invocation_id: &str) -> Result<()> {
+        let manifest = self.root.join(format!("output-{invocation_id}.refs.jsonl"));
         if manifest.exists() {
             let contents = std::fs::read_to_string(manifest)?;
             for line in contents.split_inclusive('\n').filter(|s| s.ends_with('\n')) {

@@ -24,6 +24,11 @@ pub fn num(v: &Value) -> u64 {
 pub fn list(v: &Value) -> Vec<Value> {
     v.as_array().cloned().unwrap_or_default()
 }
+pub fn is_capacity_refusal(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<pio_core::projections::CapacityExceeded>()
+        .is_some()
+}
 pub fn key(v: &Value) -> String {
     serde_json::to_string(v).unwrap()
 }
@@ -128,6 +133,9 @@ pub struct Provider {
     pub now: String,
     pub authorities: Vec<String>,
     pub provider_id: String,
+    /// Last ADR 002 capacity refusal. The frozen public error for a refused
+    /// commit is `unavailable` with nothing bound, so the reason is local.
+    pub capacity_refusal: Option<Value>,
 }
 impl Provider {
     pub fn new(root: &Path, config: Value) -> Result<Self> {
@@ -204,10 +212,23 @@ impl Provider {
                 execution.get("output").is_none(),
                 "legacy inline output requires explicit migration"
             );
-            ensure!(
-                (execution["source"] == "fake-host/process") == host.is_some(),
-                "cannot switch persisted execution adapter mode"
-            );
+            let persisted = execution["source"].as_str().unwrap_or("");
+            let expected = match host
+                .as_ref()
+                .map(|h| h["adapter"].as_str().unwrap_or("fake"))
+            {
+                None => persisted == pio_host::script::SOURCE,
+                Some("codex") => {
+                    persisted
+                        == if host.as_ref().unwrap()["labeled_fake"] == true {
+                            pio_codex::fake::SOURCE
+                        } else {
+                            "codex-app-server"
+                        }
+                }
+                Some(_) => persisted == "fake-host/process",
+            };
+            ensure!(expected, "cannot switch persisted execution adapter mode");
         }
         let mut credentials = vec![];
         for c in list(&config["credentials"]) {
@@ -258,6 +279,7 @@ impl Provider {
             now: String::new(),
             authorities,
             provider_id,
+            capacity_refusal: None,
         };
         p.clock(true)?;
         p.data.generation += num(&p.config["dedupe"]["advance_on_start"]);
@@ -308,10 +330,40 @@ impl Provider {
         }
     }
     pub fn save(&mut self) -> Result<()> {
-        self.store_revision = self
-            .store
-            .commit_protocol(self.store_revision, &self.data.records()?)?;
-        Ok(())
+        self.commit(false)
+    }
+    /// Commit that binds a new `execution.submit`; it must stay within the
+    /// ADR 002 admission thresholds as well as the hard limits.
+    pub fn save_admission(&mut self) -> Result<()> {
+        self.commit(true)
+    }
+    fn commit(&mut self, admission: bool) -> Result<()> {
+        let records = self.data.records()?;
+        let result = if admission {
+            self.store.commit_admission(self.store_revision, &records)
+        } else {
+            self.store.commit_protocol(self.store_revision, &records)
+        };
+        match result {
+            Ok(revision) => {
+                self.store_revision = revision;
+                Ok(())
+            }
+            Err(error) => {
+                if let Some(refusal) =
+                    error.downcast_ref::<pio_core::projections::CapacityExceeded>()
+                {
+                    let refusal = json!({"limit":refusal.limit,"maximum":refusal.maximum,"projected":refusal.projected});
+                    // Background retries repeat the same refusal every tick;
+                    // log each distinct refusal once.
+                    if self.capacity_refusal.as_ref() != Some(&refusal) {
+                        eprintln!("PIO capacity refusal: {refusal}");
+                    }
+                    self.capacity_refusal = Some(refusal);
+                }
+                Err(error)
+            }
+        }
     }
     pub fn reload(&mut self) -> Result<()> {
         let (revision, records) = self.store.protocol_records()?;
@@ -342,7 +394,9 @@ impl Provider {
         json!({"oldest_retained":self.data.oldest,"current":self.data.generation})
     }
     pub fn execution_features(&self) -> &'static [&'static str] {
-        if self.durable.is_some() {
+        if self.codex() {
+            crate::codex::FEATURES
+        } else if self.durable.is_some() {
             &[
                 "execution.controller",
                 "execution.output",
@@ -357,10 +411,16 @@ impl Provider {
     }
     pub fn handle(&mut self, session: &mut Session, method: &str, p: &Value) -> Reply {
         let _ = self.clock(false);
-        self.execution_tick()
-            .map_err(|_| err("unavailable", json!({})))?;
-        self.expire_obligations()
-            .map_err(|_| err("unavailable", json!({})))?;
+        // Background commits reload committed state when refused. A capacity
+        // refusal leaves queries and bound replays answerable from that state;
+        // a new command still needs its own commit and is refused there. Any
+        // other store failure makes the whole request unavailable.
+        let background = |result: Result<()>| match result {
+            Err(error) if !is_capacity_refusal(&error) => Err(err("unavailable", json!({}))),
+            _ => Ok(()),
+        };
+        background(self.execution_tick())?;
+        background(self.expire_obligations())?;
         if session.principal.is_none() && !matches!(method, "core.describe" | "core.authenticate") {
             return Err(err("authentication_required", json!({})));
         }
@@ -631,7 +691,15 @@ impl Provider {
                         result: result.clone(),
                     },
                 );
-                if self.fault("commit_unavailable", method) || self.save().is_err() {
+                // A launch-configured commit fault short-circuits before any commit.
+                let refused = self.fault("commit_unavailable", method)
+                    || if method == "execution.submit" {
+                        self.save_admission()
+                    } else {
+                        self.save()
+                    }
+                    .is_err();
+                if refused {
                     self.reload()
                         .map_err(|_| err("internal_error", json!({})))?;
                     return Err(err("unavailable", json!({})));

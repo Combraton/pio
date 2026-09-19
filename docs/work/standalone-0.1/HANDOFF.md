@@ -1,6 +1,6 @@
 # Standalone 0.1 readiness handoff
 
-> Historical M0 record. M0 was accepted and PR #2 was subsequently merged with owner authorization. Continue from [current STATE](../STATE.md) and [M1 checkpoints](../m1/CHECKPOINTS.md); do not replay the readiness next steps below.
+> Historical M0 record. M0 was accepted and PR #2 was subsequently merged with owner authorization. Continue from [current STATE](../STATE.md) and the [M2 task packet](../m2/TASK.md); do not replay the readiness next steps below. Its Claude authentication disposition and unselected license were superseded by the owner on 2026-09-16 ([ADR 001 amendment](../../decisions/001-standalone-stack.md#amendment--owner-decisions-after-m1-acceptance-2026-09-16)).
 
 Updated 2026-09-16. Owner: Codex, PIO implementation lead. Task: [issue #1](https://github.com/Combraton/pio/issues/1). Branch: `codex/standalone-readiness`; base `e65b7c02318e71e848ab7c8b3f8efab3489fb2d2`. Read the branch/PR's actual head on resume; the readiness documents do not claim their own future commit ID.
 

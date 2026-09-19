@@ -1,4 +1,5 @@
 //! Experimental local fake host. No native harness or Protocol capability claim.
+pub mod codex;
 pub mod script;
 use anyhow::{Context, Result, bail, ensure};
 use pio_core::{ProcessIdentity, Store};
@@ -307,6 +308,51 @@ impl Controller {
         Ok(observation)
     }
 }
+impl Controller {
+    /// Admit and launch a Codex invocation (ADR 003). Journal intent, launch
+    /// guard and host slot fences are the same as for the fake host.
+    pub fn submit_codex(&self, command: &str, spec: Value) -> Result<Value> {
+        ensure!(spec["adapter"] == "codex", "codex spec required");
+        let mut store = Store::open(&self.root)?;
+        check_launch_guards(&self.root, &store)?;
+        let (invocation, inserted) = store.admit(command, spec, self.generation, false)?;
+        let mut attempt = None;
+        if inserted {
+            create_launch_guard(&self.root, &invocation)?;
+            let attempt_id = uuid::Uuid::new_v4().to_string();
+            attempt = Some(attempt_id.clone());
+            let stderr_path = self.root.join(format!("attempt-{attempt_id}.stderr"));
+            let stderr_file = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .mode(0o600)
+                .open(&stderr_path)?;
+            let outcome_path = self.root.join(format!("attempt-{attempt_id}.json"));
+            let mut child = Command::new(std::env::current_exe()?)
+                .args(["codex", "host"])
+                .arg(&self.root)
+                .arg(command)
+                .arg(&invocation.invocation_id)
+                .env_clear()
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::from(stderr_file))
+                .spawn()?;
+            std::thread::spawn(move || {
+                let result = child.wait();
+                let error = std::fs::read_to_string(&stderr_path).unwrap_or_default();
+                let _ = atomic_json(
+                    &outcome_path,
+                    &json!({"source":"codex-host","exit_code":result.ok().and_then(|s|s.code()),"reason":error.trim().strip_prefix("PIO: ").unwrap_or(error.trim())}),
+                );
+            });
+        }
+        Ok(
+            json!({"source":"codex-host","replay":!inserted,"launch_attempt":attempt,"launch_decision":if inserted {"attempted"} else {"admit_replay_suppressed"},"invocation":invocation,"controller_generation":self.generation}),
+        )
+    }
+}
+
 pub fn daemon(root: &Path) -> Result<()> {
     let controller = Controller::open(root)?;
     let root = controller.root.clone();

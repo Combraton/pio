@@ -1,0 +1,272 @@
+{
+  "format": "pio-m2-live-receipt/1",
+  "run": "R2",
+  "journeys": [
+    "J3"
+  ],
+  "real_codex": true,
+  "live": true,
+  "recorded_at_utc": "2026-09-19T15:37:37Z",
+  "seconds": 81.2,
+  "pio": {
+    "head": "efe6caa8c8bf14aeab3fff55cd7026f4441bd54d",
+    "dirty": false,
+    "binary_sha256": "b37724f259211f86bf82029610a4032bb01d53f32d259c3c6dc248d7d97ed22f"
+  },
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "codex": {
+    "selected": "$HOME/.local/bin/codex",
+    "kind": "npm_node_wrapper",
+    "wrapper_sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+    "wrapper_package_version": "0.155.1",
+    "native_sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e",
+    "native_layout_version": "0.155.1",
+    "node": {
+      "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+      "version": "v22.23.0"
+    },
+    "version": {
+      "native": "0.155.1",
+      "selected": "0.155.1"
+    },
+    "canonical_schema_listing_sha256": "93b723a83b000bffb23a0d0f17dbdc0711f28a35bb000e97306ed004dd4119b8",
+    "schema_drift": 0,
+    "service_node_resolution": {
+      "matches_qualification": true,
+      "version": "v22.23.0"
+    }
+  },
+  "environment_passed": [
+    "HOME",
+    "LANG",
+    "PATH",
+    "USER"
+  ],
+  "credential_variables_passed": false,
+  "authentication_type": "chatgpt",
+  "model": {
+    "configured": "gpt-6-astra",
+    "requested": "gpt-5.6-terra",
+    "effective": "gpt-5.6-terra"
+  },
+  "model_provider": "openai",
+  "thread_settings": {
+    "requested": {
+      "approvalPolicy": "on-request",
+      "model": "gpt-5.6-terra",
+      "sandbox": "workspace-write"
+    },
+    "configured": {
+      "approval_policy": {
+        "source": "absent_trusted_project_default",
+        "value": "on-request"
+      },
+      "sandbox_mode": {
+        "source": "absent_trusted_project_default",
+        "value": "workspace-write"
+      }
+    },
+    "guard_allowed": true,
+    "effective_sandbox": {
+      "excludeSlashTmp": false,
+      "excludeTmpdirEnvVar": false,
+      "networkAccess": false,
+      "type": "workspaceWrite",
+      "writableRoots": []
+    },
+    "effective_approval_policy": "on-request"
+  },
+  "native": {
+    "thread_id": "01a0ba50-3e43-7023-bea0-2210c1a0c28a",
+    "turn_id": "01a0ba50-3f12-7a91-8f18-d35d802dccc4",
+    "native_process": {
+      "identity": {
+        "pid": 13960,
+        "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832200:208619"
+      },
+      "interpreter": {
+        "applicable": true,
+        "path_matches_qualification": true
+      },
+      "path_matches_qualification": true,
+      "sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e"
+    }
+  },
+  "identities": {
+    "invocation_id": "be01dc43-df97-4f4a-a9fb-616c4385386b",
+    "host": {
+      "pid": 13812,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832176:335327"
+    },
+    "app_server_process": {
+      "pid": 13953,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832200:152891"
+    },
+    "host_slot": "bb6e063a-aef1-4a87-bdb6-561d8c5f8ce0",
+    "controller_generation_at_admission": 1,
+    "host_generation_now": 2,
+    "phase": "completed"
+  },
+  "delivery": {
+    "delivery": "acknowledged",
+    "delivery_id": "work.delivery-1",
+    "determined_at": "2026-09-19T15:36:56Z",
+    "evidence": {
+      "class": "native_turn_acknowledged",
+      "source": "codex-app-server/host"
+    },
+    "history": [
+      {
+        "delivery": "pending",
+        "recorded_at": "2026-09-19T15:36:56Z"
+      }
+    ],
+    "proof_class": "provider_ack_id"
+  },
+  "runtime": "exited",
+  "exit": {
+    "code": 0
+  },
+  "cancellation": null,
+  "actions": null,
+  "steering": null,
+  "deadline_stop": null,
+  "timeouts": {
+    "delivery": 120,
+    "execution_deadline": 600
+  },
+  "timeouts_passed": [],
+  "turn_status": "completed",
+  "turn_error": null,
+  "output": {
+    "bytes": 13701,
+    "sha256": "6663315a6029c0e6ea842c270d465c81963fdafa4aa454f4d8f22c8c1b81ebfa",
+    "receipt_output_digest": "sha256:6663315a6029c0e6ea842c270d465c81963fdafa4aa454f4d8f22c8c1b81ebfa",
+    "agent_text_sha256": "ff54b9c0b03a18a410c320004e9bdff57b4331cf51c213ebfdd254654c9f7b38"
+  },
+  "usage": {
+    "observed_total_tokens": 117970,
+    "observation": {
+      "liability": "resolved",
+      "observations": [
+        {
+          "amount": 117970,
+          "basis": "observed",
+          "invocation_id": "be01dc43-df97-4f4a-a9fb-616c4385386b",
+          "measure": "codex.tokens.total",
+          "recorded_at": "2026-09-19T15:37:37Z"
+        }
+      ]
+    },
+    "cap": 1000000,
+    "stop_at": 800000,
+    "run_limit": 250000,
+    "cumulative_observed_tokens": 263816
+  },
+  "config_diff": {
+    "existed_before": true,
+    "exists_after": true,
+    "format": "pio-codex-config-diff/1",
+    "other_changes": false,
+    "projects_added": [
+      {
+        "location": "fixture",
+        "path_sha256": "bea091bab3063137c529f2d83577428d6e1d74452aeaab28878921718dbb0603",
+        "trust_level": "trusted"
+      }
+    ],
+    "projects_changed": [],
+    "projects_removed": [],
+    "raw_sha256": {
+      "after": "ba9ff1b0276cb0d8554718767fba80d7f2c0165a845344dfb76aedacd48d815f",
+      "before": "d16b4c70c8b79c134c77890144bd462e16cf93a8d0f68750655ab630a92ad477"
+    },
+    "unchanged": false
+  },
+  "config_before_sha256": "d16b4c70c8b79c134c77890144bd462e16cf93a8d0f68750655ab630a92ad477",
+  "fixture": {
+    "path": "$HOME/pio-m2-live/fixtures/r2-j3",
+    "base": "09f0ea1884ac64ca61af320ab3c817eb99c8bbc9",
+    "brief_sha256": "7000f1a96a19c4ba54a260f7b7451d853935c761dca181334af8cafa7ae02167",
+    "diff_stat": "calc.py | 4 ++++\n 1 file changed, 4 insertions(+)",
+    "status_porcelain_lines": 2,
+    "unittest_exit_after_run": 0
+  },
+  "event_kinds": [
+    "config_before",
+    "thread_settings_guard",
+    "spawned",
+    "account",
+    "thread_started",
+    "turn_start_sent",
+    "turn_acknowledged",
+    "turn_started",
+    "item_completed",
+    "item_completed",
+    "item_completed",
+    "item_completed",
+    "usage",
+    "item_completed",
+    "item_completed",
+    "usage",
+    "item_completed",
+    "item_completed",
+    "usage",
+    "item_completed",
+    "item_completed",
+    "usage",
+    "item_completed",
+    "usage",
+    "turn_completed",
+    "app_server_exited",
+    "config_after"
+  ],
+  "public_transcript_schema_check": {
+    "exit": 0,
+    "summary": "156 schema-valid public results"
+  },
+  "independent_services": {
+    "cbr_processes": 0,
+    "combraton_processes": 0,
+    "context_calls": "none: PIO has no Context client in this build"
+  },
+  "submit": {
+    "admission": "admitted",
+    "error": null
+  },
+  "j3": {
+    "daemon_killed": "SIGKILL",
+    "restart_seconds": 35.2,
+    "host_process_alive_during_restart": true,
+    "host_before": {
+      "pid": 13812,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832176:335327"
+    },
+    "host_after": {
+      "pid": 13812,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832176:335327"
+    },
+    "app_server_before": {
+      "pid": 13953,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832200:152891"
+    },
+    "app_server_after": {
+      "pid": 13953,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832200:152891"
+    },
+    "same_host_and_app_server": true,
+    "invocations": 1,
+    "turn_start_sent": 1,
+    "replay": true,
+    "generation_before": 1,
+    "generation_after": 2,
+    "recovery": [
+      {
+        "decision": "ambiguous",
+        "delivery_id": "work.delivery-1",
+        "reason": "dispatch_may_have_begun",
+        "recorded_at": "2026-09-19T15:37:34Z"
+      }
+    ]
+  }
+}

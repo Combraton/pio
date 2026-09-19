@@ -40,6 +40,7 @@ git diff --exit-code -- Cargo.lock
 python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3
 python3 scripts/public_host_matrix.py --out target/public-host --repetitions 3
 python3 scripts/client_recovery.py --out target/client-recovery
+python3 scripts/codex_host_matrix.py --out target/codex-host --repetitions 3
 python3 scripts/packaging_check.py --out target/packaging
 python3 scripts/conformance.py --out target/conformance
 ```
@@ -105,3 +106,55 @@ Process-mode discovery reports the built-in labeled fake executable as detected,
 Restart records `execution.recovery.decided` followed by `execution.host.changed`, bound to the advanced controller generation. An existing child retains its original process/slot identity. Pending marker-present work becomes ambiguous until release/absence evidence reconciles it; an already proven release is preserved. The delivery evidence class **`child_release_marker`** means the identified fake child read its release message and wrote its marker. It produces the `delivered` determination, not native-provider acknowledgment or model comprehension. Recovered ambiguity resolves to `delivered` or `not_delivered` through reconciliation events with the matching frozen outcome. Recovery-state names are no longer used as delivery proof classes; the frozen optional `proof_class` enum is not extended or misused.
 
 [Private packaging and user-job prototypes](../packaging/README.md) document layout, collision refusal, uninstall ownership checks, and the exact lifecycle command used in CI. `target/packaging` contains native-manager start/stop evidence and unchanged unrelated-`pio` witnesses.
+
+## M2 capacity bound
+
+ADR 002's [capacity bound](decisions/002-protocol-journal.md#capacity-bound-2026-09-16) adds `pio-core` and `pio-protocol` Cargo tests: 28 in total at `5be40f9`, and **31** after the admission headroom and proposal demonstration at `aa7ad78`. They cover: the exact byte and record limits and one over each; refusal before any staged row, using abort triggers; growth through unchanged records; accepted shrinking and no-op commits; subject, event and dedupe records counted by a real command; configured event retention changing the result; refused `execution.submit` creating nothing; the at-limit stall after a committed dispatch marker; queries and replays staying available during capacity-refused background commits, while other store failures stay `unavailable`; and equality with the canonical encoding length. An ignored probe measures commit cost at the record bound: `cargo test -p pio-core --locked [--release] -- --ignored --nocapture measure_commit_cost`. Its timings are observations, not a pass/fail property.
+
+The headroom tests cover the exact admission thresholds for records and bytes (hard commits accept the same state), a submit refused one over the threshold while an ordinary put above it is accepted, and a submit admitted exactly at the threshold that runs to exit beyond it with no hard-limit refusal while a second submit is refused. `pinned_errors_cannot_distinguish_capacity_from_transient_commit_failure` checks the [Protocol #13](https://github.com/Combraton/protocol/issues/13) demonstration against the frozen error schema.
+
+The public matrix adds `capacity_refusal_no_spawn` (23 cases × 3 = 69 attempts at `5be40f9`) and then `capacity_headroom_admitted_completes`, for **24 cases × 3 = 72 attempts**. The headroom case pads an execution-free store to 31,125 records. One durable submit must be admitted exactly at 31,130, which the case checks by counting the admission fact's new keys. A second submit must return `unavailable` with one `admission_projection_records` log line. The admitted child must be delivered with `child_release_marker` and exit 0 while the projection grows past 31,130, with no hard-limit refusal, one spawn marker and no process or execution record for the refused identity. It stops a durable service with no executions and uses the test-only `target/debug/pio fake fill-projection DIR RECORDS` tooling to pad the projection to 32,767 records through the same bounded commit. After restart, one public `execution.submit` must return `unavailable` / `same_command`. Since `aa7ad78` it is refused first by the admission threshold, so its log line names `admission_projection_records`. A public `execution.controller.claim`, which admits no work, must also return `unavailable`, with a second log line naming the hard `projection_records` limit. Journal, outbox, invocation rows and projection rows must be unchanged; spawn markers, process-table matches and an execution record for the refused identity must be absent; `execution.inspect` must answer `not_found`. The tooling then removes its filler and the same store and configuration must admit and spawn exactly one ordinary child, which checks that the refusal is not vacuous. The filler tooling is not a product command and never runs inside the service.
+
+## M2 Codex qualification
+
+`pio-codex` binds a user-selected Codex executable before any native work. `target/debug/pio codex qualify --executable PATH --work DIR [--expected IDENTITY]` resolves the npm wrapper the way the pinned wrapper does and records wrapper, Node (path, hash, version) and native binary hashes. It runs `--version` for the selected and native binaries, requires 0.155.1, and only then generates the app-server JSON schemas. Each file's canonical parsed JSON digest is compared with the checked-in [schema identity](../adapters/codex/0.155.1/schema-identity.json) (312 files). The previous [0.146.0 identity](../adapters/codex/0.146.0/schema-identity.json) is kept as the record the re-pin was measured against. Raw digests are provenance only. It exits 0 when qualified and 3 when refused; refusals are data (`unresolved_executable`, `version_unavailable`, `unsupported_version`, `native_version_mismatch`, `schema_generation_failed`, `schema_drift`). The executable always runs with an isolated `CODEX_HOME`. `pio codex config-snapshot --codex-home DIR` and `pio codex config-diff BEFORE AFTER [--fixture-root DIR]` record configuration digests and project trust entries, reporting paths only as digests plus a `fixture` / `outside_fixture_root` label.
+
+Cargo tests (with labeled fake executables, so CI needs no Codex) cover canonical JSON, parsed-equal/raw-different acceptance, changed/added/removed schema refusal naming files, the isolated `CODEX_HOME`, an unsupported version never receiving Codex arguments, a missing executable refused as data, three npm wrapper layouts, the checked-in identity's own listing digest, and configuration trust-entry disclosure. They also cover the thread-settings guard, including a configured `approval_policy = "untrusted"` refused as unresolved rather than compared. `scripts/codex_host_matrix.py`'s file-change case proves only command approvals carry `kind`. Writing a fake executable and exec'ing one are serialized inside each test binary: a sibling test's fork inherits the still-open write descriptor and Linux then refuses the exec with `ETXTBSY`, which failed one Ubuntu CI run at `56dac9f`.
+
+`python3 scripts/codex_offline_probe.py --executable PATH --out FRESH_DIR` needs an installed Codex and is not part of CI. It qualifies, then runs five cases, each with its own isolated `CODEX_HOME` and credential variables removed, sending only `initialize` and `thread/start` for a throwaway fixture repository and recording the configuration difference: the settings live runs request; absent settings on a fresh project; absent settings with the project already trusted, which is what the thread-settings guard assumes; `approvalPolicy: "untrusted"` requested per thread, which R5 and R6 need; and `approval_policy = "untrusted"` configured, which 0.155.1 refuses to start with. Workstation evidence and findings are in [codex-qualification](work/m2/codex-qualification/README.md). None of this is a live run, real journey or model-backed result.
+
+## M2 Codex adapter offline matrix
+
+`target/debug/pio serve-codex --data-dir DIR --config FILE --socket PATH` serves the public Unix API with the ADR 003 Codex adapter. A `pio-codex-service/1` configuration names the selected executable, its explicit environment, the Codex home, the fixture root, and optional thread settings (`danger-full-access` and approval policy `never` are refused). For a real executable, startup qualifies it and refuses with `codex_not_qualified` before any native work. `labeled_fake: true` runs the labeled test double `pio codex fake-app-server` instead; its evidence is labeled `pio-fake-app-server`, and discovery reports it as not Codex and never usable.
+
+`python3 scripts/codex_host_matrix.py --out target/codex-host --repetitions 3` runs 17 cases × 3 (51 attempts) against the fake app-server, with independent markers written by the fake, read-only journal and host events, and the process table:
+
+- a J1-shaped turn: `provider_ack_id` delivery from the `turn/start` response, spooled output, observed token usage, exit 0, fixture trust-entry disclosure, and brief bytes kept out of the journal;
+- approval decline and accept delivered natively, with a repeat answer `not_found`;
+- interrupt observed as `cancelled`;
+- steering acknowledged with behavior `not_observed`;
+- the suppressed-acknowledgment control never claiming `acknowledged`;
+- a missing brief, a fixture outside the root, and a content digest mismatch refused before any app-server starts;
+- the `kind` 0.155.1 added to command approvals recorded with the action: `command` on the accepted case, `writeStdin` on the declined one, and `command` again where the optional field is absent;
+- an unqualified executable refused at service start;
+- a permission-grant request refused natively, with no action surfaced and nothing answered;
+- daemon restart with the same host and app-server, one turn and an advanced generation;
+- a lost host after acknowledgment reported `unknown` with no respawn;
+- discovery reporting authentication only after a launch observed it;
+- widening approval decisions (`acceptForSession`, execpolicy and network-policy amendments) refused as `invalid_envelope`, with no control or native answer;
+- a 3-second execution deadline stopping the turn with a real `turn/interrupt`, recorded `deadline_stop` outcome `interrupted` and a clean app-server exit;
+- a configured `read-only` sandbox making a `workspace-write` request refuse before any app-server starts.
+
+Every matrix submit carries the live timeouts (`delivery` 120 s, `execution_deadline` 600 s) unless a case tests the deadline.
+
+The matrix proves adapter plumbing only. It runs no real Codex, uses no model and establishes no journey.
+
+## M2 live Codex runs
+
+`python3 scripts/codex_live_run.py --run R1|…|R6|model-list|discovery|wrong-executable` drives the user's installed Codex through `pio serve-codex`. It is **not part of CI**, needs an authenticated Codex, and spends real tokens for R1 to R6. Each run uses its own private store and a throwaway fixture repository under `$HOME/pio-m2-live/fixtures`; raw transcripts, task output, configuration copies and the usage ledger stay under `$HOME/pio-m2-live/private` at mode 0700. The public receipt in [codex-live](work/m2/codex-live/) holds digests, identities and observed facts only, with `$HOME` and credentials redacted.
+
+Stops: no run starts once cumulative observed usage reaches 800,000 tokens, which is 80% of the owner's 1,000,000 Codex cap; a run whose observed usage passes its own limit is interrupted with `execution.cancel`; a run that ends without a usage report stops the sequence. R1 carries a 50,000 limit and R2 to R6 carry 250,000. A limit can only be enforced when the harness reports usage, so a run stops at the first report above it, not at the limit itself.
+
+`model-list`, `discovery` and `wrong-executable` start no turn and cost nothing. `discovery` queries `execution.discovery.list` twice, against a fresh store and against the store a completed run left behind, to show authentication moving from `unknown` to observed without any app-server starting.
+
+Results and the journey marks they support are in the [M2 acceptance packet](work/m2/ACCEPTANCE.md).
