@@ -1,0 +1,33 @@
+{
+  "format": "pio-codex-qualification/1",
+  "isolated_codex_home": true,
+  "pinned": {
+    "source": "be2951ea34f0d295ed0becf97079f92fa5f6950e",
+    "tag": "rust-v0.155.1",
+    "version": "0.155.1"
+  },
+  "qualified": false,
+  "refusals": [
+    {
+      "exit": 0,
+      "reason": "version_unavailable"
+    }
+  ],
+  "resolution": {
+    "kind": "native",
+    "native": {
+      "path": "~/.local/lib/node_modules/@opencode/cli/bin/opencode.exe",
+      "sha256": "ecd111efdbea132f7a33d0ce51041665a93d4e382232bf014a5072b73fcb2b6a"
+    },
+    "resolved": "~/.local/lib/node_modules/@opencode/cli/bin/opencode.exe",
+    "selected": "~/.local/bin/opencode2"
+  },
+  "schema": {
+    "skipped": "version_not_qualified"
+  },
+  "selected": "~/.local/bin/opencode2",
+  "version": {
+    "native": null,
+    "selected": null
+  }
+}

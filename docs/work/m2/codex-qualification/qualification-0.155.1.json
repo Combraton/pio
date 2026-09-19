@@ -1,0 +1,55 @@
+{
+  "format": "pio-codex-qualification/1",
+  "isolated_codex_home": true,
+  "pinned": {
+    "source": "be2951ea34f0d295ed0becf97079f92fa5f6950e",
+    "tag": "rust-v0.155.1",
+    "version": "0.155.1"
+  },
+  "qualified": true,
+  "refusals": [],
+  "resolution": {
+    "kind": "npm_node_wrapper",
+    "native": {
+      "layout": {
+        "entrypoint": "bin/codex",
+        "layoutVersion": 1,
+        "pathDir": "codex-path",
+        "resourcesDir": "codex-resources",
+        "target": "aarch64-apple-darwin",
+        "variant": "codex",
+        "version": "0.155.1"
+      },
+      "path": "~/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
+      "sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e"
+    },
+    "node": {
+      "path": "~/.hermes/node/bin/node",
+      "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+      "version": "v22.23.0"
+    },
+    "platform_package": "@openai/codex-darwin-arm64",
+    "resolved": "~/.local/lib/node_modules/@openai/codex/bin/codex.js",
+    "selected": "~/.local/bin/codex",
+    "target": "aarch64-apple-darwin",
+    "wrapper": {
+      "package_version": "0.155.1",
+      "path": "~/.local/lib/node_modules/@openai/codex/bin/codex.js",
+      "sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70"
+    }
+  },
+  "schema": {
+    "canonical_listing_sha256": "93b723a83b000bffb23a0d0f17dbdc0711f28a35bb000e97306ed004dd4119b8",
+    "drift": [],
+    "drift_count": 0,
+    "expected_canonical_listing_sha256": "93b723a83b000bffb23a0d0f17dbdc0711f28a35bb000e97306ed004dd4119b8",
+    "file_count": 312,
+    "generator_exit": 0,
+    "raw_listing_sha256": "15ef360b08c38fadf06c7a79a530e07983c6e32d1443e60e547896dc927d6ede"
+  },
+  "selected": "~/.local/bin/codex",
+  "version": {
+    "native": "0.155.1",
+    "selected": "0.155.1"
+  }
+}

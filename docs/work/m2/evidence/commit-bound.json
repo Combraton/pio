@@ -1,0 +1,504 @@
+{
+ "format": "pio-m2-checkpoint/1",
+ "checkpoint": "ADR 002 projection capacity bound",
+ "issue": "https://github.com/Combraton/pio/issues/5",
+ "base": "9cf70474c28f549650e6b48e8be20ae88426a1b0",
+ "tested_head": "5be40f999484e18e4b3966b898ee4be70691379e",
+ "ci_run": "https://github.com/Combraton/pio/actions/runs/35118539258",
+ "cargo_tests": {
+  "passed": 28,
+  "ignored_measurement_probes": 1
+ },
+ "limits": {
+  "max_projected_state_bytes": 33554432,
+  "max_projection_records": 32768
+ },
+ "real_adapter": false,
+ "native_authentication": false,
+ "end_to_end_journey": false,
+ "all_six_journeys": "not_evaluated",
+ "live_model_tokens_used": 0,
+ "milestone": "M2 bounded checkpoint; not M2 acceptance",
+ "agreement": {
+  "environments": [
+   "clean-clone",
+   "macos-ci",
+   "linux-ci"
+  ],
+  "official_fixture_classes": 280,
+  "public_case_repetitions": 69,
+  "diagnostic_case_repetitions": 54,
+  "all_classes_identical": true,
+  "packaging_managers": [
+   "launchd",
+   "systemd"
+  ]
+ },
+ "clean_clone_commands": [
+  {
+   "command": "rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy",
+   "exit": 0
+  },
+  {
+   "command": "rustc --version",
+   "exit": 0
+  },
+  {
+   "command": "cargo --version",
+   "exit": 0
+  },
+  {
+   "command": "cargo fmt --all -- --check",
+   "exit": 0
+  },
+  {
+   "command": "cargo build --workspace --locked",
+   "exit": 0
+  },
+  {
+   "command": "cargo test --workspace --locked",
+   "exit": 0
+  },
+  {
+   "command": "cargo clippy --workspace --locked -- -D warnings",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/check_docs.py",
+   "exit": 0
+  },
+  {
+   "command": "git diff --exit-code -- Cargo.lock",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/public_host_matrix.py --out target/public-host --repetitions 3",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/client_recovery.py --out target/client-recovery",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/packaging_check.py --out target/packaging",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/conformance.py --out target/conformance",
+   "exit": 0
+  }
+ ],
+ "local_mutants": [
+  {
+   "mutant": "inclusive-limit",
+   "killed": true,
+   "reason": "at-limit commit refused with projected_state_bytes 33554432"
+  },
+  {
+   "mutant": "check-after-staging",
+   "killed": true,
+   "reason": "abort trigger fired (staged row) instead of CapacityExceeded"
+  },
+  {
+   "mutant": "unchanged-bytes-uncounted",
+   "killed": true,
+   "reason": "over-limit growth accepted because unchanged record bytes were not counted"
+  },
+  {
+   "mutant": "events-uncounted",
+   "killed": true,
+   "reason": "put at MAX-2 records accepted; retention comparison inverted"
+  },
+  {
+   "mutant": "dedupe-outcomes-uncounted",
+   "killed": true,
+   "reason": "put at MAX-2 records accepted; retention comparison inverted"
+  }
+ ],
+ "measured_commit_cost": {
+  "host": "macOS arm64 workstation",
+  "records": 32767,
+  "probe": "cargo test -p pio-core --locked [--release] -- --ignored --nocapture measure_commit_cost",
+  "debug_ms": {
+   "no_op": [
+    199,
+    206
+   ],
+   "one_record": [
+    203,
+    205
+   ]
+  },
+  "release_ms": {
+   "no_op": [
+    28,
+    29
+   ],
+   "one_record": [
+    31,
+    32
+   ]
+  },
+  "note": "observations from two runs, not a pass/fail property"
+ },
+ "receipts": [
+  {
+   "name": "clean-clone",
+   "environment": {
+    "pio_head": "5be40f999484e18e4b3966b898ee4be70691379e",
+    "pio_binary_sha256": "adc862f47c5e8032259f3c90b952ff4c77c263adbebb0cfe5d2702cd43b0b481",
+    "os": "Darwin",
+    "arch": "arm64",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "pio_dirty": false
+   },
+   "official_classes": {
+    "skipped": 1,
+    "unsupported": 73,
+    "pass": 206
+   },
+   "by_directory": {
+    "compat": {
+     "skipped": 1
+    },
+    "composition": {
+     "unsupported": 14
+    },
+    "context": {
+     "unsupported": 11
+    },
+    "core": {
+     "pass": 134,
+     "unsupported": 1
+    },
+    "evidence": {
+     "unsupported": 16
+    },
+    "execution": {
+     "pass": 36,
+     "unsupported": 15
+    },
+    "knowledge": {
+     "unsupported": 10
+    },
+    "socket": {
+     "pass": 12,
+     "unsupported": 1
+    },
+    "stream": {
+     "pass": 24
+    },
+    "verification": {
+     "unsupported": 5
+    }
+   },
+   "supplemental_classes": {
+    "pass": 2
+   },
+   "runner_exit": 0,
+   "official_manifest_sha256": "99011026bfdeb5ac53582e41f6e86609151d255bf8f8d1411b7066f87a5da48b",
+   "schema_inventory": {
+    "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+    "unchanged_schema_files": 64
+   },
+   "public_matrix": {
+    "attempted": 69,
+    "repetitions": 3,
+    "classes": {
+     "pass": 48,
+     "expected_property_failure": 6,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 6
+    },
+    "head": "5be40f999484e18e4b3966b898ee4be70691379e",
+    "binary_sha256": "adc862f47c5e8032259f3c90b952ff4c77c263adbebb0cfe5d2702cd43b0b481",
+    "manifest_sha256": "73fe9bdc4956b88f09c358b88b073d0bff1d5b644cc306027aefbca8aeb33227",
+    "capacity_refusal_no_spawn": [
+     {
+      "capacity_log": [
+       {
+        "limit": "projection_records",
+        "maximum": 32768,
+        "projected": 32772
+       }
+      ],
+      "journal_after_refusal": {
+       "facts": 4,
+       "outbox": 4,
+       "invocations": 0,
+       "refused_rows": 0,
+       "projection_records": 32767
+      },
+      "positive_control": {
+       "spawn_count": 1,
+       "phase": "completed",
+       "runtime": "exited"
+      }
+     }
+    ]
+   },
+   "diagnostic_matrix": {
+    "attempted": 54,
+    "repetitions": 3,
+    "classes": {
+     "pass": 39,
+     "expected_property_failure": 3,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 3
+    },
+    "manifest_sha256": "a593224f66c44a57ed64235d0eeaea079e74e4a969b1ceea240b2506f0858b0e"
+   },
+   "caller_recovery": {
+    "outcome": "pass",
+    "spawn_count": 1,
+    "manifest_sha256": "f17be38325aa6fb14dfa3bef326a86cd3059184f84aafa1570be047efb9ebfbd"
+   },
+   "packaging": {
+    "outcome": "pass",
+    "manager": "launchd",
+    "stop_observed": true,
+    "manifest_sha256": "005265d14cdf6ad4a8ff7e00b22ba82d7fdb9969604a39cf6be51334f6a829ac"
+   }
+  },
+  {
+   "name": "macos-ci",
+   "environment": {
+    "pio_head": "5be40f999484e18e4b3966b898ee4be70691379e",
+    "pio_binary_sha256": "0e255f9ba9e71845f4ea052a526ecd5e344673514d847a745a9d2a39a6700dea",
+    "os": "Darwin",
+    "arch": "arm64",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "pio_dirty": false
+   },
+   "official_classes": {
+    "skipped": 1,
+    "unsupported": 73,
+    "pass": 206
+   },
+   "by_directory": {
+    "compat": {
+     "skipped": 1
+    },
+    "composition": {
+     "unsupported": 14
+    },
+    "context": {
+     "unsupported": 11
+    },
+    "core": {
+     "pass": 134,
+     "unsupported": 1
+    },
+    "evidence": {
+     "unsupported": 16
+    },
+    "execution": {
+     "pass": 36,
+     "unsupported": 15
+    },
+    "knowledge": {
+     "unsupported": 10
+    },
+    "socket": {
+     "pass": 12,
+     "unsupported": 1
+    },
+    "stream": {
+     "pass": 24
+    },
+    "verification": {
+     "unsupported": 5
+    }
+   },
+   "supplemental_classes": {
+    "pass": 2
+   },
+   "runner_exit": 0,
+   "official_manifest_sha256": "9d8e2f41024090de3f64a43ea71f53b9a32224fbfe4fbf5b5b3d7c948d375f46",
+   "schema_inventory": {
+    "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+    "unchanged_schema_files": 64
+   },
+   "public_matrix": {
+    "attempted": 69,
+    "repetitions": 3,
+    "classes": {
+     "pass": 48,
+     "expected_property_failure": 6,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 6
+    },
+    "head": "5be40f999484e18e4b3966b898ee4be70691379e",
+    "binary_sha256": "0e255f9ba9e71845f4ea052a526ecd5e344673514d847a745a9d2a39a6700dea",
+    "manifest_sha256": "b3eeeef4855808dcc4896abe3346495328495a5d3fded7b1a1b0377f194004b6",
+    "capacity_refusal_no_spawn": [
+     {
+      "capacity_log": [
+       {
+        "limit": "projection_records",
+        "maximum": 32768,
+        "projected": 32772
+       }
+      ],
+      "journal_after_refusal": {
+       "facts": 4,
+       "outbox": 4,
+       "invocations": 0,
+       "refused_rows": 0,
+       "projection_records": 32767
+      },
+      "positive_control": {
+       "spawn_count": 1,
+       "phase": "completed",
+       "runtime": "exited"
+      }
+     }
+    ]
+   },
+   "diagnostic_matrix": {
+    "attempted": 54,
+    "repetitions": 3,
+    "classes": {
+     "pass": 39,
+     "expected_property_failure": 3,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 3
+    },
+    "manifest_sha256": "64991a51d963f7f9f5bc6ce3f88d9a1385ee6284c8425b5d151a4304a1f0c336"
+   },
+   "caller_recovery": {
+    "outcome": "pass",
+    "spawn_count": 1,
+    "manifest_sha256": "c491156e9abb97d065961e22aa097198c1eedabe2009bbb37a4c6dd236c969bd"
+   },
+   "packaging": {
+    "outcome": "pass",
+    "manager": "launchd",
+    "stop_observed": true,
+    "manifest_sha256": "8d2f62d13956c0b9d78d705ff7a072688c0dcbd80fd247bad857338a3570bb19"
+   }
+  },
+  {
+   "name": "linux-ci",
+   "environment": {
+    "pio_head": "5be40f999484e18e4b3966b898ee4be70691379e",
+    "pio_binary_sha256": "cb5b21879dde1e6f765741f9239cc8fae312d705ffa81092818f124c0c89b166",
+    "os": "Linux",
+    "arch": "x86_64",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "pio_dirty": false
+   },
+   "official_classes": {
+    "skipped": 1,
+    "unsupported": 73,
+    "pass": 206
+   },
+   "by_directory": {
+    "compat": {
+     "skipped": 1
+    },
+    "composition": {
+     "unsupported": 14
+    },
+    "context": {
+     "unsupported": 11
+    },
+    "core": {
+     "pass": 134,
+     "unsupported": 1
+    },
+    "evidence": {
+     "unsupported": 16
+    },
+    "execution": {
+     "pass": 36,
+     "unsupported": 15
+    },
+    "knowledge": {
+     "unsupported": 10
+    },
+    "socket": {
+     "pass": 12,
+     "unsupported": 1
+    },
+    "stream": {
+     "pass": 24
+    },
+    "verification": {
+     "unsupported": 5
+    }
+   },
+   "supplemental_classes": {
+    "pass": 2
+   },
+   "runner_exit": 0,
+   "official_manifest_sha256": "61d63008b3fae27a0343a68932f37889318f9872aa3a264f31e176b87619a06b",
+   "schema_inventory": {
+    "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+    "unchanged_schema_files": 64
+   },
+   "public_matrix": {
+    "attempted": 69,
+    "repetitions": 3,
+    "classes": {
+     "pass": 48,
+     "expected_property_failure": 6,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 6
+    },
+    "head": "5be40f999484e18e4b3966b898ee4be70691379e",
+    "binary_sha256": "cb5b21879dde1e6f765741f9239cc8fae312d705ffa81092818f124c0c89b166",
+    "manifest_sha256": "d334048f2d48f4a4b4c103469414454d4d680fbc8e7befc6eed2fd02d8532bcb",
+    "capacity_refusal_no_spawn": [
+     {
+      "capacity_log": [
+       {
+        "limit": "projection_records",
+        "maximum": 32768,
+        "projected": 32772
+       }
+      ],
+      "journal_after_refusal": {
+       "facts": 4,
+       "outbox": 4,
+       "invocations": 0,
+       "refused_rows": 0,
+       "projection_records": 32767
+      },
+      "positive_control": {
+       "spawn_count": 1,
+       "phase": "completed",
+       "runtime": "exited"
+      }
+     }
+    ]
+   },
+   "diagnostic_matrix": {
+    "attempted": 54,
+    "repetitions": 3,
+    "classes": {
+     "pass": 39,
+     "expected_property_failure": 3,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 3
+    },
+    "manifest_sha256": "57c65dbdf6a2215d9194fe930f0093fc1ae4ec6b9cf26ab602b1d9879cbd771e"
+   },
+   "caller_recovery": {
+    "outcome": "pass",
+    "spawn_count": 1,
+    "manifest_sha256": "3d9dcaad1a96dc635482f063d44e9a54e20626d1494f32e164b0bfe3fb9bd2c2"
+   },
+   "packaging": {
+    "outcome": "pass",
+    "manager": "systemd",
+    "stop_observed": true,
+    "manifest_sha256": "b0e578ecbb7f1abb3eefc47061fc9849fcfc65b0ffe4ea816788d73a6cb9d84d"
+   }
+  }
+ ]
+}

@@ -1,6 +1,6 @@
 # ADR 001 — standalone implementation stack
 
-- Status: **accepted by the owner**, 2026-09-16, following review of PR #2 at `85255d9` against `e65b7c0`. The Python bridge remains conditional on the M3 experiment. This is a design decision, not runtime acceptance.
+- Status: **accepted by the owner**, 2026-09-16, following review of PR #2 at `85255d9` against `e65b7c0`. The Python bridge remains conditional on the M3 experiment. This is a design decision, not runtime acceptance. **Amended by the owner on 2026-09-16 after M1 acceptance**; see [the amendment](#amendment--owner-decisions-after-m1-acceptance-2026-09-16), which supersedes the sections it names.
 - Date: 2026-09-16. Author: Codex. Authority: explicit owner acceptance in the implementation-readiness task; recorded in the [plan dispositions](../work/standalone-0.1/PLAN.md#owner-decision-dispositions).
 - Scope: PIO internals and distribution; preserves [accepted baseline](https://github.com/Combraton/combraton/blob/9af69ce966bfacf0deb03606d99f28a355d1f944/docs/architecture/BASELINE.md). It changes no released Protocol artifact.
 
@@ -32,6 +32,8 @@ Core/Execution persistence is refined by [ADR 002](002-protocol-journal.md): mov
 
 ### Codex
 
+**Current pin: 0.155.1**, tag `rust-v0.155.1`, peeled source `be2951ea34f0d295ed0becf97079f92fa5f6950e` (owner decision, 2026-09-19; see "Codex re-pin" below). The candidate inspection that follows records 0.146.0 as it was observed and is left unchanged.
+
 Candidate: **0.146.0**, tag `rust-v0.146.0`, peeled source `e363b08c9175ac1cbe5893615dd2cb9ddf95043b`. Read the [pinned app-server source documentation](https://github.com/openai/codex/blob/e363b08c9175ac1cbe5893615dd2cb9ddf95043b/codex-rs/app-server/README.md) and [current official documentation](https://learn.chatgpt.com/docs/app-server). Local `generate-json-schema` exited 0: 275 JSON files, listing digest in [inspection evidence](../work/standalone-0.1/evidence/readiness.json). The installed binary was hashed; no reproducible-build equivalence to the Git source is claimed.
 
 Owner review reproduced byte-nondeterminism in `codex_app_server_protocol.v2.schemas.json` across runs of that same binary, with identical parsed JSON. The raw listing digest identifies the original capture, not a stable schema compatibility fingerprint. M2 must compare canonical parsed JSON per file (preserve arrays and values, normalize object-key order), never the raw bytes of that file; retain raw hashes only as capture provenance.
@@ -39,6 +41,15 @@ Owner review reproduced byte-nondeterminism in `codex_app_server_protocol.v2.sch
 Owner source review also found that `thread/start` with `cwd` and a `workspace-write` sandbox at this pinned commit writes a trusted-project entry into the user's `~/.codex/config.toml`. This is a durable native side effect outside the task worktree. PIO must disclose it and either avoid it through a validated configuration path that preserves native policy, or explicitly account for it in the launch/effect contract and evidence. Experiment 3 must observe before/after configuration state in an isolated test environment; do not exercise it against the user's real configuration merely to probe discovery. This follow-up records the owner's evidence; it did not run a live thread or modify configuration.
 
 Recommend a host-owned app-server over stdio, using explicit thread/turn IDs, streaming events, native approval requests and interrupt. Native resume is historical-session continuation, not proof a killed live turn continued. Advertise steering only after real acknowledgment/outcome tests. Never select the unrestricted `thread/shellCommand` or experimental process API to evade the execution grant. Current documentation and local help label app-server experimental; qualify the exact surface and treat version drift as requiring re-probe. Stable schema fields do not make every transport or endpoint production-supported upstream.
+
+### Codex re-pin to 0.155.1 (owner decision, 2026-09-19)
+
+The owner updated their Codex to **0.155.1**; 0.146.0 is no longer installed, and PIO's qualification refused the new binary as `unsupported_version` before any native work, which is the behavior an exact pin is for. The pin moves to 0.155.1 with a new [312-file schema identity](../../adapters/codex/0.155.1/schema-identity.json). It remains an exact-version pin: it binds one version, not a range.
+
+The measured drift, the re-qualification and its negative controls are in [codex qualification evidence](../work/m2/codex-qualification/README.md). Two changes matter to the adapter and are carried in [ADR 003](003-codex-app-server-adapter.md): command approvals gained an optional `kind`, and `approval_policy = "untrusted"` is no longer accepted in configuration, although requesting `untrusted` for one thread still is.
+
+**PIO still never selects a model.** The owner authorized one dated, test-only exception on 2026-09-19 so the M2 fixture runs can complete: a service configuration may carry an explicit model, and only when it also names that exception. ADR 003 holds the rule and the refusals that enforce it.
+
 
 ### Claude Code
 
@@ -67,3 +78,62 @@ Persist launch intent before spawn; acquire a fenced host slot; record host/proc
 Semantic events and completion receipts require durable retention. Spool limits may lose telemetry only with explicit dropped-range evidence; semantic-store failure stops new effects. Observed tokens, native reported cost, estimates, subscription coverage and unknown liability remain separate. Native controls may refuse cancellation; cancellation does not settle external effects.
 
 The accepted stack supersedes the README's unresolved stack preference; it does not supersede architectural boundaries or turn experiments into passes. macOS arm64 and Linux x86_64 are accepted targets, with both-platform build and conformance CI required from M1 onward. The Python bridge remains conditional on M3. Failed experiments remain in the task evidence; a changed direction requires an explicit amendment. M0 is accepted only as a documentation checkpoint; merge, tag and publication remain separate authorizations.
+
+## Amendment — owner decisions after M1 acceptance (2026-09-16)
+
+Recorded at the start of M2: base `9cf70474c28f549650e6b48e8be20ae88426a1b0` (merge of PR #4), [issue #5](https://github.com/Combraton/pio/issues/5). These owner decisions amend the sections named here; the text above remains the record of the earlier position. They establish no runtime behavior, harness support or journey result.
+
+### Harnesses run as the user configured them
+
+PIO drives the harness executables the user already has installed, with the user's own login, configured models and providers, instructions, settings and permissions. **PIO never selects or injects a model or provider** and never adds a provider entry to a harness configuration. A kickoff draft on the same day routed MiniMax through a Codex custom model provider; the owner withdrew it before any such configuration was created.
+
+The harness test scope expands from the two initial candidates to the four harnesses installed on the owner's workstation:
+
+| Harness | Local `--version` observation, 2026-09-16 | Role |
+|---|---|---|
+| Codex | `codex-cli 0.146.0`; `codex-cli 0.155.1` after the owner updated it on 2026-09-19 | M2 adapter; the user's own login and configured model |
+| Claude Code | `2.1.273 (Claude Code)` | M3 adapter; authentication route below |
+| OpenCode | `opencode v2.0.1` (`@opencode/cli`, invoked as `opencode2`) | Additional adapter; the owner has MiniMax, GLM and Kimi models configured. Preferred for heavy-usage testing |
+| Hermes Agent | `v0.20.1 (2026.8.13)` | Additional adapter; the owner has MiniMax configured |
+
+These are version-command observations, not qualification: each adapter still binds the resolved executable, exact version and binary hash. A separately installed `opencode` reporting 1.18.18 is a different version and is not selected. Test scope is not a support claim; advertised support follows per-version qualification evidence.
+
+**v0.1 release scope remains Codex and Claude Code.** OpenCode and Hermes Agent are test-scope adapters and do not gate the v0.1 release unless the owner promotes them. Test scope is not release scope. The owner confirmed on 2026-09-16 that their adapters come after M3 (PLAN row M3b).
+
+### Live-run spend and concurrency bounds
+
+- **Codex:** at most **1,000,000 tokens** across all its tests.
+- **Claude Code:** a separate **1,000,000 tokens** across all its tests. The two caps are per harness, not shared.
+- **MiniMax through OpenCode and Hermes:** at most **300,000,000 tokens** combined.
+- **GLM and Kimi through OpenCode:** they bill separately from MiniMax. Until the owner sets per-provider caps, which must happen before M3b starts, their usage counts against the 300,000,000 cap **as an interim proxy only** and is recorded as proxy-counted.
+- Count tokens per run from each harness's own usage reports and record them per journey in [STATE](../work/STATE.md). A run without a usage report is recorded as unknown liability, never as zero. Stop live work on a harness and report when any cap reaches 80 percent.
+- At most **three concurrent live sessions** across all harnesses.
+- Comparative measurements name the harness and the model that actually served each run. Results from different models are not equivalent.
+
+### Codex configuration side effect
+
+This amends the Codex finding above. Live Codex runs use the **user's real Codex home**, as an installed product would. Every run captures that configuration before and after, reports any trusted-project entry that `thread/start` added, and changes nothing else. Raw snapshots contain private paths and stay outside Git; the repository records digests and a redacted difference. Offline tests keep using isolated fixtures, and PIO still never reads the user's configuration merely to probe discovery.
+
+### Claude Code authentication
+
+This supersedes PLAN disposition 3 and the Claude Code authentication paragraphs above. **Owner product decision:** PIO drives the user's installed Claude Code executable with the user's own existing login, as a human at the keyboard would, and drives it by API key when the user has one configured.
+
+Anthropic's [SDK documentation](https://code.claude.com/docs/en/agent-sdk/overview) says third-party products must not offer claude.ai login and rate limits without prior approval. PIO's position is that it operates the user's own installation on the user's own machine and never provisions, resells, stores or copies credentials. **This is a policy risk the owner accepts knowingly, not a technical or compliance claim.**
+
+M3 must prove, for every live run, which route served it, from the CLI's initialization or account-source output or from provider-side signals. It defines and tests an explicit precedence rule for when both a login and an API key are present. The negative control: with neither a configured API key nor a usable login, PIO refuses with the specific missing-route reason; it neither succeeds silently nor prompts for login on the user's behalf. PIO never logs the user out, copies tokens, edits global Claude settings for convenience or bypasses permissions.
+
+For M3 experiment 4, the primary criterion is fidelity to the user's own configuration, instructions, settings, permissions and login. Compare the direct CLI stream interface with the Python SDK bridge on that basis. The SDK bridge remains acceptable only if it spawns the user's installed CLI through an explicit path and preserves all of these.
+
+### License, design and walkthrough
+
+- **License:** MIT, matching Protocol; see [LICENSE](../../LICENSE). Nothing is distributed before M6.
+- **M4:** before implementation, the independent reviewer supplies TUI mockups produced with Claude Design and iterated against reference terminal interfaces. The builder implements against them and records every deviation with its reason.
+- **M6:** before any release candidate is accepted, the reviewer works through the full product as a user would, on a runnable build, with the user's own installed harnesses and existing logins on the walkthrough machine. Findings are review evidence, not builder evidence.
+- **Thresholds:** unchanged. Evaluation thresholds and rubric are frozen after the pilot, based on pilot variance, and never moved after confirmatory results are seen.
+
+### Constraints for later milestones
+
+Recorded by the owner on 2026-09-16, after the amendment above was committed.
+
+- **Hermes isolation.** Hermes runs only under an isolated Hermes profile that carries model configuration and nothing else. The owner's real Hermes home runs their scheduled messaging check-ins and other scheduled jobs and **must never be driven by PIO**. If Hermes cannot be isolated that way, defer the Hermes adapter and say so; do not fall back to the real home.
+- **Codex live runs.** Every live Codex run works in a **throwaway fixture repository path**, never a user project. PIO never selects Codex's full-access sandbox (`dangerFullAccess`, configuration value `danger-full-access`) or the unsandboxed shell-command surface (`thread/shellCommand`). Consistent with the existing no-weakening rule, PIO also does not select `externalSandbox`, under which Codex enforces no sandbox, or the unsandboxed `process/spawn` API. Every trusted-project entry a run adds to the user's Codex configuration is disclosed. Because each fixture path is new, these entries accumulate; PIO reports them and does not edit the configuration to remove them.

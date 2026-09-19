@@ -1,0 +1,1256 @@
+{
+  "canonical_listing_sha256": "93b723a83b000bffb23a0d0f17dbdc0711f28a35bb000e97306ed004dd4119b8",
+  "file_count": 312,
+  "files": {
+    "ApplyPatchApprovalParams.json": {
+      "canonical_sha256": "968ce933bb3a8602928191fa89550dabb19a16fd042c851f13b1eba8db7e8518",
+      "raw_sha256": "179d91081c3c84d0f79fc544a3d6d423f280c0f9d93512cdd0344c80e09b99a3"
+    },
+    "ApplyPatchApprovalResponse.json": {
+      "canonical_sha256": "72f26114b32c1b10b130a8e144b4f401c3d96e2ff9385b8d449b59706337f802",
+      "raw_sha256": "a5e145b4794ea91da6eb478626fac96bbbd4485c3399fabd1c9972d53d2d9010"
+    },
+    "AttestationGenerateParams.json": {
+      "canonical_sha256": "aa818c50814505fce83044ee851b9b552953dc36e421706c4cc2d456a60ad619",
+      "raw_sha256": "b85df8f169cfbca98724df3a5f7550fc4649fa69b23f5160aafdb52e027133a8"
+    },
+    "AttestationGenerateResponse.json": {
+      "canonical_sha256": "52716288aa370cbefb9632523b4dd0b01b916e2de4e9daa87b09e6db3ecba93d",
+      "raw_sha256": "2eb86b2a37bca01a8cb5d0822f28cf13d46dd106c8b1d38e7ba097e436b5ab30"
+    },
+    "ChatgptAuthTokensRefreshParams.json": {
+      "canonical_sha256": "74d490082dab616ac01c94d388c9a836304c96092db37290cfdd10a46b0f3ef9",
+      "raw_sha256": "03b7a734b8b3180d9cb477b33564385d29b22a2528165a614891f13849060503"
+    },
+    "ChatgptAuthTokensRefreshResponse.json": {
+      "canonical_sha256": "ff76f5cc58bff40216f9d5f3c5be921268059f6d66d6c034970cddf0e08f0ced",
+      "raw_sha256": "06d6b30436fc962d80b5d7920f8f323de12a052214d9148c5f0dfbaedd5eec6c"
+    },
+    "ClientNotification.json": {
+      "canonical_sha256": "4446a1ae8626aa55d812836bfc2dae24213500d87c4759af2698f6199ea5b59f",
+      "raw_sha256": "706cf248d75027c84a3c63348d0ed507182e8eba40069dd17541793de029145a"
+    },
+    "ClientRequest.json": {
+      "canonical_sha256": "da2c651d90c6aa63a1ccee4b8a174a24100ed55b11a37029d6d47caa32e9a02c",
+      "raw_sha256": "85d6d137bab416d9ad47982adf354d707713042da5d37f934d0b2ed386e53ca4"
+    },
+    "CommandExecutionRequestApprovalParams.json": {
+      "canonical_sha256": "cc03b0101cc46dcbb6d4537e242ce02ddb0403c85db65cb354d74bca7bb8ba3e",
+      "raw_sha256": "16a71816c2d66e319c2c4aa83dd636dfdc43c61e72b6d5475e421ce08d8e6558"
+    },
+    "CommandExecutionRequestApprovalResponse.json": {
+      "canonical_sha256": "d1546d530d210f005b87c0d57e4840da712257fd11747c356c830833b19c0010",
+      "raw_sha256": "6d0767113e22f311381809b6b236b0dde2b99b01992879c26bf7b1ea0e003cb7"
+    },
+    "DynamicToolCallParams.json": {
+      "canonical_sha256": "af7d6eed112291b3974df5bcdf32d2a81ab76c9f3364fd70e54140bd461622b7",
+      "raw_sha256": "401bba20cfbd95762bef0467d840430c46be53369093ad9f26425ba757e34efc"
+    },
+    "DynamicToolCallResponse.json": {
+      "canonical_sha256": "9cdefbb11d6d0f46f291396706443a1dd413b7f05d4eed0d70dd92f036d7282a",
+      "raw_sha256": "abb082cad67f11fcc98ba75f2eff75d7d1723af0c657655329b83ff160451a02"
+    },
+    "ExecCommandApprovalParams.json": {
+      "canonical_sha256": "f5763e676eba8bb509e02d06531ea37da5f5225083efd7134e4eb1032e9efb66",
+      "raw_sha256": "653116614df1aa5011c3cc399cf79bae6b9eb28c1d527df27275abf61ceb1365"
+    },
+    "ExecCommandApprovalResponse.json": {
+      "canonical_sha256": "a77c3971dc46a9b5051b898c0eaeb459932893c7cfdf9ca502787696b8e979e5",
+      "raw_sha256": "80dba6d9f28d19c57960db72340554c193624f014cd496714a0c7aabe1120046"
+    },
+    "FileChangeRequestApprovalParams.json": {
+      "canonical_sha256": "1683d378ee81b2d4d2aeab348d4aa8236a8070c6ee44a1548a8d206ee947411d",
+      "raw_sha256": "13848b26814c286ad6425a20d01c1691c86790e1f9e2529399677a8a22fe0d18"
+    },
+    "FileChangeRequestApprovalResponse.json": {
+      "canonical_sha256": "f522e127a6160afd094932f6b0a58b736a171ebfb767d58b3d70c0bd7ff7ab97",
+      "raw_sha256": "b95b03ee6be674e25cee2e863cc135a28620e1070addd2f34685aadee27cde08"
+    },
+    "FuzzyFileSearchParams.json": {
+      "canonical_sha256": "233829834866264a07931cf0e5d8d7b6d3b3a392fccc2f01564e0631ab59b1cb",
+      "raw_sha256": "0291dbb87a7c3d8ef7f7cdf8d5d61f929deabab8c0ea79f064da95984d7d5f4f"
+    },
+    "FuzzyFileSearchResponse.json": {
+      "canonical_sha256": "73021c084fd72fb832e097c92797ec5ec2cbbd80b14e063d4770a22d9356632a",
+      "raw_sha256": "4984c3dba591e240407c39531d41c6b499c4816017de70a3371c7d6fa2d0951f"
+    },
+    "FuzzyFileSearchSessionCompletedNotification.json": {
+      "canonical_sha256": "8aab02e1f780f3d092baf1187c8ab47d70929d46e2600fc5148f50f31c9c21a7",
+      "raw_sha256": "d3af2e301142ac0cb2462d95b052162ff4f25d83f9c1b21e319d5ce9c860d401"
+    },
+    "FuzzyFileSearchSessionUpdatedNotification.json": {
+      "canonical_sha256": "8e20d39f730c026d8bf37a376187187648a959498f060c6ee324b12a22c72afe",
+      "raw_sha256": "b8626521028e0c68611c57d458f27dbc9bf8be542e804865ae0d14acd78cf2e6"
+    },
+    "JSONRPCError.json": {
+      "canonical_sha256": "8835db6c4ada12ec628613fe2f571edc2c8fb55fc31bac706085e25ad1a08c0e",
+      "raw_sha256": "d7ea353d4875ae204625da5a00a1ecb5afc69101d5778b9acc253a49f8932992"
+    },
+    "JSONRPCErrorError.json": {
+      "canonical_sha256": "7018f6ebe41d025ee75f313a9b5080b28ac40bda1d19325495f731c9f57406a5",
+      "raw_sha256": "12cc5cd5d9df9246defa609c472375020fe5250f3aeabd7d529076cecd9f541e"
+    },
+    "JSONRPCMessage.json": {
+      "canonical_sha256": "a0cfee76c4fcea92835c0406186d64d9cd61dab471e9aaa56f2f28e5109d5885",
+      "raw_sha256": "6da4cc373a7ccd01f5608ad4496eeb4d44b6a9b0d3158e85ed66b59f3c0b5114"
+    },
+    "JSONRPCNotification.json": {
+      "canonical_sha256": "b45311699388af1937cb4a48467d57cfe979efaf34bfb9b2ee752646b5291017",
+      "raw_sha256": "c2b43f26880db331393fe09f34bdd76dfeb4dc30d8418d1c26e18db166d6c8c8"
+    },
+    "JSONRPCRequest.json": {
+      "canonical_sha256": "68bc219450ff077f153a899eb64e34dafbb0a2479e3f79e1810d9c0d1817601e",
+      "raw_sha256": "31bd6f360b2dd8a7ceaf682708105d40d38cb0b9d0821357a04da67028438f73"
+    },
+    "JSONRPCResponse.json": {
+      "canonical_sha256": "a126ce01981bfe6223693d17fe273cbcd17d27627c324ee82608543578399a8e",
+      "raw_sha256": "4796738c04c74288213a08fb8d820c7b4df19e0977cdcd35b65ffcb43cfc93ab"
+    },
+    "McpServerElicitationRequestParams.json": {
+      "canonical_sha256": "08581cc17d307de0f9b3f120f4256d3473b5870dda5b6cdc11edb00ff82b869c",
+      "raw_sha256": "5cbeb6bc702d2efa076da4c1dfb00672c970c1bad747031eb880b9ab907815c0"
+    },
+    "McpServerElicitationRequestResponse.json": {
+      "canonical_sha256": "628ee89b301b9ad59a83172bdeebb36dcd2b021f63b99bf26a33b77255b90e70",
+      "raw_sha256": "792a012fdfe53ac211575a6c37ffbd492be848d15cb313d1bb4b534ade1f54ac"
+    },
+    "PermissionsRequestApprovalParams.json": {
+      "canonical_sha256": "6cf0075b6061d3feb7086d7d59fccaa35001f8abdef68ccf73f7c2e3645c81be",
+      "raw_sha256": "c11fbe632472ab0923aba5c0a53da3d6d86929bcd5c78e7c13c51c6b2db508ff"
+    },
+    "PermissionsRequestApprovalResponse.json": {
+      "canonical_sha256": "08d82c17c27361f25763cb9fb117fe5779b3f38a092f4524afd5a73538d90af1",
+      "raw_sha256": "23f3f24e9dbf35db3e0b85703f0d934da5a1cff3cbb611fba8bcd41f3b4a04b0"
+    },
+    "RequestId.json": {
+      "canonical_sha256": "9725e2a9a95af7d55f70cb5e63d8c51b3f98f17e2bb6d0a8621d18072df20749",
+      "raw_sha256": "9c72d59a306d827113020c6d31a14c326d55210d9bd6954f825196a52009f1c7"
+    },
+    "ServerNotification.json": {
+      "canonical_sha256": "d8601047d9a3e4fa242b01c9caf5bffffe828140b999fb3cfaedf4c7a2d3f8a5",
+      "raw_sha256": "0a1c81641a6a2f009d7d6e3e26e8b99e6522f34d749cb1a2d5f182bbc395fcc3"
+    },
+    "ServerRequest.json": {
+      "canonical_sha256": "c3d046f059f8e3ffba0b3f198e127715ea0c6556225d6e128879ca8f9c70f592",
+      "raw_sha256": "f339be472737a0003efa25fba2e6e6c9237e621cd065b6d6995c51256e9dc1fb"
+    },
+    "ToolRequestUserInputParams.json": {
+      "canonical_sha256": "b99ace3211269f77083d8d86664393deb7992c3b53ef596582915b1256668682",
+      "raw_sha256": "fda15b62e7446105b59c8ed85c908abed2a47db70653e57c92c47a2f204fa77a"
+    },
+    "ToolRequestUserInputResponse.json": {
+      "canonical_sha256": "18735c465696eda1d8da032be0ff06097656ef1d1bf2cedc86b8707164aa105c",
+      "raw_sha256": "5073b245f741fa8ce62ec52e4dd1809b7831f9c4284c279a78abc9b171f8e3f2"
+    },
+    "codex_app_server_protocol.schemas.json": {
+      "canonical_sha256": "c8a4dc1c2d5cac6955b7910ed910d7ab508359b422e1e2a60cbd2be41032d467",
+      "raw_sha256": "f1f3591667d8dcf77352c04be5d0667153e492d1a378e4205d69e9af6f31c0c3"
+    },
+    "codex_app_server_protocol.v2.schemas.json": {
+      "canonical_sha256": "4bd2cca110846b2bb604f635e2fa165a3156c0e2ecd3a32823cd3495bb6c716c",
+      "raw_sha256": "f0402dc8ce8d278108f1e68e9d46ec7e59ddd9d153f5e70668d84d56f258dda3"
+    },
+    "v1/InitializeParams.json": {
+      "canonical_sha256": "df2c8126d3d1d95c8b7914c8f157eefd9b3c56d64e04ef12f6c941e1915d4331",
+      "raw_sha256": "6f0094be9a65242ec779a40794cbd4fdfa32fca1e45084a16adfb50501d33ea2"
+    },
+    "v1/InitializeResponse.json": {
+      "canonical_sha256": "747401b5d7d395b71e4023d3d13aaaaefb0f6ae044d611675f59838672720c3d",
+      "raw_sha256": "62ad689c2cb6379913c1d72749cfd8de5089d35760214123518eb92eef11acc9"
+    },
+    "v2/AccountLoginCompletedNotification.json": {
+      "canonical_sha256": "de500849f26359278f9c268ce1e9bca693da03e52070e8f8e8fd15e1e363f7d3",
+      "raw_sha256": "d81e8821fd5a4a9ad118dfc3506ea156d32dcb18da388b336501bbc6a5ccb4a6"
+    },
+    "v2/AccountRateLimitsUpdatedNotification.json": {
+      "canonical_sha256": "f204a908acfbfa4a30bffa1f100c03560137f3c767a838f04b9c3b80c5e2436e",
+      "raw_sha256": "8252ed2af807bebce56e9c042b6848300c7c52ba7a8162dc50d320709fa3b078"
+    },
+    "v2/AccountUpdatedNotification.json": {
+      "canonical_sha256": "273b40bcd6dc5d57f4c2d6e8a92b0fe586b141e64b6e2ff415702f433ba6e81c",
+      "raw_sha256": "9bf450d9d9ea23a2bac9c9cb0a68c2de8f89a97bdeb4485c91762bb4d43295b8"
+    },
+    "v2/AgentMessageDeltaNotification.json": {
+      "canonical_sha256": "0a4da13aefe3b5e912226e0a07fb969127ec0fb4c99d0bb3ca3ec0e8e20f1905",
+      "raw_sha256": "996e6c0ea65e57bed5a00f410b94381fe5ebf804333e5d00c2b6e6d47e5c55f6"
+    },
+    "v2/AppListUpdatedNotification.json": {
+      "canonical_sha256": "87d7fbf48f6ba7b0bf1e1f36a0356e15fceb19c0438c01062a97af34c55093ea",
+      "raw_sha256": "2c67a3bc676309afdd0d6952ad454c2a040a3d4c09d38c8f63ca7fb632034cce"
+    },
+    "v2/AppsInstalledParams.json": {
+      "canonical_sha256": "9089af232a7ff81bf172de0e819fe808c4286ed2d6165e780f167486f5adbd64",
+      "raw_sha256": "c2027510d5d041c2205349036f9c2bea10b20df309de5330beab9de8a9e50bdb"
+    },
+    "v2/AppsInstalledResponse.json": {
+      "canonical_sha256": "3e7811dcd09a4c9a59edb318b1408258b1f0ced7202a6a9898df48e854465ab9",
+      "raw_sha256": "d8ef8dd14dcba8aaaaaf2b0b80db90d66edf8f4ff422589b844ae2b0edcb46d4"
+    },
+    "v2/AppsListParams.json": {
+      "canonical_sha256": "6669bc6780ec9fbfb74fd74ec495348e4389b234f372f70064dfdee8fcfa9664",
+      "raw_sha256": "e880d0c24811118a2d3c2c7f0569a14aae5b12a31b0efe56809ccca8bbd85802"
+    },
+    "v2/AppsListResponse.json": {
+      "canonical_sha256": "d48ee36d6ca54f9323fc0b16a0edc26328e6a30b24cefd37d0f06c3f889cf8d9",
+      "raw_sha256": "5811fda68d6274decfc11744ad72bbe93e601d8514549e94f361ba3131d1adeb"
+    },
+    "v2/AppsReadParams.json": {
+      "canonical_sha256": "661118ff1ffee8bc51eea15ad32f5c879d4177baf84964cc0ab1c7739bed1380",
+      "raw_sha256": "61e6a9d35515f3164a7f7e7a5b0c5ac92817c5a3b5d7fb27e9a704fe2935ddf7"
+    },
+    "v2/AppsReadResponse.json": {
+      "canonical_sha256": "4f443f4e92ec1d47195ea8e0c76de5297544f3d06ab316bfa712d93615783a64",
+      "raw_sha256": "f3b73c2c31f16a2cff013c9682dfea48f26571f94002195c93ce10722a288791"
+    },
+    "v2/AuthRecoveryNotification.json": {
+      "canonical_sha256": "3bc0d4b60e58dd85dd7fa3b8d4a6697acd88f4a881b7b7d15ef3f8b22e249f98",
+      "raw_sha256": "c19238d43cf8bf610ea346afefc390b9ffa4f01e98ec6b42af0addf29d6cb7d5"
+    },
+    "v2/CancelLoginAccountParams.json": {
+      "canonical_sha256": "36a861ed78cf1c0a60f9e93ccfc9715f0f2022d1a22ab0abb2e477272cfead60",
+      "raw_sha256": "a4570a7542b82b918f69199f1e214ef747151c678473a5af58c58b088fdf58b6"
+    },
+    "v2/CancelLoginAccountResponse.json": {
+      "canonical_sha256": "4296bf2e5d7d98168aac0b013e26b2ab6299dd92dc0ecb3cd7d883304a983962",
+      "raw_sha256": "06bc17624df01600fdc399d3c0f222f875c010d2d952c1d1191cb84de9b59014"
+    },
+    "v2/CommandExecOutputDeltaNotification.json": {
+      "canonical_sha256": "df6fd51d0e171f38dc56d4121268fc46b7bedcb11012d3bcabc7f84a4a2257da",
+      "raw_sha256": "28e74454b211ab677a256129e623fc5a2a29ce5394da1c69d3bc5136f7e37c57"
+    },
+    "v2/CommandExecParams.json": {
+      "canonical_sha256": "d64ef59d5a30cb644ee3b952fff9d7bbdb820a40e5771399dccbb3cb06f2d021",
+      "raw_sha256": "e4f20080b92c6199cf132941840c4bd0fb9a90e3fec197ceb0e1ce9084346e18"
+    },
+    "v2/CommandExecResizeParams.json": {
+      "canonical_sha256": "e98f3496e2e41e764d475dcde9f5b46cb417014ec83369cca7433f9f3b956ad3",
+      "raw_sha256": "b748fee19979d2c32ac17a460ccfdc761e125cc2939bc551945e1e2c2af34197"
+    },
+    "v2/CommandExecResizeResponse.json": {
+      "canonical_sha256": "007b8ba5881b625e21164e2a0ca0f92c7efeccf5e28b9ef30bd67bfd2ad61cda",
+      "raw_sha256": "01da20d70957fa5b43cf41365c5fee4fb3a69927947a45f92866f9bcf0895d0f"
+    },
+    "v2/CommandExecResponse.json": {
+      "canonical_sha256": "f40282af0193d753edd4df784fd96054da3634ec41965619e8ffd27141a21191",
+      "raw_sha256": "dec52d187121e8dd48124b47a4a8d8428ef3717b98b9200345bb404f73b62c9d"
+    },
+    "v2/CommandExecTerminateParams.json": {
+      "canonical_sha256": "aac0457aa0a677a5c787aa4dae9f8a15d301d76448192c7ec90a89fba1ca6059",
+      "raw_sha256": "979ece7059c6713d0909ab1690daec27149510f4ea2ec10014600bfb1d631c97"
+    },
+    "v2/CommandExecTerminateResponse.json": {
+      "canonical_sha256": "766a12c498d924430fe70ccc1c1b83c6f9b020c7e81cf282943f0b1ea8ba5384",
+      "raw_sha256": "d46aa76d952bb3ac95d0bd64de609fb8a82efd98d9ee38264fe3673fd184ce5d"
+    },
+    "v2/CommandExecWriteParams.json": {
+      "canonical_sha256": "e6e0786a3ed4c56305a097361c13e55f7f94a16cef354e17651c906d63aaa6ab",
+      "raw_sha256": "3e8e849ce321c85987bbe96ce1f913df0047696a5207bc97dfa1409b0142eda8"
+    },
+    "v2/CommandExecWriteResponse.json": {
+      "canonical_sha256": "ea7f0b4a3f2a496e42c86c051ad8f193a08b6193ba678dcd420fbb714833c20c",
+      "raw_sha256": "22887250f84443b2a6f5fc6f9c46cf9e2af072ff631574340018c48771411571"
+    },
+    "v2/CommandExecutionOutputDeltaNotification.json": {
+      "canonical_sha256": "1f46a991f4a2a5a930f64804d9b05e591354c2cd0a913d40bdd94b0adabcf9ea",
+      "raw_sha256": "841fa94098ddb63a71acf1bf5f9e3fac1b0491f4ed3fa8ef86f9a6ca1260b539"
+    },
+    "v2/ConfigBatchWriteParams.json": {
+      "canonical_sha256": "7ad93ede3231a137263c0014ce9b92e54b97bef5cb64b45f67f144006f8dcc46",
+      "raw_sha256": "d11e244258ffaf8a37a0ca4afdbe589d07cb7881b72f06b7f730fddbab9ad613"
+    },
+    "v2/ConfigReadParams.json": {
+      "canonical_sha256": "30c0c8cf7aeba951a065e57291c07ff4c757089f918cb07ee7dcdf89a11cd6ff",
+      "raw_sha256": "257c54a423b47c1d209ff1076765a1564d82322fd5161670fd489a2874de1bac"
+    },
+    "v2/ConfigReadResponse.json": {
+      "canonical_sha256": "099485429614aed1ba09e273f2fc0c1558dc06139ebeaa8328ef34ad4a66903c",
+      "raw_sha256": "bd72c94e2c7d49ead6a20bcf54afedc8db11044bf8cadb387e42135dd5d1e342"
+    },
+    "v2/ConfigRequirementsReadResponse.json": {
+      "canonical_sha256": "298ebc5e55de9671c38e00eb94722316be6c60bef5aa38ec2fda3b92807b0fea",
+      "raw_sha256": "b12320eb9faf118a63de0ce9ba374571e7bf92606c9bcb89eb021b13878a3992"
+    },
+    "v2/ConfigValueWriteParams.json": {
+      "canonical_sha256": "2fed8cd8bb820ec3542faaddea3edf025bd7325f2bb84bd79aaea34c6f425000",
+      "raw_sha256": "b9032e35bf64d4628bfc72e22b58b71bbcf754aeb720a86eacb091e0137547c9"
+    },
+    "v2/ConfigWarningNotification.json": {
+      "canonical_sha256": "af6583b5b77951b92be317e907f9fc23445a1cea9528bc7fd4d482594819f589",
+      "raw_sha256": "533e713405b582cce4d772d0b4ebbc75e840f0fe71cedbb17c2c83da285a21d4"
+    },
+    "v2/ConfigWriteResponse.json": {
+      "canonical_sha256": "7e44c161e84b1b486445b3a334fc69e150d6569112ebb0254512c5bc175926ce",
+      "raw_sha256": "1d690287d9e8a0c552f664038d3810dfc3903ec8042eb2c0f772856414f59954"
+    },
+    "v2/ConsumeAccountRateLimitResetCreditParams.json": {
+      "canonical_sha256": "786e21cea315db75c1033b240e59971e58e211b05a7742972d5931b861174420",
+      "raw_sha256": "ce36a9f59ce3b8138fccdca042538f723e93d0e34d08441e6846d3153ee0b291"
+    },
+    "v2/ConsumeAccountRateLimitResetCreditResponse.json": {
+      "canonical_sha256": "143c879ac619798c17de58a92ec072c604c182745edf0843cb1d6f451f2c482d",
+      "raw_sha256": "6d4144c00dcb7f73be6ad24693ff7e539bad56064e4432f7f2bf8d20b3bab724"
+    },
+    "v2/ContextCompactedNotification.json": {
+      "canonical_sha256": "42c45cf3e0e2548a23c32d5b1ff69fedac43df6c29e7b0665269914491cd2d22",
+      "raw_sha256": "c9f9a58ef680e09d568cff5f24b45895841e1cf138b650bae64dcf6c85f177af"
+    },
+    "v2/DeprecationNoticeNotification.json": {
+      "canonical_sha256": "dd45d65ab33fca3f95fd42a0783e17770348751fd0988cf1e71a5cb152c15cfa",
+      "raw_sha256": "29fdb44fc0a09bfdc5c4924ff34e33679acc9201730fa4fe9be7ed1978af0b72"
+    },
+    "v2/EnvironmentConnectionNotification.json": {
+      "canonical_sha256": "378dae75a8a687cba5dc3a5d500aa1ac72fbb8659beae27e98073a28d707f68a",
+      "raw_sha256": "007e9a6ccae0003a56476bb7cdc9a097141e964c168e7ae43d213a763c93fb56"
+    },
+    "v2/ErrorNotification.json": {
+      "canonical_sha256": "656987d460949965d3614082821ca692fcb230e30180f3a9b03fe65feb078499",
+      "raw_sha256": "d77732536ef8864799e4fbb5bf6965a9f1970a6195e523f144252a82287c08e7"
+    },
+    "v2/ExperimentalFeatureEnablementSetParams.json": {
+      "canonical_sha256": "e3ca755f1960b18dc532c443182d9260d5dbadae4bcfd769f5eb22e7ca796dd6",
+      "raw_sha256": "00aaf2ef719cc336e4d20eb26dd6158be1eb26161fb7647372804b80a02e3131"
+    },
+    "v2/ExperimentalFeatureEnablementSetResponse.json": {
+      "canonical_sha256": "8c7b8ce9157daad573178627fc135df4e1b96b32d53f884df748dfc2c5746c7f",
+      "raw_sha256": "5ecd92ee95380d7cadc4c109091530aa71245e41b9f1b530a5e9d5c5c9eda95b"
+    },
+    "v2/ExperimentalFeatureListParams.json": {
+      "canonical_sha256": "dfd22e2b66c5cc628e3b1afe6516245bd7d650635257d201bce5f98a6aa12b77",
+      "raw_sha256": "4db92977e59fea4125710babb4cd2128dc2cebef8292e3619d0844089e7fc1f5"
+    },
+    "v2/ExperimentalFeatureListResponse.json": {
+      "canonical_sha256": "c3b75b295dd5197e045f888d9fb4ab4d4abf113ab03f04d2186978126eb0e950",
+      "raw_sha256": "4084a25f32333b3f58eb5e9803a5983739b57f945c4e7e4002e85851622ce597"
+    },
+    "v2/ExternalAgentConfigDetectParams.json": {
+      "canonical_sha256": "561c905971c0abb72569d10ba35e741a5057e3dd9d8a462a216d8816831668d4",
+      "raw_sha256": "db6c6ea654efb4095dc745a1e65bee76d0d063b03f2bc3202b9077a1569211f8"
+    },
+    "v2/ExternalAgentConfigDetectResponse.json": {
+      "canonical_sha256": "8bbbba06f34976d955e6879443dbafd0f3c1fedae3cdae341c154b34b5cef974",
+      "raw_sha256": "36c4173d5f30ebd04be3d40389c904bc4ecadfbb8e5d1dd46b9b589254f7e1d9"
+    },
+    "v2/ExternalAgentConfigImportCompletedNotification.json": {
+      "canonical_sha256": "13215499819550d68288561736a976df00dc0a80f3790e086d3b19e749e4d1d1",
+      "raw_sha256": "c54702d40c3a40bcb3e3e835d99860473831725acbd3576fc26d2d4fa3a7617a"
+    },
+    "v2/ExternalAgentConfigImportHistoriesReadResponse.json": {
+      "canonical_sha256": "b2135223ccdf6eb2e201bd2f3c5e522fe7747cc837f7c530e09cc6da0445bb6e",
+      "raw_sha256": "1c09641e957333a2f602a350532acd99cf538a73ea45f39a2294289907a0bd96"
+    },
+    "v2/ExternalAgentConfigImportHistoryRecordParams.json": {
+      "canonical_sha256": "2de0bcec4480a7b740591daf616792902847b26cad81a43489d7564ee41aafc2",
+      "raw_sha256": "6a3e8071854771b0f34c6623fb7dcfbeaa7518a90779cc4a40c97fe92ac6f3ed"
+    },
+    "v2/ExternalAgentConfigImportHistoryRecordResponse.json": {
+      "canonical_sha256": "2789d655af88d0030ca5a4bcc9bfd938d03ede73b826f598cdda63d78448452b",
+      "raw_sha256": "a252a2c2a03b4460bf3635d517c0735fa487a2f8a97de1aa0637f930419ae656"
+    },
+    "v2/ExternalAgentConfigImportParams.json": {
+      "canonical_sha256": "b1cdc97edd79c258f7aa6053b9c96a0fc42328bca05570adcc1e265597e83d97",
+      "raw_sha256": "6b8d0a8fbd5a7ddd455ec0dea6d1b578f56841480c8a5fffbfcd045db79458ee"
+    },
+    "v2/ExternalAgentConfigImportProgressNotification.json": {
+      "canonical_sha256": "c2bf7f7ef11898a7e8bc36a6287bcb24c0610e77670e4dc8ac59a87046a62744",
+      "raw_sha256": "dae7bfc12026811ba24cc6f32dc01ae9ffaee7d9340d7768f9afce94575c23d2"
+    },
+    "v2/ExternalAgentConfigImportResponse.json": {
+      "canonical_sha256": "ea63a6753d8ae72333443cc69c2b36400cc6c2f322ac21e8fdd0c4a9965bbbfc",
+      "raw_sha256": "0ad2fc7dff7b1bdc471cc365985f559490f253ea127263417f0a0a1edcb33cef"
+    },
+    "v2/FeedbackUploadParams.json": {
+      "canonical_sha256": "305ffd92a2031bfcb240e2c42d072f34b8c56851c98e2a12ddb695e737d011bc",
+      "raw_sha256": "aa958cd74b37fb28cc49ce22345a1efcda9d4cf5fa47e7cce6949e5366ff8b2e"
+    },
+    "v2/FeedbackUploadResponse.json": {
+      "canonical_sha256": "56a0e266ff981c8efeb0746399e7d19635d3a2298707f792f772b26b4fb14542",
+      "raw_sha256": "d23cb7bfa94f59fbb423b1e042239ac1b6dc344be15c5efc69ef04badff01a91"
+    },
+    "v2/FileChangeOutputDeltaNotification.json": {
+      "canonical_sha256": "ac88dc23fc909dd6eded81c99053a4a62f492223ccfbd52e7625765bf46a3a6f",
+      "raw_sha256": "04c3df83d46725ffc048577e7a5aa25de9a6c8ea9eff713bbae2b408672481c5"
+    },
+    "v2/FileChangePatchUpdatedNotification.json": {
+      "canonical_sha256": "1f855fc8876fa1771c711431db1e75df75ba9dec6aa5c448f6e98599ba2f6fdc",
+      "raw_sha256": "cfb69d18658610a0510f213e09c6847f70517410ed91cf99cc4713c15a795213"
+    },
+    "v2/FsChangedNotification.json": {
+      "canonical_sha256": "b4eb615e516d029455d4fedf66aac0384ee9bc889afb06df56759d8b98a8e054",
+      "raw_sha256": "197693fcb852a85fedfbcf1cd00c9a3cc74dddfa09bdf6b11fdafebbcd12ea2d"
+    },
+    "v2/FsCopyParams.json": {
+      "canonical_sha256": "a7f7ad201a9b5dd8a6afe8c5565c3b288d1a493fadfee7152beb68842e4a6018",
+      "raw_sha256": "bc1135070827681e4d9a14f79b5b06a4f5652e538ae6a89642d27dbc8b2a2af1"
+    },
+    "v2/FsCopyResponse.json": {
+      "canonical_sha256": "1bde20677d7751e035cecc9464f5b903f63b5bb83267b43007d84ef96c5e69e2",
+      "raw_sha256": "c88392d6c3ff394441231cdf5614794ba0c2b4ba683811f6033a01fe65528a59"
+    },
+    "v2/FsCreateDirectoryParams.json": {
+      "canonical_sha256": "3b4839058c30c506ee72563e31d712945013e09ce94d237dab339bc07f0a6d24",
+      "raw_sha256": "405fd718ebafe7f47ffd82c86540ab4af663659c737ea2b25acd3e04a1bc94ea"
+    },
+    "v2/FsCreateDirectoryResponse.json": {
+      "canonical_sha256": "c57d84c23c800abb727f093ba22eb23d0480d4b8d04b6302404d2882dc82c2d9",
+      "raw_sha256": "a658fbd34d5e3d6300bcb7015f10fc1764aa8aca3088abc79af9caa2e848e527"
+    },
+    "v2/FsGetMetadataParams.json": {
+      "canonical_sha256": "273309eff78a2c9cc61be3e3bf020b40c926134dff7ee9afe485708b51058c5d",
+      "raw_sha256": "382bbf3a8b5c7e8cb16a1a29f853ce49c2904e563325e33a9e41dcbf632dab5e"
+    },
+    "v2/FsGetMetadataResponse.json": {
+      "canonical_sha256": "4e0da614cdb04db7ba2162adea8254c8f61e5b59eba8cee152d363a573c329f6",
+      "raw_sha256": "b8355f112eda37d7ff25ad0eda7dae912dba695961855c5cb8444a7f867d66c2"
+    },
+    "v2/FsReadDirectoryParams.json": {
+      "canonical_sha256": "c60b14fff96c1311eafc458ab2ceaba54d5f125bf9b9b79787268cf9bed85d51",
+      "raw_sha256": "c4ca6cdc129d70375fe638c723c1b1bb07a9716101525970cf77bf7560fec657"
+    },
+    "v2/FsReadDirectoryResponse.json": {
+      "canonical_sha256": "f188be0112899b88e27ff2e051833cda337072fa263b1fb3de70e02c05543a44",
+      "raw_sha256": "2cfb28c3c1ab1487f6b778f4d76871e3a9f590597bdf0da502cc41b202269dbc"
+    },
+    "v2/FsReadFileParams.json": {
+      "canonical_sha256": "5b523c9c51bdfaee5ebe1851d298ffbea7e178d54e5adf5c75aaea51077ee1aa",
+      "raw_sha256": "74b325108195fe955e6ffcb6032e9380d3bfdee8aed7d115f5f1e4b127c5d706"
+    },
+    "v2/FsReadFileResponse.json": {
+      "canonical_sha256": "9206077eb77f824ab5a5ce37235428bc4ac59d3a06429216d860331a30ddd794",
+      "raw_sha256": "fd67dd725b5bf5c7f27e78cc3d66fe24314f08913fc00ace9dbb663bf2f487e1"
+    },
+    "v2/FsRemoveParams.json": {
+      "canonical_sha256": "06f7a5f7b9c9b8cbbefd5607d0168a24c71496ae23013a60c3a9ab0a99ab167d",
+      "raw_sha256": "c453f8ae4b3311f5da88f67f743fdabbcdc323dc3d9eaa40d750ceae147bb630"
+    },
+    "v2/FsRemoveResponse.json": {
+      "canonical_sha256": "6777c8621b8a6cf7539690d70932d1315884ae6185b15cb186e76f8497beecf6",
+      "raw_sha256": "6371aba2cae2f92be487be05c1ce531ca4139da5004b740a0010ccfdba548100"
+    },
+    "v2/FsUnwatchParams.json": {
+      "canonical_sha256": "ab763ff6222d24b47725f53fed0c149c8b286319e81f2b206462155706893da1",
+      "raw_sha256": "3134d42c231f40769a4d1ac4adcf051be5205e7a1b70bb32c4a8655fea730175"
+    },
+    "v2/FsUnwatchResponse.json": {
+      "canonical_sha256": "d88a2c985db3e12d74cc0b876b3f54c32b1268f6f60ed8bb8623f72a3e135962",
+      "raw_sha256": "9c59c3473df1f1873ee0d87ed33cecec0766b24c8357ee7dc8b29a57ca21e104"
+    },
+    "v2/FsWatchParams.json": {
+      "canonical_sha256": "1dd944d77563aa995b6319c7a0dbf90586fddf1a084c1c42bab3429227f938d3",
+      "raw_sha256": "10bd9c01b3819db1ed8e2487a277f20b35e3a9f74ae77214654f1a529fc1444d"
+    },
+    "v2/FsWatchResponse.json": {
+      "canonical_sha256": "d2f20ad9f7b2edd66dac851ddbdc08896b3819a48e793ea4775bbcbf60b550a6",
+      "raw_sha256": "d32e77e7d6f619c5f4183c335ecddd3c4ffb95a51761198985c47838ae891a6c"
+    },
+    "v2/FsWriteFileParams.json": {
+      "canonical_sha256": "5490b137c437e014d42f84ca5ab94bfbfea3a9ee94747949e0a20ca85c58d090",
+      "raw_sha256": "2167e05c7f3eb26d475f9c1ce71697ba3b635efd8761a00b22abfd6af175bd2f"
+    },
+    "v2/FsWriteFileResponse.json": {
+      "canonical_sha256": "afeb884e1e504db633238399c1b27e4a7ceb9f6b44f49f7a9837308969e984ca",
+      "raw_sha256": "0e4153ee7baa5c1203c2c573504baaa40e1dd8738d78e4c1e3a179fb49df6b16"
+    },
+    "v2/GetAccountParams.json": {
+      "canonical_sha256": "17e5ac273188157a40fccccdbe24d27d98d6ea91b34ebb1871888fee8c61b32d",
+      "raw_sha256": "30b545275f60975b55bd6fbaafd70f15505801d14168ee82d3931b6e93c78aab"
+    },
+    "v2/GetAccountRateLimitsResponse.json": {
+      "canonical_sha256": "58c173d3f5da2a956ec6b6cb18bca84f3dacffdd3bc213ebf889196981ddfec5",
+      "raw_sha256": "76bc91758269a89f57cd16c618b91c1fba76aca3e9d2b6186205e6f107d6b28c"
+    },
+    "v2/GetAccountResponse.json": {
+      "canonical_sha256": "9b33b15c390aa15fa4e1899e4609eb089ac9bb419836cd9e4caa20f2929c96df",
+      "raw_sha256": "08a7dd8c570c905b0bb6998d43ed133e72e2445f08125f86dfc96887e288701a"
+    },
+    "v2/GetAccountTokenUsageResponse.json": {
+      "canonical_sha256": "618cc5aca6d45c063148189f06ab1fb3d1248e2e9f9bec9319bd8da080f3ae5d",
+      "raw_sha256": "a58e58c852c888e5de925d99a66688d55ebb2fff038e795aadf04f8a8426dff8"
+    },
+    "v2/GetWorkspaceMessagesResponse.json": {
+      "canonical_sha256": "24a18c028e182f6240aa81582f3d8e1cab8e2f94ecc5d41e166b9a5c0901b0f2",
+      "raw_sha256": "3ebd00f0acca088e5ee0309ec09b9a571e7f2eea5b63a32cda67be01c6886d67"
+    },
+    "v2/GuardianWarningNotification.json": {
+      "canonical_sha256": "edf09a9aee314fc6129789442a0ce3bd7cdd54f4c9fc79197d01a0c67901c8b0",
+      "raw_sha256": "5325551d2efb47d578665e3deb846f6369e05f98fbc5bfbffc5d9fe0cb0bd167"
+    },
+    "v2/HookCompletedNotification.json": {
+      "canonical_sha256": "215dd1cf5a5339435fc758528dc574b36acdfb7518846592215377d1b0e2fb56",
+      "raw_sha256": "1f146d70303cea6e59752191179e36a273650d63a74d4f9338f9a399da6597d2"
+    },
+    "v2/HookStartedNotification.json": {
+      "canonical_sha256": "9928407e0390c3225f83a46aa0ed1a64a38efb76f37889dd714bfbf75f86b67f",
+      "raw_sha256": "913ca61da2ab299d5f3318f6ea4d842d22708fc9308a9b10cdfad5e757098f2f"
+    },
+    "v2/HooksListParams.json": {
+      "canonical_sha256": "10ca05100ec02c2b5a95ffe84d4b26605869ee4b2fd661c64e54b216cfa5ece0",
+      "raw_sha256": "07638c3a8a3690cf368fa92c7ff697fdd0132865e8c59d53f6e5789e5a260053"
+    },
+    "v2/HooksListResponse.json": {
+      "canonical_sha256": "0f717ee5389cc734e39c0c1dfb085b47d67eea6169541d172dd7f68ef0456d9e",
+      "raw_sha256": "891dd10ef7f78e59631fce05fff2becddb8004b3c0338dbbbd6b4f17ef1fa64f"
+    },
+    "v2/ItemCompletedNotification.json": {
+      "canonical_sha256": "7c032b758292d57617e131c523b3ad399c39c5a8d918f02d414d1d684821b1cf",
+      "raw_sha256": "69aba3fe5f72f38bf5c541e7e2c09de40778abe65ff969d9fc73372037812091"
+    },
+    "v2/ItemGuardianApprovalReviewCompletedNotification.json": {
+      "canonical_sha256": "7bf25e9f6d898e2da2aee87ac10a6dd86215d25b60e8b9be7b60c4272b4bb17d",
+      "raw_sha256": "a9f56c22fa2bdac445e4099bb0b16d92a4166f119127c871c24716977fcacdae"
+    },
+    "v2/ItemGuardianApprovalReviewStartedNotification.json": {
+      "canonical_sha256": "6af1626c0fa1e55b183f8a68ff92d4464738076d9c5068e513657327c53642f7",
+      "raw_sha256": "eb6283bd8ab1f7d23439cb9f140ea6bf13d6ebb47f59aeb73f46f9948d5c9657"
+    },
+    "v2/ItemStartedNotification.json": {
+      "canonical_sha256": "9561b63200971e2b0e8884defef29328c410fb4d42fb973a167693f599badf1a",
+      "raw_sha256": "c4c34f47db6326cd4841bae428f23d08eb285077ffad35be9772b928c65bb912"
+    },
+    "v2/ListMcpServerStatusParams.json": {
+      "canonical_sha256": "4a4a3a5635d9d992ddd7fbca2697f915a9d0c599c9c45a4f8870c360ea1893f4",
+      "raw_sha256": "33b1933595d844c61f76bdcfbc874c8456b65079877fed6e86e2710ea3d49f1b"
+    },
+    "v2/ListMcpServerStatusResponse.json": {
+      "canonical_sha256": "f86528ac2c9aab74f7e081de52642b02283da2da34ed1a646baa3a2443fd4f40",
+      "raw_sha256": "b70fe28f68e82f9716bfdf534c8339c00318e875e15bb30e7f153c5adbbcf962"
+    },
+    "v2/LoginAccountParams.json": {
+      "canonical_sha256": "7b41b6881d98b4ec6872d73d7981f5ab61e5960e4296510728d08d4abbfaebf2",
+      "raw_sha256": "48fb9bea54d7e0890052653ac06737efb3200ba2261515b2c4014027f36bea3d"
+    },
+    "v2/LoginAccountResponse.json": {
+      "canonical_sha256": "c23e07edff316a072e0180f5f4781fa237366f0c096815c9f8b2bd3d077ee7ba",
+      "raw_sha256": "72e6d77f49bc5809c3af50f183e2a0862dd8f7836816d4796ff69bb13eae0e89"
+    },
+    "v2/LogoutAccountResponse.json": {
+      "canonical_sha256": "7526d103e8cd99bc1a986d138c303ead01bc2144fef10d570ffaae65ea8399c6",
+      "raw_sha256": "ac14ddfca2ec6092b0039be8720262d5a9930484d23e62544d2ef0b7e1db7926"
+    },
+    "v2/MarketplaceAddParams.json": {
+      "canonical_sha256": "be87286d4bf6cef203d06416bbb33519d81252db429b4aeafbcd6d1e879aa3cd",
+      "raw_sha256": "e6c92ca2a3889641ca2281cca7684569b1187653b25b57f9beabf85519d638a2"
+    },
+    "v2/MarketplaceAddResponse.json": {
+      "canonical_sha256": "e2aae813f189878140fe6db8e4bd6b6263fd7f9932b2b049a2bfbc6b1946e4e0",
+      "raw_sha256": "a37633e9ecc2fdd87ea582861bcdcbf7963a8fab6db9fbc1bc8eac7d2f7f9a8b"
+    },
+    "v2/MarketplaceRemoveParams.json": {
+      "canonical_sha256": "7e7feb2f9a15b16dbb7446a5432512635bda978523e596ccbd6284e0dc3f9c0b",
+      "raw_sha256": "220c2475a96f32ca095f80f3ecbad427477b4ba37dfad7fb48a0acabdeb1f4eb"
+    },
+    "v2/MarketplaceRemoveResponse.json": {
+      "canonical_sha256": "17ddde604c1408b565ed8806b2fe500b6e3c7d7d9a6e67408fae4abd528fbb1d",
+      "raw_sha256": "98deb2f721d57ed727f7cc7b4f478db5f604b6b6d40e6261928dfd5f586405e3"
+    },
+    "v2/MarketplaceUpgradeParams.json": {
+      "canonical_sha256": "cc5ece8ddf2764e4abfd7df6af2d97da8379fe267946ea9ade8970ab4f987bde",
+      "raw_sha256": "93fc5d331d353b1b89262625c38eed54c6c16b2fb8aa0eac718245c7bdcbe4dc"
+    },
+    "v2/MarketplaceUpgradeResponse.json": {
+      "canonical_sha256": "1e7b3ce2a40c7237e5a9fc8046c881a68afab87ccfc00f4afdab00ec666d0a91",
+      "raw_sha256": "2402379cb0ed1168a7dc327c412fd61bafdea2ad13ea7a3b3ebaee3b43c45963"
+    },
+    "v2/McpResourceReadParams.json": {
+      "canonical_sha256": "ece1e785f9998bc369ca17743340594462cb37afda7b78e7cc586c1286d719fd",
+      "raw_sha256": "a8241b056a65473b2b9bf0a14c1a49146de52dbc1cfc276549f52f4db13f3be6"
+    },
+    "v2/McpResourceReadResponse.json": {
+      "canonical_sha256": "6bfdc36a3eda5b2fed4a3a171381ed2a446d8fbb7d3adae51ea3dd89064c52ac",
+      "raw_sha256": "a48af749203ed3307414750d5070facb5ae6ef8b00253f1cfd9a8124bdfcfe41"
+    },
+    "v2/McpServerEventStreamNotification.json": {
+      "canonical_sha256": "1c7d87809fec05cdcf0ad6cd92eee376d6d318c9e0db6bfb965d55e34ff68eae",
+      "raw_sha256": "44b04b6cc079ec0b99b4d29af1a69d99037505c19a2a07cff955aa298d7c181b"
+    },
+    "v2/McpServerOauthLoginCompletedNotification.json": {
+      "canonical_sha256": "569f04ed120618a07ddc070965905c5638df676d7482006be0f297af1a90e78b",
+      "raw_sha256": "d3b7ca4f2626a623b4b5a97eeedc711cc27d41b3ee56fed8b0304857c5c9b13c"
+    },
+    "v2/McpServerOauthLoginParams.json": {
+      "canonical_sha256": "ed8db650e988c2f3843ad4677f7a3d004417639f1e4d131804467a3474343619",
+      "raw_sha256": "83446fb61e04a361691f84fe236a51fff2ee4fb12a8f58e2e828a32cf6f6cc75"
+    },
+    "v2/McpServerOauthLoginResponse.json": {
+      "canonical_sha256": "883c2449de08a07b9032e3db701b155407c0bccee3c95f10f8664c5a3ba2462f",
+      "raw_sha256": "95d7d00622866ac49dbe459164b8be665b2c9ad7b26772eadfc610a0537aa6d4"
+    },
+    "v2/McpServerRefreshResponse.json": {
+      "canonical_sha256": "204c6e0e9a52baab17b58e0deaf23f4a7324fad0d5bf802e2a4413d6912ebb8b",
+      "raw_sha256": "54a77812db02175dc69053870e582d3b314af6f161f0c76846f3563b0f9487c4"
+    },
+    "v2/McpServerStatusUpdatedNotification.json": {
+      "canonical_sha256": "a8c764590e7809fce0e64191ff1d240963ee1c39d20885228dc37527ca511a6c",
+      "raw_sha256": "d6f4cb120b2363d321247592f03b9afbbf2762ad6d8af31b88c1b1bf39c4c7aa"
+    },
+    "v2/McpServerToolCallParams.json": {
+      "canonical_sha256": "497a0a80afd35b00c870866c7105a953277299e655a8ec386cbdc8d2ee1f420e",
+      "raw_sha256": "7039a7583a1cbf38e9e0f5fe6398ff3711acd4d654b81b0be562514087fce6ba"
+    },
+    "v2/McpServerToolCallResponse.json": {
+      "canonical_sha256": "c7f3e71eb63378b01cac4b978a162dfe099661befc346a80e72fa33001ee184f",
+      "raw_sha256": "04a59b2064922c37b0c49bdb2470b8fff08d943e56dba4f7280a6b34bfa52c68"
+    },
+    "v2/McpToolCallProgressNotification.json": {
+      "canonical_sha256": "f3e6937cc63261e482ea165f2002d330abdda9cf3d314c33b7b495ad437f7011",
+      "raw_sha256": "64a32b8282226876e749bc107a81db89d20d5ce5cb86ee6a043b960763214b1d"
+    },
+    "v2/ModelListParams.json": {
+      "canonical_sha256": "46a4463f6218045aa1e8fbcd4e67b93ffe25b2f9605419be4590a5b768206246",
+      "raw_sha256": "de29a536c00a5b8f46f34dba417dabd93365305571a8ed200e33bea85db68b5a"
+    },
+    "v2/ModelListResponse.json": {
+      "canonical_sha256": "8016839b895a43fa9ebdeb1403edf4bb8399b069585d5ddefbc22e4997323ecc",
+      "raw_sha256": "c7b58b332f6cf18fd64235409a6daf27bb9e6c09d12dcd0daa2f3dc628b55f6f"
+    },
+    "v2/ModelProviderCapabilitiesReadParams.json": {
+      "canonical_sha256": "404d7ba93b2a3d128a792a1a36264b71c90d3db54b71ac2c3a31987386a6614b",
+      "raw_sha256": "9db732188a15476cabb42cf05e495ae0803a1ada993fca7348c21c30a998388d"
+    },
+    "v2/ModelProviderCapabilitiesReadResponse.json": {
+      "canonical_sha256": "612ad82c171a754402f0230c97b1d6cb887133492116c14440dc5a712c03af4c",
+      "raw_sha256": "5c42590f728289daaa441b947617398a0ca3aa17479013b3c564a5d314a3c9cf"
+    },
+    "v2/ModelReroutedNotification.json": {
+      "canonical_sha256": "eb5b5f6d4b35d8f19b576e7daf0eb749bb73add94bad25995f2255161332dc60",
+      "raw_sha256": "37cd3c1b3a3560b85b01d4061a07d830fc9ed93b80e4663f975f9197cdb501ef"
+    },
+    "v2/ModelSafetyBufferingUpdatedNotification.json": {
+      "canonical_sha256": "42ae43c3391a3cf291c2d66dea666ed3729a9ffe41abd9494eedabc90a4704f1",
+      "raw_sha256": "4cf853e3a2f968fdfde75206fd497d3d530b26769026bee343c3ef09ce438cfd"
+    },
+    "v2/ModelVerificationNotification.json": {
+      "canonical_sha256": "7dadca7074bfd9205fba31e3598155f2db6858983fc22756450306b638e2141f",
+      "raw_sha256": "4f27a99d0c8664c29abb4d65384ab16853bbc29b61de5e749111cefdc6994655"
+    },
+    "v2/NullableGetAccountRateLimitsParams.json": {
+      "canonical_sha256": "cf5650e33dbec4078b589bed98ff924a7ee19497ad5f9b9a7f6853aabb48f4fe",
+      "raw_sha256": "072f813ca1c696831a7f2fbd934feaa8cad228a6b3d44a4be8877547c796341b"
+    },
+    "v2/NullableGetAccountTokenUsageParams.json": {
+      "canonical_sha256": "0018a75d0ed2363dae394b5c251a4539c5e9b57bcd3bd2b41c0409854126dad9",
+      "raw_sha256": "a992c6ea0fe02b0e9f46b18afb51b8ee2635e7f0c7d546f71e7f95e2a98bebba"
+    },
+    "v2/PermissionProfileListParams.json": {
+      "canonical_sha256": "f119463294619c6866e719a6f1ce9c25fa5435c9b210f5dad875996046411cae",
+      "raw_sha256": "576d405f6c94cbde982a9f65c9301717043683b83ca35d564247907feb16b1b4"
+    },
+    "v2/PermissionProfileListResponse.json": {
+      "canonical_sha256": "695a64e0c32a58006040f487aa04a37eeacd60885aa1ec2f8a927b0d9c671d7b",
+      "raw_sha256": "4a290b5b9d47c2fc671033e22754671161bc563027ba387e861bd935398f0def"
+    },
+    "v2/PlanDeltaNotification.json": {
+      "canonical_sha256": "2c6ee96b49b2c732cdb205cd083303ffa5ec7aea992ae74d13ce42b37108a008",
+      "raw_sha256": "a5cf42ccfc6cf905ede0fa9041e9c951ea7870aba4e3a7c7f68d85f01416d3af"
+    },
+    "v2/PluginInstallParams.json": {
+      "canonical_sha256": "26ba7d55903fc5957b678cf0895fa826fb965271fb7921dbde730793c7d50e7d",
+      "raw_sha256": "d6a8ff6356aed22c916cfd5a791ecce34ee2ac509750f690e7d0ef483fec7472"
+    },
+    "v2/PluginInstallResponse.json": {
+      "canonical_sha256": "8147344e4793c9b937d5ae17ec6faa47c9d8704e2702ab3bea09fc7bf397fc39",
+      "raw_sha256": "ae283e1ecb9f454f7614c6a4348fda5a7aba5af99e9ab9177b9a0cd3e1cd7db7"
+    },
+    "v2/PluginInstalledParams.json": {
+      "canonical_sha256": "277418035d874638901e1b0c0443a9bb65f08d30c629f26a26f131947e98d275",
+      "raw_sha256": "0b56f55a817b6e82ea104496281cd43714ee96800f9b984412a3a858f444f68c"
+    },
+    "v2/PluginInstalledResponse.json": {
+      "canonical_sha256": "9be1f0c634e2e353a6e61734e7da89eb9a5eb25547959319b3eac8e5d56ede19",
+      "raw_sha256": "8afc8a16fa5c21d67f66d1855bf29890bad10a6229bafc960b3503281fc878e2"
+    },
+    "v2/PluginListParams.json": {
+      "canonical_sha256": "66777c335d5b9ebccfa09c2ab31fe5cd1f46a632769205e3cddff8b835e04403",
+      "raw_sha256": "bc6b499161306df7082c5a8cc51fd793cd6d28dda93555b12ae299445132270a"
+    },
+    "v2/PluginListResponse.json": {
+      "canonical_sha256": "3b77a652a36a84ed09e3ff9de6787772bb1744439b0496d521a7a806bc603aaf",
+      "raw_sha256": "a405d2514d6236df75130c87c749e0e070b946a889f143a0448bbcd27d1d8501"
+    },
+    "v2/PluginReadParams.json": {
+      "canonical_sha256": "951473f055145491cd9f036047991c0122378e997d516bec1615256d55913761",
+      "raw_sha256": "f15952a2828c90501cc32f347c1e1691ea65cd2d97f503ab40e7be08757de74d"
+    },
+    "v2/PluginReadResponse.json": {
+      "canonical_sha256": "95c1ca94c0164f62d2ed478caaf044ec3f2931e46d7ee59a06e8676cf9f5fe3f",
+      "raw_sha256": "1651d8136fbbbb00878c4c1f8adbf279d050bf25b4454e6db4fa46f192f953d2"
+    },
+    "v2/PluginReconcileParams.json": {
+      "canonical_sha256": "9884ba73ab3ed9a4ac423154a928d67ef2e9e073ead170538b5fb04a2739bdce",
+      "raw_sha256": "91dfe0967326b876e50ddf8d896c6c516440c43a36b08efd4746c0bd770882dc"
+    },
+    "v2/PluginReconcileResponse.json": {
+      "canonical_sha256": "4d5d06a55b8496a2b9320f70852e85b19535dbab1f542fbf03a8ccbf7dca5850",
+      "raw_sha256": "ba2a8e317c9098beed39d4decc433d9dc29ba0c8164e8d4c229481b9243c5ec8"
+    },
+    "v2/PluginShareCheckoutParams.json": {
+      "canonical_sha256": "6b5c708f6b212a34dc2b7e0ad6a353213d15430926e7d13afe4fbbf880986f90",
+      "raw_sha256": "25fd868fff9500ff244150a4ecd36322c0d31b339a4709649594b79aa1349185"
+    },
+    "v2/PluginShareCheckoutResponse.json": {
+      "canonical_sha256": "6daa29bcabacdfdbb8810321fdb6afedaf8a55ecd07984523789c3c3cbc9b2f6",
+      "raw_sha256": "d6271afa9bba5531574ba255d22b03f70fe10b8ef159185355625d92b6f9fac6"
+    },
+    "v2/PluginShareDeleteParams.json": {
+      "canonical_sha256": "19ad3876906f26f5417c5bfa6c8c7c545611943ef35f468a56f8d52819413ef3",
+      "raw_sha256": "d422a3fdecf91612bdf839d4fea6f1cddccb794869dc03ad3b8998bcb8e27fff"
+    },
+    "v2/PluginShareDeleteResponse.json": {
+      "canonical_sha256": "670d7caa0f7195eca6f00fd94132ba5e4cb43fd36cb1d2f7ab04d3643fcea345",
+      "raw_sha256": "ae881a7f898f5287354de5adf6f42094cef9029a9b9376bfd12aa1b0fe0b3106"
+    },
+    "v2/PluginShareListParams.json": {
+      "canonical_sha256": "f93d2aca0425ed9850112fb1579fd61b8a86a5be65a02501878f04e2981b456c",
+      "raw_sha256": "0d71280d2a655ffc26375044ec1693203848614f99fdb4563e0cb5a4ee40122b"
+    },
+    "v2/PluginShareListResponse.json": {
+      "canonical_sha256": "93f26ef37f78e335a32ab1be356dc6110a21878c2b3cebf185464c864c934069",
+      "raw_sha256": "d349a496947956fd5f4d125b8348faa2ef0c91daf7f3cd74ae0616f55c8e328b"
+    },
+    "v2/PluginShareSaveParams.json": {
+      "canonical_sha256": "8c8ffb80b6430c5d7ddd1ae84683c38e275919a9aec8c99bcef7afbb31d8a08e",
+      "raw_sha256": "ec937521a40437506ceb2dcfe79cedd03812dd1b8233c651b89c2ddd76e148fe"
+    },
+    "v2/PluginShareSaveResponse.json": {
+      "canonical_sha256": "6b67b77b42043596f5bd7df8b96da37482243b71ef06fc1f756183e8c88b83b6",
+      "raw_sha256": "3eb7c0ed6e6c72126c7bb3d845e73d5de98ad0d4ea8639d2f227fecd16c15411"
+    },
+    "v2/PluginShareUpdateTargetsParams.json": {
+      "canonical_sha256": "4ee6c6b97d0855d9cb86ad3d44fc62d49621b05fbeb3970198c45fc3037143a9",
+      "raw_sha256": "0ecf16212022bca115211cbf13a1302f8995d7be5664ca268b926b7d00add7b0"
+    },
+    "v2/PluginShareUpdateTargetsResponse.json": {
+      "canonical_sha256": "f58e1f51629b06b3a045ed0c6695632748c8683088419c303de617dc2ffc35b2",
+      "raw_sha256": "caf42dec67940f9e686ac7b4e77484921d62fee400b3af73fc85e6f46eaa03f4"
+    },
+    "v2/PluginSkillReadParams.json": {
+      "canonical_sha256": "57ecfde7e70a346c4822416d53ab5477b22d418af616226c2a247ffab060e814",
+      "raw_sha256": "8850a9a45b9cf6e8b016f014c7c65f7062937be896d4fa0eafdaccc816909a56"
+    },
+    "v2/PluginSkillReadResponse.json": {
+      "canonical_sha256": "4d9a829a4bc48ffac2fff8a303223966d647ddd2538844ec3a276d8aab9e1aea",
+      "raw_sha256": "dedaf95c4a8f70c022f5cac6fe3882603ed2b27d5efef710b52ae370869956cc"
+    },
+    "v2/PluginUninstallParams.json": {
+      "canonical_sha256": "376eab9138338f4a2b8305150e71f54da98ed720f48edfd28747472a835c32a0",
+      "raw_sha256": "4c9e1da7048fc99ef5269d4c3f4c6c3297dac01992c2756340fa210ae8f800cc"
+    },
+    "v2/PluginUninstallResponse.json": {
+      "canonical_sha256": "ec9c107a429159b084ac32ddc9ceeb255a2dc1b45c4fda23b3e77f90a356c871",
+      "raw_sha256": "f6a0c9c8dfd9e3fc4a535ecfa606f12922c09e469a37d6b1c6e189f45cacb89e"
+    },
+    "v2/ProcessExitedNotification.json": {
+      "canonical_sha256": "9d7d3d41c0d46a9d530fa54488310bbd4e41ee9e90caa0d0b1bf1562c918e71f",
+      "raw_sha256": "06cb5f39c67f84c227063d7f40e5e78fb62afdb76778c3d603687181896e8440"
+    },
+    "v2/ProcessOutputDeltaNotification.json": {
+      "canonical_sha256": "2aa524d50e3e506c5d2efbf0f59ef30451078730635bc41423f80fd0b0906dc4",
+      "raw_sha256": "c31714aa83297b83fd69dee98db877be7d4a3f98551dbeb517750efba0ecd79d"
+    },
+    "v2/ProjectChangedNotification.json": {
+      "canonical_sha256": "cb60ba49d4fdec2213a23ae13d130519722097f2c282708389fda3ca165d615a",
+      "raw_sha256": "b32151fcb7ef78fc5c969db44255756e5e6e1754398a5b6b09244dcff0c1eab9"
+    },
+    "v2/RawResponseCompletedNotification.json": {
+      "canonical_sha256": "7cffe57ac29ce6ca972510efcf6053e429aae799f7215f5ce4c3b5f55bc8f322",
+      "raw_sha256": "aba140e87952c900f96e0308a8849d3e313d985de1f1aa2b77f193884a76357c"
+    },
+    "v2/RawResponseItemCompletedNotification.json": {
+      "canonical_sha256": "167eced72c9ec7ce708f04a7f41d02fb36998334d64249508e80f7196187ebae",
+      "raw_sha256": "808fe739fc46130292a0a8c1969ff4e63dff856fc241ff78ce207a8eb1a67f46"
+    },
+    "v2/ReasoningSummaryPartAddedNotification.json": {
+      "canonical_sha256": "b5002b9c906fd3252fac591d26933a50ad9c44fc642261cabfb15d5b2f2f812e",
+      "raw_sha256": "c8dfcb82d773d0f5d297ae1a47749e2b719013e82030a3af5d4550f9feb8eed6"
+    },
+    "v2/ReasoningSummaryTextDeltaNotification.json": {
+      "canonical_sha256": "8030640b37379f6bc64eb9c8916ac99c2f24449d83a4d8c9e66635611b40a662",
+      "raw_sha256": "895bdca00b4674634c25a5c4d1f82e55e65767d81ddcac4bb7b00aa3d438e62f"
+    },
+    "v2/ReasoningTextDeltaNotification.json": {
+      "canonical_sha256": "28a93128851dbe15280a9d4b29d9ef820585a5dcb10fca688b82fdbe033bcc02",
+      "raw_sha256": "16cdc13080a7523b44f00fb6fdb660c56a7c4c8cda96b2f9b87b7e72264170fb"
+    },
+    "v2/RemoteControlStatusChangedNotification.json": {
+      "canonical_sha256": "a257cb89f5b3d4c27c739be254624585ef328c56d133b2d762d94e47adc5e072",
+      "raw_sha256": "56aa1d58294238557cd8b16199909c2c157a7542b9259ef2deddf40fe4c02c91"
+    },
+    "v2/ReviewStartParams.json": {
+      "canonical_sha256": "983304a69b2e9b139e760b31c1a0f496875285af8edc284ae55042db8ca4c8ee",
+      "raw_sha256": "31f826890392eb5cdc9995c94884d3a5ca6af84c66283f2f981e792a1419769f"
+    },
+    "v2/ReviewStartResponse.json": {
+      "canonical_sha256": "6cd04bfe4b71683d603a9b32ebd827ee318e1daa5af6198d8559a5ac67a41165",
+      "raw_sha256": "d6d5c99473b695fff0f58a896bee11ddcddca23304523fba878860324b7f07df"
+    },
+    "v2/SendAddCreditsNudgeEmailParams.json": {
+      "canonical_sha256": "f8ec4b79f34285a127a65abfeb62cdc5605c591640746f5bf4c05a9487402302",
+      "raw_sha256": "91b380293f5685573f8dcdf46c99eba6f8a2adb7a206df9ac987f7fe6cb282a1"
+    },
+    "v2/SendAddCreditsNudgeEmailResponse.json": {
+      "canonical_sha256": "ea5d596aaa4a54ba8fc6ba0ee115cedf6e43f5eef6037338eae67f7390940cd1",
+      "raw_sha256": "389978f741476c7cbcaec716b11a5bfb7f17581a28013e18cbf7a73ec8a45ae6"
+    },
+    "v2/ServerRequestResolvedNotification.json": {
+      "canonical_sha256": "9bab6c9eda658824742162c9eaa3edbfa3b70fcc5348f20f5a190d7a794b3d53",
+      "raw_sha256": "4f03d586a5af04edd912cad08cc97eceb658e7e06744565e6d41a93e04a55966"
+    },
+    "v2/SkillsChangedNotification.json": {
+      "canonical_sha256": "bf0948d41467efb01ed4c08aa948031a60cdff97addc39ae558a111ef1958e3a",
+      "raw_sha256": "84f7f1d327c5c774899992f32c98e9e95ee3e010a410d233ec0c33221e4ccbfb"
+    },
+    "v2/SkillsConfigWriteParams.json": {
+      "canonical_sha256": "5488f6af4cb7b8d8a25edb2d886eda96615a8830b374610df11df67cec8a6ea0",
+      "raw_sha256": "6e7dea83b649bfd118828b60446eb2eab2f5ce3cafe287c933b830c9cae9b170"
+    },
+    "v2/SkillsConfigWriteResponse.json": {
+      "canonical_sha256": "c45a9194a1d04cc61e1a2253d9a940185a5b1ae6613b05438f682d1c587b813e",
+      "raw_sha256": "628bc112ca64f5475eb02a0eda718e82d670c40299444494e02a8dc278a772c7"
+    },
+    "v2/SkillsExtraRootsSetParams.json": {
+      "canonical_sha256": "c824b95fb4d570c267efbca2d78f86e7ac8ecf92109b0a9ba6e46cb625505a02",
+      "raw_sha256": "bb60389a0c7d4b73f625b9a40965e5e67b56b6503989f2d732cae12e9ca9698a"
+    },
+    "v2/SkillsExtraRootsSetResponse.json": {
+      "canonical_sha256": "1de04b5644c4d17aac8492af2cde24ebc0ecc9c11fc3e26df4b3d4ffd30c995f",
+      "raw_sha256": "b659ec17a196eaa3a23273a3e2d5596460ea329bc3ade249971576bc723d9e96"
+    },
+    "v2/SkillsListParams.json": {
+      "canonical_sha256": "6545e3092aa7c67aab3dd2e5c602cf1a532e024530568bb3aeab96903dfb0178",
+      "raw_sha256": "1d245374e64c5acc9739dfc68a4fe5114c6c9147af04c480886f1846d2ca6239"
+    },
+    "v2/SkillsListResponse.json": {
+      "canonical_sha256": "fe9e51e090b9c6a2ee751055d980b11a5305c7baadc0ddff6294dbd3cc372831",
+      "raw_sha256": "230f125d6c36ec1b1514018a0bb6d0627f7308ea82f1ef04cad85490de482bae"
+    },
+    "v2/StrictReviewRequiredNotification.json": {
+      "canonical_sha256": "3051b276ef9c33bfa712c0f68fc79cd825ecaa2b3e88bf74ddb02e193e2dad14",
+      "raw_sha256": "16b50621c0982d84bd83b6e85586c1038ff309337e4253219895be7c118df470"
+    },
+    "v2/TerminalInteractionNotification.json": {
+      "canonical_sha256": "27927cb1c4a31b59d615f0ce3cda5a8f22f32d7bdbcb2b274741cb64d8892d47",
+      "raw_sha256": "5383b3d9681d3c071c9845fd4f043afd60fbe1bcc3650939356cb03848a7d627"
+    },
+    "v2/ThreadApproveGuardianDeniedActionParams.json": {
+      "canonical_sha256": "d558921e4ebd3d7829c8846c8d18b2f9e12d430dcb87c92c6688e9131547803e",
+      "raw_sha256": "082e5278ed4fb1fc23eafbe658e95ec21d81c446bb6daf2b57e25e8cd3aebd5e"
+    },
+    "v2/ThreadApproveGuardianDeniedActionResponse.json": {
+      "canonical_sha256": "cab335b769152c0db6a4931bce3a396a255436a610e4923ba68d7e14af4b4f47",
+      "raw_sha256": "628336c7cdabd508d5202695502bb0f9ce42fdde380f5efdd4b033cf215d93e5"
+    },
+    "v2/ThreadArchiveParams.json": {
+      "canonical_sha256": "685745fd6f4aaa0f95f59bb16b8fd065b8f9dca4ce80dfa829c9b068ee431747",
+      "raw_sha256": "dc2c0b133b814a5d9d543cc37afdb3f4f22feca35b7cea4272834b20a1e47705"
+    },
+    "v2/ThreadArchiveResponse.json": {
+      "canonical_sha256": "64440a7c3814e2589933778b38fd1ac6f11d2c5eb772a212f371762bf7351122",
+      "raw_sha256": "2e021dabd0930ae3e2beb68cd0ddbafc40fc20cfbf8dbcb5e2f9c0493d06a08c"
+    },
+    "v2/ThreadArchivedNotification.json": {
+      "canonical_sha256": "8b67577d66eaf6ef80d85bc4fc0b29bfc8af75668c3a65d51669d3a62430bb83",
+      "raw_sha256": "54ca94956719ade8682c766f31419ee9953dee8f4587b5b30efd0927de6ca26e"
+    },
+    "v2/ThreadAttachmentAddParams.json": {
+      "canonical_sha256": "cc2b13f657776721aa603bd6d348e0dad45eb205d2486946be3adbee836b18c0",
+      "raw_sha256": "9fb9d132c284d92759f39605177eef49ede6605106a211f121ad8b0cde240b3f"
+    },
+    "v2/ThreadAttachmentAddResponse.json": {
+      "canonical_sha256": "66d5a984bd61a7cced9d04d4880d41f9600e8ceb69bf01fd2787e594d85d97b6",
+      "raw_sha256": "06fd0a224722c962687bf808bd3f4d5233e35ae9fbcccd88711fa6f55334d626"
+    },
+    "v2/ThreadAttachmentListParams.json": {
+      "canonical_sha256": "abc2988271df9220e6a97057a6514679987eab9187c0626c7ad232974f02f015",
+      "raw_sha256": "1e999a37aa4ea451887d6cb9154c6c6aec0130ba8b56eef65827bf864b5810cc"
+    },
+    "v2/ThreadAttachmentListResponse.json": {
+      "canonical_sha256": "e448b74ebc0528454cd67b9027b7dca03162646428bb656f3e60e98554a76387",
+      "raw_sha256": "1ba64dc8c5d173c044753e1207ba906550be15b67c4ee105957bdaf4489cc1e8"
+    },
+    "v2/ThreadAttachmentRemoveParams.json": {
+      "canonical_sha256": "b900e9def7edf739e0f752f4c93c1853114fbb5431bf68afcd99efdc3d3c1490",
+      "raw_sha256": "9b262d87755c4ccbd1bf6d17dc71d45d173d80f26e4af9dc6df65bc2c206203d"
+    },
+    "v2/ThreadAttachmentRemoveResponse.json": {
+      "canonical_sha256": "f2b09ff8acf03effb46213e3d17078fbd43e5ec09eb524281279a4ef38ca534b",
+      "raw_sha256": "905003d0d531365a3557f42dfdcc9a2d5ff13c4992f860d7e6145cbd74083dbe"
+    },
+    "v2/ThreadAttachmentUpdatedNotification.json": {
+      "canonical_sha256": "df574589561c351d6bf2894b1c4fa5c2b0fbb561d30f6150e98dd57fa44b1a47",
+      "raw_sha256": "4470f2a0322b9a179e6970f02c5a862dc05ef4c052d948d4baa21934668c1408"
+    },
+    "v2/ThreadClosedNotification.json": {
+      "canonical_sha256": "ff7a5d91d76a5981f4de794482a589b3f75568a77f6bb53c8659d495e19253e9",
+      "raw_sha256": "d504cceb70e3397ad684924b08d3bff328a927be02ef4e3d482a18e27bab73de"
+    },
+    "v2/ThreadCompactStartParams.json": {
+      "canonical_sha256": "0dff617cb93a1398149de30d6b53098dabca86ba1ff750a7b2af8023651b9dfc",
+      "raw_sha256": "684b20adf20213a9fcbca31b59108feadcd5a8b693c16431c20d701049df3737"
+    },
+    "v2/ThreadCompactStartResponse.json": {
+      "canonical_sha256": "3933ea992c2fa391f8762b71c27133d4bf2e10c6fb84459bcbe05169af23cbc0",
+      "raw_sha256": "74674e47f33e37d7d97d144eac1789ef0580a1fc12d45a5675bb97caa08d803a"
+    },
+    "v2/ThreadDeleteParams.json": {
+      "canonical_sha256": "3677628027806ce3ff7fe57dfc808da703a9d391c4cd825fa428e2239c648777",
+      "raw_sha256": "0d5425d94af95e3dd20971cee052b2cb8c7d0d23195db1d17fde4e59cfbdec4a"
+    },
+    "v2/ThreadDeleteResponse.json": {
+      "canonical_sha256": "e8b19ad84361447d84323bc58e73039276b66a4b372d2f928807af0a1a1376bd",
+      "raw_sha256": "333c0c5df96d78d1bcbdb19b57ddfa941de9a02bdae1c29d13c5311c2cdf6527"
+    },
+    "v2/ThreadDeletedNotification.json": {
+      "canonical_sha256": "5a207de006b52f6f8c3c7d20f5cefa6d4f9393650a07e7821679914a171f941c",
+      "raw_sha256": "6f8d6fa96700ec6fff4b8c2bddf6768539b7ec7ba5dc05483aba53f5183386f9"
+    },
+    "v2/ThreadForkParams.json": {
+      "canonical_sha256": "8b5a0c6af181f85f7581ad2e0eac485875243fea53ae0e12e932954c36fc95fd",
+      "raw_sha256": "60540b97d453ddbc5e12bfaa007a3718f31847d18dec0da59a5e4b89be4717ad"
+    },
+    "v2/ThreadForkResponse.json": {
+      "canonical_sha256": "38f20e7540ffae7c1032bc6b04de31ec28d5337e637dfe00bbf709d4a2f67f85",
+      "raw_sha256": "f87794f43e171ebe2d471987fb00292d2070249768ce24457277375ec418482f"
+    },
+    "v2/ThreadGoalClearParams.json": {
+      "canonical_sha256": "3c24c0d1257c01ce9ba80451635814569983e7bb460923a1bb55431d291d9640",
+      "raw_sha256": "896c8b1997edf913382393f7d0f20ced4344714b9f0e8ce1f6564a11403e1675"
+    },
+    "v2/ThreadGoalClearResponse.json": {
+      "canonical_sha256": "b574447c0527e052086c15238acd31b2791181a8d0a3a9a06118a33e7a579370",
+      "raw_sha256": "2652c2d0072be8ccb71c8dcaaa054aa74f974e68156a73451baf72c8597669c2"
+    },
+    "v2/ThreadGoalClearedNotification.json": {
+      "canonical_sha256": "315d01caafa21bf70ac3d3c6c4db9ffb57cd8003d24abb2b56153b87b81228c5",
+      "raw_sha256": "ad6c2cf53970e45cae55d36dbddd84ecc7b34837846616493efa7b132a35a051"
+    },
+    "v2/ThreadGoalGetParams.json": {
+      "canonical_sha256": "abd3b460941f0224ff48e6f5343be33d92ede7e0e3c832b2a4239958f58a46bf",
+      "raw_sha256": "1a5de89b3c5c49528af404a65411a73ef05dc7c9c49c3f00c90d9926dfe34137"
+    },
+    "v2/ThreadGoalGetResponse.json": {
+      "canonical_sha256": "1252e855bcb4fa23970c3e168b1addb397d22cffedca6f0b02521ade9d698b26",
+      "raw_sha256": "f610000963194731c96ce2b45e46722ca700f1b6ccc1fc55a2fd95e526018fd9"
+    },
+    "v2/ThreadGoalSetParams.json": {
+      "canonical_sha256": "6f4ce2097e47be29cf97949951cf3262167adaef982d54dd1146b521db458c01",
+      "raw_sha256": "93162f095e9b3b5a051ceb24318b8922c663edefc1f8c67bd378085c0d6c01d2"
+    },
+    "v2/ThreadGoalSetResponse.json": {
+      "canonical_sha256": "728144917b87a635b88fe175a53ad741d49eec6a864073d94836ca0180c68ca0",
+      "raw_sha256": "b1c61b6068b3b73dd3d97b38f8a269593f8f7added4643bfdb2016315b71ad8e"
+    },
+    "v2/ThreadGoalUpdatedNotification.json": {
+      "canonical_sha256": "eaf5fb21c6347b2ef6c5604f87ceec6fd1e4c8dd396b82e0cd1ad88570c263d4",
+      "raw_sha256": "52010479c7efcc6dc749e2d9bf1e27c134453d92a1f0b367193d8125eec1fedc"
+    },
+    "v2/ThreadInjectItemsParams.json": {
+      "canonical_sha256": "bc2b62895d5f357f8098f6fc6788d1ead5eadf2568cc911d8793babff5fe857c",
+      "raw_sha256": "8d7e754402a2bb71bd817882076d2f8ac4cd75d4573306db082a83b841aa3532"
+    },
+    "v2/ThreadInjectItemsResponse.json": {
+      "canonical_sha256": "943a763669893dd11f2d3919fbc04421fd1ec80c87e0922996023dbf59b657cf",
+      "raw_sha256": "93d909e5b49b44da02072d340f8ad0ecd417d448ccf27fe50be7e369c7864159"
+    },
+    "v2/ThreadItemsListParams.json": {
+      "canonical_sha256": "43fd82db4ee82794580647549119d0ce493bd28469f95bd21c1a84599d095338",
+      "raw_sha256": "ff56040c327ecdd30ef02affac9bc71fab64031e8980f2b4fea9fd8a888160b4"
+    },
+    "v2/ThreadItemsListResponse.json": {
+      "canonical_sha256": "b95579f1fa6d7c128f022631fda297673ec4224bacb4ee6c0a677104345c45b4",
+      "raw_sha256": "886369490fec07067597460301b3d5c1dc9aedc41ea42522cae397d8babe6156"
+    },
+    "v2/ThreadListParams.json": {
+      "canonical_sha256": "5e5cb38ddd9b54cd1b387de6104c2a61f505a3a924e090697be4c62009bf4666",
+      "raw_sha256": "bf5abcb5363c177f8d6b60e6193c76ad8807d6452b67a73ee2f1d77dfe427ac9"
+    },
+    "v2/ThreadListResponse.json": {
+      "canonical_sha256": "8cf369e1e2fdd796548228618880ab3188764e54c6193d0d0a37da4487243fa2",
+      "raw_sha256": "4bb627dd0db9ab52a3b94a88a8e9c2e27870da9fed2dda505ab0085d708524a3"
+    },
+    "v2/ThreadLoadedListParams.json": {
+      "canonical_sha256": "c242673609b292759e07e2265f63bad1df4132ce07077cd4b7806ee3e375197c",
+      "raw_sha256": "42c2d124ab2b2998d84f0126daae2d32b0bf9c5a7ea7266e3a0814e5e37cf00d"
+    },
+    "v2/ThreadLoadedListResponse.json": {
+      "canonical_sha256": "067f647080902330ccf60bac9a0b1bf0b5ab17abff34b2c3e91d097d067499f9",
+      "raw_sha256": "1ea02c4710083e552b2a3a89b931b9049d5bf05b7db46278b8352cf9fd80cd52"
+    },
+    "v2/ThreadMetadataUpdateParams.json": {
+      "canonical_sha256": "d5e2b63bd4faa588fea50a4df6db71da30ad7b8152f964e6702ee09ac810c55f",
+      "raw_sha256": "190da07d8c7c89c44b1e44b4e57fb5d803f356953534498a7a7f39fe29a8a6a4"
+    },
+    "v2/ThreadMetadataUpdateResponse.json": {
+      "canonical_sha256": "7613fd2d60486a1696838b8534fbb5366cedd4ebbccea62cfa0a91e82f2f4ca4",
+      "raw_sha256": "1d34a3bdf73f866c6d3910548322326f4e9458bdfea478317b613cc0c99aba2e"
+    },
+    "v2/ThreadNameUpdatedNotification.json": {
+      "canonical_sha256": "7fd00624774829b921931ed006fc0f1908aa5012dc4b79920584b6016fce0455",
+      "raw_sha256": "06d5e6b0e1eaf03eb88891af58eff14368a76e300a40a9bed71bacce2093b960"
+    },
+    "v2/ThreadProjectUpdatedNotification.json": {
+      "canonical_sha256": "c7867702a91476a50c33f387799f7851f616357f6781c65f22d55370383b1329",
+      "raw_sha256": "ad31b029957a9259f26352ce879219cbe25f0314ae883d02ab811a0c6427a1e5"
+    },
+    "v2/ThreadQueueChangedNotification.json": {
+      "canonical_sha256": "59ce77f461aaee39f4548638f7133d47ad0c6f032d5ca5affcd2319244fde7c0",
+      "raw_sha256": "0a960da43fb14f69dae2550ac4f8517760464eedbf95a9977718548739fdcf21"
+    },
+    "v2/ThreadReadParams.json": {
+      "canonical_sha256": "034ae7f41fe195edb1010ab8927ac4215caacabbf24f15da96170f604aacb901",
+      "raw_sha256": "dfe040c6ac71d30795b8be3f3ff232e66f362a37f883b491e5d1ea367f470db4"
+    },
+    "v2/ThreadReadResponse.json": {
+      "canonical_sha256": "016bdd5c625f087c64a0874ab4f448bca0f9dadbe49eea59f5cd9b7394032c78",
+      "raw_sha256": "d2616b2f1ea2ebcc07b7d9fae6b221a70adeb907413d790da39613650dea07ec"
+    },
+    "v2/ThreadRealtimeClosedNotification.json": {
+      "canonical_sha256": "3364ddc1779dce3617315766741aaa9da04cb5a560c714a8f77cc98cfd05dff4",
+      "raw_sha256": "5290a73f8d4652b59d2f82d89c7bd289003fe2981fb0c628a61e801fa2123364"
+    },
+    "v2/ThreadRealtimeErrorNotification.json": {
+      "canonical_sha256": "d1ec73636604e5a7566429dc5a48d8701314709b60268e184d36765dc6617c4f",
+      "raw_sha256": "aeba7e4b477b4825b41990a4da69b0f3cb3a00f44cf9e2e42e275b944b7cb040"
+    },
+    "v2/ThreadRealtimeItemAddedNotification.json": {
+      "canonical_sha256": "fb1750c38923b0b688aab5f449b41d4cfb16d34ef876d096fd422b664aeb1f5c",
+      "raw_sha256": "48aabfcbfd2361b5830a93257bc9eb31a6933f6e390694e188bfb287acbad9b4"
+    },
+    "v2/ThreadRealtimeItemCompletedNotification.json": {
+      "canonical_sha256": "42aa1c9ecadc68243634a27fd245ba53f3e7c3f3eba1d443549680b63ba49cff",
+      "raw_sha256": "b2a5e38840b8afc2111620c332801603e832b91ad4c95dd1f13c926923b760ef"
+    },
+    "v2/ThreadRealtimeItemStartedNotification.json": {
+      "canonical_sha256": "9f77c185fe6ff0b6b7584b4f96daafa68b4602f508fcdac9bc3c867e3a3240d5",
+      "raw_sha256": "ef1a68a635ce680b321e276fd9144ef614b37bab16942368bdc16bb8ee217f46"
+    },
+    "v2/ThreadRealtimeItemTranscriptDeltaNotification.json": {
+      "canonical_sha256": "7662f6068d081625fe7ea9e298a7f3545092c2c87f6bc393040150ebf82f3eb3",
+      "raw_sha256": "42f2456726367b90a2626a32f3f88495de87032243beecd9bfbad28734f4b62d"
+    },
+    "v2/ThreadRealtimeOutputAudioDeltaNotification.json": {
+      "canonical_sha256": "7837ac6a5657f0e0dd646b9ed9b132a08ec06b6ad93271332a4d1d1d857ac4df",
+      "raw_sha256": "4f73a5c606fda4984da4fc14e4cd98f62c8f9aa75b2db17cff76562c2d176ec0"
+    },
+    "v2/ThreadRealtimeSdpNotification.json": {
+      "canonical_sha256": "2d48155575b6eb8022a3c192ccd63ffa6a6b4fb407ae89c3ebc3240b8d2490f3",
+      "raw_sha256": "1e276f48d346e6cace65551f84ef9b0bc8daba2a3ce93499f3a902551de239fc"
+    },
+    "v2/ThreadRealtimeStartedNotification.json": {
+      "canonical_sha256": "25562def699803cbf1673a6dd7c5925ec3aebdeeb513481c14e1aad96c0438b8",
+      "raw_sha256": "483d324381a8ced04c8ab158c825bca2b64c06a4e85b350a086730050fe8f188"
+    },
+    "v2/ThreadRealtimeTranscriptDeltaNotification.json": {
+      "canonical_sha256": "58b37a71b1ba062a18367d1f55d11aa147be2f7ae1b26f8217fbaa23f7992c1f",
+      "raw_sha256": "1a6add677534de891026eb56aac815b2585fbd4a6d6475f679a722c52b778703"
+    },
+    "v2/ThreadRealtimeTranscriptDoneNotification.json": {
+      "canonical_sha256": "23285aaa9617f7e5fb086e73756236a322f2801052c01cd3229bfebb3950aab8",
+      "raw_sha256": "0000453425e300fd19ac2bc5fba4ebf3fbce48ac9a9b62ceb8bc5db8b6c77fff"
+    },
+    "v2/ThreadResumeParams.json": {
+      "canonical_sha256": "67b1b0dc5c4cc3cbc9ff06ad3a7b7d99c4063b3ffc1d8608d35ab3a4897fa3d4",
+      "raw_sha256": "36b2854eb802559e17b0e5639385a1e39d5279326c50e2cdb836749b6dd7cb6f"
+    },
+    "v2/ThreadResumeResponse.json": {
+      "canonical_sha256": "daed3e19cbc3d719076314dbb907861dcae8f97521d90d51d0e9affd7999695e",
+      "raw_sha256": "fb1fac1fc4f7657736c1ab1a85efe7d71c8dde8fb5be7bf2b823d07367dab9b5"
+    },
+    "v2/ThreadRevertParams.json": {
+      "canonical_sha256": "beb4d29183ee7d43b47556fadf26f9acb2e487a4a5b6b2c9f671a2dcf9ad93e6",
+      "raw_sha256": "3a5e85a67906c8ea3ad9f5065559d263d968a28a957739e7a1d9e4e1981e4eb8"
+    },
+    "v2/ThreadRevertResponse.json": {
+      "canonical_sha256": "9c38c6ec176f23eaf082e30b6ee0bc3435d4cd6b6fcb9308b1593386ad7f4db1",
+      "raw_sha256": "60524c6fd66050509e204c9a0f77f544731f3bb070059bc95462375f30cb93cd"
+    },
+    "v2/ThreadRevertedNotification.json": {
+      "canonical_sha256": "16b50c2faec4509c12c8b0eee8809838a2901aac6b363730760a018cc9b44b27",
+      "raw_sha256": "570995a91a4436d403bafbf9a4c34ead666b137ecd5406803e14826a6d84cf22"
+    },
+    "v2/ThreadRollbackParams.json": {
+      "canonical_sha256": "d5b17db315610a290300bfc50d2b2dcb5f8758008a70fc2f78f2bf6d7bf1e36f",
+      "raw_sha256": "27002ceab514bcbab10ad2e0a7b9b842f9ae51bd5e8c084ed14960889b422ebd"
+    },
+    "v2/ThreadRollbackResponse.json": {
+      "canonical_sha256": "fa8eb4562b11c547e5d6bcc5e8fea758c706c3058e371cdc55bf5e7c4d06735e",
+      "raw_sha256": "6441a92be16354d1bfdf77a65e8a1228a7d2ba67b76bf18da068ebd2bbb94a30"
+    },
+    "v2/ThreadSectionCreateParams.json": {
+      "canonical_sha256": "7707edf8181622907876d7307f99701a6b10f0414f817f700c0a923579b387a7",
+      "raw_sha256": "e3bf941ceab7a4dd39ce1b4063168621d60162aa97f7171cef59819c999c501e"
+    },
+    "v2/ThreadSectionCreateResponse.json": {
+      "canonical_sha256": "cc1ff02e0ec0c6103717394251fb47ccd5ceb12588d4a76cf71bf24d1332f2ec",
+      "raw_sha256": "2b0b0e7a2651354aac35aa5d1a423b9f207ee8d46b2de077df747f4ed4f4c8de"
+    },
+    "v2/ThreadSectionDeleteParams.json": {
+      "canonical_sha256": "2a94abbf8df8b366e8c6d77f4e34b5d95f2b940702715196cfe8eb2a902f9533",
+      "raw_sha256": "93cc3d12bd5580966b59bbab8f2ccddd31b3b4bce56f76d49cfe41f1916b5deb"
+    },
+    "v2/ThreadSectionDeleteResponse.json": {
+      "canonical_sha256": "921a7e37c8f91aa129a5820af528e40d8211f2c53c3e86ee1e58876f64f584f4",
+      "raw_sha256": "9bbee5cca1fca02e4a65c2481dc3b24f090bca7afb786923ee481017b133b091"
+    },
+    "v2/ThreadSectionListParams.json": {
+      "canonical_sha256": "70b72964bd66b9990d48ba7691743b43ca82393318d6a5a4b3e4578b2f0314dc",
+      "raw_sha256": "6aea71b3fba46351fcaf648eab0da564080ba424599a012648abd9fd44464cf8"
+    },
+    "v2/ThreadSectionListResponse.json": {
+      "canonical_sha256": "55cb7a33d088adb5480cfb6cd311f3bfb4acbf626c38f7a0deb4c85f14081607",
+      "raw_sha256": "dc3b5e5501a56ea2a1a83cb97c5221b355629f8c9468793d94e22673424140bc"
+    },
+    "v2/ThreadSectionMoveParams.json": {
+      "canonical_sha256": "21cdb66c68715e993c98a58fd3dd3c3375bf5f323e5f25b5e2f01f519929fce1",
+      "raw_sha256": "48bc921055838df25c5595c96be7bd25beef3accb8bd1d28026fcaa7d81487b1"
+    },
+    "v2/ThreadSectionMoveResponse.json": {
+      "canonical_sha256": "5915aeb349bb26e83a63de6a15d06b92b302f2e7914925d4c0d67c8569ba7723",
+      "raw_sha256": "243299d7eebd4fb264d4e75efeb5058982681202371c2b83ff1a63b3369ddbb6"
+    },
+    "v2/ThreadSectionUpdateParams.json": {
+      "canonical_sha256": "7f687c10a1aaf2a02695bd26b88d694fa6aed436c1b411866f8f7a6326a4cf77",
+      "raw_sha256": "6cc7b7e486026a59d6fcc0701407d9293c0fe8b96e41894630c3a39fee967980"
+    },
+    "v2/ThreadSectionUpdateResponse.json": {
+      "canonical_sha256": "df6a53cda7a7d4787236b9e7c278628d425c74e07063d81b66ec52c55a4d767d",
+      "raw_sha256": "4588cbf0374204c17f02f15eecb5390cd5346bc551675e07e541bbfd28d020bf"
+    },
+    "v2/ThreadSetNameParams.json": {
+      "canonical_sha256": "82a3c1be49106366a581fb8265045e27884742aa66a19a580e54ceeb83783242",
+      "raw_sha256": "8e334c816bbaeb80f807aca61bf659246f3f60c245c21b5cb7e3ca4ee3ce4820"
+    },
+    "v2/ThreadSetNameResponse.json": {
+      "canonical_sha256": "95fce33f29f96967f4b29e5404e2718b0d1f8491e942f2398b447ef795a3c62b",
+      "raw_sha256": "f8763716433feea94f7c1ebd59b6cea4c261432e83240c13a8d49ba8185aa567"
+    },
+    "v2/ThreadSettingsUpdatedNotification.json": {
+      "canonical_sha256": "9ae34145e195328db76109362081ebf56d49e5938ff3ea9e94fff5124bee8467",
+      "raw_sha256": "e601ede3c6947f6df0aea6b1c091c01e38ef7909df939f5ef11c8f836fc8a2ed"
+    },
+    "v2/ThreadShellCommandParams.json": {
+      "canonical_sha256": "a9b044ab9730f7a253308aed5eca58b7100232bb08e7b09486b63f15d556b389",
+      "raw_sha256": "dc646457ca36be601c8c3d15c44d14907d9a165ccf2b9635a8e9a878f0ca0727"
+    },
+    "v2/ThreadShellCommandResponse.json": {
+      "canonical_sha256": "e6602fd6bbba348f4b6ef037c7c0e972eefcaf89b3f89fbc8da46ed1ae22cb38",
+      "raw_sha256": "fd4911613f6a6da2ca13b75342501d4d61f64e00a1083c6d60038369b8caeefe"
+    },
+    "v2/ThreadStartParams.json": {
+      "canonical_sha256": "278d25b0c1771eafc2e0bdaac84c5bbc2cfbd30cc4b1feb15511a74385b0ec95",
+      "raw_sha256": "792e2f32e37cece971bd616664ea2053741acbed4e9c92e9d1766427718f2ecd"
+    },
+    "v2/ThreadStartResponse.json": {
+      "canonical_sha256": "5f12184b5b04bedec229b3c83b2879e37f865abf43f66c52bdc32d82403261c6",
+      "raw_sha256": "5686cd0fecf44b09c533018de90e34f74fcc92b8aaf941430941fd6d633e6621"
+    },
+    "v2/ThreadStartedNotification.json": {
+      "canonical_sha256": "4e2330b7c17986f80d794e7ba7bd564584fd31def8723de77fc66192c9ab1c87",
+      "raw_sha256": "b20c94888884f9147d060bd57295b92a4669848f325c42051fc7882d648e3ed5"
+    },
+    "v2/ThreadStatusChangedNotification.json": {
+      "canonical_sha256": "538acb0fee602ec811ae7c7be1d92a6ba47ce1e235ce5c2c9e0d5872f93d8df3",
+      "raw_sha256": "26f3c60c1b73f7fa2d31c74429cdc36f8746c76c33e3d314b3fb61d3661f05f6"
+    },
+    "v2/ThreadTokenUsageUpdatedNotification.json": {
+      "canonical_sha256": "6251f0be14095d7e03e890b81fb7df604b920971e004042c005ff7eb2193703e",
+      "raw_sha256": "aba4f6c7e4a19b2b842c08ee793b57000c07dafd57b922ad0d8e7c76609108c2"
+    },
+    "v2/ThreadTurnsListParams.json": {
+      "canonical_sha256": "3830cb459526d82c04c6337a4c441fa6134b2bf486d4cbe6a78c3ce7b3f989e0",
+      "raw_sha256": "2a8b93d7d4437cc25e16a1dde16d8db3c338d39e16c5eece2a56e943a21577d7"
+    },
+    "v2/ThreadTurnsListResponse.json": {
+      "canonical_sha256": "184018ff112522602aadc472c03f0cbf3ac17d2c24cce55c9622114ab71197c6",
+      "raw_sha256": "45bffd91efc358859a1a54b8165c0a8b1c21ebc2a312da9f25d05ff27af798ee"
+    },
+    "v2/ThreadUnarchiveParams.json": {
+      "canonical_sha256": "24ef289c85eba2dd0b1417d5068a6468d0064ea37621ce7feff9917e18b3638c",
+      "raw_sha256": "a1d5d847b61ea16ab09d5b9d1c1461134a7829292aae02a7e11b0a69b00c76ca"
+    },
+    "v2/ThreadUnarchiveResponse.json": {
+      "canonical_sha256": "03176501e06e495640b0b5c3db4bb902625b0e1ac6c67dc9b251f752a3ea5d73",
+      "raw_sha256": "a516d589987839a630d4f80be05550faf7212cf3bc296890d2b3af365b6a2421"
+    },
+    "v2/ThreadUnarchivedNotification.json": {
+      "canonical_sha256": "61499d983a8f04fc20b2c87da7f5fa40e95e4bccc960ed2c005f6bd971816638",
+      "raw_sha256": "fc00949cdc588b84800a26403647eda0e22d6f28663dc032a90db9c20dfa822d"
+    },
+    "v2/ThreadUnsubscribeParams.json": {
+      "canonical_sha256": "a03a66ba8f89bd17811cf1ede7eb1692e4bf0cab213b8f69b72bca03ea9d5df4",
+      "raw_sha256": "77c67e0dc0a729af2d4612f30ed63f1297160232e96cd32b7cb9cc3e7fff0233"
+    },
+    "v2/ThreadUnsubscribeResponse.json": {
+      "canonical_sha256": "45a19bd37cd49d3a3c772b655b62c093c24e82d9520715519859bb8b6e820108",
+      "raw_sha256": "9cad5e71a589c3c20e0980ce34a894a29e2898a075b10b1493bc87f32500081a"
+    },
+    "v2/TurnCompletedNotification.json": {
+      "canonical_sha256": "1c8fe516708a2f94fa96624f1b5046f0d29b0ba95ad69e9a46fc9063ede174a0",
+      "raw_sha256": "78af2a37391e8e669a4020cb58593e4d3e378756ced79d5fec72374fa69fb94b"
+    },
+    "v2/TurnDiffUpdatedNotification.json": {
+      "canonical_sha256": "803942f8fb0a2ac1482bd52232e6110d15447cc911f9f8aa07c35122b8dda7d1",
+      "raw_sha256": "59a02535094b591b926cdc11a8e5f5babf73b442323a02cace1661c62f0c2918"
+    },
+    "v2/TurnInterruptParams.json": {
+      "canonical_sha256": "3903cb9ceb194ec5aec80f9c0f1a5206725f49a0825c27aa854f44a4bc7f4521",
+      "raw_sha256": "6dff382dae73d1dbc58406ed045605f647e7a49660e2540fbd2c6c24d60c5f2b"
+    },
+    "v2/TurnInterruptResponse.json": {
+      "canonical_sha256": "06e70e8d7e6a13fa301dfc650a2aa685f44a3cbf8767ce22b4797e35a59e6a8c",
+      "raw_sha256": "531de6be06fe979b5963f249bab82498a175e614bf65ac12fb2e849dfe60bcf1"
+    },
+    "v2/TurnModerationMetadataNotification.json": {
+      "canonical_sha256": "80df55c5e69ec306df6d01b6e78024c3fa8a40cc3f022bfa1d441c8a56f67035",
+      "raw_sha256": "90fe9ade83c46fd42af9d023737a9990595dac71e059158744950f538e802876"
+    },
+    "v2/TurnPlanUpdatedNotification.json": {
+      "canonical_sha256": "faf449e884d5750dec6310ee9a7bda606fc795d1d28258126eefac29d5a78cf0",
+      "raw_sha256": "2522f743be0a1e9666dec5ad4f18d8ecba3c4f16e66d510b1491d4117d1dd0ba"
+    },
+    "v2/TurnStartParams.json": {
+      "canonical_sha256": "8a29a6fb75c063013567a01133fc4db4052771d22d3c88b634506f2a763df835",
+      "raw_sha256": "a3835e8c1e942e4b358e1a670939b89918b16c4d13105a579899892b7ade6dea"
+    },
+    "v2/TurnStartResponse.json": {
+      "canonical_sha256": "964fac59b8e94f4139d9091b6495da2e82a6cc1939f91c5669c8320fd53234d3",
+      "raw_sha256": "6fc49c3e5d0ce11a3a109ae194619b04d6e3ff98fa29bac683fdb754608958be"
+    },
+    "v2/TurnStartedNotification.json": {
+      "canonical_sha256": "283c6aa4282e25d08bf0f233782533869cd523770af5bea5c1f28fe4c350bf90",
+      "raw_sha256": "d4b59fd396cadfc2377f60c9f9f4c9367dca95362baadf7817c74e1b9c910c4d"
+    },
+    "v2/TurnSteerParams.json": {
+      "canonical_sha256": "18daa1fcfb60873beb1e1b132e142acf9812b21d69c8ef7ea7803bb748f10df7",
+      "raw_sha256": "4a52eb76e7a717bb388484ccd7538737fca0df35481fc30a21e259f1bfe96e37"
+    },
+    "v2/TurnSteerResponse.json": {
+      "canonical_sha256": "c0cee0b0c57af980fe2727679fbf2d3110ba28e8c9328f40d402fcc44ecb87bf",
+      "raw_sha256": "866ba9a77c12b5d570c837d58f73bf40b24e50fa93404bdf792dd984d313b1aa"
+    },
+    "v2/WarningNotification.json": {
+      "canonical_sha256": "b900b5bfbd5154287849e97fdd6d82ebdda0b610399e44d4f595d8a98d575537",
+      "raw_sha256": "f83c400591b923400ca0beaaaab1341c712d5ac0dee4ce6868a8e590f46490f9"
+    },
+    "v2/WindowsSandboxReadinessResponse.json": {
+      "canonical_sha256": "b7bb732761c422f735b4bed4ea0e2816bb9bb6901ceef9a36a888282a524c202",
+      "raw_sha256": "077f60a3d6d1fc226c45059472b29caf675fdc3fdebb29569eaab94bd05ceb00"
+    },
+    "v2/WindowsSandboxSetupCompletedNotification.json": {
+      "canonical_sha256": "e2fdf204f3399e86329da250c4622c0aeca9130adc5b5b8ac728419651aa4449",
+      "raw_sha256": "dc5383ae8fc2a46badbc2dab3ccd0447fed97729c2d5a177e28c4a7e2a60c329"
+    },
+    "v2/WindowsSandboxSetupStartParams.json": {
+      "canonical_sha256": "4e62b4d038fe13116fa3e9683f52eea7168f7e3f862963ac4f1e0f8d2df22a3c",
+      "raw_sha256": "8610d077fff4fc5811f2e33dea82617a15ffb82f08e55e1540aef877133f5b4f"
+    },
+    "v2/WindowsSandboxSetupStartResponse.json": {
+      "canonical_sha256": "50efa558e8a524ea2f14e976d6b6f7052516dcb55407bd77d73c847adee15652",
+      "raw_sha256": "830bf89deac3e73e36b7d9799ceed32ee25e782c30b1d25266374aa020d3bc7e"
+    },
+    "v2/WindowsWorldWritableWarningNotification.json": {
+      "canonical_sha256": "a79d7ac1c33956892f3263e2b13d8a877c312c7360a297a76dcf6ca0afbcf44c",
+      "raw_sha256": "bfa34d4890c8121a04412b8d53314a13adf98289fdd948857fd97b808dcbe79e"
+    }
+  },
+  "format": "pio-codex-schema-identity/1",
+  "raw_listing_sha256": "15ef360b08c38fadf06c7a79a530e07983c6e32d1443e60e547896dc927d6ede"
+}

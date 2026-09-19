@@ -1,0 +1,47 @@
+{
+  "format": "pio-m2-live-receipt/1",
+  "run": "discovery",
+  "live": true,
+  "turn_started": false,
+  "model_calls": 0,
+  "recorded_at_utc": "2026-09-19T15:51:12Z",
+  "pio": {
+    "head": "48d9f304e0ecd3bda0ffbcf92b18e301ac2eeeb5",
+    "dirty": false
+  },
+  "fresh_store": {
+    "installations": 1,
+    "installation": {
+      "adapter_recognized": "yes",
+      "authentication": "unknown",
+      "detected": true,
+      "harness": "Codex CLI app-server",
+      "installation_id": "codex-selected",
+      "reachable": "unknown",
+      "usable": false,
+      "version": "0.155.1",
+      "version_supported": "yes"
+    },
+    "launch_event_files_before": 0,
+    "launch_event_files_after": 0,
+    "discovery_started_no_app_server": true
+  },
+  "store_of_a_completed_run": {
+    "installations": 1,
+    "installation": {
+      "adapter_recognized": "yes",
+      "authentication": "authenticated",
+      "detected": true,
+      "harness": "Codex CLI app-server",
+      "installation_id": "codex-selected",
+      "last_verified": "2026-09-19T15:46:15Z",
+      "reachable": "yes",
+      "usable": true,
+      "version": "0.155.1",
+      "version_supported": "yes"
+    },
+    "launch_event_files_before": 1,
+    "launch_event_files_after": 1,
+    "discovery_started_no_app_server": true
+  }
+}

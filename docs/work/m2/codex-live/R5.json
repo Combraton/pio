@@ -1,0 +1,315 @@
+{
+  "format": "pio-m2-live-receipt/1",
+  "run": "R5",
+  "journeys": [
+    "approval-deny"
+  ],
+  "real_codex": true,
+  "live": true,
+  "recorded_at_utc": "2026-09-19T15:44:25Z",
+  "seconds": 49.3,
+  "pio": {
+    "head": "d4eea3363205d77d31fb99233adcca4bb9b6137b",
+    "dirty": false,
+    "binary_sha256": "b37724f259211f86bf82029610a4032bb01d53f32d259c3c6dc248d7d97ed22f"
+  },
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "codex": {
+    "selected": "$HOME/.local/bin/codex",
+    "kind": "npm_node_wrapper",
+    "wrapper_sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+    "wrapper_package_version": "0.155.1",
+    "native_sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e",
+    "native_layout_version": "0.155.1",
+    "node": {
+      "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+      "version": "v22.23.0"
+    },
+    "version": {
+      "native": "0.155.1",
+      "selected": "0.155.1"
+    },
+    "canonical_schema_listing_sha256": "93b723a83b000bffb23a0d0f17dbdc0711f28a35bb000e97306ed004dd4119b8",
+    "schema_drift": 0,
+    "service_node_resolution": {
+      "matches_qualification": true,
+      "version": "v22.23.0"
+    }
+  },
+  "environment_passed": [
+    "HOME",
+    "LANG",
+    "PATH",
+    "USER"
+  ],
+  "credential_variables_passed": false,
+  "authentication_type": "chatgpt",
+  "model": {
+    "configured": "gpt-6-astra",
+    "requested": "gpt-5.6-terra",
+    "effective": "gpt-5.6-terra"
+  },
+  "model_provider": "openai",
+  "thread_settings": {
+    "requested": {
+      "approvalPolicy": "untrusted",
+      "model": "gpt-5.6-terra",
+      "sandbox": "workspace-write"
+    },
+    "configured": {
+      "approval_policy": {
+        "source": "absent_trusted_project_default",
+        "value": "on-request"
+      },
+      "sandbox_mode": {
+        "source": "absent_trusted_project_default",
+        "value": "workspace-write"
+      }
+    },
+    "guard_allowed": true,
+    "effective_sandbox": {
+      "excludeSlashTmp": false,
+      "excludeTmpdirEnvVar": false,
+      "networkAccess": false,
+      "type": "workspaceWrite",
+      "writableRoots": []
+    },
+    "effective_approval_policy": "untrusted"
+  },
+  "native": {
+    "thread_id": "01a0ba56-f2fa-7430-8a23-ca84d52e5b65",
+    "turn_id": "01a0ba56-f3c8-7c31-9927-f05a2df22d48",
+    "native_process": {
+      "identity": {
+        "pid": 17263,
+        "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832639:602122"
+      },
+      "interpreter": {
+        "applicable": true,
+        "path_matches_qualification": true
+      },
+      "path_matches_qualification": true,
+      "sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e"
+    }
+  },
+  "identities": {
+    "invocation_id": "6a192aa6-94b6-4a02-b308-6accdc2312bb",
+    "host": {
+      "pid": 17249,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832615:796276"
+    },
+    "app_server_process": {
+      "pid": 17260,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832639:549883"
+    },
+    "host_slot": "061fbd23-c173-4fdb-a197-5d2dfb5850b9",
+    "controller_generation_at_admission": 1,
+    "host_generation_now": 1,
+    "phase": "completed"
+  },
+  "delivery": {
+    "delivery": "acknowledged",
+    "delivery_id": "work.delivery-1",
+    "determined_at": "2026-09-19T15:44:15Z",
+    "evidence": {
+      "class": "native_turn_acknowledged",
+      "source": "codex-app-server/host"
+    },
+    "history": [
+      {
+        "delivery": "pending",
+        "recorded_at": "2026-09-19T15:44:15Z"
+      }
+    ],
+    "proof_class": "provider_ack_id"
+  },
+  "runtime": "exited",
+  "exit": {
+    "code": 0
+  },
+  "cancellation": null,
+  "actions": [
+    {
+      "action_id": "work.action-1",
+      "answered_at": "2026-09-19T15:44:22Z",
+      "owner": "codex",
+      "requested_at": "2026-09-19T15:44:22Z",
+      "response_effect": "work.response-1",
+      "state": "answered"
+    }
+  ],
+  "steering": null,
+  "deadline_stop": null,
+  "timeouts": {
+    "delivery": 120,
+    "execution_deadline": 600
+  },
+  "timeouts_passed": [],
+  "turn_status": "completed",
+  "turn_error": null,
+  "output": {
+    "bytes": 7109,
+    "sha256": "5b674d4ad0c991ef07ee8cb9e2f6d1269193a8cf7202a57b26f1d5faedf6c3c5",
+    "receipt_output_digest": "sha256:5b674d4ad0c991ef07ee8cb9e2f6d1269193a8cf7202a57b26f1d5faedf6c3c5",
+    "agent_text_sha256": "e0e81fc291ceb3e07183d61d1e7e21a3bcd665059f490706483fa36b8a0cc4d9"
+  },
+  "usage": {
+    "observed_total_tokens": 43721,
+    "observation": {
+      "liability": "resolved",
+      "observations": [
+        {
+          "amount": 43721,
+          "basis": "observed",
+          "invocation_id": "6a192aa6-94b6-4a02-b308-6accdc2312bb",
+          "measure": "codex.tokens.total",
+          "recorded_at": "2026-09-19T15:44:24Z"
+        }
+      ]
+    },
+    "cap": 1000000,
+    "stop_at": 800000,
+    "run_limit": 250000,
+    "cumulative_observed_tokens": 377427
+  },
+  "config_diff": {
+    "existed_before": true,
+    "exists_after": true,
+    "format": "pio-codex-config-diff/1",
+    "other_changes": false,
+    "projects_added": [
+      {
+        "location": "fixture",
+        "path_sha256": "861cd26590f13d098e4fe33dec5733cd4c6c980d90c74cef52b5199e5cb7b4dd",
+        "trust_level": "trusted"
+      }
+    ],
+    "projects_changed": [],
+    "projects_removed": [],
+    "raw_sha256": {
+      "after": "c81833cda5552837c5e6a0f7355793ea2dc3bfaa75ba4b3caf2c9f1667d96b2e",
+      "before": "681ff2ad829df5987ec190814b98d6a6279ffa66909a76bd0aa715890143d11d"
+    },
+    "unchanged": false
+  },
+  "config_before_sha256": "681ff2ad829df5987ec190814b98d6a6279ffa66909a76bd0aa715890143d11d",
+  "fixture": {
+    "path": "$HOME/pio-m2-live/fixtures/r5-deny",
+    "base": "fd24fcfc5ec539026d7db1dd352d73841b2f9b06",
+    "brief_sha256": "2ef2e9fb2c05b8ea76cb9407af0781aa2c72a7104c7888d96b891a26c1d3b80d",
+    "diff_stat": "",
+    "status_porcelain_lines": 1,
+    "unittest_exit_after_run": 1
+  },
+  "event_kinds": [
+    "config_before",
+    "thread_settings_guard",
+    "spawned",
+    "account",
+    "thread_started",
+    "turn_start_sent",
+    "turn_acknowledged",
+    "turn_started",
+    "item_completed",
+    "item_completed",
+    "item_completed",
+    "action_requested",
+    "control_applied",
+    "request_resolved",
+    "item_completed",
+    "usage",
+    "item_completed",
+    "item_completed",
+    "usage",
+    "turn_completed",
+    "app_server_exited",
+    "config_after"
+  ],
+  "public_transcript_schema_check": {
+    "exit": 0,
+    "summary": "168 schema-valid public results"
+  },
+  "independent_services": {
+    "cbr_processes": 0,
+    "combraton_processes": 0,
+    "context_calls": "none: PIO has no Context client in this build"
+  },
+  "submit": {
+    "admission": "admitted",
+    "error": null
+  },
+  "approval": {
+    "action_id": "work.action-1",
+    "decision": "decline",
+    "answer": {
+      "action_id": "work.action-1",
+      "response_effect": "work.response-1",
+      "state": "answered"
+    },
+    "answer_error": null,
+    "request": {
+      "action_seq": 1,
+      "approval_kind": "command",
+      "command": "/bin/zsh -lc 'python3 -m unittest -q'",
+      "cwd_digest": "861cd26590f13d098e4fe33dec5733cd4c6c980d90c74cef52b5199e5cb7b4dd",
+      "item_id": "exec-262f113a-b646-4ea6-964e-ffb6e2c6cf3f",
+      "kind": "action_requested",
+      "method": "item/commandExecution/requestApproval",
+      "observed_at_unix_ms": 1789832662659,
+      "reason": null,
+      "request_id": 0,
+      "source": "codex-app-server",
+      "turn_id": "01a0ba56-f3c8-7c31-9927-f05a2df22d48"
+    },
+    "item_completed": [
+      {
+        "item_id": "01a0ba56-ffc5-78a1-aab8-91bddf8bc6fd",
+        "item_type": "userMessage",
+        "kind": "item_completed",
+        "observed_at_unix_ms": 1789832658902,
+        "source": "codex-app-server",
+        "status": null
+      },
+      {
+        "item_id": "rs_0405014deda337e4016aaeadd4d2b087d09e291fcbba584347",
+        "item_type": "reasoning",
+        "kind": "item_completed",
+        "observed_at_unix_ms": 1789832661210,
+        "source": "codex-app-server",
+        "status": null
+      },
+      {
+        "item_id": "msg_0405014deda337e4016aaeadd520b887d0888057b189da13bb",
+        "item_type": "agentMessage",
+        "kind": "item_completed",
+        "observed_at_unix_ms": 1789832661531,
+        "source": "codex-app-server",
+        "status": null
+      },
+      {
+        "item_id": "exec-262f113a-b646-4ea6-964e-ffb6e2c6cf3f",
+        "item_type": "commandExecution",
+        "kind": "item_completed",
+        "observed_at_unix_ms": 1789832662751,
+        "source": "codex-app-server",
+        "status": "declined"
+      },
+      {
+        "item_id": "rs_0405014deda337e4016aaeadd7cf2c87d0b50f6c22c8d3cac7",
+        "item_type": "reasoning",
+        "kind": "item_completed",
+        "observed_at_unix_ms": 1789832664188,
+        "source": "codex-app-server",
+        "status": null
+      },
+      {
+        "item_id": "msg_0405014deda337e4016aaeadd822a487d093689d8e2dfe47c5",
+        "item_type": "agentMessage",
+        "kind": "item_completed",
+        "observed_at_unix_ms": 1789832664510,
+        "source": "codex-app-server",
+        "status": null
+      }
+    ]
+  }
+}

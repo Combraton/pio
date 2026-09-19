@@ -1,0 +1,781 @@
+{
+ "format": "pio-m2-checkpoint/1",
+ "checkpoint": "Owner review 1 corrections: admission headroom, capacity proposal, near-bound latency",
+ "issue": "https://github.com/Combraton/pio/issues/5",
+ "pull_request": "https://github.com/Combraton/pio/pull/6",
+ "reviewed_head": "0f8685b2f312dd602caecd8684de451f7772b2e7",
+ "base": "9cf70474c28f549650e6b48e8be20ae88426a1b0",
+ "implementation_commits": {
+  "headroom_and_proposal_demo": "aa7ad784d50951e7442fe2fb14617850f7bb6841",
+  "case_fix_and_docs": "df069bf",
+  "tick_spacing_and_latency": "b217936",
+  "adr_latency_note": "6a9d11a344e50de45a2e60d441026a90cad80f86"
+ },
+ "tested_head": "6a9d11a344e50de45a2e60d441026a90cad80f86",
+ "ci_run": "https://github.com/Combraton/pio/actions/runs/35130616765",
+ "failed_intermediate_runs": [
+  {
+   "head": "aa7ad78",
+   "run": "https://github.com/Combraton/pio/actions/runs/35129019924",
+   "cause": "capacity_refusal_no_spawn still expected the hard projection_records refusal; a submit near the hard limit is now refused first at admission_projection_records",
+   "fixed_in": "df069bf"
+  },
+  {
+   "head": "df069bf",
+   "run": "https://github.com/Combraton/pio/actions/runs/35129702944",
+   "cause": "capacity_headroom_admitted_completes exceeded the fixed 3 s client socket timeout on CI after the refusal was already logged; near-bound requests pay whole-state commits",
+   "fixed_in": "b217936"
+  }
+ ],
+ "owner_decisions": {
+  "admission_headroom": {
+   "records": 31130,
+   "bytes": 31876710,
+   "scope": "new execution.submit commits only; bench values"
+  },
+  "incremental_commits": "required before M4 and before repetition-heavy M3b live testing; no throughput claim before then",
+  "protocol_proposal": "https://github.com/Combraton/protocol/issues/13"
+ },
+ "cargo_tests": {
+  "passed": 31,
+  "ignored_measurement_probes": 1
+ },
+ "local_mutants": [
+  {
+   "mutant": "admission threshold never applied",
+   "killed": true,
+   "reason": "submit one over the threshold accepted"
+  },
+  {
+   "mutant": "admission threshold applied to every commit",
+   "killed": true,
+   "reason": "ordinary put above the threshold refused"
+  },
+  {
+   "mutant": "inclusive admission boundary",
+   "killed": true,
+   "reason": "commit exactly at 31,130 records refused"
+  }
+ ],
+ "cpu_contention_probe": {
+  "host": "macOS arm64 workstation, 20 busy processes on 10 cores",
+  "case": "capacity_headroom_admitted_completes",
+  "outcome": "pass",
+  "latency_seconds": {
+   "admitted_submit": 0.708,
+   "refused_submit": 4.898,
+   "until_exited_view": 8.708
+  }
+ },
+ "real_adapter": false,
+ "all_six_journeys": "not_evaluated",
+ "live_model_tokens_used": 0,
+ "milestone": "M2 bounded checkpoint corrections; not M2 acceptance",
+ "agreement": {
+  "environments": [
+   "clean-clone",
+   "macos-ci",
+   "linux-ci"
+  ],
+  "official_fixture_classes": 280,
+  "public_case_repetitions": 72,
+  "diagnostic_case_repetitions": 54,
+  "all_classes_identical": true
+ },
+ "clean_clone_commands": [
+  {
+   "command": "rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy",
+   "exit": 0
+  },
+  {
+   "command": "rustc --version",
+   "exit": 0
+  },
+  {
+   "command": "cargo --version",
+   "exit": 0
+  },
+  {
+   "command": "cargo fmt --all -- --check",
+   "exit": 0
+  },
+  {
+   "command": "cargo build --workspace --locked",
+   "exit": 0
+  },
+  {
+   "command": "cargo test --workspace --locked",
+   "exit": 0
+  },
+  {
+   "command": "cargo clippy --workspace --locked -- -D warnings",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/check_docs.py",
+   "exit": 0
+  },
+  {
+   "command": "git diff --exit-code -- Cargo.lock",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/public_host_matrix.py --out target/public-host --repetitions 3",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/client_recovery.py --out target/client-recovery",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/packaging_check.py --out target/packaging",
+   "exit": 0
+  },
+  {
+   "command": "python3 scripts/conformance.py --out target/conformance",
+   "exit": 0
+  }
+ ],
+ "receipts": [
+  {
+   "name": "clean-clone",
+   "environment": {
+    "pio_head": "6a9d11a344e50de45a2e60d441026a90cad80f86",
+    "pio_binary_sha256": "3eda5170c037f980c6b8b65a3f1c738a998b25c6ba9144c3a7fed079f1890930",
+    "os": "Darwin",
+    "arch": "arm64",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "pio_dirty": false
+   },
+   "official_classes": {
+    "skipped": 1,
+    "unsupported": 73,
+    "pass": 206
+   },
+   "by_directory": {
+    "compat": {
+     "skipped": 1
+    },
+    "composition": {
+     "unsupported": 14
+    },
+    "context": {
+     "unsupported": 11
+    },
+    "core": {
+     "pass": 134,
+     "unsupported": 1
+    },
+    "evidence": {
+     "unsupported": 16
+    },
+    "execution": {
+     "pass": 36,
+     "unsupported": 15
+    },
+    "knowledge": {
+     "unsupported": 10
+    },
+    "socket": {
+     "pass": 12,
+     "unsupported": 1
+    },
+    "stream": {
+     "pass": 24
+    },
+    "verification": {
+     "unsupported": 5
+    }
+   },
+   "supplemental_classes": {
+    "pass": 2
+   },
+   "runner_exit": 0,
+   "official_manifest_sha256": "3f4070855680d9b13aa274ed28c47f07473400a1628f640e84f116690cf72ec4",
+   "schema_inventory": {
+    "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+    "unchanged_schema_files": 64
+   },
+   "public_matrix": {
+    "attempted": 72,
+    "repetitions": 3,
+    "classes": {
+     "pass": 51,
+     "expected_property_failure": 6,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 6
+    },
+    "head": "6a9d11a344e50de45a2e60d441026a90cad80f86",
+    "binary_sha256": "3eda5170c037f980c6b8b65a3f1c738a998b25c6ba9144c3a7fed079f1890930",
+    "manifest_sha256": "beeb7df541b02ad1fe9b6d0f8895f483cb04502862a264e86eafabeb3b1753f9",
+    "capacity_cases": {
+     "capacity_refusal_no_spawn": [
+      {
+       "repetition": 1,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 32772
+        },
+        {
+         "limit": "projection_records",
+         "maximum": 32768,
+         "projected": 32770
+        }
+       ],
+       "latency_seconds": null,
+       "final_projection_records": null,
+       "admission_records": null
+      },
+      {
+       "repetition": 2,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 32772
+        },
+        {
+         "limit": "projection_records",
+         "maximum": 32768,
+         "projected": 32770
+        }
+       ],
+       "latency_seconds": null,
+       "final_projection_records": null,
+       "admission_records": null
+      },
+      {
+       "repetition": 3,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 32772
+        },
+        {
+         "limit": "projection_records",
+         "maximum": 32768,
+         "projected": 32770
+        }
+       ],
+       "latency_seconds": null,
+       "final_projection_records": null,
+       "admission_records": null
+      }
+     ],
+     "capacity_headroom_admitted_completes": [
+      {
+       "repetition": 1,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 31137
+        }
+       ],
+       "latency_seconds": {
+        "admitted_submit": 0.308,
+        "refused_submit": 1.636,
+        "until_exited_view": 3.733
+       },
+       "final_projection_records": 31134,
+       "admission_records": 31130
+      },
+      {
+       "repetition": 2,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 31137
+        }
+       ],
+       "latency_seconds": {
+        "admitted_submit": 0.319,
+        "refused_submit": 1.629,
+        "until_exited_view": 3.489
+       },
+       "final_projection_records": 31134,
+       "admission_records": 31130
+      },
+      {
+       "repetition": 3,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 31137
+        }
+       ],
+       "latency_seconds": {
+        "admitted_submit": 0.324,
+        "refused_submit": 1.647,
+        "until_exited_view": 2.401
+       },
+       "final_projection_records": 31134,
+       "admission_records": 31130
+      }
+     ]
+    }
+   },
+   "diagnostic_matrix": {
+    "attempted": 54,
+    "repetitions": 3,
+    "classes": {
+     "pass": 39,
+     "expected_property_failure": 3,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 3
+    },
+    "manifest_sha256": "40ce50bbe50f280e6a88047e1ef2396487a15df779610314c0626c950522676b"
+   },
+   "caller_recovery": {
+    "outcome": "pass",
+    "spawn_count": 1,
+    "manifest_sha256": "2b20e41dbaf541813d247cb92c7544172c74cbffec412ffd2dd4c4b190a7c147"
+   },
+   "packaging": {
+    "outcome": "pass",
+    "manager": "launchd",
+    "stop_observed": true,
+    "manifest_sha256": "d0df5ab63263310f3cf9dd132e07a2414aa4b96edb58633957db3c7a6a4a109b"
+   }
+  },
+  {
+   "name": "macos-ci",
+   "environment": {
+    "pio_head": "6a9d11a344e50de45a2e60d441026a90cad80f86",
+    "pio_binary_sha256": "64f6bc0467ec884ce1243e1a5a065ed9b5d4e80d922889c8bf497e1488401d6b",
+    "os": "Darwin",
+    "arch": "arm64",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "pio_dirty": false
+   },
+   "official_classes": {
+    "skipped": 1,
+    "unsupported": 73,
+    "pass": 206
+   },
+   "by_directory": {
+    "compat": {
+     "skipped": 1
+    },
+    "composition": {
+     "unsupported": 14
+    },
+    "context": {
+     "unsupported": 11
+    },
+    "core": {
+     "pass": 134,
+     "unsupported": 1
+    },
+    "evidence": {
+     "unsupported": 16
+    },
+    "execution": {
+     "pass": 36,
+     "unsupported": 15
+    },
+    "knowledge": {
+     "unsupported": 10
+    },
+    "socket": {
+     "pass": 12,
+     "unsupported": 1
+    },
+    "stream": {
+     "pass": 24
+    },
+    "verification": {
+     "unsupported": 5
+    }
+   },
+   "supplemental_classes": {
+    "pass": 2
+   },
+   "runner_exit": 0,
+   "official_manifest_sha256": "9d8e2f41024090de3f64a43ea71f53b9a32224fbfe4fbf5b5b3d7c948d375f46",
+   "schema_inventory": {
+    "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+    "unchanged_schema_files": 64
+   },
+   "public_matrix": {
+    "attempted": 72,
+    "repetitions": 3,
+    "classes": {
+     "pass": 51,
+     "expected_property_failure": 6,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 6
+    },
+    "head": "6a9d11a344e50de45a2e60d441026a90cad80f86",
+    "binary_sha256": "64f6bc0467ec884ce1243e1a5a065ed9b5d4e80d922889c8bf497e1488401d6b",
+    "manifest_sha256": "7e8d77525fc9831517adc8b9e583981ab7fcd01ff4d4891c52dc67d3cac0fad5",
+    "capacity_cases": {
+     "capacity_refusal_no_spawn": [
+      {
+       "repetition": 1,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 32772
+        },
+        {
+         "limit": "projection_records",
+         "maximum": 32768,
+         "projected": 32770
+        }
+       ],
+       "latency_seconds": null,
+       "final_projection_records": null,
+       "admission_records": null
+      },
+      {
+       "repetition": 2,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 32772
+        },
+        {
+         "limit": "projection_records",
+         "maximum": 32768,
+         "projected": 32770
+        }
+       ],
+       "latency_seconds": null,
+       "final_projection_records": null,
+       "admission_records": null
+      },
+      {
+       "repetition": 3,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 32772
+        },
+        {
+         "limit": "projection_records",
+         "maximum": 32768,
+         "projected": 32770
+        }
+       ],
+       "latency_seconds": null,
+       "final_projection_records": null,
+       "admission_records": null
+      }
+     ],
+     "capacity_headroom_admitted_completes": [
+      {
+       "repetition": 1,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 31137
+        }
+       ],
+       "latency_seconds": {
+        "admitted_submit": 0.5,
+        "refused_submit": 2.216,
+        "until_exited_view": 6.665
+       },
+       "final_projection_records": 31134,
+       "admission_records": 31130
+      },
+      {
+       "repetition": 2,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 31137
+        }
+       ],
+       "latency_seconds": {
+        "admitted_submit": 0.599,
+        "refused_submit": 3.529,
+        "until_exited_view": 7.684
+       },
+       "final_projection_records": 31134,
+       "admission_records": 31130
+      },
+      {
+       "repetition": 3,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 31137
+        }
+       ],
+       "latency_seconds": {
+        "admitted_submit": 0.711,
+        "refused_submit": 3.416,
+        "until_exited_view": 8.272
+       },
+       "final_projection_records": 31134,
+       "admission_records": 31130
+      }
+     ]
+    }
+   },
+   "diagnostic_matrix": {
+    "attempted": 54,
+    "repetitions": 3,
+    "classes": {
+     "pass": 39,
+     "expected_property_failure": 3,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 3
+    },
+    "manifest_sha256": "f5363d89ccc151c8a55b4cc165dd6832373080543cb71942ee8adbe81ecca2bd"
+   },
+   "caller_recovery": {
+    "outcome": "pass",
+    "spawn_count": 1,
+    "manifest_sha256": "5384cb7f6fa4ea5b94a63b15f53836bfef6edd921e3e4dfb85dccf38d71c8a00"
+   },
+   "packaging": {
+    "outcome": "pass",
+    "manager": "launchd",
+    "stop_observed": true,
+    "manifest_sha256": "40a8f2a678a22a6b718e0e4b03f8870296d698f68b775f7a6e8d59189dc244e0"
+   }
+  },
+  {
+   "name": "linux-ci",
+   "environment": {
+    "pio_head": "6a9d11a344e50de45a2e60d441026a90cad80f86",
+    "pio_binary_sha256": "4438b168f955d39a02902e2358d96c9088ba727412b82278fa1229f09b8de88a",
+    "os": "Linux",
+    "arch": "x86_64",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "pio_dirty": false
+   },
+   "official_classes": {
+    "skipped": 1,
+    "unsupported": 73,
+    "pass": 206
+   },
+   "by_directory": {
+    "compat": {
+     "skipped": 1
+    },
+    "composition": {
+     "unsupported": 14
+    },
+    "context": {
+     "unsupported": 11
+    },
+    "core": {
+     "pass": 134,
+     "unsupported": 1
+    },
+    "evidence": {
+     "unsupported": 16
+    },
+    "execution": {
+     "pass": 36,
+     "unsupported": 15
+    },
+    "knowledge": {
+     "unsupported": 10
+    },
+    "socket": {
+     "pass": 12,
+     "unsupported": 1
+    },
+    "stream": {
+     "pass": 24
+    },
+    "verification": {
+     "unsupported": 5
+    }
+   },
+   "supplemental_classes": {
+    "pass": 2
+   },
+   "runner_exit": 0,
+   "official_manifest_sha256": "61d63008b3fae27a0343a68932f37889318f9872aa3a264f31e176b87619a06b",
+   "schema_inventory": {
+    "source_commit": "cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc",
+    "unchanged_schema_files": 64
+   },
+   "public_matrix": {
+    "attempted": 72,
+    "repetitions": 3,
+    "classes": {
+     "pass": 51,
+     "expected_property_failure": 6,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 6
+    },
+    "head": "6a9d11a344e50de45a2e60d441026a90cad80f86",
+    "binary_sha256": "4438b168f955d39a02902e2358d96c9088ba727412b82278fa1229f09b8de88a",
+    "manifest_sha256": "8da101b483fa2528ccd1d835029f56f2d6822f60832dff39607ff9e479ca4381",
+    "capacity_cases": {
+     "capacity_refusal_no_spawn": [
+      {
+       "repetition": 1,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 32772
+        },
+        {
+         "limit": "projection_records",
+         "maximum": 32768,
+         "projected": 32770
+        }
+       ],
+       "latency_seconds": null,
+       "final_projection_records": null,
+       "admission_records": null
+      },
+      {
+       "repetition": 2,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 32772
+        },
+        {
+         "limit": "projection_records",
+         "maximum": 32768,
+         "projected": 32770
+        }
+       ],
+       "latency_seconds": null,
+       "final_projection_records": null,
+       "admission_records": null
+      },
+      {
+       "repetition": 3,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 32772
+        },
+        {
+         "limit": "projection_records",
+         "maximum": 32768,
+         "projected": 32770
+        }
+       ],
+       "latency_seconds": null,
+       "final_projection_records": null,
+       "admission_records": null
+      }
+     ],
+     "capacity_headroom_admitted_completes": [
+      {
+       "repetition": 1,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 31137
+        }
+       ],
+       "latency_seconds": {
+        "admitted_submit": 0.635,
+        "refused_submit": 3.037,
+        "until_exited_view": 6.656
+       },
+       "final_projection_records": 31134,
+       "admission_records": 31130
+      },
+      {
+       "repetition": 2,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 31137
+        }
+       ],
+       "latency_seconds": {
+        "admitted_submit": 0.643,
+        "refused_submit": 3.033,
+        "until_exited_view": 7.092
+       },
+       "final_projection_records": 31134,
+       "admission_records": 31130
+      },
+      {
+       "repetition": 3,
+       "outcome": "pass",
+       "capacity_log": [
+        {
+         "limit": "admission_projection_records",
+         "maximum": 31130,
+         "projected": 31137
+        }
+       ],
+       "latency_seconds": {
+        "admitted_submit": 0.635,
+        "refused_submit": 3.029,
+        "until_exited_view": 5.632
+       },
+       "final_projection_records": 31134,
+       "admission_records": 31130
+      }
+     ]
+    }
+   },
+   "diagnostic_matrix": {
+    "attempted": 54,
+    "repetitions": 3,
+    "classes": {
+     "pass": 39,
+     "expected_property_failure": 3,
+     "expected_defense_refusal": 9,
+     "expected_classifier_failure": 3
+    },
+    "manifest_sha256": "c2f2f9a14d5388f3be567246a1825b14983dc719bb9d17091e1113a335610819"
+   },
+   "caller_recovery": {
+    "outcome": "pass",
+    "spawn_count": 1,
+    "manifest_sha256": "5244638d6e461aa057aee67082b7d88bfd5ee25b805a6cbd64951304f097aa36"
+   },
+   "packaging": {
+    "outcome": "pass",
+    "manager": "systemd",
+    "stop_observed": true,
+    "manifest_sha256": "f157ba5b3998bfe2b1dbd1ea1fa23c987e7569b951752ff0597dcab0ab5e616c"
+   }
+  }
+ ]
+}

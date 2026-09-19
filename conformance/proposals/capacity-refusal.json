@@ -1,0 +1,33 @@
+{
+  "description": "Schema compatibility demonstration for a Protocol proposal, not an official runner fixture or accepted extension. At Protocol v0.1.0 (cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc) a provider that refuses a commit because retained state is at capacity must answer CORE section 10 step 8 `unavailable` (retry same_command, empty details). The two observed error objects below were captured from PIO public process matrix transcripts at 5be40f999484e18e4b3966b898ee4be70691379e: one for a capacity refusal (case capacity_refusal_no_spawn) and one for an injected transient commit failure (case journal_failure_no_spawn). They are identical, so a caller cannot tell that retransmitting the same command will keep failing until capacity is freed. The proposed object uses an illustrative code, retry and details; exact names and semantics are a Protocol decision. The frozen error-data schema rejects it.",
+  "observed_capacity_refusal": {
+    "code": 1,
+    "data": {
+      "code": "unavailable",
+      "details": {},
+      "retry": "same_command"
+    },
+    "message": "unavailable"
+  },
+  "observed_transient_commit_failure": {
+    "code": 1,
+    "data": {
+      "code": "unavailable",
+      "details": {},
+      "retry": "same_command"
+    },
+    "message": "unavailable"
+  },
+  "proposed": {
+    "code": 1,
+    "data": {
+      "code": "capacity_exhausted",
+      "details": {
+        "limit": "projection_records",
+        "maximum": 32768
+      },
+      "retry": "no"
+    },
+    "message": "capacity_exhausted"
+  }
+}

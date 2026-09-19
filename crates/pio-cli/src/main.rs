@@ -9,7 +9,7 @@ fn run() -> Result<()> {
             pio_host::IMPLEMENTATION
         ),
         Some("participant") => println!("{}", pio_core::participant()),
-        Some("conformance" | "serve-fake") => {
+        Some("conformance" | "serve-fake" | "serve-codex") => {
             let option = |name: &str| -> Result<&Path> {
                 let index = args
                     .iter()
@@ -19,16 +19,92 @@ fn run() -> Result<()> {
                     args.get(index + 1).context("missing option value")?,
                 ))
             };
-            let serve = if args[0] == "serve-fake" {
-                pio_protocol::serve_fake
-            } else {
-                pio_protocol::serve
+            let serve = match args[0].as_str() {
+                "serve-fake" => pio_protocol::serve_fake,
+                "serve-codex" => pio_protocol::serve_codex,
+                _ => pio_protocol::serve,
             };
             serve(
                 option("--data-dir")?,
                 option("--config")?,
                 option("--socket")?,
             )?;
+        }
+        Some("codex") => {
+            let option = |name: &str| -> Result<&Path> {
+                let index = args
+                    .iter()
+                    .position(|a| a == name)
+                    .with_context(|| format!("missing codex option {name}"))?;
+                Ok(Path::new(
+                    args.get(index + 1).context("missing option value")?,
+                ))
+            };
+            match args.get(1).map(String::as_str) {
+                Some("schema-identity") => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&pio_codex::schema_identity(Path::new(
+                        args.get(2).context("missing schema directory")?
+                    ))?)?
+                ),
+                Some("qualify") => {
+                    // `--expected FILE` exists for drift controls; the
+                    // checked-in qualified identity is the default.
+                    let expected: serde_json::Value = if args.iter().any(|a| a == "--expected") {
+                        serde_json::from_slice(&std::fs::read(option("--expected")?)?)?
+                    } else {
+                        serde_json::from_str(pio_codex::QUALIFIED_SCHEMA_IDENTITY)?
+                    };
+                    let record = pio_codex::qualify(
+                        option("--executable")?,
+                        &expected,
+                        pio_codex::inherited_path().as_deref(),
+                        option("--work")?,
+                    )?;
+                    println!("{}", serde_json::to_string_pretty(&record)?);
+                    if record["qualified"] != true {
+                        std::process::exit(3);
+                    }
+                }
+                // Labeled offline test double; accepts the `app-server` argument
+                // a real Codex executable receives.
+                Some("fake-app-server") => pio_codex::fake::run()?,
+                // Launched only by the service controller.
+                Some("host") => pio_host::codex::codex_host(
+                    Path::new(args.get(2).context("missing store")?),
+                    args.get(3).context("missing command id")?,
+                    args.get(4).context("missing invocation identity")?,
+                )?,
+                Some("config-snapshot") => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&pio_codex::config_snapshot(option(
+                        "--codex-home"
+                    )?)?)?
+                ),
+                Some("config-diff") => {
+                    let read = |index: usize| -> Result<serde_json::Value> {
+                        Ok(serde_json::from_slice(&std::fs::read(
+                            args.get(index).context("config-diff BEFORE AFTER")?,
+                        )?)?)
+                    };
+                    let fixture_root = if args.iter().any(|a| a == "--fixture-root") {
+                        Some(option("--fixture-root")?)
+                    } else {
+                        None
+                    };
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&pio_codex::config_diff(
+                            &read(2)?,
+                            &read(3)?,
+                            fixture_root
+                        ))?
+                    );
+                }
+                _ => bail!(
+                    "codex requires schema-identity DIR, qualify --executable PATH --work DIR, config-snapshot --codex-home DIR or config-diff BEFORE AFTER"
+                ),
+            }
         }
         Some("check-transcript") => {
             println!(
@@ -75,9 +151,9 @@ fn run() -> Result<()> {
             );
         }
         Some("fake") => {
-            let action = args
-                .get(1)
-                .context("fake requires daemon, request, host, child or identity")?;
+            let action = args.get(1).context(
+                "fake requires daemon, request, host, child, identity or fill-projection",
+            )?;
             let value = args.get(2).context("missing fake argument")?;
             match action.as_str() {
                 "daemon" => pio_host::daemon(Path::new(value))?,
@@ -100,6 +176,16 @@ fn run() -> Result<()> {
                     args.get(3).context("missing command id")?,
                     args.get(4).context("missing invocation identity")?,
                 )?,
+                // Test tooling only: pads a stopped store up to a record count.
+                "fill-projection" => println!(
+                    "{}",
+                    pio_protocol::capacity::fill_projection_records(
+                        Path::new(value),
+                        args.get(3)
+                            .context("missing target record count")?
+                            .parse()?,
+                    )?
+                ),
                 "identity" => println!(
                     "{}",
                     serde_json::to_string(&pio_host::identity(value.parse()?)?)?
@@ -108,7 +194,7 @@ fn run() -> Result<()> {
             }
         }
         _ => {
-            bail!("expected conformance, serve-fake, client, or diagnostic fake command")
+            bail!("expected conformance, serve-fake, client, codex, or diagnostic fake command")
         }
     }
     Ok(())

@@ -1,0 +1,22 @@
+{
+  "format": "pio-m2-live-receipt/1",
+  "run": "model-list",
+  "live": true,
+  "turn_started": false,
+  "model_calls": 0,
+  "recorded_at_utc": "2026-09-19T15:21:02Z",
+  "codex_version": {
+    "native": "0.155.1",
+    "selected": "0.155.1"
+  },
+  "requested_model": "gpt-5.6-terra",
+  "available": [
+    "gpt-5.5",
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-6-astra"
+  ],
+  "requested_model_available": true,
+  "error": null
+}

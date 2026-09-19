@@ -1,0 +1,16 @@
+{
+  "format": "pio-m2-live-receipt/1",
+  "run": "wrong-executable",
+  "live": true,
+  "model_calls": 0,
+  "selected": "$HOME/.local/bin/opencode2",
+  "service_exit": 2,
+  "refused": true,
+  "refusals": [
+    {
+      "exit": 0,
+      "reason": "version_unavailable"
+    }
+  ],
+  "socket_created": false
+}
