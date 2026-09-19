@@ -4,7 +4,7 @@ Prepared 2026-09-16 for a fresh builder after PR #4's merge; **started and amend
 
 ## Task / feature and outcome
 
-Implement [PLAN's M2 row](../standalone-0.1/PLAN.md): **Codex 0.146.0 native app-server behind the durable host**, driving the user's installed Codex **exactly as the user configured it** — its own login, model, instructions, settings and permissions. The standalone CLI submits scoped repository work and records actual native output and immutable result evidence. Prove J1, J3, J4 and J5 with real Codex without replacing its native loop, selecting a model or weakening permissions.
+Implement [PLAN's M2 row](../standalone-0.1/PLAN.md): **Codex 0.155.1 native app-server behind the durable host**, driving the user's installed Codex **exactly as the user configured it** — its own login, model, instructions, settings and permissions. The standalone CLI submits scoped repository work and records actual native output and immutable result evidence. Prove J1, J3, J4 and J5 with real Codex without replacing its native loop, selecting a model or weakening permissions.
 
 Predecessor: accepted [M1 issue #3](https://github.com/Combraton/pio/issues/3) (closed on merge; successor comment added), [PR #4](https://github.com/Combraton/pio/pull/4) merged as `9cf70474c28f549650e6b48e8be20ae88426a1b0` (reviewed head `a34c408864e8f87abefd6d820518902b31b6a724`, accepted M1 head `2048e84b0e77b258444f8f30333f4b76584cdccc`). **M2 issue: [#5](https://github.com/Combraton/pio/issues/5).**
 
@@ -41,7 +41,7 @@ Exclude Claude implementation (M3), OpenCode/Hermes adapters (M3b; Hermes only t
 
 M2 is accepted only with PLAN's distinguishing behavior and evidence:
 
-- Codex **0.146.0 app-server** runs behind the durable host; client/daemon detach does not own its transport. The CLI submits scoped repository work and records real native output/result.
+- Codex **0.155.1 app-server** runs behind the durable host; client/daemon detach does not own its transport. The CLI submits scoped repository work and records real native output/result.
 - **J1:** real Codex discovery/qualified binary selection, bounded edit/test in a throwaway fixture repository, output and result evidence; wrong/unsupported executable is refused, never advertised usable.
 - **J3:** real Codex detach, daemon restart, reattach/reconcile without duplicate prompt/work, with native session/turn, kernel start identity, host slot and controller generation evidence. Lost host remains uncertain; the duplicate-launch control fails for its intended identity/count reason.
 - **J4:** real Codex supported steering/cancellation with correlated native acknowledgment and observed outcome, truthful refusal/unsupported behavior and a suppressed-ack negative control. A write or cancel request alone never proves comprehension or stopped work. M2 proves API/CLI paths; TUI proof remains M4.
@@ -63,7 +63,7 @@ Prerequisites and carry-forwards are part of the acceptance work:
 - [AGENTS](../../../AGENTS.md), [STATE](../STATE.md), [PLAN](../standalone-0.1/PLAN.md), [ADR 001](../../decisions/001-standalone-stack.md) including its 2026-09-16 amendment, [ADR 002](../../decisions/002-protocol-journal.md), [JOURNEYS](../../JOURNEYS.md), [M1 acceptance corrections](../m1/ACCEPTANCE-CORRECTIONS.md), [CHECKPOINTS](../m1/CHECKPOINTS.md), [VERIFICATION](../../VERIFICATION.md).
 - M1 acceptance at `2048e84b0e77b258444f8f30333f4b76584cdccc`; runtime `7b05342cbcaaa1813b2da02cf6bdb01a1ddc2673`. The historical acceptance report/index remains unchanged; the owner disposition is in CHECKPOINTS and issue #3.
 - [Protocol lock](../../../protocol.lock.json): **v0.1.0**, source **`cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc`**. Verify release assets with the existing verifier and use the released contracts/fixtures. Needed gaps go upstream as **versioned proposals with demonstrating fixtures**; pin an approved revision explicitly before adoption.
-- Codex **0.146.0**, tag `rust-v0.146.0`, peeled source **`e363b08c9175ac1cbe5893615dd2cb9ddf95043b`**. Use the [pinned app-server README](https://github.com/openai/codex/blob/e363b08c9175ac1cbe5893615dd2cb9ddf95043b/codex-rs/app-server/README.md), ADR 001 and [readiness provenance](../standalone-0.1/evidence/readiness.json). On 2026-09-16 the workstation's `codex --version` reported `codex-cli 0.146.0`; that is not yet qualification of the selected executable or a reproducible build of that source.
+- Codex **0.155.1**, tag `rust-v0.155.1`, peeled source **`be2951ea34f0d295ed0becf97079f92fa5f6950e`** (owner re-pin, 2026-09-19; the 0.146.0 provenance below is the original record). Use the [pinned app-server README](https://github.com/openai/codex/blob/e363b08c9175ac1cbe5893615dd2cb9ddf95043b/codex-rs/app-server/README.md), ADR 001 and [readiness provenance](../standalone-0.1/evidence/readiness.json). On 2026-09-16 the workstation's `codex --version` reported `codex-cli 0.146.0`; that is not yet qualification of the selected executable or a reproducible build of that source.
 - Shared TASK/workflow revision: `9af69ce966bfacf0deb03606d99f28a355d1f944`. Preserve PIO execution authority and public component boundaries.
 
 ## Dependencies

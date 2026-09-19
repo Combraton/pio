@@ -17,8 +17,13 @@ use std::time::{Duration, Instant};
 pub const APPROVAL_METHODS: &[&str] = &[
     "item/commandExecution/requestApproval",
     "item/fileChange/requestApproval",
-    "item/permissions/requestApproval",
 ];
+/// `item/permissions/requestApproval` asks for a granted permission profile,
+/// not `accept`, `decline` or `cancel`: its response carries `permissions` and a
+/// `scope` that defaults to the whole turn. Answering it would widen the
+/// settings the thread-settings guard approved, and PIO cannot express a grant
+/// through a Protocol action response, so it is refused natively with a reason.
+pub const REFUSED_PERMISSION_GRANT: &str = "item/permissions/requestApproval";
 /// Decisions PIO may forward. Session-wide or policy-amending approvals widen
 /// standing permissions and are never sent.
 pub const ALLOWED_DECISIONS: &[&str] = &["accept", "decline", "cancel"];
@@ -310,7 +315,7 @@ pub fn codex_host(root: &Path, command: &str, invocation_id: &str) -> Result<()>
             &root,
             &invocation,
             &spec,
-            json!({"kind":"thread_started","thread_id":thread_id,"model":result["model"],"model_provider":result["modelProvider"],"sandbox":sandbox,"approval_policy":result["approvalPolicy"],"instruction_sources":result["instructionSources"].as_array().map(|a|a.len())}),
+            json!({"kind":"thread_started","thread_id":thread_id,"configured_model":before["settings"]["keys"]["model"],"requested_model":spec["thread"]["model"],"model":result["model"],"model_provider":result["modelProvider"],"sandbox":sandbox,"approval_policy":result["approvalPolicy"],"instruction_sources":result["instructionSources"].as_array().map(|a|a.len())}),
         )?;
         ensure!(
             !matches!(
@@ -391,22 +396,36 @@ pub fn codex_host(root: &Path, command: &str, invocation_id: &str) -> Result<()>
                     if APPROVAL_METHODS.contains(&method) {
                         action_seq += 1;
                         let params = &message["params"];
+                        // 0.155.1 added `kind` to command approvals: `command`,
+                        // the default when absent, or `writeStdin`, which is
+                        // input to a terminal that is already running. A
+                        // decision must record which one it answered.
+                        let approval_kind = (method == "item/commandExecution/requestApproval")
+                            .then(|| params["kind"].as_str().unwrap_or("command").to_owned());
                         pending_actions.insert(action_seq, message["id"].clone());
                         event(
                             &root,
                             &invocation,
                             &spec,
-                            json!({"kind":"action_requested","action_seq":action_seq,"request_id":message["id"],"method":method,"turn_id":params["turnId"],"item_id":params["itemId"],"command":params["command"],"cwd_digest":params["cwd"].as_str().map(|c|pio_codex::sha256_hex(c.as_bytes())),"reason":params["reason"]}),
+                            json!({"kind":"action_requested","action_seq":action_seq,"request_id":message["id"],"method":method,"approval_kind":approval_kind,"turn_id":params["turnId"],"item_id":params["itemId"],"command":params["command"],"cwd_digest":params["cwd"].as_str().map(|c|pio_codex::sha256_hex(c.as_bytes())),"reason":params["reason"]}),
                         )?;
                     } else {
-                        // PIO never answers user input, elicitations, tool calls or
-                        // attestation on the user's behalf.
-                        app.send(&json!({"id":message["id"],"error":{"code":-32000,"message":"declined by PIO: no user is attached to answer this request"}}))?;
+                        // PIO never answers user input, elicitations, tool calls
+                        // or attestation on the user's behalf, and never grants
+                        // permissions beyond the approved thread settings.
+                        let reason = if method == REFUSED_PERMISSION_GRANT {
+                            "declined by PIO: a permission grant would widen the approved thread settings"
+                        } else {
+                            "declined by PIO: no user is attached to answer this request"
+                        };
+                        app.send(
+                            &json!({"id":message["id"],"error":{"code":-32000,"message":reason}}),
+                        )?;
                         event(
                             &root,
                             &invocation,
                             &spec,
-                            json!({"kind":"native_request_declined","method":method}),
+                            json!({"kind":"native_request_declined","method":method,"reason":reason}),
                         )?;
                     }
                     continue;

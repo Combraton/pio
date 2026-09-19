@@ -20,6 +20,12 @@ fn fake_executable(dir: &Path) -> std::path::PathBuf {
     path
 }
 
+/// Writing the wrapper and exec'ing it race across the tests in this binary: a
+/// sibling test's fork inherits the still-open write descriptor and Linux then
+/// refuses the exec with `ETXTBSY`. `Command::spawn` returns only once the child
+/// has exec'd, so holding this across write and spawn closes the window.
+static FAKE_EXECUTABLES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn start(dir: &Path, scenario: Value) -> AppServer {
     let home = dir.join("codex-home");
     std::fs::create_dir_all(&home).unwrap();
@@ -29,6 +35,9 @@ fn start(dir: &Path, scenario: Value) -> AppServer {
         ("PIO_CODEX_FAKE_SCENARIO".to_owned(), scenario.to_string()),
     ];
     let stderr = std::fs::File::create(dir.join("stderr")).unwrap();
+    let _guard = FAKE_EXECUTABLES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     AppServer::spawn(&fake_executable(dir), &env, stderr).unwrap()
 }
 
@@ -106,6 +115,8 @@ fn fake_app_server_handshake_thread_turn_approval_and_usage() {
     let turn_id = turn["result"]["turn"]["id"].as_str().unwrap().to_owned();
     let request = next(&server, "item/commandExecution/requestApproval");
     assert_eq!(request["params"]["turnId"], turn_id);
+    // 0.155.1 added `kind` to command approvals; `command` is its default.
+    assert_eq!(request["params"]["kind"], "command");
     server
         .respond(&request["id"], json!({"decision":"decline"}))
         .unwrap();
@@ -238,6 +249,35 @@ fn fake_app_server_interrupt_steer_and_suppressed_ack() {
         Ok(())
     });
     assert!(suppressed.is_err(), "no acknowledgment when suppressed");
+    server.close_stdin();
+    assert!(server.child.wait().unwrap().success());
+}
+
+/// File-change approvals have no `kind` at 0.155.1; only command approvals do.
+#[test]
+fn fake_app_server_file_change_approval_carries_no_kind() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut server = start(dir.path(), json!({"approval":"fileChange","delay_ms":100}));
+    let id = server.request("initialize", json!({})).unwrap();
+    server
+        .wait_response(id, Duration::from_secs(10), |_| Ok(()))
+        .unwrap();
+    let id = server.request("thread/start", json!({})).unwrap();
+    let thread = server
+        .wait_response(id, Duration::from_secs(10), |_| Ok(()))
+        .unwrap();
+    let id = server
+        .request("turn/start", json!({"threadId":thread["result"]["thread"]["id"],"input":[{"type":"text","text":"x"}]}))
+        .unwrap();
+    server
+        .wait_response(id, Duration::from_secs(10), |_| Ok(()))
+        .unwrap();
+    let request = next(&server, "item/fileChange/requestApproval");
+    assert_eq!(request["params"]["kind"], Value::Null);
+    assert!(!request["params"].as_object().unwrap().contains_key("kind"));
+    server
+        .respond(&request["id"], json!({"decision":"decline"}))
+        .unwrap();
     server.close_stdin();
     assert!(server.child.wait().unwrap().success());
 }

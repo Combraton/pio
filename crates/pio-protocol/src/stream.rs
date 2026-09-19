@@ -17,6 +17,12 @@ use tokio::{
     net::{UnixListener, UnixStream},
 };
 
+/// Owner decision of 2026-09-19: PIO may pass an explicit model for the M2
+/// Codex fixture runs, because the configured model cannot complete a turn at
+/// the pinned version and is expensive. It is test-only and dated on purpose;
+/// the product still never selects a model. See ADR 003.
+pub const MODEL_EXCEPTION: &str = "owner-2026-09-19-m2-fixture-runs";
+
 pub fn serve(root: &Path, config: &Path, socket: &Path) -> Result<()> {
     serve_mode(root, config, socket, Mode::Conformance)
 }
@@ -45,7 +51,8 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
                 "codex_home",
                 "fixture_root",
                 "thread",
-                "labeled_fake"
+                "labeled_fake",
+                "test_only_model_exception"
             ]
             .contains(&name.as_str()),
             "unsupported codex setting: {name}"
@@ -67,16 +74,30 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
     if let Some(thread) = codex["thread"].as_object() {
         for (name, value) in thread {
             anyhow::ensure!(
-                ["sandbox", "approvalPolicy"].contains(&name.as_str()),
+                ["sandbox", "approvalPolicy", "model"].contains(&name.as_str()),
                 "unsupported codex.thread setting: {name}"
             );
             // Never select full access or disable approvals on the user's behalf.
             anyhow::ensure!(
-                !matches!(value.as_str(), Some("danger-full-access" | "never")),
+                name == "model" || !matches!(value.as_str(), Some("danger-full-access" | "never")),
                 "codex.thread.{name} value is not permitted: {value}"
             );
         }
     }
+    // PIO never selects a model. `codex.thread.model` exists only for the
+    // owner's dated, test-only exception for M2 fixture runs, so it is refused
+    // unless the configuration names that decision, and the exception is
+    // refused on its own so it cannot sit unused in a shipped configuration.
+    let model = codex["thread"]["model"].as_str();
+    let exception = codex["test_only_model_exception"].as_str();
+    anyhow::ensure!(
+        model.is_none_or(|m| !m.is_empty()),
+        "codex.thread.model must be a non-empty model name"
+    );
+    anyhow::ensure!(
+        model.is_some() == exception.is_some_and(|e| e == MODEL_EXCEPTION),
+        "codex.thread.model requires test_only_model_exception = \"{MODEL_EXCEPTION}\" and that exception requires a model"
+    );
     let mut host = codex.clone();
     host["adapter"] = "codex".into();
     if codex["labeled_fake"] == true {
@@ -418,6 +439,66 @@ impl Drop for StoreLock {
 mod tests {
     use super::*;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    /// A labeled-fake configuration, which is validated without qualifying a
+    /// real executable.
+    fn codex_config(dir: &Path, thread: Value, exception: Value) -> Value {
+        let mut codex = json!({
+            "executable": dir.join("fake-codex"), "codex_home": dir.join("home"),
+            "fixture_root": dir.join("fixtures"), "env": {"PATH": "/usr/bin:/bin"},
+            "thread": thread, "labeled_fake": true,
+        });
+        if !exception.is_null() {
+            codex["test_only_model_exception"] = exception;
+        }
+        codex
+    }
+
+    #[test]
+    fn a_model_is_only_accepted_under_the_dated_test_only_exception() {
+        let dir = tempfile::tempdir().unwrap();
+        let plan = json!({"sandbox":"workspace-write","approvalPolicy":"on-request"});
+        let with_model = json!({"sandbox":"workspace-write","approvalPolicy":"on-request","model":"gpt-5.6-terra"});
+        let refused = [
+            // A model without the exception, which is what a shipped
+            // configuration would look like if the option ever leaked.
+            (with_model.clone(), Value::Null, "test_only_model_exception"),
+            (
+                with_model.clone(),
+                json!("owner-2026-09-18-m2-fixture-runs"),
+                "test_only_model_exception",
+            ),
+            // The exception without a model cannot sit unused.
+            (
+                plan.clone(),
+                json!(MODEL_EXCEPTION),
+                "test_only_model_exception",
+            ),
+            // An empty model name is not a model.
+            (
+                json!({"sandbox":"workspace-write","approvalPolicy":"on-request","model":""}),
+                json!(MODEL_EXCEPTION),
+                "non-empty model name",
+            ),
+        ];
+        for (thread, exception, expected) in refused {
+            let config = codex_config(dir.path(), thread, exception);
+            let error = codex_host_config(dir.path(), &config).unwrap_err();
+            assert!(
+                format!("{error:#}").contains(expected),
+                "{error:#} for {config}"
+            );
+        }
+        let allowed = codex_host_config(
+            dir.path(),
+            &codex_config(dir.path(), with_model, json!(MODEL_EXCEPTION)),
+        )
+        .unwrap();
+        assert_eq!(allowed["thread"]["model"], "gpt-5.6-terra");
+        let plain =
+            codex_host_config(dir.path(), &codex_config(dir.path(), plan, Value::Null)).unwrap();
+        assert_eq!(plain["thread"]["model"], Value::Null);
+    }
     #[tokio::test]
     async fn non_json_whitespace_is_a_fatal_parse_error() {
         for byte in [0x0b, 0x0c] {

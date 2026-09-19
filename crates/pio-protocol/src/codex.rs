@@ -481,7 +481,7 @@ impl Provider {
                 e["codex"]["config_diff"] = event["diff"].clone();
             }
             "thread_started" => {
-                e["codex"]["thread"] = json!({"thread_id":event["thread_id"],"model":event["model"],"model_provider":event["model_provider"],"sandbox":event["sandbox"],"approval_policy":event["approval_policy"]});
+                e["codex"]["thread"] = json!({"thread_id":event["thread_id"],"configured_model":event["configured_model"],"requested_model":event["requested_model"],"model":event["model"],"model_provider":event["model_provider"],"sandbox":event["sandbox"],"approval_policy":event["approval_policy"]});
             }
             "turn_acknowledged" => {
                 e["codex"]["turn_id"] = event["turn_id"].clone();
@@ -521,7 +521,7 @@ impl Provider {
             }
             "action_requested" => {
                 let action_id = format!("{id}.action-{}", num(&event["action_seq"]));
-                e["codex_actions"][&action_id] = json!({"seq":event["action_seq"],"method":event["method"],"request_id":event["request_id"]});
+                e["codex_actions"][&action_id] = json!({"seq":event["action_seq"],"method":event["method"],"approval_kind":event["approval_kind"],"request_id":event["request_id"]});
                 push(
                     &mut e["view"]["actions"],
                     json!({"action_id":action_id,"owner":"codex","state":"pending","requested_at":self.now}),

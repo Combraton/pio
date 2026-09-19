@@ -141,8 +141,11 @@ pub fn run() -> Result<()> {
                         (id.clone(), active.as_mut())
                         && pending.as_deref() == id.as_str()
                     {
+                        // A client that refuses answers with an error, not a
+                        // decision. Record which one happened.
+                        let refusal = message.get("error").cloned();
                         let decision = message["result"]["decision"].as_str().unwrap_or("cancel");
-                        let status = if decision == "accept" {
+                        let status = if refusal.is_none() && decision == "accept" {
                             "completed"
                         } else {
                             "declined"
@@ -151,12 +154,24 @@ pub fn run() -> Result<()> {
                         send(
                             json!({"method":"serverRequest/resolved","params":{"threadId":thread_id,"requestId":id}}),
                         )?;
+                        let item_type = match scenario["approval"].as_str() {
+                            Some("fileChange") => "fileChange",
+                            Some("permissions") => "permissions",
+                            _ => "commandExecution",
+                        };
                         send(
-                            json!({"method":"item/completed","params":{"threadId":thread_id,"turnId":turn,"item":{"type":"commandExecution","id":"item-approval","command":"echo fixture","cwd":cwd,"status":status,"commandActions":[]}}}),
+                            json!({"method":"item/completed","params":{"threadId":thread_id,"turnId":turn,"item":{"type":item_type,"id":"item-approval","command":"echo fixture","cwd":cwd,"status":status,"commandActions":[]}}}),
                         )?;
                         marker(
                             &markers,
-                            json!({"source":SOURCE,"kind":"approval_answered","decision":decision}),
+                            match &refusal {
+                                Some(error) => {
+                                    json!({"source":SOURCE,"kind":"approval_refused","code":error["code"],"message":error["message"]})
+                                }
+                                None => {
+                                    json!({"source":SOURCE,"kind":"approval_answered","decision":decision})
+                                }
+                            },
                         )?;
                         *pending = None;
                         *deadline = Instant::now() + Duration::from_millis(50);
@@ -233,14 +248,29 @@ pub fn run() -> Result<()> {
                         let pending = match scenario["approval"].as_str() {
                             Some(kind) => {
                                 let request = format!("fake-request-{turns}");
-                                let method = if kind == "fileChange" {
-                                    "item/fileChange/requestApproval"
-                                } else {
-                                    "item/commandExecution/requestApproval"
+                                let file_change = kind == "fileChange";
+                                let permissions = kind == "permissions";
+                                let method = match kind {
+                                    "fileChange" => "item/fileChange/requestApproval",
+                                    "permissions" => "item/permissions/requestApproval",
+                                    _ => "item/commandExecution/requestApproval",
                                 };
-                                send(
-                                    json!({"method":method,"id":request,"params":{"threadId":thread_id,"turnId":turn,"itemId":"item-approval","command":"echo fixture","cwd":cwd,"reason":"labeled fake approval request"}}),
-                                )?;
+                                let mut params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","command":"echo fixture","cwd":cwd,"reason":"labeled fake approval request"});
+                                if permissions {
+                                    // The real request asks for a profile, not a
+                                    // decision.
+                                    params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","cwd":cwd,"startedAtMs":0,"reason":"labeled fake permission grant request","permissions":{"filesystem":{"write":[cwd]}}});
+                                }
+                                // Only command approvals carry `kind` at
+                                // 0.155.1, and it is optional there too, so
+                                // `absent` omits it and the client must read
+                                // that as `command`.
+                                let approval_kind =
+                                    scenario["approval_kind"].as_str().unwrap_or("command");
+                                if !file_change && !permissions && approval_kind != "absent" {
+                                    params["kind"] = json!(approval_kind);
+                                }
+                                send(json!({"method":method,"id":request,"params":params}))?;
                                 Some(request)
                             }
                             None => None,

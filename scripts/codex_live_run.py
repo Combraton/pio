@@ -9,8 +9,16 @@ task output, configuration copies and paths stay under $HOME/pio-m2-live/private
 holds digests, identities and observed facts only.
 
 Stops (owner plan): no run starts if cumulative observed Codex usage has reached
-800,000 tokens; a run whose observed usage exceeds 250,000 is interrupted with
-`execution.cancel`; a run that ends without a usage report stops the sequence.
+800,000 tokens, which is 80% of the 1,000,000 Codex cap; a run whose observed
+usage exceeds its own limit is interrupted with `execution.cancel`; a run that
+ends without a usage report stops the sequence.
+
+Model (owner decision, 2026-09-19): R1 runs with the user's configuration
+untouched and no model passed, under a 50,000 token limit and with no retry on
+failure, because the configured model is expensive. R2 to R6 pass
+`gpt-5.6-terra` explicitly through the service configuration, which the service
+accepts only under the dated test-only exception. `--run model-list` confirms
+that model exists for the account without starting a turn.
 """
 import argparse
 import base64
@@ -39,6 +47,8 @@ FEATURES = ['execution.controller', 'execution.output', 'execution.discovery', '
 CAP = 1_000_000
 STOP_AT = 800_000
 RUN_LIMIT = 250_000
+# Must equal `pio_protocol::stream::MODEL_EXCEPTION`.
+MODEL_EXCEPTION = 'owner-2026-09-19-m2-fixture-runs'
 DEADLINE = 600
 DELIVERY = 120
 
@@ -60,15 +70,20 @@ if __name__ == "__main__":
     unittest.main()
 '''
 IMPLEMENT = 'implement the add(a, b) function that test_calc.py expects in calc.py, run python3 -m unittest -q, and reply with the test result in one line.'
+# Owner decision of 2026-09-19: R1 proves the "harness as configured" route with
+# the user's own model and nothing passed, once, under its own 50,000 token stop.
+# R2 to R6 pass `gpt-5.6-terra` explicitly, as a dated test-only exception.
+TERRA = 'gpt-5.6-terra'
+R1_LIMIT = 50_000
 RUNS = {
-    'R1': dict(fixture='r1-j1', journeys=['J1', 'J5'], approval='on-request',
+    'R1': dict(fixture='r1-j1', journeys=['J1', 'J5'], approval='on-request', model=None, limit=R1_LIMIT,
                brief='In this repository, test_calc.py expects an add(a, b) function in calc.py. Implement it, run python3 -m unittest -q, and reply with the test result in one line.'),
-    'R2': dict(fixture='r2-j3', journeys=['J3'], approval='on-request', brief='Run sleep 20 first. Then, in this repository, ' + IMPLEMENT),
-    'R3': dict(fixture='r3-j4-interrupt', journeys=['J4'], approval='on-request', brief='Run sleep 120 and then reply with the word done.'),
-    'R4': dict(fixture='r4-j4-steer', journeys=['J4'], approval='on-request', brief='Run sleep 30 and then reply with the single word alpha.',
+    'R2': dict(model=TERRA, limit=RUN_LIMIT, fixture='r2-j3', journeys=['J3'], approval='on-request', brief='Run sleep 20 first. Then, in this repository, ' + IMPLEMENT),
+    'R3': dict(model=TERRA, limit=RUN_LIMIT, fixture='r3-j4-interrupt', journeys=['J4'], approval='on-request', brief='Run sleep 120 and then reply with the word done.'),
+    'R4': dict(model=TERRA, limit=RUN_LIMIT, fixture='r4-j4-steer', journeys=['J4'], approval='on-request', brief='Run sleep 30 and then reply with the single word alpha.',
                steer='Reply with the single word beta instead.'),
-    'R5': dict(fixture='r5-deny', journeys=['approval-deny'], approval='untrusted', brief='Run python3 -m unittest -q and reply with the result in one line.', decision='decline'),
-    'R6': dict(fixture='r6-allow', journeys=['approval-allow'], approval='untrusted', brief='Run python3 -m unittest -q and reply with the result in one line.', decision='accept'),
+    'R5': dict(model=TERRA, limit=RUN_LIMIT, fixture='r5-deny', journeys=['approval-deny'], approval='untrusted', brief='Run python3 -m unittest -q and reply with the result in one line.', decision='decline'),
+    'R6': dict(model=TERRA, limit=RUN_LIMIT, fixture='r6-allow', journeys=['approval-allow'], approval='untrusted', brief='Run python3 -m unittest -q and reply with the result in one line.', decision='accept'),
 }
 
 
@@ -129,8 +144,9 @@ def make_fixture(name):
 
 
 class Service:
-    def __init__(self, run, approval, executable):
+    def __init__(self, run, approval, executable, model=None, limit=RUN_LIMIT):
         self.run = run
+        self.limit = limit
         self.private = private_dir(run)
         self.store = LIVE / 'stores' / f'{run}-{uuid.uuid4().hex[:8]}'
         self.store.parent.mkdir(parents=True, exist_ok=True)
@@ -141,9 +157,15 @@ class Service:
         env = {'PATH': f'{HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(HOME), 'USER': os.environ.get('USER', ''), 'LANG': 'en_US.UTF-8'}
         protocol = dict(format='combraton-conformance-config/1', principal='owner', credentials=[dict(credential='ccred1.owner.' + base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip('='))], executor=dict(host_id='codex-host'))
         self.credential = protocol['credentials'][0]['credential']
-        self.config = dict(format='pio-codex-service/1', protocol=protocol,
-                           codex=dict(executable=str(executable), env=env, codex_home=str(HOME / '.codex'), fixture_root=str(LIVE / 'fixtures'),
-                                      thread=dict(sandbox='workspace-write', approvalPolicy=approval), labeled_fake=False))
+        thread = dict(sandbox='workspace-write', approvalPolicy=approval)
+        codex = dict(executable=str(executable), env=env, codex_home=str(HOME / '.codex'), fixture_root=str(LIVE / 'fixtures'),
+                     thread=thread, labeled_fake=False)
+        if model:
+            # The service refuses a model unless the configuration names the
+            # owner's dated exception, so both appear together or not at all.
+            thread['model'] = model
+            codex['test_only_model_exception'] = MODEL_EXCEPTION
+        self.config = dict(format='pio-codex-service/1', protocol=protocol, codex=codex)
         self.config_path = self.private / 'service.json'
         self.config_path.write_text(json.dumps(self.config))
         os.chmod(self.config_path, 0o600)
@@ -224,7 +246,7 @@ def wait(service, predicate, seconds, identity='work'):
         if predicate(last):
             return last
         total = usage_total(service.events())
-        if total is not None and total > RUN_LIMIT and not service.__dict__.get('limit_cancelled'):
+        if total is not None and total > service.limit and not service.__dict__.get('limit_cancelled'):
             service.limit_cancelled = True
             cancel(service, 'usage-limit-cancel')
         time.sleep(1)
@@ -278,7 +300,8 @@ def receipt(service, run, spec, repo, base, started, extra):
                    service_node_resolution=dict(matches_qualification=qualification['service_node_resolution']['matches_qualification'], version=qualification['service_node_resolution']['version'])),
         environment_passed=sorted(service.config['codex']['env']), credential_variables_passed=False,
         authentication_type=(first('account') or {}).get('authentication_type'),
-        model=thread.get('model'), model_provider=thread.get('model_provider'),
+        model=dict(configured=thread.get('configured_model'), requested=thread.get('requested_model'), effective=thread.get('model')),
+        model_provider=thread.get('model_provider'),
         thread_settings=dict(requested=guard.get('requested'), configured=guard.get('configured'), guard_allowed=guard.get('allowed'),
                              effective_sandbox=thread.get('sandbox'), effective_approval_policy=thread.get('approval_policy')),
         native=dict(thread_id=thread.get('thread_id'), turn_id=(first('turn_acknowledged') or {}).get('turn_id'), native_process=((first('spawned') or {}).get('native'))),
@@ -289,7 +312,7 @@ def receipt(service, run, spec, repo, base, started, extra):
         deadline_stop=(record or {}).get('codex', {}).get('deadline_stop'), timeouts=dict(delivery=DELIVERY, execution_deadline=DEADLINE), timeouts_passed=(record or {}).get('timeouts_passed'),
         turn_status=(first('turn_completed') or {}).get('status'), turn_error=(first('turn_completed') or {}).get('error'),
         output=dict(bytes=len(out_bytes), sha256=sha(out_bytes), receipt_output_digest=(invocation.get('receipt') or {}).get('output_digest'), agent_text_sha256=sha(agent_text.encode())),
-        usage=dict(observed_total_tokens=usage, observation=view['usage'], cap=CAP, stop_at=STOP_AT),
+        usage=dict(observed_total_tokens=usage, observation=view['usage'], cap=CAP, stop_at=STOP_AT, run_limit=service.limit),
         config_diff=(first('config_after') or {}).get('diff'), config_before_sha256=((first('config_before') or {}).get('snapshot') or {}).get('raw_sha256'),
         fixture=dict(path=f'$HOME/pio-m2-live/fixtures/{spec["fixture"]}', base=base, brief_sha256=sha(spec['brief'].encode()), diff_stat=diff_stat, status_porcelain_lines=len(status.splitlines()),
                      unittest_exit_after_run=tests.returncode),
@@ -304,7 +327,7 @@ def run_live(run, args):
     if cumulative(book) >= STOP_AT:
         raise SystemExit(f'stop: cumulative observed usage {cumulative(book)} reached {STOP_AT}')
     repo, base = make_fixture(spec['fixture'])
-    service = Service(run, spec['approval'], args.executable)
+    service = Service(run, spec['approval'], args.executable, spec['model'], spec['limit'])
     daemon = service.start()
     started = time.monotonic()
     brief = spec['brief'].encode()
@@ -411,12 +434,66 @@ def wrong_executable(args):
     print(json.dumps(result, indent=2))
 
 
+def model_list(args):
+    """Zero-token check that the model R2 to R6 request exists for this account.
+
+    Starts the qualified app-server directly against the user's real Codex home,
+    sends `initialize` and `model/list`, and sends no turn. Listing models is not
+    a model call and reports no usage.
+    """
+    private = private_dir('model-list')
+    work = private / 'qualify'
+    code = subprocess.run([str(BINARY), 'codex', 'qualify', '--executable', str(args.executable), '--work', str(work)],
+                          capture_output=True, text=True)
+    qualification = json.loads(code.stdout)
+    assert qualification['qualified'], qualification['refusals']
+    env = {'PATH': f'{HOME}/.local/bin:/usr/bin:/bin', 'HOME': str(HOME), 'CODEX_HOME': str(HOME / '.codex')}
+    process = subprocess.Popen([str(args.executable), 'app-server'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=(private / 'app-server.stderr').open('wb'), env=env)
+
+    def send(message):
+        process.stdin.write((json.dumps(message) + '\n').encode())
+        process.stdin.flush()
+
+    def response(request_id, seconds):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            line = process.stdout.readline()
+            if not line:
+                break
+            message = json.loads(line)
+            if message.get('id') == request_id and ('result' in message or 'error' in message):
+                return message
+        raise TimeoutError(f'no response to {request_id}')
+
+    send({'method': 'initialize', 'id': 0, 'params': {'clientInfo': {'name': 'pio_model_list', 'title': 'PIO model list', 'version': '0.1.0-dev'}}})
+    response(0, 60)
+    send({'method': 'initialized'})
+    send({'method': 'model/list', 'id': 1, 'params': {}})
+    listed = response(1, 120)
+    process.stdin.close()
+    process.wait(timeout=30)
+    models = [m.get('model') or m.get('id') for m in listed.get('result', {}).get('data', [])]
+    result = dict(format='pio-m2-live-receipt/1', run='model-list', live=True, turn_started=False, model_calls=0,
+                  recorded_at_utc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                  codex_version=qualification['version'], requested_model=TERRA, available=sorted(set(filter(None, models))),
+                  requested_model_available=TERRA in models, error=listed.get('error'))
+    out = ROOT / 'docs/work/m2/codex-live'
+    out.mkdir(parents=True, exist_ok=True)
+    (out / 'model-list.json').write_text(json.dumps(result, indent=2).replace(str(HOME), '$HOME') + '\n')
+    print(json.dumps(result, indent=2))
+    if not result['requested_model_available']:
+        raise SystemExit(f'stop: {TERRA} is not in the account model list')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--run', required=True, choices=[*RUNS, 'wrong-executable'])
+    parser.add_argument('--run', required=True, choices=[*RUNS, 'wrong-executable', 'model-list'])
     parser.add_argument('--executable', type=Path, default=HOME / '.local/bin/codex')
     args = parser.parse_args()
-    if args.run == 'wrong-executable':
+    if args.run == 'model-list':
+        model_list(args)
+    elif args.run == 'wrong-executable':
         wrong_executable(args)
     else:
         run_live(args.run, args)

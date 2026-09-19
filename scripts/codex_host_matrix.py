@@ -27,7 +27,7 @@ CONTENT = 'pio.combraton.dev/content'
 FEATURES = ['execution.controller', 'execution.output', 'execution.discovery', 'execution.workspaces', 'execution.usage', 'execution.actions', 'execution.steering']
 CASES = ['j1_turn_completes', 'approval_decline', 'approval_accept', 'interrupt_cancels_turn', 'steer_acknowledged', 'suppressed_ack_negative_control',
          'missing_content_refused', 'content_digest_mismatch', 'outside_fixture_refused', 'unqualified_executable_refused', 'restart_reattach_no_duplicate', 'host_lost_no_respawn', 'discovery_reports_observed_authentication',
-         'widening_decisions_refused', 'deadline_stop_interrupts', 'thread_settings_broader_refused']
+         'widening_decisions_refused', 'deadline_stop_interrupts', 'thread_settings_broader_refused', 'permission_grant_refused']
 
 
 def poll(action, predicate, seconds=20):
@@ -196,14 +196,15 @@ def events_of(case, kind):
 
 def run_case(out, name):
     scenario = dict(
-        approval_decline={'approval': 'command', 'delay_ms': 100},
+        approval_decline={'approval': 'command', 'approval_kind': 'writeStdin', 'delay_ms': 100},
         approval_accept={'approval': 'command', 'delay_ms': 100},
         interrupt_cancels_turn={'delay_ms': 60000},
         steer_acknowledged={'delay_ms': 60000},
         suppressed_ack_negative_control={'ack_turn': False, 'delay_ms': 300},
         restart_reattach_no_duplicate={'delay_ms': 4000},
         host_lost_no_respawn={'delay_ms': 60000},
-        widening_decisions_refused={'approval': 'command', 'delay_ms': 100},
+        widening_decisions_refused={'approval': 'command', 'approval_kind': 'absent', 'delay_ms': 100},
+        permission_grant_refused={'approval': 'permissions', 'delay_ms': 100},
         deadline_stop_interrupts={'delay_ms': 60000},
     ).get(name, {'delay_ms': 100})
     case = Case(out, name, scenario, fake=(name != 'unqualified_executable_refused'))
@@ -296,6 +297,8 @@ def run_case(out, name):
         if name == 'widening_decisions_refused':
             waiting = poll(lambda: case.inspect()['result'], lambda v: v['runtime'] == 'requires_action')
             action = waiting['runtime_detail']['action_id']
+            # `kind` is optional, and absent means a command approval.
+            assert [e['approval_kind'] for e in events_of(case, 'action_requested')] == ['command']
             refused = []
             for n, decision in enumerate(['acceptForSession', {'acceptWithExecpolicyAmendment': {'execpolicy_amendment': ['echo', 'fixture']}},
                                           {'applyNetworkPolicyAmendment': {'network_policy_amendment': {'host': 'example.com', 'action': 'allow'}}}]):
@@ -330,6 +333,18 @@ def run_case(out, name):
             assert 'execution_deadline' in record['timeouts_passed']
             assert invocations[0]['receipt']['turn_status'] == 'interrupted'
             return dict(outcome='pass', deadline_stop=stop, turn_status='interrupted', app_server_exit=0, host_killed=False)
+        if name == 'permission_grant_refused':
+            final = exited(case)
+            declined = events_of(case, 'native_request_declined')
+            assert [e['method'] for e in declined] == ['item/permissions/requestApproval'], declined
+            assert 'widen' in declined[0]['reason']
+            # No action is ever surfaced, so nobody can answer a permission
+            # grant. The view omits `actions` entirely when there are none.
+            assert final.get('actions', []) == [] and events_of(case, 'action_requested') == [], final
+            refusals = [m for m in case.markers_records() if m['kind'] == 'approval_refused']
+            assert [m['code'] for m in refusals] == [-32000], refusals
+            assert [m for m in case.markers_records() if m['kind'] == 'approval_answered'] == []
+            return dict(outcome='pass', declined=declined[0]['method'], actions=0, native_refusal_code=-32000, exit=final['exit'])
         if name == 'suppressed_ack_negative_control':
             final = exited(case)
             delivery = final['deliveries'][0]
@@ -350,6 +365,10 @@ def run_case(out, name):
             assert [a['decision'] for a in answers] == [decision], answers
             items = [e for e in events_of(case, 'item_completed') if e['item_id'] == 'item-approval']
             assert items and items[0]['status'] == ('completed' if decision == 'accept' else 'declined'), items
+            # The decision records which kind of command approval it answered.
+            requested = events_of(case, 'action_requested')
+            expected_kind = 'writeStdin' if decision == 'decline' else 'command'
+            assert [e['approval_kind'] for e in requested] == [expected_kind], requested
             with case.client() as c:
                 record = c.query('core.effects.get', {'effect': effect})['result']
             assert record['status'] == 'succeeded' and record['observations'][-1]['evidence']['class'] == 'native_request_resolved', record

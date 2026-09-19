@@ -11,6 +11,20 @@ fn executable(path: &Path, text: &str) {
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
 }
 
+/// Writing a test executable and running one race inside a single test binary:
+/// a sibling test's fork inherits the still-open write descriptor, and Linux
+/// then refuses the exec with `ETXTBSY`. `Command::spawn` returns only once the
+/// child has exec'd, so serializing every "write a fake, then run one" region
+/// closes the window. Tests that only write data do not need this.
+static FAKE_EXECUTABLES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn serialized<T>(body: impl FnOnce() -> T) -> T {
+    let _guard = FAKE_EXECUTABLES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    body()
+}
+
 /// Labeled fake Codex CLI: prints a version and writes two schema files. It
 /// appends the CODEX_HOME it was given next to itself.
 fn fake_codex(dir: &Path, version: &str, a: &str, b: &str) -> PathBuf {
@@ -100,15 +114,17 @@ fn schema_identity_ignores_raw_only_differences_and_names_real_drift() {
 fn qualify_accepts_pinned_version_and_raw_nondeterministic_schema_in_an_isolated_home() {
     let dir = tempfile::tempdir().unwrap();
     let expected = expected(dir.path());
-    // Same content as the reference with different member order and spacing.
-    let codex = fake_codex(
-        dir.path(),
-        PINNED_VERSION,
-        r#"{ "enum":["x","y"], "type":"object" }"#,
-        r#"{"b":[3,2,1],"a":1}"#,
-    );
     let work = dir.path().join("work");
-    let record = qualify(&codex, &expected, path_var().as_deref(), &work).unwrap();
+    let record = serialized(|| {
+        // Same content as the reference with different member order and spacing.
+        let codex = fake_codex(
+            dir.path(),
+            PINNED_VERSION,
+            r#"{ "enum":["x","y"], "type":"object" }"#,
+            r#"{"b":[3,2,1],"a":1}"#,
+        );
+        qualify(&codex, &expected, path_var().as_deref(), &work).unwrap()
+    });
     assert_eq!(record["qualified"], true, "{record:#}");
     assert_eq!(record["resolution"]["kind"], "native");
     assert_eq!(record["schema"]["file_count"], 2);
@@ -133,14 +149,16 @@ fn qualify_accepts_pinned_version_and_raw_nondeterministic_schema_in_an_isolated
 fn qualify_refuses_unsupported_version_without_running_codex_arguments() {
     let dir = tempfile::tempdir().unwrap();
     let expected = expected(dir.path());
-    let codex = fake_codex(
-        dir.path(),
-        "0.147.0",
-        r#"{"type":"object","enum":["x","y"]}"#,
-        r#"{"a":1,"b":[3,2,1]}"#,
-    );
     let work = dir.path().join("work");
-    let record = qualify(&codex, &expected, path_var().as_deref(), &work).unwrap();
+    let record = serialized(|| {
+        let codex = fake_codex(
+            dir.path(),
+            "0.147.0",
+            r#"{"type":"object","enum":["x","y"]}"#,
+            r#"{"a":1,"b":[3,2,1]}"#,
+        );
+        qualify(&codex, &expected, path_var().as_deref(), &work).unwrap()
+    });
     assert_eq!(record["qualified"], false);
     assert_eq!(
         record["refusals"],
@@ -157,19 +175,21 @@ fn qualify_refuses_unsupported_version_without_running_codex_arguments() {
 fn qualify_refuses_meaningful_schema_change_naming_the_file() {
     let dir = tempfile::tempdir().unwrap();
     let expected = expected(dir.path());
-    let codex = fake_codex(
-        dir.path(),
-        PINNED_VERSION,
-        r#"{"type":"object","enum":["x","z"]}"#,
-        r#"{"a":1,"b":[3,2,1]}"#,
-    );
-    let record = qualify(
-        &codex,
-        &expected,
-        path_var().as_deref(),
-        &dir.path().join("work"),
-    )
-    .unwrap();
+    let record = serialized(|| {
+        let codex = fake_codex(
+            dir.path(),
+            PINNED_VERSION,
+            r#"{"type":"object","enum":["x","z"]}"#,
+            r#"{"a":1,"b":[3,2,1]}"#,
+        );
+        qualify(
+            &codex,
+            &expected,
+            path_var().as_deref(),
+            &dir.path().join("work"),
+        )
+        .unwrap()
+    });
     assert_eq!(record["qualified"], false);
     assert_eq!(
         record["refusals"],
@@ -205,7 +225,7 @@ fn npm_layout(root: &Path, hoisted: bool, vendored: bool) -> (PathBuf, PathBuf) 
     );
     write(
         &package.join("package.json"),
-        r#"{"name":"@openai/codex","version":"0.146.0"}"#,
+        &format!(r#"{{"name":"@openai/codex","version":"{PINNED_VERSION}"}}"#),
     );
     let platform_root = if hoisted {
         root.join("lib/node_modules").join(platform)
@@ -224,7 +244,9 @@ fn npm_layout(root: &Path, hoisted: bool, vendored: bool) -> (PathBuf, PathBuf) 
     executable(&vendor.join(triple).join("bin/codex"), "#!/bin/sh\n");
     write(
         &vendor.join(triple).join("codex-package.json"),
-        &format!(r#"{{"version":"0.146.0","target":"{triple}","entrypoint":"bin/codex"}}"#),
+        &format!(
+            r#"{{"version":"{PINNED_VERSION}","target":"{triple}","entrypoint":"bin/codex"}}"#
+        ),
     );
     std::fs::create_dir_all(root.join("bin")).unwrap();
     let selected = root.join("bin/codex");
@@ -241,16 +263,18 @@ fn npm_layout(root: &Path, hoisted: bool, vendored: bool) -> (PathBuf, PathBuf) 
 fn resolve_mirrors_the_pinned_npm_wrapper_layouts() {
     for (hoisted, vendored) in [(false, false), (true, false), (false, true)] {
         let dir = tempfile::tempdir().unwrap();
-        let (selected, native) = npm_layout(dir.path(), hoisted, vendored);
         let node_path = OsString::from(dir.path().join("node-bin"));
-        let resolution = resolve(&selected, Some(&node_path)).unwrap();
+        let (native, resolution) = serialized(|| {
+            let (selected, native) = npm_layout(dir.path(), hoisted, vendored);
+            (native, resolve(&selected, Some(&node_path)).unwrap())
+        });
         assert_eq!(resolution["kind"], "npm_node_wrapper");
         assert_eq!(
             Path::new(resolution["native"]["path"].as_str().unwrap()),
             native
         );
-        assert_eq!(resolution["wrapper"]["package_version"], "0.146.0");
-        assert_eq!(resolution["native"]["layout"]["version"], "0.146.0");
+        assert_eq!(resolution["wrapper"]["package_version"], PINNED_VERSION);
+        assert_eq!(resolution["native"]["layout"]["version"], PINNED_VERSION);
         assert_eq!(resolution["target"], target_triple().unwrap());
         assert!(resolution["node"]["sha256"].is_string());
     }
@@ -260,8 +284,8 @@ fn resolve_mirrors_the_pinned_npm_wrapper_layouts() {
 fn checked_in_identity_is_the_qualified_schema_listing() {
     let identity: Value = serde_json::from_str(QUALIFIED_SCHEMA_IDENTITY).unwrap();
     assert_eq!(identity["format"], "pio-codex-schema-identity/1");
-    assert_eq!(identity["file_count"], 275);
-    assert_eq!(identity["files"].as_object().unwrap().len(), 275);
+    assert_eq!(identity["file_count"], 312);
+    assert_eq!(identity["files"].as_object().unwrap().len(), 312);
     let mut listing = String::new();
     for (file, digest) in identity["files"].as_object().unwrap() {
         listing.push_str(&format!(
@@ -365,16 +389,26 @@ fn thread_settings_guard_refuses_broader_than_configured_defaults() {
     assert_eq!(guard_for(None, untrusted.clone())["allowed"], true);
     // Broader than an explicit stricter default is refused, naming the setting.
     let strict = guard_for(
-        Some("sandbox_mode = \"read-only\"\napproval_policy = \"untrusted\"\n"),
-        plan.clone(),
+        Some("sandbox_mode = \"read-only\"\n"),
+        json!({"sandbox":"workspace-write","approvalPolicy":"never"}),
     );
     assert_eq!(strict["allowed"], false);
     assert_eq!(
         strict["broader_than_configured"],
         json!([
             {"setting":"sandbox_mode","requested":"workspace-write","configured":"read-only"},
-            {"setting":"approval_policy","requested":"on-request","configured":"untrusted"}
+            {"setting":"approval_policy","requested":"never","configured":"on-request"}
         ])
+    );
+    // A configured `untrusted` approval policy is not a stricter default at
+    // 0.155.1: the app-server exits before `initialize`, so it is unresolved
+    // rather than compared, while requesting `untrusted` per thread is fine.
+    let configured_untrusted = guard_for(Some("approval_policy = \"untrusted\"\n"), plan.clone());
+    assert_eq!(configured_untrusted["allowed"], false);
+    assert_eq!(configured_untrusted["broader_than_configured"], json!([]));
+    assert_eq!(
+        configured_untrusted["unresolved"],
+        json!([{"setting":"approval_policy","reason":"Codex 0.155.1 does not start with this configured value","value":"untrusted"}])
     );
     assert_eq!(
         guard_for(Some("sandbox_mode = \"read-only\"\n"), untrusted)["allowed"],

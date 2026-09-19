@@ -21,7 +21,7 @@ Disposable prompt, rewritten 2026-09-16 after M2 started. It replaces the fresh-
 ## 3. Owner decisions that are easy to get wrong
 
 - **PIO drives harnesses as the user configured them.** Never select or inject a model or provider, and never add a provider entry to a harness configuration. An earlier draft that put MiniMax inside Codex was withdrawn by the owner; do not revive it.
-- **Test scope:** Codex 0.146.0 (M2), Claude Code 2.1.273 (M3), OpenCode v2.0.1 invoked as `opencode2` and Hermes Agent v0.20.1 (M3b, after M3). A separately installed `opencode` 1.18.18 is not the selected OpenCode. OpenCode is preferred for heavy-usage testing. **Test scope is not release scope:** v0.1 remains Codex and Claude Code.
+- **Test scope:** Codex 0.155.1 (M2), Claude Code 2.1.273 (M3), OpenCode v2.0.1 invoked as `opencode2` and Hermes Agent v0.20.1 (M3b, after M3). A separately installed `opencode` 1.18.18 is not the selected OpenCode. OpenCode is preferred for heavy-usage testing. **Test scope is not release scope:** v0.1 remains Codex and Claude Code.
 - **Hermes (later):** only an isolated profile carrying model configuration; never the owner's real Hermes home, which runs their scheduled jobs. If isolation is impossible, defer the Hermes adapter and say so.
 - **Token caps:** Codex 1,000,000 and Claude Code a separate 1,000,000, each across all its tests; MiniMax through OpenCode and Hermes 300,000,000 combined. GLM/Kimi bill separately and are proxy-counted against the MiniMax cap only until the owner sets per-provider caps before M3b. Record per journey in STATE, stop and report at 80 percent, and never run more than three live sessions at once.
 - **Codex home and fixtures:** use the user's real Codex home. Capture configuration before and after every live run and disclose added trusted-project entries; change nothing else; keep raw snapshots outside Git. Live runs work in a throwaway fixture repository path. Never select the full-access sandbox or `thread/shellCommand` (nor `externalSandbox` or `process/spawn`).
@@ -34,7 +34,7 @@ Owner review 1 is done (corrections verified at `6a9d11a`). Codex qualification 
 
 ## 5. Protocol and Codex pins
 
-Protocol **v0.1.0** at `cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc` via `protocol.lock.json`; build the runner from the verified archive. Protocol #9, #10 and the undeclared subscription authorization-recheck barrier remain coverage limits; gaps go upstream as versioned proposals with demonstrating fixtures, never local schema widening. Codex candidate **0.146.0**, source `e363b08c9175ac1cbe5893615dd2cb9ddf95043b`. Drift checks compare canonical parsed JSON per file, never raw bytes of `codex_app_server_protocol.v2.schemas.json`.
+Protocol **v0.1.0** at `cbf8e4df9df2ca8a9b50264df6acace6e4c3a0fc` via `protocol.lock.json`; build the runner from the verified archive. Protocol #9, #10 and the undeclared subscription authorization-recheck barrier remain coverage limits; gaps go upstream as versioned proposals with demonstrating fixtures, never local schema widening. Codex candidate **0.155.1**, source `be2951ea34f0d295ed0becf97079f92fa5f6950e` (re-pinned from 0.146.0 on 2026-09-19). Drift checks compare canonical parsed JSON per file, never raw bytes of `codex_app_server_protocol.v2.schemas.json`.
 
 ## 6. Environment gotchas
 
