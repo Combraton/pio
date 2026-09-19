@@ -148,3 +148,13 @@ Cargo tests (with labeled fake executables, so CI needs no Codex) cover canonica
 Every matrix submit carries the live timeouts (`delivery` 120 s, `execution_deadline` 600 s) unless a case tests the deadline.
 
 The matrix proves adapter plumbing only. It runs no real Codex, uses no model and establishes no journey.
+
+## M2 live Codex runs
+
+`python3 scripts/codex_live_run.py --run R1|…|R6|model-list|discovery|wrong-executable` drives the user's installed Codex through `pio serve-codex`. It is **not part of CI**, needs an authenticated Codex, and spends real tokens for R1 to R6. Each run uses its own private store and a throwaway fixture repository under `$HOME/pio-m2-live/fixtures`; raw transcripts, task output, configuration copies and the usage ledger stay under `$HOME/pio-m2-live/private` at mode 0700. The public receipt in [codex-live](work/m2/codex-live/) holds digests, identities and observed facts only, with `$HOME` and credentials redacted.
+
+Stops: no run starts once cumulative observed usage reaches 800,000 tokens, which is 80% of the owner's 1,000,000 Codex cap; a run whose observed usage passes its own limit is interrupted with `execution.cancel`; a run that ends without a usage report stops the sequence. R1 carries a 50,000 limit and R2 to R6 carry 250,000. A limit can only be enforced when the harness reports usage, so a run stops at the first report above it, not at the limit itself.
+
+`model-list`, `discovery` and `wrong-executable` start no turn and cost nothing. `discovery` queries `execution.discovery.list` twice, against a fresh store and against the store a completed run left behind, to show authentication moving from `unknown` to observed without any app-server starting.
+
+Results and the journey marks they support are in the [M2 acceptance packet](work/m2/ACCEPTANCE.md).
