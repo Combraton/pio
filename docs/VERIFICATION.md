@@ -137,7 +137,7 @@ Cargo tests (with labeled fake executables, so CI needs no Codex) cover canonica
 - a missing brief, a fixture outside the root, and a content digest mismatch refused before any app-server starts;
 - the `kind` 0.155.1 added to command approvals recorded with the action: `command` on the accepted case, `writeStdin` on the declined one, and `command` again where the optional field is absent;
 - an unqualified executable refused at service start;
-- a permission-grant request refused natively, with no action surfaced and nothing answered;
+- a permission-grant request refused natively, with no action surfaced and nothing answered, failing on the named assertion `permission_grant_surfaced_as_action` rather than on a timeout if one ever is;
 - daemon restart with the same host and app-server, one turn and an advanced generation;
 - a lost host after acknowledgment reported `unknown` with no respawn;
 - discovery reporting authentication only after a launch observed it;
@@ -153,7 +153,7 @@ The matrix proves adapter plumbing only. It runs no real Codex, uses no model an
 
 `python3 scripts/codex_live_run.py --run R1|…|R6|model-list|discovery|wrong-executable` drives the user's installed Codex through `pio serve-codex`. It is **not part of CI**, needs an authenticated Codex, and spends real tokens for R1 to R6. Each run uses its own private store and a throwaway fixture repository under `$HOME/pio-m2-live/fixtures`; raw transcripts, task output, configuration copies and the usage ledger stay under `$HOME/pio-m2-live/private` at mode 0700. The public receipt in [codex-live](work/m2/codex-live/) holds digests, identities and observed facts only, with `$HOME` and credentials redacted.
 
-Stops: no run starts once cumulative observed usage reaches 800,000 tokens, which is 80% of the owner's 1,000,000 Codex cap; a run whose observed usage passes its own limit is interrupted with `execution.cancel`; a run that ends without a usage report stops the sequence. R1 carries a 50,000 limit and R2 to R6 carry 250,000. A limit can only be enforced when the harness reports usage, so a run stops at the first report above it, not at the limit itself.
+Stops are the **runner's** rules, not the product's: PIO enforces no budget, and every stop below is `scripts/codex_live_run.py` watching observed usage and calling `execution.cancel`. No run starts once cumulative observed usage reaches 800,000 tokens, which is 80% of the owner's 1,000,000 Codex cap; a run whose observed usage passes its own limit is interrupted with `execution.cancel`; a run that ends without a usage report stops the sequence. R1 carries a 50,000 limit and R2 to R6 carry 250,000. A limit can only be enforced when the harness reports usage, so a run stops at the first report above it, not at the limit itself.
 
 `model-list`, `discovery` and `wrong-executable` start no turn and cost nothing. `discovery` queries `execution.discovery.list` twice, against a fresh store and against the store a completed run left behind, to show authentication moving from `unknown` to observed without any app-server starting.
 

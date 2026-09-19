@@ -334,7 +334,13 @@ def run_case(out, name):
             assert invocations[0]['receipt']['turn_status'] == 'interrupted'
             return dict(outcome='pass', deadline_stop=stop, turn_status='interrupted', app_server_exit=0, host_killed=False)
         if name == 'permission_grant_refused':
-            final = exited(case)
+            # Surfacing a permission grant as an answerable action would stall
+            # this case at requires_action until the wait expired. Watch for
+            # either outcome so the failure names the defect instead of timing
+            # out with a view dump.
+            final = poll(lambda: case.inspect()['result'],
+                         lambda v: v['runtime'] in ('exited', 'requires_action'), 30)
+            assert final['runtime'] == 'exited', 'permission_grant_surfaced_as_action'
             declined = events_of(case, 'native_request_declined')
             assert [e['method'] for e in declined] == ['item/permissions/requestApproval'], declined
             assert 'widen' in declined[0]['reason']

@@ -105,3 +105,9 @@ The owner's decision of 2026-09-19: run **R1 exactly once** with the configurati
 - `scripts/codex_live_run.py --run model-list` confirms the model exists for the account with a zero-token `model/list` call before any turn. It starts no turn and reports no usage.
 
 The Codex cap stays 1,000,000 tokens with the stop at 80%.
+
+## Owner review 3 corrections (2026-09-19)
+
+- **Protocol gap filed.** Reattaching an execution whose delivery is already determined still records `ambiguous` / `dispatch_may_have_begun`, because the frozen `recovery_decision` enum has no value for it. [Protocol #15](https://github.com/Combraton/protocol/issues/15). PIO keeps the inaccurate entry and discloses it rather than widening its local schemas; if #15 resolves the other way, PIO stops emitting a recovery decision once delivery is determined.
+- **Budget enforcement is not PIO's yet.** The token stop that bounded the M2 live runs is the live runner's rule in `scripts/codex_live_run.py`, applied through `execution.cancel`. The service and host enforce no budget. Recorded as an open obligation, not a property.
+- **`test_only_model_exception` is temporary.** It must be removed or compiled out before release, not merely refused without its dated token.
