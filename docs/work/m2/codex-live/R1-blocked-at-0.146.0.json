@@ -7,30 +7,30 @@
   ],
   "real_codex": true,
   "live": true,
-  "recorded_at_utc": "2026-09-19T15:31:23Z",
-  "seconds": 68.6,
+  "recorded_at_utc": "2026-09-19T00:27:03Z",
+  "seconds": 34.8,
   "pio": {
-    "head": "4ad92f8a69b1205049a7d60c7fd2edee8b439b59",
+    "head": "fdd60ab2e3cf4d611e98c72179db8f84d7093feb",
     "dirty": true,
-    "binary_sha256": "b37724f259211f86bf82029610a4032bb01d53f32d259c3c6dc248d7d97ed22f"
+    "binary_sha256": "69c0203fa75207352c60a2b24c8909325abafb0d4f9695690dad09d81fc52f31"
   },
   "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
   "codex": {
     "selected": "$HOME/.local/bin/codex",
     "kind": "npm_node_wrapper",
-    "wrapper_sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
-    "wrapper_package_version": "0.155.1",
-    "native_sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e",
-    "native_layout_version": "0.155.1",
+    "wrapper_sha256": "134063e133f0b4244fa3b251acf973d4fe4b4aeeacbdc135211bf480f59f1477",
+    "wrapper_package_version": "0.146.0",
+    "native_sha256": "ae1d3ffe6d48aec6a4dc3f50e7eb8e0d11962485a6a9406c5a7012139383da02",
+    "native_layout_version": "0.146.0",
     "node": {
       "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
       "version": "v22.23.0"
     },
     "version": {
-      "native": "0.155.1",
-      "selected": "0.155.1"
+      "native": "0.146.0",
+      "selected": "0.146.0"
     },
-    "canonical_schema_listing_sha256": "93b723a83b000bffb23a0d0f17dbdc0711f28a35bb000e97306ed004dd4119b8",
+    "canonical_schema_listing_sha256": "65c3badeb422b8f04355ddf1cb9fdd000162f22a9d024f04394690b4f1d4f8b3",
     "schema_drift": 0,
     "service_node_resolution": {
       "matches_qualification": true,
@@ -45,11 +45,7 @@
   ],
   "credential_variables_passed": false,
   "authentication_type": "chatgpt",
-  "model": {
-    "configured": "gpt-6-astra",
-    "requested": null,
-    "effective": "gpt-6-astra"
-  },
+  "model": "gpt-6-astra",
   "model_provider": "openai",
   "thread_settings": {
     "requested": {
@@ -77,32 +73,32 @@
     "effective_approval_policy": "on-request"
   },
   "native": {
-    "thread_id": "01a0ba4a-bf73-7bb0-b779-5c644e02520a",
-    "turn_id": "01a0ba4a-c041-79d2-9a13-b3401f1d761a",
+    "thread_id": "01a0b70f-0ced-79d0-9065-d3bf6ba4baf0",
+    "turn_id": "01a0b70f-0da9-73c1-ac75-956e11bb43da",
     "native_process": {
       "identity": {
-        "pid": 9989,
-        "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789831838:465832"
+        "pid": 16762,
+        "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789777602:249964"
       },
       "interpreter": {
         "applicable": true,
         "path_matches_qualification": true
       },
       "path_matches_qualification": true,
-      "sha256": "8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e"
+      "sha256": "ae1d3ffe6d48aec6a4dc3f50e7eb8e0d11962485a6a9406c5a7012139383da02"
     }
   },
   "identities": {
-    "invocation_id": "e1802310-f74e-48e3-be44-cb3586b9801e",
+    "invocation_id": "75c95b62-20b4-4b0e-ad88-899defe45873",
     "host": {
-      "pid": 9778,
-      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789831814:506696"
+      "pid": 16754,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789777588:459076"
     },
     "app_server_process": {
-      "pid": 9986,
-      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789831838:411452"
+      "pid": 16759,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789777602:220928"
     },
-    "host_slot": "bd00cbd3-f53a-43f1-b03b-ddfd07537391",
+    "host_slot": "413526f4-48ce-472d-bdea-aaabf23801a7",
     "controller_generation_at_admission": 1,
     "host_generation_now": 1,
     "phase": "completed"
@@ -110,7 +106,7 @@
   "delivery": {
     "delivery": "acknowledged",
     "delivery_id": "work.delivery-1",
-    "determined_at": "2026-09-19T15:30:56Z",
+    "determined_at": "2026-09-19T00:26:52Z",
     "evidence": {
       "class": "native_turn_acknowledged",
       "source": "codex-app-server/host"
@@ -118,7 +114,7 @@
     "history": [
       {
         "delivery": "pending",
-        "recorded_at": "2026-09-19T15:30:56Z"
+        "recorded_at": "2026-09-19T00:26:52Z"
       }
     ],
     "proof_class": "provider_ack_id"
@@ -127,13 +123,7 @@
   "exit": {
     "code": 0
   },
-  "cancellation": {
-    "outcome": "cancelled",
-    "receipt": {
-      "operation_ref": "cef9131c-86f0-4762-9a38-033aa4314610",
-      "state": "cancel_requested"
-    }
-  },
+  "cancellation": null,
   "actions": null,
   "steering": null,
   "deadline_stop": null,
@@ -142,55 +132,56 @@
     "execution_deadline": 600
   },
   "timeouts_passed": [],
-  "turn_status": "interrupted",
-  "turn_error": null,
+  "turn_status": "failed",
+  "turn_error": {
+    "additionalDetails": null,
+    "codexErrorInfo": "other",
+    "message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"The 'gpt-6-astra' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again.\"}}"
+  },
   "output": {
-    "bytes": 9027,
-    "sha256": "e9c3fb5795fe966e3af004be77f8cd5587973e5bfac903564a3de59696c5e79b",
-    "receipt_output_digest": "sha256:e9c3fb5795fe966e3af004be77f8cd5587973e5bfac903564a3de59696c5e79b",
-    "agent_text_sha256": "936622b9c01a0af063bc06fdfe603487afe7c7ede9532e242067b77bb21fd104"
+    "bytes": 508,
+    "sha256": "f24c21367351008f414f25e1ee1cb336a5de31bb431ab2dfbc54341aaefa0081",
+    "receipt_output_digest": "sha256:f24c21367351008f414f25e1ee1cb336a5de31bb431ab2dfbc54341aaefa0081",
+    "agent_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "usage": {
-    "observed_total_tokens": 72935,
+    "observed_total_tokens": null,
     "observation": {
-      "liability": "resolved",
-      "observations": [
-        {
-          "amount": 72935,
-          "basis": "observed",
-          "invocation_id": "e1802310-f74e-48e3-be44-cb3586b9801e",
-          "measure": "codex.tokens.total",
-          "recorded_at": "2026-09-19T15:31:21Z"
-        }
-      ]
+      "liability": "unresolved",
+      "observations": []
     },
     "cap": 1000000,
     "stop_at": 800000,
-    "run_limit": 50000,
-    "cumulative_observed_tokens": 72935
+    "cumulative_observed_tokens": 0
   },
   "config_diff": {
     "existed_before": true,
     "exists_after": true,
     "format": "pio-codex-config-diff/1",
     "other_changes": false,
-    "projects_added": [],
+    "projects_added": [
+      {
+        "location": "fixture",
+        "path_sha256": "930acc83aec800e7e7992f13d4d2f71f8b218aa1051b8dc9567801749150c847",
+        "trust_level": "trusted"
+      }
+    ],
     "projects_changed": [],
     "projects_removed": [],
     "raw_sha256": {
       "after": "d16b4c70c8b79c134c77890144bd462e16cf93a8d0f68750655ab630a92ad477",
-      "before": "d16b4c70c8b79c134c77890144bd462e16cf93a8d0f68750655ab630a92ad477"
+      "before": "42f6b8821db1a9de5323f7b933f2d783963f3d32a8234112e3d06c7d48872d3d"
     },
-    "unchanged": true
+    "unchanged": false
   },
-  "config_before_sha256": "d16b4c70c8b79c134c77890144bd462e16cf93a8d0f68750655ab630a92ad477",
+  "config_before_sha256": "42f6b8821db1a9de5323f7b933f2d783963f3d32a8234112e3d06c7d48872d3d",
   "fixture": {
     "path": "$HOME/pio-m2-live/fixtures/r1-j1",
-    "base": "518abd8f6e0d4bbf940935a99f9aed8c5e98a166",
+    "base": "72780ef4d8c59d89636eaba7b6ec54f74da24e62",
     "brief_sha256": "aae2ac8fac030228c07798db39b62a15b44f55e69a5e4c0175ab6cd289694689",
-    "diff_stat": "calc.py | 4 ++++\n 1 file changed, 4 insertions(+)",
-    "status_porcelain_lines": 2,
-    "unittest_exit_after_run": 0
+    "diff_stat": "",
+    "status_porcelain_lines": 1,
+    "unittest_exit_after_run": 1
   },
   "event_kinds": [
     "config_before",
@@ -202,25 +193,14 @@
     "turn_acknowledged",
     "turn_started",
     "item_completed",
-    "item_completed",
-    "item_completed",
-    "item_completed",
-    "usage",
-    "item_completed",
-    "usage",
-    "item_completed",
-    "item_completed",
-    "usage",
-    "control_sent",
-    "usage",
-    "control_response",
+    "native_error",
     "turn_completed",
     "app_server_exited",
     "config_after"
   ],
   "public_transcript_schema_check": {
     "exit": 0,
-    "summary": "339 schema-valid public results"
+    "summary": "117 schema-valid public results"
   },
   "independent_services": {
     "cbr_processes": 0,
