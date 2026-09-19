@@ -7,11 +7,11 @@
   ],
   "real_codex": true,
   "live": true,
-  "recorded_at_utc": "2026-09-19T15:31:23Z",
-  "seconds": 68.6,
+  "recorded_at_utc": "2026-09-19T15:34:42Z",
+  "seconds": 62.6,
   "pio": {
-    "head": "4ad92f8a69b1205049a7d60c7fd2edee8b439b59",
-    "dirty": true,
+    "head": "a865dfee53fa782d5ea3fc0b7ff8680184680ef2",
+    "dirty": false,
     "binary_sha256": "b37724f259211f86bf82029610a4032bb01d53f32d259c3c6dc248d7d97ed22f"
   },
   "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
@@ -77,12 +77,12 @@
     "effective_approval_policy": "on-request"
   },
   "native": {
-    "thread_id": "01a0ba4a-bf73-7bb0-b779-5c644e02520a",
-    "turn_id": "01a0ba4a-c041-79d2-9a13-b3401f1d761a",
+    "thread_id": "01a0ba4d-de9d-74d1-bc7e-1bc8c00af7ab",
+    "turn_id": "01a0ba4d-df7d-72e2-9594-36f2186c2a48",
     "native_process": {
       "identity": {
-        "pid": 9989,
-        "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789831838:465832"
+        "pid": 12844,
+        "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832044:153498"
       },
       "interpreter": {
         "applicable": true,
@@ -93,16 +93,16 @@
     }
   },
   "identities": {
-    "invocation_id": "e1802310-f74e-48e3-be44-cb3586b9801e",
+    "invocation_id": "31f7e00f-c705-4dad-8874-2d8a2f9b8fbb",
     "host": {
-      "pid": 9778,
-      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789831814:506696"
+      "pid": 12754,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832020:330090"
     },
     "app_server_process": {
-      "pid": 9986,
-      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789831838:411452"
+      "pid": 12841,
+      "start": "macos:15C211AF-7938-43DE-92D1-561126371ED8:1789832044:98529"
     },
-    "host_slot": "bd00cbd3-f53a-43f1-b03b-ddfd07537391",
+    "host_slot": "82964200-d335-422d-8ef6-130f9cd1733b",
     "controller_generation_at_admission": 1,
     "host_generation_now": 1,
     "phase": "completed"
@@ -110,7 +110,7 @@
   "delivery": {
     "delivery": "acknowledged",
     "delivery_id": "work.delivery-1",
-    "determined_at": "2026-09-19T15:30:56Z",
+    "determined_at": "2026-09-19T15:34:20Z",
     "evidence": {
       "class": "native_turn_acknowledged",
       "source": "codex-app-server/host"
@@ -118,7 +118,7 @@
     "history": [
       {
         "delivery": "pending",
-        "recorded_at": "2026-09-19T15:30:56Z"
+        "recorded_at": "2026-09-19T15:34:20Z"
       }
     ],
     "proof_class": "provider_ack_id"
@@ -130,7 +130,7 @@
   "cancellation": {
     "outcome": "cancelled",
     "receipt": {
-      "operation_ref": "cef9131c-86f0-4762-9a38-033aa4314610",
+      "operation_ref": "233f5e41-faa5-4721-a1a4-b8b0297cf2b0",
       "state": "cancel_requested"
     }
   },
@@ -145,29 +145,29 @@
   "turn_status": "interrupted",
   "turn_error": null,
   "output": {
-    "bytes": 9027,
-    "sha256": "e9c3fb5795fe966e3af004be77f8cd5587973e5bfac903564a3de59696c5e79b",
-    "receipt_output_digest": "sha256:e9c3fb5795fe966e3af004be77f8cd5587973e5bfac903564a3de59696c5e79b",
-    "agent_text_sha256": "936622b9c01a0af063bc06fdfe603487afe7c7ede9532e242067b77bb21fd104"
+    "bytes": 8534,
+    "sha256": "d4b208a75e53403192bc3173dd7ba29b07d7aa0bdc92a9b2767f9f2b5221914b",
+    "receipt_output_digest": "sha256:d4b208a75e53403192bc3173dd7ba29b07d7aa0bdc92a9b2767f9f2b5221914b",
+    "agent_text_sha256": "8867f4553cf93499d3a7821991bee519a80fd86682d9cbc370ea16f8a910060f"
   },
   "usage": {
-    "observed_total_tokens": 72935,
+    "observed_total_tokens": 72911,
     "observation": {
       "liability": "resolved",
       "observations": [
         {
-          "amount": 72935,
+          "amount": 72911,
           "basis": "observed",
-          "invocation_id": "e1802310-f74e-48e3-be44-cb3586b9801e",
+          "invocation_id": "31f7e00f-c705-4dad-8874-2d8a2f9b8fbb",
           "measure": "codex.tokens.total",
-          "recorded_at": "2026-09-19T15:31:21Z"
+          "recorded_at": "2026-09-19T15:34:41Z"
         }
       ]
     },
     "cap": 1000000,
     "stop_at": 800000,
     "run_limit": 50000,
-    "cumulative_observed_tokens": 72935
+    "cumulative_observed_tokens": 145846
   },
   "config_diff": {
     "existed_before": true,
@@ -186,7 +186,7 @@
   "config_before_sha256": "d16b4c70c8b79c134c77890144bd462e16cf93a8d0f68750655ab630a92ad477",
   "fixture": {
     "path": "$HOME/pio-m2-live/fixtures/r1-j1",
-    "base": "518abd8f6e0d4bbf940935a99f9aed8c5e98a166",
+    "base": "3c9f232075e823d5b07a780452af751bdc21523b",
     "brief_sha256": "aae2ac8fac030228c07798db39b62a15b44f55e69a5e4c0175ab6cd289694689",
     "diff_stat": "calc.py | 4 ++++\n 1 file changed, 4 insertions(+)",
     "status_porcelain_lines": 2,
@@ -220,7 +220,7 @@
   ],
   "public_transcript_schema_check": {
     "exit": 0,
-    "summary": "339 schema-valid public results"
+    "summary": "543 schema-valid public results"
   },
   "independent_services": {
     "cbr_processes": 0,
