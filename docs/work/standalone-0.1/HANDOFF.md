@@ -1,6 +1,6 @@
 # Standalone 0.1 readiness handoff
 
-> Historical M0 record. M0 was accepted and PR #2 was subsequently merged with owner authorization. Continue from [current STATE](../STATE.md) and the [M2 task packet](../m2/TASK.md); do not replay the readiness next steps below. Its Claude authentication disposition and unselected license were superseded by the owner on 2026-09-16 ([ADR 001 amendment](../../decisions/001-standalone-stack.md#amendment--owner-decisions-after-m1-acceptance-2026-09-16)).
+> Historical M0 record. M0 was accepted and PR #2 was merged with owner authorization; M1 merged as `9cf7047` and M2 as `16fb2291`. Continue from [current STATE](../STATE.md) and the [M3 task packet](../m3/TASK.md); do not replay the readiness next steps below. Its Claude authentication disposition and unselected license were superseded by the owner on 2026-09-16 ([ADR 001 amendment](../../decisions/001-standalone-stack.md#amendment--owner-decisions-after-m1-acceptance-2026-09-16)).
 
 Updated 2026-09-16. Owner: Codex, PIO implementation lead. Task: [issue #1](https://github.com/Combraton/pio/issues/1). Branch: `codex/standalone-readiness`; base `e65b7c02318e71e848ab7c8b3f8efab3489fb2d2`. Read the branch/PR's actual head on resume; the readiness documents do not claim their own future commit ID.
 
@@ -25,7 +25,7 @@ Protocol [issue #1](https://github.com/Combraton/protocol/issues/1) is closed; [
 
 Delivered: [release plan](PLAN.md), [stack ADR](../../decisions/001-standalone-stack.md), [journey matrix](../../JOURNEYS.md), [public integration map](PROTOCOL.md), [Protocol lock](../../../protocol.lock.json), release verifier and sanitized [inspection evidence](evidence/readiness.json). Entry points link them. No substantial product implementation or dependency installation occurred.
 
-Owner dispositions now accepted: stack/hosting, two-adapter/platform scope with both-platform build/conformance CI from M1, and explicit Claude API-key/provider authentication. Python bridge remains conditional on M3; claude.ai login is unsupported until an approved route exists. Confirmatory thresholds and license are later reserved decisions. Codex 0.146.0 and Claude 2.1.273 are validation candidates, not supported releases. Authentication and native behavior remain unknown. The installed historical `pio` is not this product; avoid PATH collision during installation.
+Owner dispositions now accepted: stack/hosting, two-adapter/platform scope with both-platform build/conformance CI from M1, and explicit Claude API-key/provider authentication. Python bridge remains conditional on M3; claude.ai login is unsupported until an approved route exists. Confirmatory thresholds and license are later reserved decisions. Codex and Claude Code were validation candidates here, not supported releases, and the versions recorded in this document have since moved: Codex was re-pinned to 0.155.1 during M2, and the Claude Code version installed at M3 start differs from the 2.1.273 recorded here. Qualify what is installed. Codex authentication and native behavior are no longer unknown — see the [M2 acceptance packet](../m2/ACCEPTANCE.md) — while Claude Code's remain so until M3. The installed historical `pio` is not this product; avoid PATH collision during installation.
 
 ## Checks and limits
 
