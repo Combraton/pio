@@ -8,9 +8,20 @@ You are the standalone **PIO M3 builder**. Everything you need is in this reposi
 >
 > Work in the `pio-m3` worktree on branch `codex/m3-claude-code`, based on `main` at `16fb2291`, the merge of M2. Read, in order: [`docs/work/STATE.md`](../STATE.md), [`docs/work/m3/TASK.md`](TASK.md), [ADR 001](../../decisions/001-standalone-stack.md), [ADR 003](../../decisions/003-codex-app-server-adapter.md) as the shape your adapter ADR should follow, and the [M2 acceptance packet](../m2/ACCEPTANCE.md) for what was proven, what was not, and why.
 >
-> Deliver the six scope items on issue #7. Do not start a live run until qualification, the offline matrix against a labeled fake, and the credential-route negative control are committed and CI is green — and never from a dirty tree.
+> Deliver the scope in [`docs/work/m3/TASK.md`](TASK.md): the owner's six items and the reviewer's additions of 2026-09-20. **Do not start a live run** until the adapter ADR, qualification with its negative controls, the offline matrix against a labeled fake and the missing-credential-route refusal are committed with CI green — then post the live-run plan on issue #7 and **wait for the owner's go**, as M2 did on #5. Never run from a dirty tree.
 >
 > Report outcomes as they are. A failing test is a fact to state, not a thing to route around; an unproven property stays `not_evaluated`.
+
+## The constraints that will bite if you skip the packet
+
+- **Never** bypass permissions or use the dangerous skip flag. The guard refuses any requested permission mode broader than the user's configured default, which is **accept-edits**. Forward only **single-use** allow and deny — never "always allow" or a rule update.
+- Because edits do not prompt under accept-edits, build the deny and allow runs around a **shell command approval**. That is the pair that exercises the decision.
+- An as-configured session loads **eleven plugins** with hooks and outward-facing tools. Record their names, and the hook and MCP server names, in every receipt — **names only**. Write briefs that need none of them. **Decline every tool request outside the fixture workspace** with a recorded reason, and prove that refusal with an offline matrix case.
+- **Transport is yours to decide in the ADR**, not to inherit: ADR 001 recommended a Python SDK bridge, and the owner's later decision is that PIO drives the installed `claude` executable as the user would. Choose, and justify it against that decision and the Anthropic caveat in the README. **PIO never reads, copies or passes credentials.**
+- **Cost.** The configured model is Opus with 1M context and always-on thinking. The single as-configured run gets the smallest brief, a runner stop at **150,000**, and no retry. Everything else runs on **Sonnet 5** (`claude-sonnet-5`) under a new dated test-only exception, each with its own **250,000** limit. **1,000,000 total across every run, stop and report at 800,000.** Measure the harness's usage reporting granularity offline before setting any stop.
+- **Snapshot before and after every run:** the settings file, `~/.claude.json`, and a listing of the project transcript directory. Report by digest. PIO edits and removes nothing.
+- The reviewer's own Claude Code session runs on this machine. Three concurrent live sessions maximum, and **never touch a session you did not start**.
+- **2.1.278 is installed from a Homebrew cask that tracks latest and self-updates.** Qualification will refuse mid-milestone at some point; that is the feature working. Make re-qualification cheap.
 
 ## What the M2 builder learned, so you do not pay for it again
 
