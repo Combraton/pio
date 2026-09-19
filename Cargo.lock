@@ -644,10 +644,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
+name = "pio-claude"
+version = "0.1.0-dev"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "pio-cli"
 version = "0.1.0-dev"
 dependencies = [
  "anyhow",
+ "pio-claude",
  "pio-codex",
  "pio-core",
  "pio-host",

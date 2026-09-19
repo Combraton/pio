@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/pio-core", "crates/pio-host", "crates/pio-cli", "crates/pio-protocol", "crates/pio-codex"]
+members = ["crates/pio-core", "crates/pio-host", "crates/pio-cli", "crates/pio-protocol", "crates/pio-codex", "crates/pio-claude"]
 
 [workspace.package]
 version = "0.1.0-dev"

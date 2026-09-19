@@ -39,4 +39,11 @@ system/init → user (isReplay) → assistant (authentication_failed) → result
 - **Usage is reported at turn end in `result`.** Whether `assistant` messages carry usable incremental usage during a real turn is not measured here, because no real turn ran. If they do not, a mid-turn token stop is impossible in this transport and a limit can only prevent the next turn. This is the granularity measurement the owner asked for before the stops are set, and it is the first item in the live-run plan.
 - **The permission-mode breadth ordering is not established.** A documentation pass produced an ordering that contradicted itself, placing `dontAsk` — which auto-denies everything that would prompt — as broader than `acceptEdits`. The guard therefore requires equality with the configured default rather than encoding a guess.
 
+## Qualification against the real executable
+
+| File | Command | Result |
+| --- | --- | --- |
+| [qualification.json](qualification.json) | `target/debug/pio claude qualify --executable /opt/homebrew/bin/claude --work <scratch>` | **qualified**, exit 0. Version 2.1.278, resolved into the cask directory named `2.1.278`, binary sha256 `bd245662…`, surface listing `0dd17ec7…` equal to [the checked-in identity](../../../../adapters/claude/2.1.278/surface-identity.json), zero drift |
+| [wrong-executable-control.json](wrong-executable-control.json) | same, with `--executable ~/.local/bin/codex` | refused `unsupported_version`, exit 3, surface generation `skipped`, so no Claude-specific argument reached the other harness |
+
 None of this is a live run, a real journey or a model-backed result.

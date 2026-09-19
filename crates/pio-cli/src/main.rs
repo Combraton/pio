@@ -106,6 +106,62 @@ fn run() -> Result<()> {
                 ),
             }
         }
+        Some("claude") => {
+            let option = |name: &str| -> Result<&Path> {
+                let index = args
+                    .iter()
+                    .position(|a| a == name)
+                    .with_context(|| format!("missing claude option {name}"))?;
+                Ok(Path::new(
+                    args.get(index + 1).context("missing option value")?,
+                ))
+            };
+            let path = std::env::var_os("PATH");
+            match args.get(1).map(String::as_str) {
+                Some("qualify") => {
+                    // `--expected FILE` exists for drift controls; the
+                    // checked-in qualified surface is the default.
+                    let expected: serde_json::Value = if args.iter().any(|a| a == "--expected") {
+                        serde_json::from_slice(&std::fs::read(option("--expected")?)?)?
+                    } else {
+                        serde_json::from_str(pio_claude::QUALIFIED_SURFACE)?
+                    };
+                    let record = pio_claude::qualify(
+                        option("--executable")?,
+                        &expected,
+                        path.as_deref(),
+                        option("--work")?,
+                    )?;
+                    let qualified = record["qualified"] == true;
+                    println!("{}", serde_json::to_string_pretty(&record)?);
+                    if !qualified {
+                        std::process::exit(3);
+                    }
+                }
+                Some("auth-route") => {
+                    // Observes the route only. Never reads a credential file.
+                    let record = pio_claude::auth_route(
+                        option("--executable")?,
+                        option("--config-dir")?,
+                        path.as_deref(),
+                    )?;
+                    let usable = record["usable"] == true;
+                    println!("{}", serde_json::to_string_pretty(&record)?);
+                    if !usable {
+                        std::process::exit(3);
+                    }
+                }
+                Some("settings-snapshot") => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&pio_claude::settings_snapshot(option(
+                        "--config-dir"
+                    )?)?)?
+                ),
+                _ => bail!(
+                    "claude requires qualify --executable PATH --work DIR, auth-route --executable PATH --config-dir DIR or settings-snapshot --config-dir DIR"
+                ),
+            }
+        }
         Some("check-transcript") => {
             println!(
                 "{} schema-valid public results",

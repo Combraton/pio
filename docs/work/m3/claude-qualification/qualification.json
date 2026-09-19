@@ -1,0 +1,24 @@
+{
+  "format": "pio-claude-qualification/1",
+  "isolated_config_dir": true,
+  "pinned": {
+    "version": "2.1.278"
+  },
+  "qualified": true,
+  "refusals": [],
+  "resolution": {
+    "binary_sha256": "bd245662fb8a0e321b3bf133e930371d6563c387527885f30b2613aef3ba14d6",
+    "resolved": "/opt/homebrew/Caskroom/claude-code@latest/2.1.278/claude",
+    "resolved_parent": "2.1.278",
+    "selected": "/opt/homebrew/bin/claude"
+  },
+  "selected": "/opt/homebrew/bin/claude",
+  "surface": {
+    "command_count": 8,
+    "drift": [],
+    "drift_count": 0,
+    "expected_surface_listing_sha256": "0dd17ec774e837b830d0800697b0cad251f7c9fdf46c0ea95e1730181b9ff7c5",
+    "surface_listing_sha256": "0dd17ec774e837b830d0800697b0cad251f7c9fdf46c0ea95e1730181b9ff7c5"
+  },
+  "version": "2.1.278"
+}

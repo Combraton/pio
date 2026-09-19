@@ -16,6 +16,7 @@ anyhow.workspace = true
 serde_json.workspace = true
 pio-protocol = { path = "../pio-protocol" }
 pio-codex = { path = "../pio-codex" }
+pio-claude = { path = "../pio-claude" }
 
 [dev-dependencies]
 tempfile = "3"
