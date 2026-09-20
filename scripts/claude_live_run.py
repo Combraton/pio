@@ -95,6 +95,14 @@ BRIEFS = {
             f'exit status. Do nothing else: {TAG_COMMAND}').encode(),
     'R4b': (f'Run exactly this one command once in this repository and report its '
             f'exit status. Do nothing else: {TAG_COMMAND}').encode(),
+    # R3b and R4b were run with PIO believing it was the host and not being
+    # one: it named no prompt tool and sent no handshake, so the CLI denied
+    # anything that would prompt and PIO never saw the request. Same brief,
+    # attached this time.
+    'R3c': (f'Run exactly this one command once in this repository and report its '
+            f'exit status. Do nothing else: {TAG_COMMAND}').encode(),
+    'R4c': (f'Run exactly this one command once in this repository and report its '
+            f'exit status. Do nothing else: {TAG_COMMAND}').encode(),
     'R7': b'Count slowly from 1 to 200, one number per line, with no tools.',
 }
 RUNS = list(BRIEFS)
@@ -317,6 +325,10 @@ OBSERVATION = {
             lambda r: r['decision']['requested'] and bool(r['decision']['answered'])),
     'R4b': ('a permission request surfaced and answered by the caller',
             lambda r: r['decision']['requested'] and bool(r['decision']['answered'])),
+    'R3c': ('a permission request surfaced and answered by the caller',
+            lambda r: r['decision']['requested'] and bool(r['decision']['answered'])),
+    'R4c': ('a permission request surfaced and answered by the caller',
+            lambda r: r['decision']['requested'] and bool(r['decision']['answered'])),
     'R5': ('a signal actually sent to a running harness',
            lambda r: r['cancel']['signal_sent'] and r['cancel']['tested_cancel']),
     'R6': ("PIO's own decline of a target outside the workspace",
@@ -431,7 +443,7 @@ class Service:
                 # than only the runner's plumbing around it.
                 scenario['permission_request'] = {
                     'tool_name': 'Bash', 'input': {'command': DECISION_COMMAND}}
-            if run in ('R3b', 'R4b'):
+            if run in ('R3b', 'R4b', 'R3c', 'R4c'):
                 scenario['permission_request'] = {
                     'tool_name': 'Bash', 'input': {'command': TAG_COMMAND}}
             if run == 'R6':
@@ -745,13 +757,13 @@ def run_one(run, args):
                      'the turn finished before the cancel was sent: this run '
                      'observed a completed turn, not a cancel')
 
-        elif run in ('R3', 'R4', 'R3b', 'R4b'):
+        elif run in ('R3', 'R4', 'R3b', 'R4b', 'R3c', 'R4c'):
             # The decision is the caller's, and it is the whole point of these
             # two runs: R3 denies, R4 allows. If the harness never asks, that
             # is a negative result for the decision path and is recorded as
             # one — never re-run with a different command until something
             # prompts.
-            decision = 'deny' if run in ('R3', 'R3b') else 'allow'
+            decision = 'deny' if run in ('R3', 'R3b', 'R3c') else 'allow'
             answered = []
             view = wait(service, lambda v: v['runtime'] in ('requires_action', 'exited'), 300)
             while view['runtime'] == 'requires_action' and len(answered) < 4:
@@ -882,16 +894,17 @@ def main():
     for run in args.run:
         if run in NOT_RUN:
             raise SystemExit(f'{run} is not run: {NOT_RUN[run]}')
-        if run == 'R4b' and not args.dry_run:
-            # Owner rule: if R3b draws no prompt, that is the finding. Stop
-            # there, do not run R4b, and do not try a third command.
-            prior = args.out / 'R3b.json'
+        if run in ('R4b', 'R4c') and not args.dry_run:
+            # Owner rule: if the deny run draws no prompt, that is the finding.
+            # Stop there, do not run the allow, and do not try another command.
+            deny_run = 'R3b' if run == 'R4b' else 'R3c'
+            prior = args.out / f'{deny_run}.json'
             if not prior.exists():
-                raise SystemExit('R4b needs R3b first: no R3b receipt')
+                raise SystemExit(f'{run} needs {deny_run} first: no receipt')
             if not json.loads(prior.read_text())['decision']['requested']:
                 raise SystemExit(
-                    'R4b is not run: R3b drew no permission request, which is '
-                    'the finding. No third command is tried.')
+                    f'{run} is not run: {deny_run} drew no permission request, '
+                    f'which is the finding. No other command is tried.')
         run_one(run, args)
 
 
