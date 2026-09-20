@@ -49,6 +49,9 @@ MODEL = 'claude-sonnet-5'
 MODEL_EXCEPTION = 'owner-2026-09-20-m3-fixture-runs'
 PERMISSION_MODE = 'acceptEdits'
 DELIVERY_TIMEOUT = 120
+# Long enough that the turn is genuinely under way when the signal arrives:
+# cancelling an idle turn would prove nothing about what a cancel costs.
+CANCEL_AFTER = 20
 EXECUTION_DEADLINE = 600
 
 # Verified offline against the owner's 38 `Bash(...)` allow rules across both
@@ -76,6 +79,15 @@ RUNS = list(BRIEFS)
 # It is deferred until the control exists, and ADR 004 §10 already records that
 # steering behaviour is not observed for this harness.
 DEFERRED = {'R8': 'no steer control in the Claude host; see ADR 004 section 10'}
+
+# R4 was to be the caller's **allow**. R3 measured that this harness never asks
+# for this command under the owner's configuration: it ran `touch` unprompted
+# and created the marker. R4 carries the same brief, so it could only reproduce
+# that negative at the cost of another turn. Owner decision after R3: skip it,
+# and carry the caller's decision path as an unexercised obligation rather than
+# swapping in a command chosen because it prompts.
+NOT_RUN = {'R4': 'no permission request arrives for this brief; see R3 and '
+                 'docs/work/m3/claude-live/R4-not-run.json'}
 
 
 def sha(data):
@@ -268,6 +280,10 @@ class Service:
                 # than only the runner's plumbing around it.
                 scenario['permission_request'] = {
                     'tool_name': 'Bash', 'input': {'command': DECISION_COMMAND}}
+            if run == 'R5':
+                # The fake must still be running when the signal arrives, or
+                # the dry run would rehearse cancelling nothing.
+                scenario['delay_ms'] = (CANCEL_AFTER + 10) * 1000
             env['PIO_CLAUDE_FAKE_SCENARIO'] = json.dumps(scenario)
         else:
             config_dir = HOME / '.claude'
@@ -324,6 +340,13 @@ class Service:
         envelope = command('execution.submit', dict(kind='execution.execution', id=identity),
                            payload, command_id=identity)
         envelope['extensions'] = {CONTENT: dict(media_type='text/plain', text=brief.decode())}
+        with self.client() as c:
+            return c.call(envelope)
+
+    def cancel(self, revision, identity='work'):
+        envelope = command('execution.cancel',
+                           dict(kind='execution.execution', id=identity), {},
+                           command_id=f'{identity}.cancel', revision=revision)
         with self.client() as c:
             return c.call(envelope)
 
@@ -481,6 +504,38 @@ def run_one(run, args):
                 identity_after=first_event(events, 'spawned').get('identity'),
                 spawn_markers=len([e for e in events if e['kind'] == 'spawned']),
                 brief_releases=len([e for e in events if e['kind'] == 'turn_start_sent']))
+        elif run == 'R5':
+            # Cancel is SIGINT and is described as exactly that; the in-band
+            # `interrupt_receipt_v1` the capabilities advertise is unverified
+            # against 2.1.278. What this run is for is what a cancel *costs*:
+            # `result` is the only place usage is reported, so a signal that
+            # ends the turn first leaves usage unknown. Recorded either way,
+            # and never as zero.
+            wait(service, lambda v: v['delivery'] == 'acknowledged', 180)
+            time.sleep(CANCEL_AFTER)
+            at_cancel = service.inspect()
+            asked = time.monotonic()
+            response = service.cancel(at_cancel['revision'])
+            view = wait(service, lambda v: v['runtime'] == 'exited', 900)
+            elapsed = time.monotonic() - asked
+            events = service.events()
+            usage_event = first_event(events, 'usage')
+            extra['cancel'] = dict(
+                requested_after_seconds=CANCEL_AFTER,
+                accepted=response.get('result') is not None,
+                error=response.get('error', {}).get('data'),
+                # The signal, as the host describes it to itself.
+                control_sent=[{k: e.get(k) for k in
+                               ('method', 'in_band', 'signal_delivered',
+                                'escalates_after_ms', 'usage_may_be_unknown')}
+                              for e in events if e['kind'] == 'control_sent'],
+                seconds_to_exit=round(elapsed, 3),
+                # The question the plan asked: does a `result` arrive after the
+                # signal, and is usage therefore knowable on cancel?
+                turn_completed=bool(first_event(events, 'turn_completed')),
+                usage_reported=bool(usage_event),
+                usage_basis='observed' if usage_event else 'unknown')
+
         elif run in ('R3', 'R4'):
             # The decision is the caller's, and it is the whole point of these
             # two runs: R3 denies, R4 allows. If the harness never asks, that
@@ -576,6 +631,8 @@ def main():
         ROOT_OVERRIDE = args.out / 'tree'
         args.out = args.out.parent / 'claude-live-dry-run'
     for run in args.run:
+        if run in NOT_RUN:
+            raise SystemExit(f'{run} is not run: {NOT_RUN[run]}')
         run_one(run, args)
 
 
