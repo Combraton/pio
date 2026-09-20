@@ -378,9 +378,12 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let after = pio_claude::durable_snapshot(&home, &config_dir, &fixture)?;
     let diff = pio_claude::durable_diff(&before, &after);
     let tool_uses = pio_claude::tool_use_records(&tool_use_messages, &fixture, &cwd);
-    life.event(json!({"kind":"harness_exited","code":exit}))?;
+    // Ordered deliberately: the exit event is what turns the runtime to
+    // `exited`, so everything a caller must see on a finished execution is
+    // recorded first. A matrix run caught the other order.
     life.event(json!({"kind":"tool_uses","record":tool_uses}))?;
     life.event(json!({"kind":"config_after","snapshot":after,"diff":diff}))?;
+    life.event(json!({"kind":"harness_exited","code":exit}))?;
     let receipt = json!({
         "source":source(&life.spec),
         "kind":"native_turn_completed",

@@ -195,15 +195,24 @@ class Service:
         env = {'PATH': f'{HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
                'HOME': str(HOME), 'USER': os.environ.get('USER', '')}
         if dry_run:
+            # A dry run must not read the owner's real configuration, and on a
+            # CI runner there is none: the permission-mode guard then refuses
+            # an absent default and the service never starts. So the dry run
+            # gets its own stand-in settings, which is also the honest thing —
+            # it is exercising the runner, not the owner's machine.
+            config_dir = private_dir(self.run, 'claude-config')
+            (config_dir / 'settings.json').write_text(json.dumps(
+                {'permissions': {'defaultMode': PERMISSION_MODE, 'allow': ['Bash(cat)']}}))
             executable = self.private / 'fake-claude'
             executable.write_text(f"#!/bin/sh\nexec '{BINARY}' claude fake-cli \"$@\"\n")
             executable.chmod(0o755)
             env['PIO_CLAUDE_FAKE_SCENARIO'] = json.dumps(
                 {'markers': str(self.private / 'markers')})
         else:
+            config_dir = HOME / '.claude'
             executable = Path(shutil.which('claude') or '/opt/homebrew/bin/claude')
         claude = dict(executable=str(executable), env=env,
-                      config_dir=str(HOME / '.claude'), home=str(HOME),
+                      config_dir=str(config_dir), home=str(HOME),
                       fixture_root=str(LIVE / 'fixtures'),
                       permission_mode=PERMISSION_MODE, labeled_fake=dry_run)
         if model:

@@ -224,15 +224,19 @@ class Service:
         env = {'PATH': f'{HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
                'HOME': str(HOME), 'USER': os.environ.get('USER', '')}
         if dry_run:
+            # A dry run exercises the runner, not the owner's machine, so it
+            # never points at the real configuration directory.
+            config_dir = private_dir(self.run, 'opencode-config')
             executable = self.private / 'fake-opencode'
             executable.write_text(f"#!/bin/sh\nexec '{BINARY}' opencode fake-acp \"$@\"\n")
             executable.chmod(0o755)
             env['PIO_OPENCODE_FAKE_SCENARIO'] = json.dumps(
                 {'model': MODEL, 'markers': str(self.private / 'markers')})
         else:
+            config_dir = HOME / '.config/opencode'
             executable = Path(shutil.which('opencode2') or str(HOME / '.local/bin/opencode2'))
         opencode = dict(executable=str(executable), env=env,
-                        config_dir=str(HOME / '.config/opencode'), home=str(HOME),
+                        config_dir=str(config_dir), home=str(HOME),
                         fixture_root=str(LIVE / 'fixtures'), labeled_fake=dry_run)
         # Every run passes an explicit MiniMax model: the configured default is
         # a provider the owner has excluded from PIO entirely.

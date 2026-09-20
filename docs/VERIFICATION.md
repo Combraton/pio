@@ -193,6 +193,8 @@ Every submit carries a **120 second delivery timeout and a 600 second execution 
 
 The cap's measure is **input, output, cache creation and cache read, summed, and reported separately** in every receipt. ACP reports input and output only, and the receipt says so rather than implying the other two were zero.
 
+A dry run uses **its own stand-in settings directory**, never the owner's. On a machine with no `~/.claude/settings.json` the permission-mode guard correctly refuses an absent default and the service never starts — which is what CI showed — and a run exercising the runner has no business reading the owner's configuration anyway.
+
 Stop rules are applied to every finished run and abort the sequence: no usage report (recorded as **unknown, never zero**), a usage report that parses to zero while the harness sent something, an effective permission mode that did not match the requested one, a change to the owner's settings, the owner's OpenCode service moving, or cumulative usage reaching 80 per cent of the cap.
 
 The zero-parse stop exists because the first OpenCode dry run produced a receipt claiming a *reported* usage of zero: ACP spells its counters in camelCase and the measure read the Claude spellings. A reported zero is indistinguishable from unknown and worse than either.
