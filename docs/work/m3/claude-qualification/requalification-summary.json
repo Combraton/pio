@@ -63,6 +63,66 @@
   "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
   "qualified": true,
   "stream": {
+    "attached": {
+      "apiKeySource": null,
+      "authentication_failure": {
+        "error": null,
+        "is_api_error_message": null
+      },
+      "brief_sha256": "b27d6b5a47800233b069297b17d87c244246c3babc973f6522cfbd2c1835e38b",
+      "capabilities": null,
+      "claude_code_version": null,
+      "exit": 0,
+      "extra_args": [
+        "--permission-mode",
+        "acceptEdits",
+        "--permission-prompts",
+        "host",
+        "--permission-prompt-tool",
+        "stdio"
+      ],
+      "held_stdin_open_seconds": 0,
+      "init_keys": [],
+      "init_name_list_lengths": {
+        "agents": 0,
+        "mcp_servers": 0,
+        "plugins": 0,
+        "skills": 0,
+        "slash_commands": 0,
+        "tools": 0
+      },
+      "init_received": false,
+      "initialize_answered": true,
+      "initialize_answered_in_seconds": 0.691,
+      "initialize_response_error": null,
+      "initialize_response_keys": [
+        "pending_permission_requests",
+        "pending_user_dialog_requests",
+        "request_id",
+        "response",
+        "subtype"
+      ],
+      "initialize_response_subtype": "success",
+      "initialize_sent": true,
+      "is_error": null,
+      "label": "attached",
+      "message_sequence": [
+        "control_response"
+      ],
+      "messages_before_any_stdin_write": 0,
+      "model": null,
+      "permissionMode": null,
+      "permission_denials": null,
+      "replay_acknowledged": false,
+      "replay_matches_sent": false,
+      "result_keys": [],
+      "seconds_from_write_to_init": null,
+      "stderr_mentions_unknown_option": false,
+      "stderr_sha256": null,
+      "terminal_reason": null,
+      "total_cost_usd": null,
+      "usage_at_turn_end": null
+    },
     "init_timing": {
       "apiKeySource": "none",
       "authentication_failure": {
@@ -114,6 +174,12 @@
         "tools": 22
       },
       "init_received": true,
+      "initialize_answered": false,
+      "initialize_answered_in_seconds": null,
+      "initialize_response_error": null,
+      "initialize_response_keys": [],
+      "initialize_response_subtype": null,
+      "initialize_sent": false,
       "is_error": true,
       "label": "init-timing",
       "message_sequence": [
@@ -151,7 +217,9 @@
         "usage",
         "uuid"
       ],
-      "seconds_from_write_to_init": 0.039,
+      "seconds_from_write_to_init": 0.014,
+      "stderr_mentions_unknown_option": false,
+      "stderr_sha256": null,
       "terminal_reason": "api_error",
       "total_cost_usd": 0,
       "usage_at_turn_end": {
@@ -227,6 +295,12 @@
         "tools": 22
       },
       "init_received": true,
+      "initialize_answered": false,
+      "initialize_answered_in_seconds": null,
+      "initialize_response_error": null,
+      "initialize_response_keys": [],
+      "initialize_response_subtype": null,
+      "initialize_sent": false,
       "is_error": true,
       "label": "product-defaults",
       "message_sequence": [
@@ -264,7 +338,9 @@
         "usage",
         "uuid"
       ],
-      "seconds_from_write_to_init": 0.229,
+      "seconds_from_write_to_init": 0.279,
+      "stderr_mentions_unknown_option": false,
+      "stderr_sha256": null,
       "terminal_reason": "api_error",
       "total_cost_usd": 0,
       "usage_at_turn_end": {
@@ -288,6 +364,54 @@
         "service_tier": "standard",
         "speed": "standard"
       }
+    },
+    "prompt_tool_only": {
+      "apiKeySource": null,
+      "authentication_failure": {
+        "error": null,
+        "is_api_error_message": null
+      },
+      "brief_sha256": "b27d6b5a47800233b069297b17d87c244246c3babc973f6522cfbd2c1835e38b",
+      "capabilities": null,
+      "claude_code_version": null,
+      "exit": 0,
+      "extra_args": [
+        "--permission-prompt-tool",
+        "stdio"
+      ],
+      "held_stdin_open_seconds": 0,
+      "init_keys": [],
+      "init_name_list_lengths": {
+        "agents": 0,
+        "mcp_servers": 0,
+        "plugins": 0,
+        "skills": 0,
+        "slash_commands": 0,
+        "tools": 0
+      },
+      "init_received": false,
+      "initialize_answered": false,
+      "initialize_answered_in_seconds": null,
+      "initialize_response_error": null,
+      "initialize_response_keys": [],
+      "initialize_response_subtype": null,
+      "initialize_sent": false,
+      "is_error": null,
+      "label": "prompt-tool",
+      "message_sequence": [],
+      "messages_before_any_stdin_write": 0,
+      "model": null,
+      "permissionMode": null,
+      "permission_denials": null,
+      "replay_acknowledged": false,
+      "replay_matches_sent": false,
+      "result_keys": [],
+      "seconds_from_write_to_init": null,
+      "stderr_mentions_unknown_option": false,
+      "stderr_sha256": null,
+      "terminal_reason": null,
+      "total_cost_usd": null,
+      "usage_at_turn_end": null
     },
     "requested_mode": {
       "apiKeySource": "none",
@@ -343,6 +467,12 @@
         "tools": 22
       },
       "init_received": true,
+      "initialize_answered": false,
+      "initialize_answered_in_seconds": null,
+      "initialize_response_error": null,
+      "initialize_response_keys": [],
+      "initialize_response_subtype": null,
+      "initialize_sent": false,
       "is_error": true,
       "label": "requested-mode",
       "message_sequence": [
@@ -380,7 +510,9 @@
         "usage",
         "uuid"
       ],
-      "seconds_from_write_to_init": 0.216,
+      "seconds_from_write_to_init": 0.225,
+      "stderr_mentions_unknown_option": false,
+      "stderr_sha256": null,
       "terminal_reason": "api_error",
       "total_cost_usd": 0,
       "usage_at_turn_end": {
@@ -404,6 +536,64 @@
         "service_tier": "standard",
         "speed": "standard"
       }
+    },
+    "unattached": {
+      "apiKeySource": null,
+      "authentication_failure": {
+        "error": null,
+        "is_api_error_message": null
+      },
+      "brief_sha256": "b27d6b5a47800233b069297b17d87c244246c3babc973f6522cfbd2c1835e38b",
+      "capabilities": null,
+      "claude_code_version": null,
+      "exit": 0,
+      "extra_args": [
+        "--permission-mode",
+        "acceptEdits",
+        "--permission-prompts",
+        "host"
+      ],
+      "held_stdin_open_seconds": 0,
+      "init_keys": [],
+      "init_name_list_lengths": {
+        "agents": 0,
+        "mcp_servers": 0,
+        "plugins": 0,
+        "skills": 0,
+        "slash_commands": 0,
+        "tools": 0
+      },
+      "init_received": false,
+      "initialize_answered": true,
+      "initialize_answered_in_seconds": 0.694,
+      "initialize_response_error": null,
+      "initialize_response_keys": [
+        "pending_permission_requests",
+        "pending_user_dialog_requests",
+        "request_id",
+        "response",
+        "subtype"
+      ],
+      "initialize_response_subtype": "success",
+      "initialize_sent": true,
+      "is_error": null,
+      "label": "no-prompt-tool",
+      "message_sequence": [
+        "control_response"
+      ],
+      "messages_before_any_stdin_write": 0,
+      "model": null,
+      "permissionMode": null,
+      "permission_denials": null,
+      "replay_acknowledged": false,
+      "replay_matches_sent": false,
+      "result_keys": [],
+      "seconds_from_write_to_init": null,
+      "stderr_mentions_unknown_option": false,
+      "stderr_sha256": null,
+      "terminal_reason": null,
+      "total_cost_usd": null,
+      "usage_at_turn_end": null
     }
   },
   "stream_identity": {
@@ -440,12 +630,22 @@
       "uuid"
     ],
     "init_waits_for_stdin": true,
+    "initialize_answered": true,
+    "initialize_response_keys": [
+      "pending_permission_requests",
+      "pending_user_dialog_requests",
+      "request_id",
+      "response",
+      "subtype"
+    ],
+    "initialize_response_subtype": "success",
     "message_sequence": [
       "system/init",
       "user",
       "assistant",
       "result/success"
     ],
+    "permission_prompt_tool_accepted": true,
     "product_default_model": "claude-opus-5[1m]",
     "product_default_permission_mode": "default",
     "result_keys": [

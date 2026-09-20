@@ -48,8 +48,9 @@ pub const STREAM_ARGS: &[&str] = &[
 const ATTACH_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// How long a surfaced permission request may wait for a caller's decision
-/// before PIO answers it itself. A request nobody answers holds the harness
-/// open forever, so the default is a **single-use deny**, recorded as PIO's.
+/// before PIO answers it itself, when the caller named no delivery timeout.
+/// A request nobody answers holds the harness open forever, so the default is
+/// a **single-use deny**, recorded as PIO's.
 const ACTION_ANSWER_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Send the handshake and wait for its answer, keeping anything else that
@@ -230,6 +231,11 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     // Who decided each tool use, by `tool_use_id`. The result's denial list
     // says a use was refused and never says by whom.
     let mut decided = json!({});
+    // The caller's own delivery timeout is how long their decision may take.
+    let answer_timeout = life.spec["action_answer_timeout_seconds"]
+        .as_u64()
+        .map(Duration::from_secs)
+        .unwrap_or(ACTION_ANSWER_TIMEOUT);
     let mut tool_use_messages: Vec<Value> = Vec::new();
     let mut interrupt_deadline: Option<(std::time::Instant, String)> = None;
     let mut escalation: Option<Value> = None;
@@ -328,10 +334,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                     } else {
                         pending_actions.insert(
                             action_seq,
-                            (
-                                message.clone(),
-                                std::time::Instant::now() + ACTION_ANSWER_TIMEOUT,
-                            ),
+                            (message.clone(), std::time::Instant::now() + answer_timeout),
                         );
                         life.event(json!({"kind":"action_requested",
                             "action_seq":action_seq,"request_id":message["request_id"],
@@ -429,7 +432,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
             }
             life.event(json!({"kind":"request_denied_by_default",
                 "action_seq":seq,
-                "after_seconds":ACTION_ANSWER_TIMEOUT.as_secs(),
+                "after_seconds":answer_timeout.as_secs(),
                 "suggestions_offered":decision["suggestions_offered"],
                 "suggestions_acted_on":0,
                 "widening_fields_sent":[]}))?;

@@ -246,6 +246,10 @@ impl Provider {
                 spec["home"] = host["home"].clone();
                 spec["permission_mode"] = host["permission_mode"].clone();
                 spec["model"] = host["model"].clone();
+                // How long a surfaced permission request may wait for the
+                // caller who asked for it. Theirs to set, not the host's.
+                spec["action_answer_timeout_seconds"] =
+                    p["payload"]["timeouts"]["delivery"].clone();
             }
             "opencode" => {
                 spec["config_dir"] = host["config_dir"].clone();

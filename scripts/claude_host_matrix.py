@@ -47,6 +47,7 @@ CASES = [
     'service_reports_the_transcript_the_run_wrote',
     'service_records_the_configured_model_from_settings',
     'service_tells_a_harness_refusal_apart_from_a_pio_decline',
+    'service_denies_a_request_nobody_answers',
     'service_refuses_an_unqualified_executable_at_start',
     'service_answers_a_request_it_will_not_act_on',
     'service_interrupt_escalates_when_the_signal_is_ignored',
@@ -275,12 +276,13 @@ class ServiceCase(Case):
             'commit', '-q', '-m', 'fixture')
         return repo, git('rev-parse', 'HEAD').stdout.strip()
 
-    def submit(self, identity='work', brief=b'Fixture task: reply with one line.'):
+    def submit(self, identity='work', brief=b'Fixture task: reply with one line.',
+               delivery_timeout=120):
         from public_api import command
         repo, base = self.fixture_repo(identity)
         payload = dict(brief=dict(digest=digest(brief), media_type='text/plain'),
                        workspace=dict(repository=str(repo), base=base, cleanup='retain'),
-                       timeouts=dict(delivery=120, execution_deadline=600))
+                       timeouts=dict(delivery=delivery_timeout, execution_deadline=600))
         envelope = command('execution.submit', dict(kind='execution.execution', id=identity),
                            payload, command_id=identity)
         envelope['extensions'] = {CONTENT: dict(media_type='text/plain', text=brief.decode())}
@@ -688,6 +690,44 @@ def run_case(out, name):
         assert record['denied_by_harness_count'] == 1, record
         assert record['tool_uses'][0]['outcome'] == 'attempted_and_denied', record
         assert record['liability'] == 'none_observed', record
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_denies_a_request_nobody_answers':
+        # PIO decides nothing on the user's behalf except this. A request the
+        # caller never answers holds the harness open forever and leaves the
+        # execution unfinishable, so the default is a **single-use deny**,
+        # recorded as PIO's own. The wait is the caller's declared delivery
+        # timeout, not a number the host picked.
+        case = ServiceCase(out, name, scenario={
+            'permission_request': {'tool_name': 'Bash',
+                                   'input': {'command': 'git tag pio-live-marker'}}})
+        case.start()
+        # Five seconds, so the case does not sit for the default two minutes.
+        case.submit(delivery_timeout=5)
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited', seconds=120)
+        events = case.host_events()
+        # The request was surfaced to the caller, who answered nothing.
+        assert len([e for e in events if e['kind'] == 'action_requested']) == 1, events[-6:]
+        assert [e for e in events if e['kind'] == 'control_applied'] == []
+        defaulted = [e for e in events if e['kind'] == 'request_denied_by_default']
+        assert len(defaulted) == 1, [e['kind'] for e in events]
+        assert defaulted[0]['after_seconds'] == 5, defaulted
+        # A single-use deny, and nothing that widens a permission.
+        assert defaulted[0]['widening_fields_sent'] == [], defaulted
+        assert defaulted[0]['suggestions_acted_on'] == 0, defaulted
+        assert defaulted[0]['suggestions_offered'] == 1, defaulted
+        # The harness took it and the turn ended rather than hanging.
+        assert view['exit'] == {'code': 0}, view
+        recorded = case.markers_of('permission_decision')
+        assert [r['behavior'] for r in recorded] == ['deny'], recorded
+        assert recorded[0]['widening_fields_received'] == [], recorded
+        # Attribution is not asserted here: the fake's permission-request path
+        # emits the control request without an accompanying assistant tool-use
+        # block, so there is no tool use to attribute. The real harness sends
+        # both, and `a_refusal_is_attributed_to_whoever_decided_it` covers the
+        # PIO-decided case directly.
+        record = [e for e in events if e['kind'] == 'tool_uses'][0]['record']
+        assert record['tool_uses'] == [], record
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     elif name == 'service_refuses_an_unqualified_executable_at_start':
