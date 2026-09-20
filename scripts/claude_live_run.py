@@ -134,21 +134,25 @@ def preflight(dry_run):
         raise SystemExit('refusing to run live from a dirty tree:\n' + dirty)
     head = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'],
                           capture_output=True, text=True).stdout.strip()
-    # The binary must be newer than the last commit that could have changed it,
-    # or the receipt describes code that is not what ran.
-    last = subprocess.run(['git', '-C', str(ROOT), 'log', '-1', '--format=%ct',
-                           '--', 'crates', 'Cargo.lock', 'Cargo.toml'],
-                          capture_output=True, text=True).stdout.strip()
     if not BINARY.exists():
         raise SystemExit(f'refusing to run live: no binary at {BINARY}')
+    # The binary must be newer than every source it is built from. Comparing it
+    # to the *commit* timestamp instead refused a correct binary, because
+    # building before committing always loses that comparison — the binary held
+    # exactly the committed code and was still called stale.
+    sources = [ROOT / 'Cargo.toml', ROOT / 'Cargo.lock']
+    sources += [p for p in (ROOT / 'crates').rglob('*')
+                if p.is_file() and p.suffix in ('.rs', '.toml')]
+    newest = max(sources, key=lambda p: p.stat().st_mtime)
     built = BINARY.stat().st_mtime
-    if last and built < float(last):
+    if built < newest.stat().st_mtime:
         raise SystemExit(
-            f'refusing to run live: {BINARY.name} was built before the last commit '
-            f'touching crates or the lockfile; rebuild from {head[:12]} first')
+            f'refusing to run live: {BINARY.name} is older than '
+            f'{newest.relative_to(ROOT)}; rebuild from {head[:12]} first')
     return {'checked': True, 'commit': head, 'dirty': False,
             'binary_sha256': binary_sha256(),
-            'binary_built_after_last_code_commit': True}
+            'binary_newer_than_every_source': True,
+            'newest_source': str(newest.relative_to(ROOT))}
 
 
 def ledger_path():
