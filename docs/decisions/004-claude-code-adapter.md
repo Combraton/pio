@@ -209,6 +209,12 @@ It is now controlled and fixed. A cleared-environment run and an inherited-envir
 
 The same disclosure answers the reviewer's question about that probe reporting `acceptEdits` and Opus. The mode came from a flag the probe itself passed, `--permission-mode acceptEdits`; the control run without the flag reports `default`. The model is the **product default**, reproduced with an empty configuration and a cleared environment, and it is not evidence of a leak — nor, as §8 now records, evidence of fidelity.
 
+### The ledger carries observed and charged
+
+Owner decision of 2026-09-20, after R5. A cancelled turn reports an empty usage block, so what it spent is unknown — and a cap kept in unknowns is not a cap. The ledger therefore carries two numbers per run: **observed**, what the harness reported, and **charged**, what the cap is measured against. They differ only where a turn reported nothing.
+
+A turn cancelled **inside its first model call** is charged a flat **40,000**. The basis is the only two single-call turns measured: R1 at 33,793 and R5 attempt 1 at 32,957. **Every stop rule is applied to charged**, and both numbers, with this basis, appear in the ledger and in every receipt.
+
 ### Disclosure: a cancelled turn counted as zero
 
 R5's cancel worked and PIO mis-recorded what came back. The harness answers SIGINT with a `result` whose usage block is empty; the host turned that into an observation, and the protocol was told `basis: observed, amount: 0, liability: resolved` for a turn that had spent a session's prefix plus five seconds of generation. The ledger counted nothing and no stop rule fired, because the rule tested whether a report was *present*.
@@ -232,6 +238,7 @@ The same mistake made the **containment boundary** the fixtures area rather than
 ## Named unmeasured items and obligations
 
 - ~~Usage-reporting granularity~~ **measured on R1**: `assistant` messages carry a full `usage` block and `result.usage.iterations` holds one entry per model call, so a mid-turn stop is possible. The host still records usage once, from `result`, so PIO's stops remain next-turn stops until it reads per-message usage. That gap is PIO's, not the harness's.
+- **Obligation, before any further cancel run** (owner, 2026-09-20), in order: the host reads **per-message** usage rather than only `result`; then, with partial messages enabled, measure whether the **start of each model call** reports its input and cache tokens. If it does, a cancelled turn's unknown becomes a measured lower bound rather than an allowance.
 - **Usage is not knowable on cancel** (measured on R5). SIGINT is answered: a `result` arrives with `terminal_reason: aborted_streaming`, `status: failed`, an empty `iterations` and every usage part zero. The tokens the turn spent before the signal are **unaccounted**, and PIO records them as unknown rather than zero. The defect this found is recorded in the disclosure below.
 - The in-band interrupt and the permission wire shapes (§8), each `not_evaluated`.
 - **The caller's own permission decision is unexercised against the real harness.** R3 measured that a mutating shell command inside the workspace runs with **no prompt at all** under the owner's `acceptEdits` default: the file it created is the evidence, and no request reached PIO. The decision path — `execution.respond_action` to a single-use `allow` or `deny` — is proven only against the labeled fake. R4 was to be the allow and is not run, because it carries the same brief; [its record](../work/m3/claude-live/R4-not-run.json) says so. Reaching it needs a tool call this harness actually asks about, which is a measurement, not a guess.

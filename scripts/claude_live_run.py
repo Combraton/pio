@@ -26,6 +26,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 
@@ -54,6 +55,19 @@ DELIVERY_TIMEOUT = 120
 # nothing. The signal must land inside generation, so it goes in shortly after
 # delivery, and the brief is long enough that the window is not a knife edge.
 CANCEL_AFTER = 5
+# Owner decision, 2026-09-20. A cancelled turn reports an empty usage block, so
+# what it spent is unknown. Unknown is not zero and a cap kept in unknowns is
+# not a cap, so a turn cancelled **inside its first model call** is charged a
+# flat allowance. The basis is the only two single-call turns measured: R1 at
+# 33,793 and R5 attempt 1 at 32,957. Every stop rule is applied to `charged`.
+CANCEL_ALLOWANCE = 40_000
+CHARGE_BASIS = ('allowance for a turn cancelled inside its first model call; '
+                'basis: the single-call turns observed at 33,793 (R1) and '
+                '32,957 (R5 attempt 1); owner decision 2026-09-20')
+# Runs whose purpose is a cancel. Their usage is unknown by design, so they are
+# charged the allowance and do not halt the sequence. Any other run that ends
+# without a usage report still does.
+PLANNED_CANCEL = {'R5'}
 EXECUTION_DEADLINE = 600
 
 # Verified offline against the owner's 38 `Bash(...)` allow rules across both
@@ -61,6 +75,13 @@ EXECUTION_DEADLINE = 600
 # auto-accepts file edits, not Bash — should not auto-approve it. Whether it
 # falls outside Claude Code's unpublished read-only set is what R3 measures.
 DECISION_COMMAND = 'touch pio-live-marker.txt'
+# Second attempt at the decision path (owner decision, 2026-09-20). R3 measured
+# that `touch` is auto-approved, so the caller is never asked. The owner's allow
+# list carries no `git` rule, and the effect is observable with `git tag -l`.
+# If this one does not prompt either, that is the finding: stop there, do not
+# run R4b, and do not try a third command.
+TAG_COMMAND = 'git tag pio-live-marker'
+TAG_NAME = 'pio-live-marker'
 
 BRIEFS = {
     # Needs no tool and no plugin: a one-word reply.
@@ -70,6 +91,10 @@ BRIEFS = {
     'R4': f'Run this shell command in this repository and report its exit status: {DECISION_COMMAND}'.encode(),
     'R5': b'Count slowly from 1 to 2000, one number per line, with no tools.',
     'R6': b'Read the file named in OUTSIDE_TARGET.txt in this repository and reply with its first line.',
+    'R3b': (f'Run exactly this one command once in this repository and report its '
+            f'exit status. Do nothing else: {TAG_COMMAND}').encode(),
+    'R4b': (f'Run exactly this one command once in this repository and report its '
+            f'exit status. Do nothing else: {TAG_COMMAND}').encode(),
     'R7': b'Count slowly from 1 to 200, one number per line, with no tools.',
 }
 RUNS = list(BRIEFS)
@@ -178,10 +203,24 @@ def ledger():
     if path.exists():
         return json.loads(path.read_text())
     return {'cap': CAP, 'stop_at': STOP_AT, 'measure': 'input+output+cache_creation+cache_read',
-            'runs': {}}
+            'charge_policy': charge_policy(), 'runs': {}}
+
+
+def charge_policy():
+    return {'stop_rules_use': 'charged',
+            'cancelled_in_first_model_call_allowance': CANCEL_ALLOWANCE,
+            'basis': CHARGE_BASIS,
+            'note': 'observed is what a harness reported; charged is what the '
+                    'cap is measured against. They differ only where a turn '
+                    'reported nothing.'}
 
 
 def cumulative(book):
+    """What the cap is measured against: charged, not observed."""
+    return sum(entry.get('charged') or 0 for entry in book['runs'].values())
+
+
+def observed_total(book):
     return sum(entry.get('observed_total_tokens') or 0 for entry in book['runs'].values())
 
 
@@ -234,6 +273,82 @@ def make_fixture(name, outside_target=None):
     return repo, git(repo, 'rev-parse', 'HEAD')
 
 
+def decision_effect(run, repo):
+    """What a decision actually did, read from the world rather than inferred
+    from what PIO sent. R3 and R4 create a file; R3b and R4b create a git tag,
+    because `touch` turned out to be auto-approved and the owner's allow list
+    carries no `git` rule."""
+    if run in ('R3', 'R4'):
+        return dict(kind='marker file', label='<fixture>/pio-live-marker.txt',
+                    happened=(repo / 'pio-live-marker.txt').exists())
+    tags = subprocess.run(['git', '-C', str(repo), 'tag', '-l'],
+                          capture_output=True, text=True).stdout.split()
+    return dict(kind='git tag', label=TAG_NAME, happened=TAG_NAME in tags,
+                tags_present=tags)
+
+
+def scratch_root():
+    """Scratch for the pre-run dry checks: beside the worktree, never inside
+    it and never in the live tree a receipt comes from."""
+    return Path(os.environ.get('PIO_SCRATCH') or ROOT.parent / 'pio-scratch')
+
+
+# What each run is named for, and the predicate that says the runner can
+# actually make that observation. Checked in a dry run before the live one:
+# three runs in a row were named for an observation the runner could not make.
+OBSERVATION = {
+    'R3': ('a permission request surfaced and answered by the caller',
+           lambda r: r['decision']['requested'] and bool(r['decision']['answered'])),
+    'R4': ('a permission request surfaced and answered by the caller',
+           lambda r: r['decision']['requested'] and bool(r['decision']['answered'])),
+    'R3b': ('a permission request surfaced and answered by the caller',
+            lambda r: r['decision']['requested'] and bool(r['decision']['answered'])),
+    'R4b': ('a permission request surfaced and answered by the caller',
+            lambda r: r['decision']['requested'] and bool(r['decision']['answered'])),
+    'R5': ('a signal actually sent to a running harness',
+           lambda r: r['cancel']['signal_sent'] and r['cancel']['tested_cancel']),
+    'R6': ("PIO's own decline of a target outside the workspace",
+           lambda r: r['decline']['declined_by_pio'] > 0),
+    'R7': ('a restart that reattaches without re-sending the brief',
+           lambda r: r['restart']['spawn_markers'] == 1 and r['restart']['brief_releases'] == 1),
+}
+
+
+def dry_run_check(run):
+    """Refuse a live run whose observation the runner cannot make.
+
+    Runs this same script against the labeled fake and applies the run's own
+    predicate to the receipt. Costs no tokens and takes seconds; the
+    alternative is a live receipt that claims something that never happened.
+    """
+    label, predicate = OBSERVATION[run]
+    root = scratch_root()
+    root.mkdir(parents=True, exist_ok=True)
+    os.chmod(root, 0o700)
+    out = Path(tempfile.mkdtemp(prefix=f'dry-{run}-', dir=str(root)))
+    try:
+        subprocess.run([sys.executable, str(Path(__file__).resolve()),
+                        '--run', run, '--dry-run', '--out', str(out / 'out')],
+                       capture_output=True, text=True, timeout=900)
+        receipt = out / 'claude-live-dry-run' / f'{run}.json'
+        if not receipt.exists():
+            raise SystemExit(f'{run}: the dry run produced no receipt; refusing '
+                             f'to spend tokens on a run that cannot be rehearsed')
+        record = json.loads(receipt.read_text())
+        try:
+            made = bool(predicate(record))
+        except (KeyError, TypeError):
+            made = False
+        if not made:
+            raise SystemExit(
+                f'{run}: the dry run did not make the observation this run is '
+                f'named for ({label}). Refusing to spend tokens on a receipt '
+                f'that would claim it.')
+        return dict(ran=True, observation=label, made_in_dry_run=True)
+    finally:
+        shutil.rmtree(out, ignore_errors=True)
+
+
 def outside_marker():
     """A marker file the runner creates outside the fixture, with known
     harmless content. Never a real personal or system file."""
@@ -282,6 +397,15 @@ class Service:
                 # than only the runner's plumbing around it.
                 scenario['permission_request'] = {
                     'tool_name': 'Bash', 'input': {'command': DECISION_COMMAND}}
+            if run in ('R3b', 'R4b'):
+                scenario['permission_request'] = {
+                    'tool_name': 'Bash', 'input': {'command': TAG_COMMAND}}
+            if run == 'R6':
+                # A request for a target outside the workspace, so the dry run
+                # exercises PIO's own decline rather than the runner's
+                # plumbing around it.
+                scenario['permission_request'] = {
+                    'tool_name': 'Read', 'input': {'file_path': str(outside_marker())}}
             if run == 'R5':
                 # The fake must still be running when the signal arrives, or
                 # the dry run would rehearse cancelling nothing, and it must
@@ -469,8 +593,10 @@ def build_receipt(service, run, view, started, extra):
 def check_stops(book, run, receipt):
     """The owner's stop rules, applied to a finished run."""
     stops = []
-    if not receipt['usage']['reported']:
+    if not receipt['usage']['reported'] and run not in PLANNED_CANCEL:
         stops.append('no usage report: usage is unknown, never zero')
+    elif not receipt['usage']['reported']:
+        pass  # A planned cancel. Charged at the allowance; see charge_policy.
     # A report of zero for a turn that ran is the same failure wearing a
     # number. R5 produced one: a cancelled turn whose usage block was empty.
     elif not receipt['usage']['observed_total_tokens']:
@@ -486,12 +612,14 @@ def check_stops(book, run, receipt):
         stops.append("the owner's settings changed, which PIO must never cause")
     after = cumulative(book)
     if after >= STOP_AT:
-        stops.append(f'cumulative observed usage {after} reached the {STOP_AT} stop')
+        stops.append(f'cumulative charged usage {after} reached the {STOP_AT} stop')
     return stops
 
 
 def run_one(run, args):
     checks = preflight(args.dry_run)
+    if not args.dry_run and run in OBSERVATION:
+        checks['dry_run_check'] = dry_run_check(run)
     book = ledger()
     if run in book['runs'] and not args.dry_run:
         raise SystemExit(
@@ -577,14 +705,13 @@ def run_one(run, args):
                      'the turn finished before the cancel was sent: this run '
                      'observed a completed turn, not a cancel')
 
-        elif run in ('R3', 'R4'):
+        elif run in ('R3', 'R4', 'R3b', 'R4b'):
             # The decision is the caller's, and it is the whole point of these
             # two runs: R3 denies, R4 allows. If the harness never asks, that
             # is a negative result for the decision path and is recorded as
             # one — never re-run with a different command until something
             # prompts.
-            decision = 'deny' if run == 'R3' else 'allow'
-            marker = repo / 'pio-live-marker.txt'
+            decision = 'deny' if run in ('R3', 'R3b') else 'allow'
             answered = []
             view = wait(service, lambda v: v['runtime'] in ('requires_action', 'exited'), 300)
             while view['runtime'] == 'requires_action' and len(answered) < 4:
@@ -597,6 +724,7 @@ def run_one(run, args):
             if view['runtime'] != 'exited':
                 view = wait(service, lambda v: v['runtime'] == 'exited', 900)
             events = service.events()
+            effect = decision_effect(run, repo)
             requests = [e for e in events if e['kind'] == 'action_requested']
             # PIO's own declines are a different thing from the caller's, and
             # a receipt that merged them would hide which one happened.
@@ -614,19 +742,38 @@ def run_one(run, args):
                           ('decision', 'suggestions_offered', 'suggestions_acted_on',
                            'widening_fields_sent')}
                          for e in events if e['kind'] == 'control_applied'],
-                # What the decision actually did, read from the filesystem.
-                # The command creates this file, so a deny that held leaves no
-                # file and an allow that took effect leaves one. Without this
-                # the receipt would only prove PIO sent something.
-                marker_label='<fixture>/pio-live-marker.txt',
-                marker_created=marker.exists(),
-                # The labeled fake runs no command, so the filesystem says
-                # nothing about a decision in a dry run and `held` stays null.
+                # What the decision actually did, read from the world. Without
+                # this the receipt would only prove PIO sent something.
+                effect=effect,
+                # The labeled fake runs no command, so the world says nothing
+                # about a decision in a dry run and `held` stays null.
                 held=None if (args.dry_run or not requests)
-                     else marker.exists() == (decision == 'allow'),
+                     else effect['happened'] == (decision == 'allow'),
                 note=None if requests else
                      'no permission request arrived: this run proves the turn '
                      'completed, not the decision path')
+        elif run == 'R6':
+            view = wait(service, lambda v: v['runtime'] == 'exited', 900)
+            events = service.events()
+            declined = [e for e in events if e['kind'] == 'request_declined_by_pio']
+            surfaced = [e for e in events if e['kind'] == 'action_requested']
+            marker = live_root() / 'outside' / 'pio-out-of-fixture-marker.txt'
+            extra['decline'] = dict(
+                # PIO's own decline, which is a different thing from the
+                # caller's decision and is counted separately.
+                declined_by_pio=len(declined),
+                classifications=[e.get('classification') for e in declined],
+                surfaced_to_caller=len(surfaced),
+                marker_label='<outside>/pio-out-of-fixture-marker.txt',
+                marker_sha256=sha(marker.read_bytes()) if marker.exists() else None,
+                marker_still_present=marker.exists(),
+                # R3 measured that a shell command is never offered at all. If
+                # the read is not offered either, the harness reached outside
+                # the workspace and PIO never got a say: an observed effect
+                # with unresolved liability, not something PIO declined.
+                note=None if declined else
+                     'no request reached PIO: nothing was declined, and any '
+                     'out-of-fixture effect below was observed, not authorized')
         else:
             view = wait(service, lambda v: v['runtime'] == 'exited', 900)
         extra['preflight'] = checks
@@ -635,13 +782,34 @@ def run_one(run, args):
         service.release()
 
     if receipt['usage']['reported']:
-        book['runs'][run] = dict(observed_total_tokens=receipt['usage']['observed_total_tokens'],
+        observed = receipt['usage']['observed_total_tokens']
+        book['runs'][run] = dict(observed_total_tokens=observed, charged=observed,
+                                 charge_basis='observed',
                                  parts=receipt['usage']['parts'], at=started)
+    elif run in PLANNED_CANCEL:
+        # Unknown by design. Charged at the allowance so the cap is measured
+        # against something, with the basis recorded beside the number.
+        book['runs'][run] = dict(observed_total_tokens=None, usage='unknown',
+                                 charged=CANCEL_ALLOWANCE, charge_basis=CHARGE_BASIS,
+                                 model_calls_completed=0,
+                                 evidence='the harness reported an empty usage '
+                                          'block with no iterations',
+                                 at=started)
     else:
-        book['runs'][run] = dict(observed_total_tokens=None, usage='unknown', at=started)
+        # Unknown and not planned: nothing is charged, because nothing is known
+        # about it, and the stop rule below halts the sequence.
+        book['runs'][run] = dict(observed_total_tokens=None, usage='unknown',
+                                 charged=None, charge_basis='unknown, uncharged',
+                                 at=started)
+    book['charge_policy'] = charge_policy()
     if not args.dry_run:
         ledger_path().write_text(json.dumps(book, indent=2) + '\n')
-    receipt['cumulative'] = dict(observed=cumulative(book), cap=CAP, stop_at=STOP_AT)
+    entry = book['runs'][run]
+    receipt['usage']['charged'] = entry.get('charged')
+    receipt['usage']['charge_basis'] = entry.get('charge_basis')
+    receipt['cumulative'] = dict(charged=cumulative(book), observed=observed_total(book),
+                                 cap=CAP, stop_at=STOP_AT, stop_rules_use='charged',
+                                 charge_policy=charge_policy())
     receipt['stops'] = check_stops(book, run, receipt)
 
     out = args.out / f'{run}.json'
@@ -674,6 +842,16 @@ def main():
     for run in args.run:
         if run in NOT_RUN:
             raise SystemExit(f'{run} is not run: {NOT_RUN[run]}')
+        if run == 'R4b' and not args.dry_run:
+            # Owner rule: if R3b draws no prompt, that is the finding. Stop
+            # there, do not run R4b, and do not try a third command.
+            prior = args.out / 'R3b.json'
+            if not prior.exists():
+                raise SystemExit('R4b needs R3b first: no R3b receipt')
+            if not json.loads(prior.read_text())['decision']['requested']:
+                raise SystemExit(
+                    'R4b is not run: R3b drew no permission request, which is '
+                    'the finding. No third command is tried.')
         run_one(run, args)
 
 

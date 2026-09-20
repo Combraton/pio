@@ -1,4 +1,21 @@
 {
+  "addenda": [
+    {
+      "charge_basis": "observed",
+      "charged": 129945,
+      "cumulative_after_this_policy": {
+        "cap": 1000000,
+        "charged": 341070,
+        "observed": 261070,
+        "stop_at": 800000
+      },
+      "date": "2026-09-20",
+      "raised_by": "owner decision after R5",
+      "reason": "charge_policy_introduced",
+      "receipt_rewritten": false,
+      "what_changed": "the ledger now carries observed and charged, and every stop rule is applied to charged. Observed is what the harness reported; charged is what the cap is measured against. The figures in the body above are unchanged and remain what this run observed."
+    }
+  ],
   "binary_sha256": "f59f3539afb64f88798ad5197a14a63de65ecc6fe571a17bcee72e8b37308eb3",
   "commit": "d6e57ddcd40e12e62fc7cb9a1f261a0607d4791a",
   "completion_is_acceptance": false,

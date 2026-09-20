@@ -43,6 +43,21 @@
         "durable_state.new_transcript_entries": 0,
         "model.configured": null
       }
+    },
+    {
+      "charge_basis": "observed",
+      "charged": 33793,
+      "cumulative_after_this_policy": {
+        "cap": 1000000,
+        "charged": 341070,
+        "observed": 261070,
+        "stop_at": 800000
+      },
+      "date": "2026-09-20",
+      "raised_by": "owner decision after R5",
+      "reason": "charge_policy_introduced",
+      "receipt_rewritten": false,
+      "what_changed": "the ledger now carries observed and charged, and every stop rule is applied to charged. Observed is what the harness reported; charged is what the cap is measured against. The figures in the body above are unchanged and remain what this run observed."
     }
   ],
   "binary_sha256": "1f1a79357c8b4e0a27d04f47bc0fc1074f0519f8f56186d22f16cbb9fa411ae4",

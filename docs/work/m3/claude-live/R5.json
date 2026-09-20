@@ -1,4 +1,22 @@
 {
+  "addenda": [
+    {
+      "charge_basis": "allowance for a turn cancelled inside its first model call; basis: the single-call turns observed at 33,793 (R1) and 32,957 (R5 attempt 1); owner decision 2026-09-20",
+      "charged": 40000,
+      "cumulative_after_this_policy": {
+        "cap": 1000000,
+        "charged": 341070,
+        "observed": 261070,
+        "stop_at": 800000
+      },
+      "date": "2026-09-20",
+      "raised_by": "owner decision after R5",
+      "reason": "charge_policy_introduced",
+      "receipt_rewritten": false,
+      "what_changed": "the ledger now carries observed and charged, and every stop rule is applied to charged. Observed is what the harness reported; charged is what the cap is measured against. The figures in the body above are unchanged and remain what this run observed.",
+      "why_an_allowance": "this turn was cancelled inside its first model call and reported an empty usage block, so what it spent is unknown. Unknown is not zero, and a cap kept in unknowns is not a cap."
+    }
+  ],
   "binary_sha256": "e873db80e931cabd3f21760934538f788257b839c28dc96e8ae1ed343cddced3",
   "cancel": {
     "accepted": true,
