@@ -9,7 +9,7 @@ fn run() -> Result<()> {
             pio_host::IMPLEMENTATION
         ),
         Some("participant") => println!("{}", pio_core::participant()),
-        Some("conformance" | "serve-fake" | "serve-codex" | "serve-claude") => {
+        Some("conformance" | "serve-fake" | "serve-codex" | "serve-claude" | "serve-opencode") => {
             let option = |name: &str| -> Result<&Path> {
                 let index = args
                     .iter()
@@ -23,6 +23,7 @@ fn run() -> Result<()> {
                 "serve-fake" => pio_protocol::serve_fake,
                 "serve-codex" => pio_protocol::serve_codex,
                 "serve-claude" => pio_protocol::serve_claude,
+                "serve-opencode" => pio_protocol::serve_opencode,
                 _ => pio_protocol::serve,
             };
             serve(
@@ -149,6 +150,12 @@ fn run() -> Result<()> {
                 // A labeled fake ACP server, so the offline matrix runs in CI
                 // with no OpenCode installed and never near the owner's service.
                 Some("fake-acp") => pio_opencode::fake::run()?,
+                // Launched only by the service controller.
+                Some("host") => pio_host::opencode::opencode_host(
+                    Path::new(args.get(2).context("missing store")?),
+                    args.get(3).context("missing command id")?,
+                    args.get(4).context("missing invocation identity")?,
+                )?,
                 // The owner's rule of 2026-09-20: refuse unless the session's
                 // reported provider and model equal the requested ones. ACP
                 // reports them before any prompt, so this precedes delivery.

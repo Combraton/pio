@@ -95,6 +95,25 @@ pub const PROFILES: &[Profile] = &[
         guard_key: "permission_mode",
         exited_event: "harness_exited",
     },
+    Profile {
+        adapter: "opencode",
+        fake_source: "pio-fake-opencode-acp",
+        real_source: "opencode-acp",
+        // Measured: this harness acknowledges nothing. The first session
+        // update shows it acting on the prompt, which is evidence of receipt
+        // but not an identifier it returned, so there is no proof class.
+        // ADR 005 §7.
+        delivery_evidence: "native_session_update",
+        ack_proof_field: "first_session_update",
+        usage_measure: "opencode.tokens.total",
+        decisions: &["allow", "deny"],
+        cancel_description: "session/cancel, in band, escalating to SIGKILL",
+        session_event: "session_started",
+        session_key: "session",
+        guard_event: "settings_guard",
+        guard_key: "session_configuration",
+        exited_event: "harness_exited",
+    },
 ];
 
 pub fn profile(adapter: &str) -> Option<&'static Profile> {
@@ -229,6 +248,13 @@ impl Provider {
                 spec["permission_mode"] = host["permission_mode"].clone();
                 spec["model"] = host["model"].clone();
                 spec["configured_model"] = host["configured_model"].clone();
+            }
+            "opencode" => {
+                spec["config_dir"] = host["config_dir"].clone();
+                spec["home"] = host["home"].clone();
+                // Every run passes an explicit model, under the dated
+                // exception the admission already checked.
+                spec["model"] = host["model"].clone();
             }
             _ => {
                 spec["codex_home"] = host["codex_home"].clone();
@@ -628,11 +654,15 @@ impl Provider {
                 e[&ns]["turn_id"] = event["turn_id"].clone();
                 if matches!(text(&e["view"]["delivery"]), "pending" | "ambiguous") {
                     let reconcile = e["view"]["delivery"] == "ambiguous";
+                    // Only a harness that returned an identifier gets a
+                    // proof class. ADR 005 §7.
+                    let proof = (profile.ack_proof_field != "first_session_update")
+                        .then_some("provider_ack_id");
                     self.delivery_observed(
                         e,
                         "acknowledged",
                         profile.delivery_evidence,
-                        Some("provider_ack_id"),
+                        proof,
                         true,
                         reconcile,
                     );

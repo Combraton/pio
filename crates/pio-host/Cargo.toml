@@ -13,4 +13,5 @@ libc.workspace = true
 pio-core = { path = "../pio-core" }
 pio-codex = { path = "../pio-codex" }
 pio-claude = { path = "../pio-claude" }
+pio-opencode = { path = "../pio-opencode" }
 uuid.workspace = true

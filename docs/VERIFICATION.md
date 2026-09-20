@@ -177,7 +177,11 @@ The case that carries the owner's rule is `silent_downgrade_refused_before_any_p
 
 `unqualified_executable_refused` caught a real defect on its first run: `service_admission` computed a qualification verdict and admitted the configuration anyway, so an executable with seven drifting commands would have been allowed to start. A verdict nothing acts on is not a check.
 
-**Scope, stated plainly:** this matrix drives the adapter and the fake directly. There is no `serve-opencode` yet, so it proves the adapter's decisions and the ACP shapes, and nothing about journal, restart or reattach for this harness.
+Two of the twelve run **through the service**, `pio serve-opencode`: a turn that completes, and — the one that matters — **a downgraded session refused before any prompt**. The host reaches `session/new`, sees the session report a different provider, refuses, and the view records `failed_before_delivery`; the fake's markers show `session_created` and **no** `prompt_received`. This adapter can refuse while the brief is still inside PIO, which the Claude adapter cannot.
+
+A run's receipt carries `delivery_proof_class: null`, because this harness returns no acknowledgment identifier (ADR 005 §7), and `owner_service_untouched`, which the host asserts before completing.
+
+**Scope, stated plainly:** the other ten cases drive the adapter and the fake directly. Restart, reattach and host-loss are **not** yet covered for this harness the way they are for Codex and Claude Code.
 
 ## The shared host lifecycle
 

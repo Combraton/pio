@@ -35,12 +35,16 @@ pub fn serve_codex(root: &Path, config: &Path, socket: &Path) -> Result<()> {
 pub fn serve_claude(root: &Path, config: &Path, socket: &Path) -> Result<()> {
     serve_mode(root, config, socket, Mode::Claude)
 }
+pub fn serve_opencode(root: &Path, config: &Path, socket: &Path) -> Result<()> {
+    serve_mode(root, config, socket, Mode::OpenCode)
+}
 #[derive(PartialEq)]
 enum Mode {
     Conformance,
     FakeProcess,
     Codex,
     Claude,
+    OpenCode,
 }
 /// Validate a `pio-codex-service/1` configuration and qualify the selected
 /// executable before any native work. A labeled fake app-server skips
@@ -206,6 +210,31 @@ fn claude_host_config(root: &Path, claude: &Value) -> Result<Value> {
     Ok(host)
 }
 
+/// Validate a `pio-opencode-service/1` configuration and make every decision
+/// that must precede a session, including the owner's exclusion of a provider
+/// and the dated model exception.
+fn opencode_host_config(root: &Path, opencode: &Value) -> Result<Value> {
+    let record = pio_opencode::service_admission(&root.join("qualification"), opencode)?;
+    std::fs::write(
+        root.join("opencode-admission.json"),
+        serde_json::to_vec_pretty(&record)?,
+    )?;
+    anyhow::ensure!(
+        record["admitted"] == true,
+        "opencode_not_admitted: {}",
+        record["refusals"]
+    );
+    let mut host = opencode.clone();
+    host["adapter"] = "opencode".into();
+    host["qualification_binding"] = if opencode["labeled_fake"] == true {
+        Value::Null
+    } else {
+        json!({"binary_sha256":record["qualification"]["resolution"]["binary_sha256"],
+               "version":record["qualification"]["version"]})
+    };
+    Ok(host)
+}
+
 fn serve_mode(root: &Path, config: &Path, socket: &Path, mode: Mode) -> Result<()> {
     let durable = mode != Mode::Conformance;
     if durable {
@@ -214,7 +243,20 @@ fn serve_mode(root: &Path, config: &Path, socket: &Path, mode: Mode) -> Result<(
     pio_host::secure_root(socket.parent().context("socket parent")?)?;
     let _lock = StoreLock::acquire(root)?;
     let config: Value = serde_json::from_slice(&std::fs::read(config)?)?;
-    let provider = if mode == Mode::Claude {
+    let provider = if mode == Mode::OpenCode {
+        anyhow::ensure!(
+            config["format"] == "pio-opencode-service/1",
+            "invalid opencode service config"
+        );
+        let protocol = config["protocol"].clone();
+        anyhow::ensure!(
+            protocol["executor"]["scripts"].is_null()
+                && protocol["executor"]["default_script"].is_null(),
+            "executor.script is conformance-only"
+        );
+        let host = opencode_host_config(root, &config["opencode"])?;
+        Provider::with_host(root, protocol, Some(host))?
+    } else if mode == Mode::Claude {
         anyhow::ensure!(
             config["format"] == "pio-claude-service/1",
             "invalid claude service config"

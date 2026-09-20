@@ -22,11 +22,33 @@ import queue
 import shutil
 import subprocess
 import tempfile
+import hashlib
 import threading
 import time
 
+
+def digest(data):
+    return 'sha256:' + hashlib.sha256(data).hexdigest()
+
+
+def poll(action, predicate, seconds=60):
+    deadline = time.monotonic() + seconds
+    last = None
+    while time.monotonic() < deadline:
+        try:
+            last = action()
+            if predicate(last):
+                return last
+        except (OSError, ValueError, KeyError):
+            pass
+        time.sleep(0.05)
+    raise AssertionError(f'bounded observation timed out; last={json.dumps(last)[:1200]}')
+
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = ROOT / 'target/debug/pio'
+CONTENT = 'pio.combraton.dev/content'
+FEATURES = ['execution.controller', 'execution.output', 'execution.discovery',
+            'execution.workspaces', 'execution.usage', 'execution.actions']
 REQUESTED = 'minimax-coding-plan/MiniMax-M2.7-highspeed'
 DOWNGRADE = 'opencode/nemotron-3.5-lightning-free'
 CASES = [
@@ -40,6 +62,9 @@ CASES = [
     'unqualified_executable_refused',
     'forbidden_flags_are_never_passed',
     'an_always_allow_option_is_offered_and_never_taken',
+    # Through the service, which is the only place delivery and usage land.
+    'service_turn_completes',
+    'service_refuses_a_downgraded_session_before_any_prompt',
 ]
 
 
@@ -169,6 +194,92 @@ class Case:
         shutil.rmtree(self.root, ignore_errors=True)
 
 
+class ServiceCase(Case):
+    """Driven through `pio serve-opencode` over the public Unix API."""
+
+    def __init__(self, out, name, **kw):
+        super().__init__(out, name, **kw)
+        from public_api import Client, CREDENTIAL
+
+        class OpenCodeClient(Client):
+            def __init__(self, path, transcript=None, timeout=10):
+                self.features = FEATURES
+                super().__init__(path, transcript, timeout)
+
+            def query(self, operation, payload):
+                if operation == 'core.negotiate':
+                    payload = dict(payload, profiles=[
+                        dict(name='core', majors=[1], required=True,
+                             required_features=['core.events', 'core.capabilities', 'core.effects'],
+                             optional_features=[]),
+                        dict(name='execution', majors=[1], required=True,
+                             required_features=FEATURES, optional_features=[])])
+                return super().query(operation, payload)
+
+        self._client = OpenCodeClient
+        self.store = self.root / 'store'
+        self.socket = self.root / 'public.sock'
+        self.transcript = self.out / 'public-transcript.jsonl'
+        self.daemons, self.files = [], []
+        config = json.loads(self.config_path.read_text())
+        config['format'] = 'pio-opencode-service/1'
+        config['protocol'] = dict(
+            format='combraton-conformance-config/1', principal='owner',
+            credentials=[dict(credential=CREDENTIAL)],
+            executor=dict(host_id='opencode-host'))
+        self.config_path.write_text(json.dumps(config))
+
+    def client(self):
+        return self._client(self.socket, self.transcript)
+
+    def start(self, expect_ready=True):
+        n = len(self.daemons)
+        stdout = (self.out / f'daemon-{n}.stdout').open('w')
+        stderr = (self.out / f'daemon-{n}.stderr').open('w')
+        self.files += [stdout, stderr]
+        daemon = subprocess.Popen(
+            [str(BINARY), 'serve-opencode', '--data-dir', str(self.store),
+             '--config', str(self.config_path), '--socket', str(self.socket)],
+            stdout=stdout, stderr=stderr, env=self.env())
+        self.daemons.append(daemon)
+        if expect_ready:
+            poll(lambda: self.client().query('core.describe', {}), lambda r: 'result' in r)
+        return daemon
+
+    def submit(self, identity='work', brief=b'Fixture task: reply with one line.'):
+        from public_api import command
+        repo = self.fixtures / identity
+        repo.mkdir(exist_ok=True)
+        (repo / 'README.md').write_text('fixture\n')
+        git = lambda *a: subprocess.run(['git', '-C', str(repo), *a], check=True,
+                                        capture_output=True, text=True)
+        git('init', '-q')
+        git('-c', 'user.email=pio@example.invalid', '-c', 'user.name=pio', 'add', '.')
+        git('-c', 'user.email=pio@example.invalid', '-c', 'user.name=pio',
+            'commit', '-q', '-m', 'fixture')
+        base = git('rev-parse', 'HEAD').stdout.strip()
+        payload = dict(brief=dict(digest=digest(brief), media_type='text/plain'),
+                       workspace=dict(repository=str(repo), base=base, cleanup='retain'),
+                       timeouts=dict(delivery=120, execution_deadline=600))
+        envelope = command('execution.submit', dict(kind='execution.execution', id=identity),
+                           payload, command_id=identity)
+        envelope['extensions'] = {CONTENT: dict(media_type='text/plain', text=brief.decode())}
+        with self.client() as c:
+            return c.call(envelope)
+
+    def inspect(self, identity='work'):
+        with self.client() as c:
+            return c.query('execution.inspect', {'execution': identity})['result']
+
+    def cleanup(self):
+        for daemon in self.daemons:
+            daemon.kill()
+            daemon.wait(timeout=10)
+        for handle in self.files:
+            handle.close()
+        super().cleanup()
+
+
 def new_session(case, extra_args=()):
     """Everything up to, and not including, a prompt."""
     acp = Acp(case, extra_args)
@@ -290,6 +401,36 @@ def run_case(out, name):
         assert decided[0]['always_option_taken'] is False, decided
         assert decided[0]['widening_fields_received'] == [], decided
         acp.close()
+
+    elif name == 'service_turn_completes':
+        case = ServiceCase(out, name, model=REQUESTED)
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        assert view['delivery'] == 'acknowledged', view
+        delivery = view['deliveries'][0]
+        assert delivery['evidence']['class'] == 'native_session_update', delivery
+        # This harness returns no acknowledgment identifier, so no proof class
+        # is claimed. ADR 005 section 7.
+        assert 'proof_class' not in delivery or delivery['proof_class'] is None, delivery
+        assert view['usage']['liability'] == 'resolved', view['usage']
+        assert [o['measure'] for o in view['usage']['observations']] == \
+            ['opencode.tokens.total'], view['usage']
+        assert len(case.markers_of('prompt_received')) == 1, case.markers_of('prompt_received')
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_refuses_a_downgraded_session_before_any_prompt':
+        # The owner's rule, through the durable host: the session reports a
+        # different provider, so the host refuses and the brief never leaves.
+        case = ServiceCase(out, name, scenario={'model': DOWNGRADE}, model=REQUESTED)
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(),
+                    lambda v: v['delivery'] in ('failed_before_delivery', 'not_delivered'))
+        assert view['delivery'] == 'failed_before_delivery', view
+        assert case.markers_of('prompt_received') == [], 'a prompt was sent after a refusal'
+        assert len(case.markers_of('session_created')) == 1, case.markers_of('session_created')
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     else:
         raise AssertionError(f'unknown case {name}')

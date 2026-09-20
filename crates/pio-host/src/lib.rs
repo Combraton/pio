@@ -2,6 +2,7 @@
 pub mod claude;
 pub mod codex;
 pub mod harness;
+pub mod opencode;
 pub mod script;
 use anyhow::{Context, Result, bail, ensure};
 use pio_core::{ProcessIdentity, Store};
