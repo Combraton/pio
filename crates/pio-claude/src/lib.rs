@@ -884,6 +884,7 @@ fn target_label(resolved: &Option<String>, workspace: &Path, placement: &str) ->
 pub fn tool_use_records(
     messages: &[Value],
     denials: &Value,
+    decided: &Value,
     workspace: &Path,
     cwd: &Path,
 ) -> Value {
@@ -912,16 +913,33 @@ pub fn tool_use_records(
             let (resolved, placement) = classify_target(input, &workspace, &cwd);
             let digest_source = resolved.clone().unwrap_or_else(|| input.to_string());
             let refused = block["id"].as_str().is_some_and(|id| denied.contains(&id));
+            // Who decided. `result.permission_denials` names every refusal
+            // without saying whose it was, so a denial PIO forwarded on a
+            // caller's behalf looked exactly like one the harness made on its
+            // own. R3c is the run that showed the difference: the caller said
+            // no, and the record called it the harness's refusal.
+            let decision = block["id"]
+                .as_str()
+                .map(|id| decided[id].clone())
+                .unwrap_or(Value::Null);
+            let outcome = match (refused, decision["by"].as_str()) {
+                (true, Some("caller")) => "denied_by_caller",
+                (true, Some("pio")) => "declined_by_pio",
+                (true, _) => "attempted_and_denied",
+                (false, _) => "performed",
+            };
             records.push(json!({
                 "tool": &block["name"],
                 "tool_use_id": &block["id"],
                 "target_label": target_label(&resolved, &workspace, placement),
                 "target_sha256": sha256_hex(digest_source.as_bytes()),
                 "placement": placement,
-                // Refused by the harness itself. It never ran, so it is not an
-                // effect and carries no liability.
-                "denied_by_harness": refused,
-                "outcome": if refused { "attempted_and_denied" } else { "performed" },
+                // Refused. It never ran, so it is not an effect and carries no
+                // liability, whoever decided.
+                "denied": refused,
+                "denied_by_harness": refused && decision["by"].is_null(),
+                "decided_by": decision["by"].clone(),
+                "outcome": outcome,
             }));
         }
     }
@@ -929,7 +947,7 @@ pub fn tool_use_records(
     let count = |what: &str| {
         records
             .iter()
-            .filter(|r| r["placement"] == what && r["denied_by_harness"] != true)
+            .filter(|r| r["placement"] == what && r["denied"] != true)
             .count()
     };
     let outside = count("outside_fixture");
@@ -938,17 +956,28 @@ pub fn tool_use_records(
         .iter()
         .filter(|r| r["denied_by_harness"] == true)
         .count();
+    let by_caller = records
+        .iter()
+        .filter(|r| r["outcome"] == "denied_by_caller")
+        .count();
+    let by_pio = records
+        .iter()
+        .filter(|r| r["outcome"] == "declined_by_pio")
+        .count();
     json!({
-        "format":"pio-claude-tool-uses/4",
+        "format":"pio-claude-tool-uses/5",
         "containment":{
             "mechanism":"harness_permission_rules_only",
             "os_sandbox_observed":false,
         },
         "workspace_sha256":sha256_hex(workspace.display().to_string().as_bytes()),
         "tool_uses":records,
-        // Refused by the harness's own rules, with no host attached to ask.
-        // A different thing from PIO declining, and from a caller deciding.
+        // Three different things, counted apart: the harness refusing under
+        // its own rules with nobody asked, PIO declining, and a caller
+        // deciding. `result.permission_denials` merges all three.
         "denied_by_harness_count":refused,
+        "denied_by_caller_count":by_caller,
+        "declined_by_pio_count":by_pio,
         "out_of_fixture_effect_observed":outside > 0,
         "out_of_fixture_count":outside,
         "unclassifiable_target_count":unclassified,

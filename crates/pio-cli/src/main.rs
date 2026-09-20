@@ -329,6 +329,9 @@ fn run() -> Result<()> {
                                 .find(|m| m["type"] == "result")
                                 .map(|m| m["permission_denials"].clone())
                                 .unwrap_or(serde_json::Value::Null),
+                            // A transcript alone cannot say who decided a
+                            // refusal, so none is attributed here.
+                            &serde_json::Value::Null,
                             option("--workspace")?,
                             option("--cwd")?
                         ))?

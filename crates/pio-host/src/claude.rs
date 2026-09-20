@@ -227,6 +227,9 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let mut pending_actions: std::collections::BTreeMap<u64, (Value, std::time::Instant)> =
         std::collections::BTreeMap::new();
     let mut action_seq = 0u64;
+    // Who decided each tool use, by `tool_use_id`. The result's denial list
+    // says a use was refused and never says by whom.
+    let mut decided = json!({});
     let mut tool_use_messages: Vec<Value> = Vec::new();
     let mut interrupt_deadline: Option<(std::time::Instant, String)> = None;
     let mut escalation: Option<Value> = None;
@@ -316,6 +319,10 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                                 .unwrap_or("refused by PIO"),
                         )?;
                         child.send(&decision["envelope"])?;
+                        if let Some(id) = message["request"]["tool_use_id"].as_str() {
+                            decided[id] = json!({"by":"pio","decision":"deny",
+                                "reason":classification["reason"]});
+                        }
                         life.event(json!({"kind":"request_declined_by_pio",
                             "action_seq":action_seq,"classification":classification}))?;
                     } else {
@@ -416,6 +423,10 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                 "no caller answered within the delivery timeout",
             )?;
             child.send(&decision["envelope"])?;
+            if let Some(id) = original["request"]["tool_use_id"].as_str() {
+                decided[id] = json!({"by":"pio","decision":"deny",
+                    "reason":"no caller answered within the delivery timeout"});
+            }
             life.event(json!({"kind":"request_denied_by_default",
                 "action_seq":seq,
                 "after_seconds":ACTION_ANSWER_TIMEOUT.as_secs(),
@@ -468,6 +479,9 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                             ) {
                                 Ok(encoded) => {
                                     child.send(&encoded["envelope"])?;
+                                    if let Some(id) = original["request"]["tool_use_id"].as_str() {
+                                        decided[id] = json!({"by":"caller","decision":decision});
+                                    }
                                     life.event(json!({"kind":"control_applied",
                                         "control_id":id,"action_seq":control["action_seq"],
                                         "decision":decision,
@@ -516,7 +530,8 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
         .as_ref()
         .map(|r| r["permission_denials"].clone())
         .unwrap_or(Value::Null);
-    let tool_uses = pio_claude::tool_use_records(&tool_use_messages, &denials, &cwd, &cwd);
+    let tool_uses =
+        pio_claude::tool_use_records(&tool_use_messages, &denials, &decided, &cwd, &cwd);
     // Ordered deliberately: the exit event is what turns the runtime to
     // `exited`, so everything a caller must see on a finished execution is
     // recorded first. A matrix run caught the other order.

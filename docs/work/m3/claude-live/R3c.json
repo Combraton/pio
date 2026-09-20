@@ -1,0 +1,545 @@
+{
+  "addenda": [
+    {
+      "cause": "`result.permission_denials` says a tool use was refused and never says by whom, so a denial PIO forwarded for a caller looked exactly like one the harness made with nobody asked. The view would have shown `denied_by_harness: 1` with the reason \"PIO was not asked\" \u2014 which is the opposite of what happened here.",
+      "date": "2026-09-20",
+      "fixed_in": "the host records who decided each tool use by `tool_use_id`, and the record carries decided_by with counts kept apart for the caller, PIO and the harness",
+      "reason": "a_refusal_was_attributed_to_the_harness_instead_of_the_caller",
+      "receipt_rewritten": false,
+      "recomputed_from_the_stored_evidence": {
+        "declined_by_pio_count": 0,
+        "denied_by_caller_count": 1,
+        "denied_by_harness_count": 0,
+        "format": "pio-claude-tool-uses/5",
+        "liability": "none_observed",
+        "out_of_fixture_effect_observed": false,
+        "tool_uses": [
+          {
+            "decided_by": "caller",
+            "denied": true,
+            "denied_by_harness": false,
+            "outcome": "denied_by_caller",
+            "placement": "not_classifiable",
+            "target_label": null,
+            "target_sha256": "7560c44d7fedaba143b1ea39b945ceaf13131868cc4d436ee36d8633816a7153",
+            "tool": "Bash",
+            "tool_use_id": "toolu_01LBYB7Bg7G6XuvrbZwpcd21"
+          }
+        ]
+      },
+      "unaffected": "the decision path itself. The request reached PIO, the caller's deny was forwarded, one suggestion was offered and none acted on, no widening field was sent, and the command did not run.",
+      "what_is_true": "the caller answered deny through execution.respond_action, and the harness then recorded the denial. The refusal was the caller's, not the harness's own.",
+      "what_the_receipt_claimed": {
+        "denied_by_harness_count": 1,
+        "tool_uses[0].denied_by_harness": true,
+        "tool_uses[0].outcome": "attempted_and_denied"
+      }
+    }
+  ],
+  "binary_sha256": "252454bbf12313e753caa6d82ada9a63d328c48ecc6f0aeb71155c1dc6c97422",
+  "commit": "925f39e0935191b9f4fe0aeece540080e6a0ab34",
+  "completion_is_acceptance": false,
+  "containment": {
+    "denied_by_harness": 1,
+    "denied_by_harness_reason": "the harness refused it under its own rules; PIO was not asked",
+    "mechanism": "harness_permission_rules_only",
+    "os_sandbox_observed": false
+  },
+  "cumulative": {
+    "cap": 1000000,
+    "charge_policy": {
+      "basis": "allowance for a turn cancelled inside its first model call; basis: the single-call turns observed at 33,793 (R1) and 32,957 (R5 attempt 1); owner decision 2026-09-20",
+      "cancelled_in_first_model_call_allowance": 40000,
+      "note": "observed is what a harness reported; charged is what the cap is measured against. They differ only where a turn reported nothing.",
+      "stop_rules_use": "charged"
+    },
+    "charged": 603157,
+    "observed": 523157,
+    "stop_at": 800000,
+    "stop_rules_use": "charged"
+  },
+  "decision": {
+    "answered": [
+      {
+        "action_id": "work.action-1",
+        "decision": "deny",
+        "error": null,
+        "result": {
+          "acknowledgment": {
+            "command_digest": "sha256:7feb2c28377a81b2b479a424b4a93b1c26e7ceb7107063e19253b64fc87532a7",
+            "command_id": "work.answer-work.action-1",
+            "effect_refs": [
+              "work.response-1"
+            ],
+            "operation_ref": "cbe2f59e-dbf1-4588-ab13-9cb918b2f718",
+            "revision": 5,
+            "subject": {
+              "id": "work",
+              "kind": "execution.execution"
+            }
+          },
+          "outcome": {
+            "action_id": "work.action-1",
+            "response_effect": "work.response-1",
+            "state": "answered"
+          },
+          "replay": false
+        }
+      }
+    ],
+    "applied": [
+      {
+        "decision": "deny",
+        "suggestions_acted_on": 0,
+        "suggestions_offered": 1,
+        "widening_fields_sent": []
+      }
+    ],
+    "classifications": [
+      {
+        "auto_allowed": false,
+        "disposition": "surface_as_action",
+        "format": "pio-claude-request-classification/1",
+        "placement": "not_classifiable",
+        "reason": "no resolvable target; PIO cannot classify this request",
+        "target_label": null,
+        "target_sha256": null,
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_01LBYB7Bg7G6XuvrbZwpcd21"
+      }
+    ],
+    "declined_by_pio": 0,
+    "effect": {
+      "happened": false,
+      "kind": "git tag",
+      "label": "pio-live-marker",
+      "tags_present": []
+    },
+    "held": true,
+    "intended": "deny",
+    "note": null,
+    "request_count": 1,
+    "requested": true
+  },
+  "delivery": {
+    "evidence": {
+      "class": "native_replay_echo",
+      "source": "claude-code/host"
+    },
+    "proof_class": "provider_ack_id",
+    "state": "acknowledged"
+  },
+  "dirty": false,
+  "dry_run": false,
+  "durable_state": {
+    "claude_json_key_count_changed": false,
+    "format": "pio-claude-durable-diff/2",
+    "new_transcript_entries": 2,
+    "settings_changed": false,
+    "usage_secondary": {
+      "last_cost": null,
+      "last_total_input_tokens": null,
+      "last_total_output_tokens": null
+    },
+    "workspace_project_created": false,
+    "workspace_project_trusted_without_asking": false
+  },
+  "exit": {
+    "code": 0
+  },
+  "format": "pio-claude-live-receipt/1",
+  "harness": {
+    "claude_code_version": "2.1.278",
+    "session_id": "87dc8072-668a-4c07-9988-8e9402212e85",
+    "source": "claude-code/host"
+  },
+  "loaded": {
+    "agents": 8,
+    "mcp_servers": [
+      {
+        "name": "plugin:vercel:vercel",
+        "source": "plugin",
+        "status": "needs-auth"
+      },
+      {
+        "name": "plugin:github:github",
+        "source": "plugin",
+        "status": "failed"
+      },
+      {
+        "name": "plugin:playwright:playwright",
+        "source": "plugin",
+        "status": "connected"
+      },
+      {
+        "name": "plugin:chrome-devtools-mcp:chrome-devtools",
+        "source": "plugin",
+        "status": "connected"
+      },
+      {
+        "name": "claude.ai Claude Docs",
+        "source": "claudeai",
+        "status": "connected"
+      },
+      {
+        "name": "claude.ai higgsfield",
+        "source": "claudeai",
+        "status": "connected"
+      },
+      {
+        "name": "claude.ai Gmail",
+        "source": "claudeai",
+        "status": "needs-auth"
+      },
+      {
+        "name": "claude.ai Google Calendar",
+        "source": "claudeai",
+        "status": "needs-auth"
+      },
+      {
+        "name": "claude.ai Google Drive",
+        "source": "claudeai",
+        "status": "needs-auth"
+      }
+    ],
+    "plugins": [
+      {
+        "name": "clangd-lsp",
+        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0",
+        "source": "clangd-lsp@claude-plugins-official",
+        "version": "1.0.0"
+      },
+      {
+        "name": "planning-with-files",
+        "path": "/Users/comreton/.claude/plugins/cache/planning-with-files/planning-with-files/2.34.0",
+        "source": "planning-with-files@planning-with-files",
+        "version": "2.34.0"
+      },
+      {
+        "name": "superpowers",
+        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0",
+        "source": "superpowers@claude-plugins-official",
+        "version": "6.3.0"
+      },
+      {
+        "name": "ralph-loop",
+        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/ralph-loop/1.0.0",
+        "source": "ralph-loop@claude-plugins-official",
+        "version": "1.0.0"
+      },
+      {
+        "name": "frontend-design",
+        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/frontend-design/c447c3207a42",
+        "source": "frontend-design@claude-plugins-official"
+      },
+      {
+        "name": "rust-analyzer-lsp",
+        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0",
+        "source": "rust-analyzer-lsp@claude-plugins-official",
+        "version": "1.0.0"
+      },
+      {
+        "name": "vercel",
+        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/vercel/0.49.2",
+        "source": "vercel@claude-plugins-official",
+        "version": "0.49.2"
+      },
+      {
+        "name": "php-lsp",
+        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/php-lsp/1.0.0",
+        "source": "php-lsp@claude-plugins-official",
+        "version": "1.0.0"
+      },
+      {
+        "name": "github",
+        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/github/c447c3207a42",
+        "source": "github@claude-plugins-official"
+      },
+      {
+        "name": "playwright",
+        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/playwright/c447c3207a42",
+        "source": "playwright@claude-plugins-official"
+      },
+      {
+        "name": "chrome-devtools-mcp",
+        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/chrome-devtools-mcp/1.9.0",
+        "source": "chrome-devtools-mcp@claude-plugins-official",
+        "version": "1.9.0"
+      },
+      {
+        "name": "agents-md",
+        "path": "builtin",
+        "source": "agents-md@builtin"
+      }
+    ],
+    "skills": 93,
+    "slash_commands": 140,
+    "tools": [
+      "Task",
+      "AskUserQuestion",
+      "Bash",
+      "CronCreate",
+      "CronDelete",
+      "CronList",
+      "DesignSync",
+      "Edit",
+      "EnterPlanMode",
+      "EnterWorktree",
+      "ExitPlanMode",
+      "ExitWorktree",
+      "ListAgents",
+      "ListMcpResourcesTool",
+      "LSP",
+      "Monitor",
+      "NotebookEdit",
+      "PushNotification",
+      "Read",
+      "ReadMcpResourceDirTool",
+      "ReadMcpResourceTool",
+      "RemoteTrigger",
+      "ReportFindings",
+      "ScheduleWakeup",
+      "SendMessage",
+      "Skill",
+      "TaskStop",
+      "ToolSearch",
+      "WebFetch",
+      "WebSearch",
+      "Workflow",
+      "Write",
+      "mcp__claude_ai_Claude_Docs__batch",
+      "mcp__claude_ai_Claude_Docs__create",
+      "mcp__claude_ai_Claude_Docs__delete",
+      "mcp__claude_ai_Claude_Docs__export",
+      "mcp__claude_ai_Claude_Docs__guide",
+      "mcp__claude_ai_Claude_Docs__query",
+      "mcp__claude_ai_Claude_Docs__read",
+      "mcp__claude_ai_Claude_Docs__update",
+      "mcp__claude_ai_higgsfield__animation_actions",
+      "mcp__claude_ai_higgsfield__apps_describe",
+      "mcp__claude_ai_higgsfield__apps_invoke",
+      "mcp__claude_ai_higgsfield__apps_search",
+      "mcp__claude_ai_higgsfield__balance",
+      "mcp__claude_ai_higgsfield__cancel_trial_auto_renewal",
+      "mcp__claude_ai_higgsfield__confirm_billing_purchase",
+      "mcp__claude_ai_higgsfield__confirm_trial_cancel",
+      "mcp__claude_ai_higgsfield__create_voice",
+      "mcp__claude_ai_higgsfield__create_voice_from_confirmed_audio",
+      "mcp__claude_ai_higgsfield__create_website",
+      "mcp__claude_ai_higgsfield__deploy_website",
+      "mcp__claude_ai_higgsfield__dubbing",
+      "mcp__claude_ai_higgsfield__generate_3d",
+      "mcp__claude_ai_higgsfield__generate_audio",
+      "mcp__claude_ai_higgsfield__generate_audio_batch",
+      "mcp__claude_ai_higgsfield__generate_image",
+      "mcp__claude_ai_higgsfield__generate_image_batch",
+      "mcp__claude_ai_higgsfield__generate_video",
+      "mcp__claude_ai_higgsfield__generate_video_batch",
+      "mcp__claude_ai_higgsfield__get_explainer_presets",
+      "mcp__claude_ai_higgsfield__get_workflow_bundle_file",
+      "mcp__claude_ai_higgsfield__get_workflow_instructions",
+      "mcp__claude_ai_higgsfield__job_display",
+      "mcp__claude_ai_higgsfield__job_status",
+      "mcp__claude_ai_higgsfield__jobs_wait",
+      "mcp__claude_ai_higgsfield__list_voices",
+      "mcp__claude_ai_higgsfield__list_website_categories",
+      "mcp__claude_ai_higgsfield__list_websites",
+      "mcp__claude_ai_higgsfield__list_workspaces",
+      "mcp__claude_ai_higgsfield__marketing_studio_v2_avatars",
+      "mcp__claude_ai_higgsfield__marketing_studio_v2_costs",
+      "mcp__claude_ai_higgsfield__marketing_studio_v2_create",
+      "mcp__claude_ai_higgsfield__marketing_studio_v2_presets",
+      "mcp__claude_ai_higgsfield__marketing_studio_v2_status",
+      "mcp__claude_ai_higgsfield__media_confirm",
+      "mcp__claude_ai_higgsfield__media_import_url",
+      "mcp__claude_ai_higgsfield__media_upload",
+      "mcp__claude_ai_higgsfield__media_upload_widget",
+      "mcp__claude_ai_higgsfield__models_explore",
+      "mcp__claude_ai_higgsfield__motion_control",
+      "mcp__claude_ai_higgsfield__outpaint_image",
+      "mcp__claude_ai_higgsfield__participate_in_contest",
+      "mcp__claude_ai_higgsfield__presets_show",
+      "mcp__claude_ai_higgsfield__publish_website",
+      "mcp__claude_ai_higgsfield__reframe",
+      "mcp__claude_ai_higgsfield__remove_background",
+      "mcp__claude_ai_higgsfield__rename_website",
+      "mcp__claude_ai_higgsfield__resolve_explainer_preset",
+      "mcp__claude_ai_higgsfield__reveal_generation",
+      "mcp__claude_ai_higgsfield__sandbox_exec",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_create_project",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_get_artifact",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_get_blend",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_get_glb",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_get_operation",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_get_project",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_import_asset",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_list_projects",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_query_python",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_run_python",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_search_assets",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_show_scene",
+      "mcp__claude_ai_higgsfield__select_workspace",
+      "mcp__claude_ai_higgsfield__shorts_studio_create",
+      "mcp__claude_ai_higgsfield__shorts_studio_create_preset",
+      "mcp__claude_ai_higgsfield__shorts_studio_list_presets",
+      "mcp__claude_ai_higgsfield__shorts_studio_list_sessions",
+      "mcp__claude_ai_higgsfield__shorts_studio_status",
+      "mcp__claude_ai_higgsfield__show_characters",
+      "mcp__claude_ai_higgsfield__show_generation_by_ids",
+      "mcp__claude_ai_higgsfield__show_generations",
+      "mcp__claude_ai_higgsfield__show_marketing_studio_generations",
+      "mcp__claude_ai_higgsfield__show_marketing_studio_v2",
+      "mcp__claude_ai_higgsfield__show_medias",
+      "mcp__claude_ai_higgsfield__show_plans_and_credits",
+      "mcp__claude_ai_higgsfield__show_reference_elements",
+      "mcp__claude_ai_higgsfield__tiktok_accounts",
+      "mcp__claude_ai_higgsfield__tiktok_connect",
+      "mcp__claude_ai_higgsfield__tiktok_music_trending",
+      "mcp__claude_ai_higgsfield__tiktok_music_tune",
+      "mcp__claude_ai_higgsfield__tiktok_prepare_publish",
+      "mcp__claude_ai_higgsfield__tiktok_publish",
+      "mcp__claude_ai_higgsfield__tiktok_publish_status",
+      "mcp__claude_ai_higgsfield__tiktok_reconnect",
+      "mcp__claude_ai_higgsfield__transactions",
+      "mcp__claude_ai_higgsfield__upscale_image",
+      "mcp__claude_ai_higgsfield__upscale_video",
+      "mcp__claude_ai_higgsfield__video_analysis_create",
+      "mcp__claude_ai_higgsfield__video_analysis_jobs",
+      "mcp__claude_ai_higgsfield__video_analysis_status",
+      "mcp__claude_ai_higgsfield__virality_predictor",
+      "mcp__claude_ai_higgsfield__voice_change",
+      "mcp__claude_ai_higgsfield__website_db",
+      "mcp__claude_ai_higgsfield__website_repo_access",
+      "mcp__claude_ai_higgsfield__website_secrets",
+      "mcp__claude_ai_higgsfield__website_status",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__click",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__close_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__drag",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__emulate",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__evaluate_script",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__fill",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__fill_form",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__get_console_message",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__get_network_request",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__handle_dialog",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__hover",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__lighthouse_audit",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__list_console_messages",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__list_network_requests",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__list_pages",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__navigate_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__new_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__performance_analyze_insight",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__performance_start_trace",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__performance_stop_trace",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__press_key",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__resize_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__select_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_heapsnapshot",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_screenshot",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_snapshot",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__type_text",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__upload_file",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__wait_for",
+      "mcp__plugin_playwright_playwright__browser_click",
+      "mcp__plugin_playwright_playwright__browser_close",
+      "mcp__plugin_playwright_playwright__browser_console_messages",
+      "mcp__plugin_playwright_playwright__browser_drag",
+      "mcp__plugin_playwright_playwright__browser_drop",
+      "mcp__plugin_playwright_playwright__browser_emulate_media",
+      "mcp__plugin_playwright_playwright__browser_evaluate",
+      "mcp__plugin_playwright_playwright__browser_file_upload",
+      "mcp__plugin_playwright_playwright__browser_fill_form",
+      "mcp__plugin_playwright_playwright__browser_find",
+      "mcp__plugin_playwright_playwright__browser_handle_dialog",
+      "mcp__plugin_playwright_playwright__browser_hover",
+      "mcp__plugin_playwright_playwright__browser_navigate",
+      "mcp__plugin_playwright_playwright__browser_navigate_back",
+      "mcp__plugin_playwright_playwright__browser_network_request",
+      "mcp__plugin_playwright_playwright__browser_network_requests",
+      "mcp__plugin_playwright_playwright__browser_press_key",
+      "mcp__plugin_playwright_playwright__browser_resize",
+      "mcp__plugin_playwright_playwright__browser_run_code_unsafe",
+      "mcp__plugin_playwright_playwright__browser_select_option",
+      "mcp__plugin_playwright_playwright__browser_snapshot",
+      "mcp__plugin_playwright_playwright__browser_tabs",
+      "mcp__plugin_playwright_playwright__browser_take_screenshot",
+      "mcp__plugin_playwright_playwright__browser_type",
+      "mcp__plugin_playwright_playwright__browser_wait_for"
+    ]
+  },
+  "model": {
+    "configured": "opus[1m]",
+    "effective": "claude-sonnet-5",
+    "effective_proves_fidelity": false,
+    "requested": "claude-sonnet-5"
+  },
+  "permission": {
+    "checked_after_delivery": true,
+    "effective": "acceptEdits",
+    "matched": true,
+    "requested": "acceptEdits"
+  },
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "preflight": {
+    "binary_newer_than_every_source": true,
+    "binary_sha256": "252454bbf12313e753caa6d82ada9a63d328c48ecc6f0aeb71155c1dc6c97422",
+    "checked": true,
+    "commit": "925f39e0935191b9f4fe0aeece540080e6a0ab34",
+    "dirty": false,
+    "dry_run_check": {
+      "made_in_dry_run": true,
+      "observation": "a permission request surfaced and answered by the caller",
+      "ran": true
+    },
+    "newest_source": "crates/pio-cli/tests/claude_fake_cli.rs"
+  },
+  "run": "R3c",
+  "runtime": "exited",
+  "started_at": "2026-09-20T17:42:17Z",
+  "stops": [],
+  "tool_uses": {
+    "containment": {
+      "mechanism": "harness_permission_rules_only",
+      "os_sandbox_observed": false
+    },
+    "denied_by_harness_count": 1,
+    "format": "pio-claude-tool-uses/4",
+    "liability": "none_observed",
+    "out_of_fixture_count": 0,
+    "out_of_fixture_effect_observed": false,
+    "tool_uses": [
+      {
+        "denied_by_harness": true,
+        "outcome": "attempted_and_denied",
+        "placement": "not_classifiable",
+        "target_label": null,
+        "target_sha256": "7560c44d7fedaba143b1ea39b945ceaf13131868cc4d436ee36d8633816a7153",
+        "tool": "Bash",
+        "tool_use_id": "toolu_01LBYB7Bg7G6XuvrbZwpcd21"
+      }
+    ],
+    "unclassifiable_target_count": 0,
+    "workspace_sha256": "683b6e7380c99466c3edea1d657a1b47f9a7ac61338ff0f1be4c75283bd86737"
+  },
+  "usage": {
+    "cap": 1000000,
+    "charge_basis": "observed",
+    "charged": 67357,
+    "execution_deadline_seconds": 600,
+    "limit_is_next_turn_only": true,
+    "measure": "input+output+cache_creation+cache_read",
+    "observed_total_tokens": 67357,
+    "parts": {
+      "cache_creation_input_tokens": 33656,
+      "cache_read_input_tokens": 33551,
+      "input_tokens": 4,
+      "output_tokens": 146
+    },
+    "reported": true,
+    "run_limit": 250000,
+    "stop_at": 800000,
+    "terminal_reason": "completed",
+    "unknown_reason": null
+  }
+}

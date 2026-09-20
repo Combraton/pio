@@ -374,7 +374,8 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
         .collect();
     // This harness reports no denial list, so nothing is claimed about
     // refusals here and every recorded use is treated as performed.
-    let tool_uses = pio_claude::tool_use_records(&tool_use_messages, &Value::Null, &cwd, &cwd);
+    let tool_uses =
+        pio_claude::tool_use_records(&tool_use_messages, &Value::Null, &Value::Null, &cwd, &cwd);
     // Ordered deliberately: the exit event is what turns the runtime to
     // `exited`, so everything a caller must see on a finished execution is
     // recorded first. A matrix run caught the other order.

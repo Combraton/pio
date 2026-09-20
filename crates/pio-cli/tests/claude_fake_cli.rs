@@ -276,7 +276,8 @@ fn tool_uses_are_reported_so_the_receipt_can_record_every_one() {
     let messages = turn(dir.path(), &scenario, None);
     let fixture = dir.path().join("fixture");
     std::fs::create_dir_all(&fixture).unwrap();
-    let record = pio_claude::tool_use_records(&messages, &Value::Null, &fixture, &fixture);
+    let record =
+        pio_claude::tool_use_records(&messages, &Value::Null, &Value::Null, &fixture, &fixture);
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses.len(), 2);
     assert_eq!(uses[1]["placement"], "outside_fixture");
