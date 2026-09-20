@@ -209,13 +209,18 @@ fn qualify_refuses_surface_drift_naming_the_command() {
 #[test]
 fn qualify_refuses_a_missing_executable_as_data() {
     let dir = tempfile::tempdir().unwrap();
-    let record = qualify(
-        &dir.path().join("absent"),
-        &json!({"commands":{}}),
-        &ChildEnv::isolated(&dir.path().join("work")).with_path(path_var().as_deref()),
-        &dir.path().join("work"),
-    )
-    .unwrap();
+    // Serialized like every other spawn here: a missing executable still
+    // forks before it fails, and a fork inside another test's write-then-run
+    // region is what makes an exec fail with `ETXTBSY` on Linux.
+    let record = serialized(|| {
+        qualify(
+            &dir.path().join("absent"),
+            &json!({"commands":{}}),
+            &ChildEnv::isolated(&dir.path().join("work")).with_path(path_var().as_deref()),
+            &dir.path().join("work"),
+        )
+        .unwrap()
+    });
     assert_eq!(record["qualified"], false);
     assert_eq!(record["refusals"][0]["reason"], "unresolved_executable");
 }

@@ -13,6 +13,18 @@ fn serialized<T>(body: impl FnOnce() -> T) -> T {
     body()
 }
 
+/// Every admission runs `ps` to record the owner's service, which is a fork.
+/// A fork landing between writing a fake executable and running it leaves the
+/// child holding an inherited write descriptor, and the exec then fails with
+/// `ETXTBSY`. So an admission takes the same lock as a write-then-run region.
+/// Measured: this failed `a_version_that_is_not_the_pin_is_refused_without_
+/// running_further_arguments` on a Linux runner, never on macOS.
+///
+/// Not for use inside a `serialized` block: the lock is not reentrant.
+fn admitted(work: &Path, config: &Value) -> Value {
+    serialized(|| service_admission(work, config).unwrap())
+}
+
 fn fake_opencode(dir: &Path, version: &str, top_help: &str) -> PathBuf {
     let path = dir.join("fake-opencode");
     std::fs::write(
@@ -164,11 +176,10 @@ fn reasons(record: &Value) -> Vec<String> {
 #[test]
 fn the_owner_excluded_provider_is_refused_outright() {
     let dir = tempfile::tempdir().unwrap();
-    let record = service_admission(
+    let record = admitted(
         dir.path(),
         &service(json!("juspay-grid/glm-latest"), json!({})),
-    )
-    .unwrap();
+    );
     assert_eq!(record["admitted"], false);
     assert!(reasons(&record).contains(&"provider_excluded_by_the_owner".to_owned()));
 }
@@ -176,17 +187,16 @@ fn the_owner_excluded_provider_is_refused_outright() {
 #[test]
 fn a_model_requires_the_dated_exception_and_a_run_requires_a_model() {
     let dir = tempfile::tempdir().unwrap();
-    let missing = service_admission(dir.path(), &service(Value::Null, json!({}))).unwrap();
+    let missing = admitted(dir.path(), &service(Value::Null, json!({})));
     assert!(reasons(&missing).contains(&"model_required".to_owned()));
 
-    let undated = service_admission(
+    let undated = admitted(
         dir.path(),
         &service(
             json!("minimax-coding-plan/MiniMax-M2.7-highspeed"),
             json!({"test_only_model_exception":"something-else"}),
         ),
-    )
-    .unwrap();
+    );
     assert!(
         reasons(&undated).contains(&"model_requires_the_dated_test_only_exception".to_owned()),
         "{undated}"
@@ -197,14 +207,13 @@ fn a_model_requires_the_dated_exception_and_a_run_requires_a_model() {
 fn a_credential_variable_never_reaches_a_child() {
     let dir = tempfile::tempdir().unwrap();
     for name in ["ANTHROPIC_API_KEY", "MINIMAX_TOKEN", "OPENCODE_PASSWORD"] {
-        let record = service_admission(
+        let record = admitted(
             dir.path(),
             &service(
                 json!("minimax-coding-plan/MiniMax-M2.7-highspeed"),
                 json!({"env":{"PATH":"/usr/bin:/bin", name:"x"}}),
             ),
-        )
-        .unwrap();
+        );
         assert!(
             reasons(&record).contains(&"env_carries_a_credential_variable".to_owned()),
             "{name} was admitted"
@@ -215,14 +224,13 @@ fn a_credential_variable_never_reaches_a_child() {
 #[test]
 fn an_admitted_configuration_starts_no_session_and_records_the_owner_service() {
     let dir = tempfile::tempdir().unwrap();
-    let record = service_admission(
+    let record = admitted(
         dir.path(),
         &service(
             json!("minimax-coding-plan/MiniMax-M2.7-highspeed"),
             json!({}),
         ),
-    )
-    .unwrap();
+    );
     assert_eq!(record["admitted"], true, "{record}");
     assert_eq!(record["session_started"], false);
     // The owner's own service is recorded so a run can prove it did not move.
