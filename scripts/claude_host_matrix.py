@@ -28,7 +28,7 @@ CONTENT = 'pio.combraton.dev/content'
 FEATURES = ['execution.controller', 'execution.output', 'execution.discovery',
             'execution.workspaces', 'execution.usage', 'execution.actions']
 STREAM_ARGS = ['--print', '--input-format', 'stream-json', '--output-format', 'stream-json',
-               '--verbose', '--replay-user-messages']
+               '--verbose', '--replay-user-messages', '--permission-prompts', 'host']
 CASES = [
     'turn_completes',
     'replay_acknowledges_delivery',
@@ -37,6 +37,7 @@ CASES = [
     'out_of_fixture_request_declined_by_pio',
     'unclassifiable_request_surfaced_not_auto_allowed',
     'widening_decision_never_sent',
+    'an_unattached_host_never_sees_the_request_the_harness_refuses',
     'unqualified_executable_refused',
     'missing_credential_route_refused',
     'permission_mode_not_the_configured_default_refused',
@@ -45,6 +46,7 @@ CASES = [
     'service_turn_completes',
     'service_reports_the_transcript_the_run_wrote',
     'service_records_the_configured_model_from_settings',
+    'service_tells_a_harness_refusal_apart_from_a_pio_decline',
     'service_refuses_an_unqualified_executable_at_start',
     'service_answers_a_request_it_will_not_act_on',
     'service_interrupt_escalates_when_the_signal_is_ignored',
@@ -151,14 +153,22 @@ class Case:
         (self.out / 'admission.json').write_text(json.dumps(record, indent=2, sort_keys=True))
         return result.returncode, record
 
-    def turn(self, decision=None, brief='do the fixture task'):
+    def turn(self, decision=None, brief='do the fixture task', attach=True):
         """Drive one turn against the fake, answering any permission request."""
         argv = [str(self.wrapper), *STREAM_ARGS, '--permission-mode', 'acceptEdits']
+        if attach:
+            argv += ['--permission-prompt-tool', 'stdio']
         child = subprocess.Popen(argv, cwd=str(self.workspace), env=self.env(),
                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                  text=True, bufsize=1)
         sent = {'type': 'user', 'message': {'role': 'user',
                                             'content': [{'type': 'text', 'text': brief}]}}
+        if attach:
+            # The handshake that announces the host, before anything else.
+            child.stdin.write(json.dumps({
+                'type': 'control_request', 'request_id': 'req_init_pio',
+                'request': {'subtype': 'initialize', 'hooks': None}}) + '\n')
+            child.stdin.flush()
         child.stdin.write(json.dumps(sent) + '\n')
         child.stdin.flush()
         messages = []
@@ -166,6 +176,9 @@ class Case:
             if not line.strip():
                 continue
             message = json.loads(line)
+            if message.get('type') == 'control_response' \
+                    and message.get('response', {}).get('request_id') == 'req_init_pio':
+                continue
             messages.append(message)
             if message.get('type') == 'control_request' and decision is not None:
                 child.stdin.write(json.dumps({'type': 'control_response', 'response': {
@@ -347,7 +360,7 @@ def run_case(out, name):
             'permission_request': {'tool_name': 'Bash', 'input': {'command': 'ls /etc'}}})
         _, messages = case.turn(decision={'behavior': 'deny', 'message': 'outside the fixture'})
         assert 'control_request' in kinds(messages), kinds(messages)
-        assert messages[-1]['permission_denials'] == 1, messages[-1]
+        assert messages[-1]['permission_denial_count'] == 1, messages[-1]
         recorded = case.markers_of('permission_decision')
         assert [r['behavior'] for r in recorded] == ['deny'], recorded
         assert recorded[0]['widening_fields_received'] == [], recorded
@@ -357,7 +370,7 @@ def run_case(out, name):
         case = Case(out, name, scenario={
             'permission_request': {'tool_name': 'Bash', 'input': command}})
         _, messages = case.turn(decision={'behavior': 'allow', 'updatedInput': command})
-        assert messages[-1]['permission_denials'] == 0, messages[-1]
+        assert messages[-1]['permission_denial_count'] == 0, messages[-1]
         recorded = case.markers_of('permission_decision')
         assert [r['behavior'] for r in recorded] == ['allow'], recorded
         # An allow must echo the input unchanged: rewriting it would alter the
@@ -398,7 +411,7 @@ def run_case(out, name):
              '--reason', classification['reason']],
             input=json.dumps(request), capture_output=True, text=True, check=True).stdout)
         _, messages = case.turn(decision=encoded['envelope']['response']['response'])
-        assert messages[-1]['permission_denials'] == 1, messages[-1]
+        assert messages[-1]['permission_denial_count'] == 1, messages[-1]
         recorded = case.markers_of('permission_decision')
         assert [r['behavior'] for r in recorded] == ['deny'], recorded
         # The decline covers the prompt. The tool use is still recorded, because
@@ -472,6 +485,38 @@ def run_case(out, name):
         # case is only evidence because that detector is proven to work.
         assert recorded[0]['widening_fields_received'] == [], recorded
         assert recorded[0]['input_echoed_unchanged'] is True, recorded
+
+    elif name == 'an_unattached_host_never_sees_the_request_the_harness_refuses':
+        # R3b, reproduced. Without `--permission-prompt-tool stdio` and the
+        # handshake, the CLI denies anything that would prompt and answers its
+        # own model. PIO is never asked and learns nothing.
+        case = Case(out, name, scenario={
+            'permission_request': {'tool_name': 'Bash',
+                                   'input': {'command': 'git tag pio-live-marker'}}})
+        _, messages = case.turn(attach=False)
+        assert 'control_request' not in kinds(messages), kinds(messages)
+        refused = case.markers_of('denied_by_harness_no_host_attached')
+        assert len(refused) == 1, case.markers_of('turn_received')
+        assert refused[0]['attached'] is False, refused
+        # The harness told its own model, in the words the real one used.
+        results = [b for m in messages if m.get('type') == 'user'
+                   for b in (m['message']['content'] if isinstance(m['message']['content'], list) else [])
+                   if b.get('type') == 'tool_result']
+        assert len(results) == 1 and results[0]['is_error'] is True, results
+        assert results[0]['content'] == 'This command requires approval', results
+        # And the result names the refusal, which is how a denied attempt is
+        # told apart from an effect.
+        assert [d['tool_name'] for d in messages[-1]['permission_denials']] == ['Bash'], messages[-1]
+        # The same case with a host attached must reach PIO, or this proves
+        # nothing about attachment.
+        attached_case = Case(out, name + '-attached', scenario={
+            'permission_request': {'tool_name': 'Bash',
+                                   'input': {'command': 'git tag pio-live-marker'}}})
+        _, attached_messages = attached_case.turn(
+            decision={'behavior': 'deny', 'message': 'the caller said no'})
+        assert 'control_request' in kinds(attached_messages), kinds(attached_messages)
+        assert attached_case.markers_of('denied_by_harness_no_host_attached') == []
+        attached_case.cleanup()
 
     elif name == 'unqualified_executable_refused':
         # A real (non-fake) configuration pointed at an executable that is not
@@ -613,6 +658,37 @@ def run_case(out, name):
         assert started[0]['configured_model'] == 'a-configured-model-name', started[0]
         # Nothing was passed, so the two are distinguishable in the receipt.
         assert started[0]['requested_model'] is None, started[0]
+
+    elif name == 'service_tells_a_harness_refusal_apart_from_a_pio_decline':
+        # A host is attached and the harness refuses anyway, because its own
+        # rules shadow the callback — which the pinned SDK warns about and R3
+        # measured. A caller must be able to tell that apart from PIO
+        # declining, so it is in the view rather than only in the events.
+        case = ServiceCase(out, name, scenario={
+            'deny_by_rules': True,
+            'permission_request': {'tool_name': 'Bash',
+                                   'input': {'command': 'git tag pio-live-marker'}}})
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        assert view['exit'] == {'code': 0}, view
+        events = case.host_events()
+        # PIO declined nothing and was asked nothing.
+        assert [e for e in events if e['kind'] == 'request_declined_by_pio'] == []
+        assert [e for e in events if e['kind'] == 'action_requested'] == []
+        assert [e for e in events if e['kind'] == 'request_denied_by_default'] == []
+        # The harness was attached, and refused under its own rules anyway.
+        assert case.markers_of('denied_by_harness_rules_shadowed_the_host'), case.markers_of('turn_received')
+        assert [e for e in events if e['kind'] == 'host_attached'][0]['outcome']['attached'] is True
+        # Visible to a caller, in the view, named for what it was.
+        assert view['containment']['denied_by_harness'] == 1, view['containment']
+        assert 'PIO was not asked' in view['containment']['denied_by_harness_reason'], view['containment']
+        # A refused attempt is not an effect.
+        record = [e for e in events if e['kind'] == 'tool_uses'][0]['record']
+        assert record['denied_by_harness_count'] == 1, record
+        assert record['tool_uses'][0]['outcome'] == 'attempted_and_denied', record
+        assert record['liability'] == 'none_observed', record
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     elif name == 'service_refuses_an_unqualified_executable_at_start':
         # A real configuration pointed at something that is not the qualified

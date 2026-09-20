@@ -15,6 +15,8 @@
 //! `tool_uses` (blocks to report), `usage_total` (default 128), `delay_ms`,
 //! `init` (members merged into `system/init`), `ignore_interrupt` (the fake
 //! ignores SIGINT and hangs, so a host's escalation can be proven),
+//! `deny_by_rules` (the harness refuses under its own rules even with a host
+//! attached, which the pinned SDK warns is what shadowing does),
 //! `abort_on_interrupt` (SIGINT during `delay_ms` ends the turn the way the
 //! real harness was measured to: an aborted `result` with an empty usage
 //! block),
@@ -258,11 +260,46 @@ pub fn run() -> Result<()> {
     // so init cannot be used as a pre-flight check.
     let stdin = std::io::stdin();
     let mut lines = stdin.lock().lines();
-    let Some(first) = lines.next() else {
-        return Ok(());
+    // Attachment, the way the real harness was measured to do it. A host that
+    // names `--permission-prompt-tool stdio` **and** sends the handshake is
+    // attached; anything less is not, and an unattached harness answers its
+    // own model rather than asking anyone. R3b found PIO in that state.
+    let prompt_tool = args
+        .iter()
+        .position(|a| a == "--permission-prompt-tool")
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str)
+        == Some("stdio");
+    let mut handshook = false;
+    let sent: Value = loop {
+        let Some(line) = lines.next() else {
+            return Ok(());
+        };
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let message: Value = serde_json::from_str(&line).context("stdin line is not JSON")?;
+        if message["type"] == "control_request" && message["request"]["subtype"] == "initialize" {
+            handshook = true;
+            marker(&markers, json!({"event":"initialize_received"}))?;
+            // The answer measured from 2.1.278, by its keys.
+            emit(&json!({"type":"control_response","response":{
+                "subtype":"success","request_id":message["request_id"],
+                "response":{},
+                "pending_permission_requests":[],
+                "pending_user_dialog_requests":[]}}))?;
+            continue;
+        }
+        break message;
     };
-    let sent: Value = serde_json::from_str(&first?).context("first stdin line is not JSON")?;
-    marker(&markers, json!({"event":"turn_received"}))?;
+    let attached = prompt_tool && handshook;
+    marker(
+        &markers,
+        json!({"event":"turn_received","attached":attached,
+                            "permission_prompt_tool":prompt_tool,
+                            "initialize_received":handshook}),
+    )?;
 
     emit(&init_message(&scenario, &args))?;
     // The replay echo: the exact message that was sent. This is the delivery
@@ -334,7 +371,41 @@ pub fn run() -> Result<()> {
 
     let mut denials = 0;
     let mut decision = Value::Null;
-    if !scenario["permission_request"].is_null() {
+    let mut denied_by_harness: Vec<Value> = Vec::new();
+    // Measured on the real harness and warned about in the pinned SDK: an
+    // attached host's callback is **shadowed** by the allow rules and the
+    // permission mode, so a harness can still decide by itself while a host is
+    // listening. `deny_by_rules` reproduces that; `attached` being false is
+    // the R3b state, where nobody was listening at all.
+    let harness_decides = !attached || scenario["deny_by_rules"] == true;
+    if !scenario["permission_request"].is_null() && harness_decides {
+        // Nobody is listening, so the harness decides for itself and tells its
+        // own model. Measured text, from the R3b transcript.
+        let request = &scenario["permission_request"];
+        let tool_use_id = "toolu_fake_denied_1";
+        emit(&assistant(json!([{
+            "type":"tool_use","name":&request["tool_name"],
+            "id":tool_use_id,"input":&request["input"]}])))?;
+        emit(&json!({"type":"user","message":{"role":"user","content":[{
+            "type":"tool_result","tool_use_id":tool_use_id,"is_error":true,
+            "content":"This command requires approval"}]},"source":SOURCE}))?;
+        denied_by_harness.push(json!({"tool_name":&request["tool_name"],
+            "tool_use_id":tool_use_id,"tool_input":&request["input"]}));
+        denials += 1;
+        // Two different states, never merged: nobody was listening, or a host
+        // was listening and the harness's own rules decided anyway.
+        let state = if attached {
+            "denied_by_harness_rules_shadowed_the_host"
+        } else {
+            "denied_by_harness_no_host_attached"
+        };
+        decision = json!(state);
+        marker(
+            &markers,
+            json!({"event":state,"attached":attached,
+                   "tool_name":&request["tool_name"]}),
+        )?;
+    } else if !scenario["permission_request"].is_null() {
         match request_permission(&scenario["permission_request"], &mut lines, &markers)? {
             Some(behavior) => {
                 decision = json!(behavior);
@@ -369,7 +440,8 @@ pub fn run() -> Result<()> {
         "session_id":"fake-session","is_error":false,"result_index":0,
         "terminal_reason":"complete","stop_reason":"end_turn","num_turns":1,
         "duration_ms":1,"duration_api_ms":1,"queued_turn_count":0,
-        "permission_denials":denials,"permission_decision":decision,
+        "permission_denials":denied_by_harness,"permission_denial_count":denials,
+        "permission_decision":decision,
         "total_cost_usd":0.0,"subagent_stats":{},
         "usage":{"input_tokens":total / 2,"output_tokens":total / 2,
                  "cache_creation_input_tokens":0,"cache_read_input_tokens":0},

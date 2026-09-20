@@ -45,6 +45,12 @@ STREAM_ARGS = ['--print', '--input-format', 'stream-json', '--output-format', 's
 # one is not a snapshot. `settings.local.json` also carries permission rules.
 USER_CONFIG = ('.claude/settings.json', '.claude/settings.local.json', '.claude.json')
 BASE_PATH = '/usr/bin:/bin:/usr/sbin:/sbin'
+# The control-protocol handshake, in the shape the pinned SDK sends it
+# (`query.py`): a subtype and hooks, and nothing else when nothing is
+# configured. No hooks, no agents, no system prompt snapshot, so attaching
+# changes nothing about the session it attaches to.
+INITIALIZE = {'type': 'control_request', 'request_id': 'req_init_probe',
+              'request': {'subtype': 'initialize', 'hooks': None}}
 
 # Set once by main(); every launch uses the selected executable.
 EXECUTABLE = None
@@ -113,7 +119,7 @@ def _reader(pipe, q):
     q.put(None)
 
 
-def launch(root, label, extra_args=(), write=True, silence_seconds=0):
+def launch(root, label, extra_args=(), write=True, silence_seconds=0, control_first=None):
     """Launch with an isolated config and no credentials. Authentication fails
     before any model call, so the shapes cost nothing.
 
@@ -158,6 +164,21 @@ def launch(root, label, extra_args=(), write=True, silence_seconds=0):
 
     drain(silent_until)
     messages_before_write = len(messages)
+    # The handshake, before anything else is written. A host that never
+    # announces itself is not a host: measured on R3b, the CLI then denies
+    # anything that would prompt and PIO never learns it was asked.
+    control_answered_in = None
+    if control_first is not None:
+        sent_at = time.monotonic()
+        child.stdin.write(json.dumps(control_first) + '\n')
+        child.stdin.flush()
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not any(
+                m.get('type') == 'control_response' for m in messages):
+            if drain(time.monotonic() + 0.5):
+                break
+        if any(m.get('type') == 'control_response' for m in messages):
+            control_answered_in = round(time.monotonic() - sent_at, 3)
     if write:
         wrote_at = time.monotonic()
         child.stdin.write(message + '\n')
@@ -172,12 +193,31 @@ def launch(root, label, extra_args=(), write=True, silence_seconds=0):
     except subprocess.TimeoutExpired:
         child.kill()
     init = init or {}
+    stderr_text = ''
+    try:
+        stderr_text = child.stderr.read() or ''
+    except (OSError, ValueError):
+        pass
+    answer = next((m for m in messages if m.get('type') == 'control_response'), {})
+    inner = answer.get('response') or {}
     final = next((m for m in messages if m.get('type') == 'result'), {})
     replay = next((m for m in messages if m.get('type') == 'user' and m.get('isReplay')), None)
     failure = next((m for m in messages if m.get('error')), {})
     return dict(
         label=label, extra_args=list(extra_args), exit=child.returncode,
         brief_sha256=sha(brief),
+        # A rejected flag is a usage error on stderr and a fast non-zero exit,
+        # so the flag is recorded as accepted only when neither happened.
+        stderr_sha256=sha(stderr_text) if stderr_text else None,
+        stderr_mentions_unknown_option=('unknown option' in stderr_text.lower()
+                                        or 'unknown argument' in stderr_text.lower()),
+        initialize_sent=control_first is not None,
+        initialize_answered=bool(answer),
+        initialize_answered_in_seconds=control_answered_in,
+        initialize_response_subtype=inner.get('subtype'),
+        # Keys only. The handshake's payload is the CLI's, not PIO's to record.
+        initialize_response_keys=sorted(inner),
+        initialize_response_error=inner.get('error'),
         messages_before_any_stdin_write=messages_before_write,
         held_stdin_open_seconds=silence_seconds,
         init_received=bool(init_at),
@@ -238,6 +278,23 @@ def main():
     defaults = launch(private, 'product-defaults')
     requested = launch(private, 'requested-mode', ('--permission-mode', 'acceptEdits'))
     timing = launch(private, 'init-timing', silence_seconds=20)
+    # Attachment, measured three ways and at zero tokens, because R3b showed
+    # PIO was not attached at all: it passed `--permission-prompts host`,
+    # named no prompt tool and never sent the handshake, so the CLI denied
+    # anything that would prompt and PIO never saw the request.
+    tool_only = launch(private, 'prompt-tool', ('--permission-prompt-tool', 'stdio'),
+                       write=False)
+    attached = launch(private, 'attached',
+                      ('--permission-mode', 'acceptEdits',
+                       '--permission-prompts', 'host',
+                       '--permission-prompt-tool', 'stdio'),
+                      write=False, control_first=INITIALIZE)
+    # The control: the same handshake with no prompt tool named. If this one
+    # is answered too, the flag is not what makes the CLI listen.
+    unattached = launch(private, 'no-prompt-tool',
+                        ('--permission-mode', 'acceptEdits',
+                         '--permission-prompts', 'host'),
+                        write=False, control_first=INITIALIZE)
 
     version_dir = args.adapters / version
     surface_path = version_dir / 'surface-identity.json'
@@ -249,7 +306,13 @@ def main():
         result_keys=defaults['result_keys'],
         product_default_permission_mode=defaults['permissionMode'],
         product_default_model=defaults['model'],
-        init_waits_for_stdin=timing['messages_before_any_stdin_write'] == 0)
+        init_waits_for_stdin=timing['messages_before_any_stdin_write'] == 0,
+        # How PIO attaches as the host that answers permission prompts.
+        permission_prompt_tool_accepted=(
+            not tool_only['stderr_mentions_unknown_option']),
+        initialize_answered=attached['initialize_answered'],
+        initialize_response_subtype=attached['initialize_response_subtype'],
+        initialize_response_keys=attached['initialize_response_keys'])
 
     if args.update_baseline:
         version_dir.mkdir(parents=True, exist_ok=True)
@@ -278,7 +341,9 @@ def main():
                 expected_stream, stream_identity,
                 ('init_keys', 'capabilities', 'message_sequence', 'result_keys',
                  'product_default_permission_mode', 'product_default_model',
-                 'init_waits_for_stdin'))]
+                 'init_waits_for_stdin', 'permission_prompt_tool_accepted',
+                 'initialize_answered', 'initialize_response_subtype',
+                 'initialize_response_keys'))]
 
     after = {p.name: sha(p.read_bytes()) for p in config if p.exists()}
     summary = dict(
@@ -296,7 +361,8 @@ def main():
         # artefact of the environment rather than of the missing credential.
         missing_route_control=auth_route(EXECUTABLE, private / 'no-credentials',
                                          private / 'no-credentials'),
-        stream=dict(product_defaults=defaults, requested_mode=requested, init_timing=timing),
+        stream=dict(product_defaults=defaults, requested_mode=requested, init_timing=timing,
+                    prompt_tool_only=tool_only, attached=attached, unattached=unattached),
         findings=findings, qualified=not findings,
         user_configuration_unchanged=before == after,
         user_configuration_files=sorted(before))

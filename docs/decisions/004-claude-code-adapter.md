@@ -209,6 +209,18 @@ It is now controlled and fixed. A cleared-environment run and an inherited-envir
 
 The same disclosure answers the reviewer's question about that probe reporting `acceptEdits` and Opus. The mode came from a flag the probe itself passed, `--permission-mode acceptEdits`; the control run without the flag reports `default`. The model is the **product default**, reproduced with an empty configuration and a cleared environment, and it is not evidence of a leak — nor, as §8 now records, evidence of fidelity.
 
+### Disclosure: attempts recorded as effects, and a host that never attached
+
+Two findings from R3b, and the second corrects the first two containment runs.
+
+**PIO was never attached as the host that answers permission prompts.** Attaching takes two things and PIO had neither: `--permission-prompt-tool stdio`, which is what makes the CLI send permission requests over the control protocol, and the `initialize` handshake that announces the host. PIO passed `--permission-prompts host`, named no prompt tool and sent no handshake, so the CLI denied anything that would prompt and answered its own model with *"This command requires approval"*. Measured at zero tokens on 2.1.278: the flag is accepted, and the handshake is answered `subtype: success` in about 0.7 s with `pending_permission_requests` among its keys. Unlike a user message, that write does **not** trigger `system/init`, so the effective mode still cannot be checked before delivery.
+
+**A tool use the harness refused is an attempt, not an effect.** The `result` names every refusal by `tool_use_id`, and PIO recorded that list in its own event stream while `tool_use_records` ignored it. R6 therefore reported an out-of-fixture effect with unresolved liability for a read the harness had refused outright — nothing was read. R3 counted a denied compound command among its effects. Both receipts carry addenda with the record recomputed from the stored evidence.
+
+The corrected reading of the three runs: `touch` inside the workspace **ran** unprompted, a compound command and a read outside the workspace were **refused by the harness itself**, and in every case PIO was never asked.
+
+**A side measurement worth keeping:** the child's shell is the user's, with their aliases — R3's `ls` resolved to `eza`, which is not on the child's `PATH`, and the command failed. "As configured" reaches further than the settings files.
+
 ### The ledger carries observed and charged
 
 Owner decision of 2026-09-20, after R5. A cancelled turn reports an empty usage block, so what it spent is unknown — and a cap kept in unknowns is not a cap. The ledger therefore carries two numbers per run: **observed**, what the harness reported, and **charged**, what the cap is measured against. They differ only where a turn reported nothing.

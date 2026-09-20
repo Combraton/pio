@@ -35,7 +35,42 @@ pub const STREAM_ARGS: &[&str] = &[
     "--replay-user-messages",
     "--permission-prompts",
     "host",
+    // Without this the CLI never sends a permission request over the control
+    // protocol: it denies anything that would prompt and answers its own model
+    // with "This command requires approval". R3b measured exactly that. The
+    // pinned SDK sets the same flag from `_configure_can_use_tool`.
+    "--permission-prompt-tool",
+    "stdio",
 ];
+
+/// How long PIO waits for the CLI to answer the attachment handshake.
+/// Measured on 2.1.278: it answers in about 0.7 s.
+const ATTACH_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How long a surfaced permission request may wait for a caller's decision
+/// before PIO answers it itself. A request nobody answers holds the harness
+/// open forever, so the default is a **single-use deny**, recorded as PIO's.
+const ACTION_ANSWER_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Send the handshake and wait for its answer, keeping anything else that
+/// arrives meanwhile so the turn loop still sees it.
+fn attach(child: &mut StdioChild, early: &mut Vec<Value>) -> Result<Value> {
+    child.send(&pio_claude::initialize_request())?;
+    let deadline = std::time::Instant::now() + ATTACH_TIMEOUT;
+    while std::time::Instant::now() < deadline {
+        let Some(message) = child.receive(Duration::from_millis(50))? else {
+            continue;
+        };
+        if message["type"] == "control_response"
+            && message["response"]["request_id"] == pio_claude::INITIALIZE_REQUEST_ID
+        {
+            return Ok(pio_claude::initialize_outcome(&message));
+        }
+        early.push(message);
+    }
+    Ok(json!({"attached":false,"subtype":Value::Null,
+              "error":"the CLI did not answer the handshake within the attach timeout"}))
+}
 
 pub fn events_path(root: &Path, invocation: &str) -> PathBuf {
     harness::events_path(root, ADAPTER, invocation)
@@ -155,6 +190,20 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
 
     // Nothing arrives from this harness until the brief is written, so the
     // release and that write happen together under the controller gate.
+    // Attach as the host that answers permission prompts, **before** anything
+    // is delivered. Without it the CLI denies anything that would prompt and
+    // PIO never learns it was asked, which is what R3b found. A handshake that
+    // fails or goes unanswered is a refusal here, not a surprise mid-turn.
+    let mut early: Vec<Value> = Vec::new();
+    let attachment = attach(child, &mut early)?;
+    life.event(json!({"kind":"host_attached","outcome":attachment,
+        "permission_prompt_tool":"stdio","sent_before_delivery":true}))?;
+    ensure!(
+        attachment["attached"] == true,
+        "host_not_attached: the CLI did not accept the permission-prompt handshake ({})",
+        attachment["error"]
+    );
+
     let gate = life.release()?;
     child.send(&sent)?;
     life.event(json!({"kind":"turn_start_sent",
@@ -173,7 +222,9 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     // Only what the audit needs is retained: the requests still awaiting a
     // decision, and the messages that carried a tool use. A long turn's
     // transcript is spooled, not held in memory.
-    let mut pending_actions: std::collections::BTreeMap<u64, Value> =
+    // Each surfaced request, with the moment PIO will answer it itself if no
+    // caller has. A request nobody answers holds the harness open forever.
+    let mut pending_actions: std::collections::BTreeMap<u64, (Value, std::time::Instant)> =
         std::collections::BTreeMap::new();
     let mut action_seq = 0u64;
     let mut tool_use_messages: Vec<Value> = Vec::new();
@@ -181,7 +232,19 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let mut escalation: Option<Value> = None;
 
     while result.is_none() {
-        if let Some(message) = child.receive(Duration::from_millis(25))? {
+        // Anything the CLI sent during the handshake is processed first, in
+        // the order it arrived.
+        let next = match early.is_empty() {
+            false => Some(early.remove(0)),
+            true => child.receive(Duration::from_millis(25))?,
+        };
+        // Whether this pass read nothing. The checks that end the loop run
+        // only then, because a child can exit with messages still queued: its
+        // `result` is already written and not yet read. Checking on every pass
+        // ended the turn one message early and reported `result_missing` for a
+        // turn that had completed.
+        let idle = next.is_none();
+        if let Some(message) = next {
             match message["type"].as_str().unwrap_or_default() {
                 "system" if message["subtype"] == "init" => {
                     let effective = message["permissionMode"].as_str().unwrap_or_default();
@@ -256,7 +319,13 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         life.event(json!({"kind":"request_declined_by_pio",
                             "action_seq":action_seq,"classification":classification}))?;
                     } else {
-                        pending_actions.insert(action_seq, message.clone());
+                        pending_actions.insert(
+                            action_seq,
+                            (
+                                message.clone(),
+                                std::time::Instant::now() + ACTION_ANSWER_TIMEOUT,
+                            ),
+                        );
                         life.event(json!({"kind":"action_requested",
                             "action_seq":action_seq,"request_id":message["request_id"],
                             "classification":classification}))?;
@@ -326,7 +395,40 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                 }
                 _ => {}
             }
-        } else if let Some((deadline, control)) = interrupt_deadline.as_ref()
+        }
+
+        // A request nobody answered. PIO decides nothing on the user's behalf
+        // except this: the default is a **single-use deny**, recorded as PIO's
+        // own, because leaving it unanswered leaves the harness waiting and
+        // the execution open.
+        let overdue: Vec<u64> = pending_actions
+            .iter()
+            .filter(|(_, (_, deadline))| std::time::Instant::now() >= *deadline)
+            .map(|(seq, _)| *seq)
+            .collect();
+        for seq in overdue {
+            let Some((original, _)) = pending_actions.remove(&seq) else {
+                continue;
+            };
+            let decision = pio_claude::permission_decision(
+                &original,
+                "deny",
+                "no caller answered within the delivery timeout",
+            )?;
+            child.send(&decision["envelope"])?;
+            life.event(json!({"kind":"request_denied_by_default",
+                "action_seq":seq,
+                "after_seconds":ACTION_ANSWER_TIMEOUT.as_secs(),
+                "suggestions_offered":decision["suggestions_offered"],
+                "suggestions_acted_on":0,
+                "widening_fields_sent":[]}))?;
+        }
+
+        if !idle {
+            continue;
+        }
+
+        if let Some((deadline, control)) = interrupt_deadline.as_ref()
             && std::time::Instant::now() >= *deadline
         {
             let control = control.clone();
@@ -355,7 +457,8 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                     let decision = control["decision"].as_str().unwrap_or_default();
                     let request = control["action_seq"]
                         .as_u64()
-                        .and_then(|seq| pending_actions.remove(&seq));
+                        .and_then(|seq| pending_actions.remove(&seq))
+                        .map(|(original, _)| original);
                     match request {
                         Some(original) => {
                             match pio_claude::permission_decision(
@@ -407,7 +510,13 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let exit = life.stop(&mut child.child)?;
     let after = pio_claude::durable_snapshot(&home, &config_dir, &cwd)?;
     let diff = pio_claude::durable_diff(&before, &after);
-    let tool_uses = pio_claude::tool_use_records(&tool_use_messages, &cwd, &cwd);
+    // The result names every tool use the harness refused; a refused use
+    // never ran and is not an effect.
+    let denials = result
+        .as_ref()
+        .map(|r| r["permission_denials"].clone())
+        .unwrap_or(Value::Null);
+    let tool_uses = pio_claude::tool_use_records(&tool_use_messages, &denials, &cwd, &cwd);
     // Ordered deliberately: the exit event is what turns the runtime to
     // `exited`, so everything a caller must see on a finished execution is
     // recorded first. A matrix run caught the other order.

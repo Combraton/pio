@@ -32,12 +32,22 @@
     "uuid"
   ],
   "init_waits_for_stdin": true,
+  "initialize_answered": true,
+  "initialize_response_keys": [
+    "pending_permission_requests",
+    "pending_user_dialog_requests",
+    "request_id",
+    "response",
+    "subtype"
+  ],
+  "initialize_response_subtype": "success",
   "message_sequence": [
     "system/init",
     "user",
     "assistant",
     "result/success"
   ],
+  "permission_prompt_tool_accepted": true,
   "product_default_model": "claude-opus-5[1m]",
   "product_default_permission_mode": "default",
   "result_keys": [

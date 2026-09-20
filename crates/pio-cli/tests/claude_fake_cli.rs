@@ -63,9 +63,29 @@ fn user_message(text: &str) -> Value {
 
 /// Drive one turn, answering any permission request with `decision`.
 fn turn(dir: &Path, scenario: &Value, decision: Option<Value>) -> Vec<Value> {
-    let mut child = spawn(dir, scenario, &["--permission-mode", "acceptEdits"]);
+    // Attached, the way the host attaches: the prompt tool names who answers,
+    // and the handshake announces them. Without both, the harness decides for
+    // itself and nobody is ever asked — which is what R3b found PIO doing.
+    let mut child = spawn(
+        dir,
+        scenario,
+        &[
+            "--permission-mode",
+            "acceptEdits",
+            "--permission-prompt-tool",
+            "stdio",
+        ],
+    );
     let mut stdin = child.stdin.take().unwrap();
     let stdout = BufReader::new(child.stdout.take().unwrap());
+    writeln!(
+        stdin,
+        "{}",
+        json!({"type":"control_request","request_id":"req_init_pio",
+               "request":{"subtype":"initialize","hooks":Value::Null}})
+    )
+    .unwrap();
+    stdin.flush().unwrap();
     writeln!(stdin, "{}", user_message("do the fixture task")).unwrap();
     stdin.flush().unwrap();
     let mut messages = Vec::new();
@@ -75,6 +95,12 @@ fn turn(dir: &Path, scenario: &Value, decision: Option<Value>) -> Vec<Value> {
             continue;
         }
         let message: Value = serde_json::from_str(&line).unwrap();
+        // The handshake's answer is not a turn message.
+        if message["type"] == "control_response"
+            && message["response"]["request_id"] == "req_init_pio"
+        {
+            continue;
+        }
         if message["type"] == "control_request"
             && let Some(decision) = &decision
         {
@@ -185,7 +211,8 @@ fn an_allow_is_single_use_and_echoes_the_input_unchanged() {
     assert!(kinds(&messages).contains(&"control_request".to_owned()));
     let result = messages.last().unwrap();
     assert_eq!(result["permission_decision"], "allow");
-    assert_eq!(result["permission_denials"], 0);
+    assert_eq!(result["permission_denial_count"], 0);
+    assert_eq!(result["permission_denials"], json!([]));
     let decision = &markers(dir.path())
         .into_iter()
         .find(|m| m["event"] == "permission_decision")
@@ -207,7 +234,7 @@ fn a_deny_is_counted_and_widens_nothing() {
     );
     let result = messages.last().unwrap();
     assert_eq!(result["permission_decision"], "deny");
-    assert_eq!(result["permission_denials"], 1);
+    assert_eq!(result["permission_denial_count"], 1);
     let decision = &markers(dir.path())
         .into_iter()
         .find(|m| m["event"] == "permission_decision")
@@ -249,7 +276,7 @@ fn tool_uses_are_reported_so_the_receipt_can_record_every_one() {
     let messages = turn(dir.path(), &scenario, None);
     let fixture = dir.path().join("fixture");
     std::fs::create_dir_all(&fixture).unwrap();
-    let record = pio_claude::tool_use_records(&messages, &fixture, &fixture);
+    let record = pio_claude::tool_use_records(&messages, &Value::Null, &fixture, &fixture);
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses.len(), 2);
     assert_eq!(uses[1]["placement"], "outside_fixture");

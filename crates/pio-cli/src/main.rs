@@ -322,6 +322,13 @@ fn run() -> Result<()> {
                         "{}",
                         serde_json::to_string_pretty(&pio_claude::tool_use_records(
                             &messages,
+                            // The transcript carries the result, and the result
+                            // names what the harness refused.
+                            &messages
+                                .iter()
+                                .find(|m| m["type"] == "result")
+                                .map(|m| m["permission_denials"].clone())
+                                .unwrap_or(serde_json::Value::Null),
                             option("--workspace")?,
                             option("--cwd")?
                         ))?

@@ -880,6 +880,15 @@ impl Provider {
                 let record = &event["record"];
                 e[&ns]["tool_uses"] = record.clone();
                 e["view"]["containment"] = record["containment"].clone();
+                // Three different things a caller must be able to tell apart:
+                // what the harness refused on its own, what PIO declined, and
+                // what a caller decided. A merged count would hide which.
+                let refused = record["denied_by_harness_count"].as_u64().unwrap_or(0);
+                if refused > 0 {
+                    e["view"]["containment"]["denied_by_harness"] = refused.into();
+                    e["view"]["containment"]["denied_by_harness_reason"] =
+                        "the harness refused it under its own rules; PIO was not asked".into();
+                }
                 if record["out_of_fixture_effect_observed"] == true
                     || record["unclassifiable_target_count"].as_u64().unwrap_or(0) > 0
                 {

@@ -42,7 +42,54 @@ pub const STREAM_IDENTITY_FIELDS: &[&str] = &[
     "product_default_permission_mode",
     "product_default_model",
     "init_waits_for_stdin",
+    // How PIO attaches as the host that answers permission prompts. Measured
+    // after R3b, where it turned out PIO was not attached at all.
+    "permission_prompt_tool_accepted",
+    "initialize_answered",
+    "initialize_response_subtype",
+    "initialize_response_keys",
 ];
+
+/// The request id PIO uses for the attachment handshake.
+pub const INITIALIZE_REQUEST_ID: &str = "req_init_pio";
+
+/// Attaching PIO as the host that answers permission prompts takes **two**
+/// things, and PIO had neither until R3b measured their absence:
+///
+/// 1. `--permission-prompt-tool stdio`, which is what makes the CLI send
+///    permission requests over the control protocol. The pinned SDK sets it
+///    from its own `_configure_can_use_tool`;
+/// 2. this handshake, sent before anything else, which announces the host.
+///
+/// It carries **no hooks, no agents and no system prompt**, so attaching
+/// changes nothing about the session it attaches to. Measured on 2.1.278: the
+/// CLI answers `subtype: success` in under a second, and — unlike a user
+/// message — this write does **not** cause `system/init` to be emitted, so the
+/// effective permission mode still cannot be checked before delivery.
+pub fn initialize_request() -> Value {
+    json!({"type":"control_request","request_id":INITIALIZE_REQUEST_ID,
+           "request":{"subtype":"initialize","hooks":Value::Null}})
+}
+
+/// What the CLI answers the handshake with, measured on 2.1.278. Recorded as
+/// keys only; the payload is the CLI's, not PIO's to keep.
+pub fn initialize_outcome(message: &Value) -> Value {
+    let inner = &message["response"];
+    let keys: Vec<&String> = inner
+        .as_object()
+        .map(|o| o.keys().collect())
+        .unwrap_or_default();
+    let mut keys: Vec<String> = keys.into_iter().cloned().collect();
+    keys.sort();
+    json!({
+        "attached": inner["subtype"] == "success",
+        "subtype": inner["subtype"],
+        "response_keys": keys,
+        "error": inner["error"],
+        // Measured: the CLI reports what is already waiting on a decision.
+        "pending_permission_requests": inner["pending_permission_requests"],
+    })
+}
 
 /// Control-protocol fields that widen permissions. PIO never sends one. Read
 /// from the pinned `claude-agent-sdk-python` 0.2.153 source; see ADR 004 §9.
@@ -834,7 +881,25 @@ fn target_label(resolved: &Option<String>, workspace: &Path, placement: &str) ->
 /// command never produces a permission request — it never reaches PIO at all.
 /// A target outside the fixture is therefore an **observed effect with
 /// unresolved liability**, not a declined request. ADR 004 §5.
-pub fn tool_use_records(messages: &[Value], workspace: &Path, cwd: &Path) -> Value {
+pub fn tool_use_records(
+    messages: &[Value],
+    denials: &Value,
+    workspace: &Path,
+    cwd: &Path,
+) -> Value {
+    // A tool use the harness refused is an **attempt**, not an effect. The
+    // `result` names every one it denied, by `tool_use_id`. PIO had this all
+    // along and ignored it: R6 reported an out-of-fixture effect with
+    // unresolved liability for a read the harness refused outright, and R3
+    // counted a denied compound command among its effects.
+    let denied: Vec<&str> = denials
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|d| d["tool_use_id"].as_str())
+                .collect()
+        })
+        .unwrap_or_default();
     let workspace = std::fs::canonicalize(workspace).unwrap_or_else(|_| workspace.to_path_buf());
     let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
     let mut records = Vec::new();
@@ -846,26 +911,44 @@ pub fn tool_use_records(messages: &[Value], workspace: &Path, cwd: &Path) -> Val
             let input = &block["input"];
             let (resolved, placement) = classify_target(input, &workspace, &cwd);
             let digest_source = resolved.clone().unwrap_or_else(|| input.to_string());
+            let refused = block["id"].as_str().is_some_and(|id| denied.contains(&id));
             records.push(json!({
                 "tool": &block["name"],
                 "tool_use_id": &block["id"],
                 "target_label": target_label(&resolved, &workspace, placement),
                 "target_sha256": sha256_hex(digest_source.as_bytes()),
                 "placement": placement,
+                // Refused by the harness itself. It never ran, so it is not an
+                // effect and carries no liability.
+                "denied_by_harness": refused,
+                "outcome": if refused { "attempted_and_denied" } else { "performed" },
             }));
         }
     }
-    let count = |what: &str| records.iter().filter(|r| r["placement"] == what).count();
+    // Only what actually happened counts towards an effect or a liability.
+    let count = |what: &str| {
+        records
+            .iter()
+            .filter(|r| r["placement"] == what && r["denied_by_harness"] != true)
+            .count()
+    };
     let outside = count("outside_fixture");
     let unclassified = count("not_classifiable");
+    let refused = records
+        .iter()
+        .filter(|r| r["denied_by_harness"] == true)
+        .count();
     json!({
-        "format":"pio-claude-tool-uses/3",
+        "format":"pio-claude-tool-uses/4",
         "containment":{
             "mechanism":"harness_permission_rules_only",
             "os_sandbox_observed":false,
         },
         "workspace_sha256":sha256_hex(workspace.display().to_string().as_bytes()),
         "tool_uses":records,
+        // Refused by the harness's own rules, with no host attached to ask.
+        // A different thing from PIO declining, and from a caller deciding.
+        "denied_by_harness_count":refused,
         "out_of_fixture_effect_observed":outside > 0,
         "out_of_fixture_count":outside,
         "unclassifiable_target_count":unclassified,
