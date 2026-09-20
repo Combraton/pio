@@ -273,6 +273,18 @@ def make_fixture(name, outside_target=None):
     return repo, git(repo, 'rev-parse', 'HEAD')
 
 
+def restart_timing(events, restarted_at_ms):
+    """How much of the turn ran after the daemon came back, measured against
+    the host's own event clock."""
+    completed = first_event(events, 'turn_completed').get('observed_at_unix_ms')
+    if completed is None:
+        return dict(restart_landed_mid_turn=None,
+                    note='the turn never completed, so the restart cannot be placed')
+    after = (completed - restarted_at_ms) / 1000
+    return dict(restart_landed_mid_turn=after > 0,
+                turn_continued_after_restart_seconds=round(after, 3))
+
+
 def decision_effect(run, repo):
     """What a decision actually did, read from the world rather than inferred
     from what PIO sent. R3 and R4 create a file; R3b and R4b create a git tag,
@@ -671,6 +683,7 @@ def run_one(run, args):
             identities_before = first_event(service.events(), 'spawned').get('identity')
             service.stop(service.daemons[-1])
             service.start()
+            restarted_at_ms = time.time() * 1000
             view = wait(service, lambda v: v['runtime'] == 'exited', 900)
             events = service.events()
             extra['restart'] = dict(
@@ -679,7 +692,12 @@ def run_one(run, args):
                 identity_before=identities_before,
                 identity_after=first_event(events, 'spawned').get('identity'),
                 spawn_markers=len([e for e in events if e['kind'] == 'spawned']),
-                brief_releases=len([e for e in events if e['kind'] == 'turn_start_sent']))
+                brief_releases=len([e for e in events if e['kind'] == 'turn_start_sent']),
+                # Whether the restart actually landed mid-turn. A restart after
+                # the turn had already finished would prove nothing about the
+                # host carrying a conversation, and the receipt would still
+                # have said "restart mid-turn". R5 attempt 1 was that mistake.
+                **restart_timing(events, restarted_at_ms))
         elif run == 'R5':
             # Cancel is SIGINT and is described as exactly that; the in-band
             # `interrupt_receipt_v1` the capabilities advertise is unverified
