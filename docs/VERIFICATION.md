@@ -159,6 +159,16 @@ Stops are the **runner's** rules, not the product's: PIO enforces no budget, and
 
 Results and the journey marks they support are in the [M2 acceptance packet](work/m2/ACCEPTANCE.md).
 
+## M3b OpenCode qualification
+
+`pio-opencode` binds the user-selected OpenCode executable before any native work. `target/debug/pio opencode qualify --executable PATH --work DIR [--expected SURFACE]` resolves and hashes the binary, requires version 2.0.1, and digests the command-line surface — the top-level help plus six subcommand helps — against the checked-in [surface identity](../adapters/opencode/2.0.1/surface-identity.json). Exit 0 qualified, 3 refused; refusals are data. Measured: the installed 2.0.1 qualifies with zero drift, and pointing it at Claude Code refuses `version_unavailable` without running a single OpenCode-specific argument.
+
+`target/debug/pio opencode service-admit --config FILE --work DIR` makes the pre-session decisions: the settings allowlist, an environment that must carry no credential variable and nothing outside `PATH`, `HOME`, `USER`, `OPENCODE_CONFIG_DIR`, the dated model exception, and the **owner's exclusion of the Juspay Grid provider**, which is refused outright rather than left unevaluated. The record carries `session_started: false` and the owner's own background service by digest, so a run can prove it did not move.
+
+`session_configuration_guard` is the owner's rule of 2026-09-20: **refuse unless the session's reported provider and model equal the requested ones.** It exists because a missing route does not refuse — measured, it silently substitutes a free built-in model. Unlike Claude Code's `system/init`, ACP reports the session configuration **before any prompt**, so this refusal precedes delivery, and the guard records `checked_before_delivery: true` to keep the two from being read as the same guarantee.
+
+Tests cover an unsupported version refused before any further argument, surface drift naming the command that moved, a session reporting the requested model, a silent downgrade to another provider, a different model from the right provider, a session reporting nothing at all, the excluded provider, a model without the dated exception and a run without a model, and a credential variable in the environment.
+
 ## The shared host lifecycle
 
 Codex, Claude Code and OpenCode differ in the protocol they speak and in nothing else that matters to the host. `pio_host::harness::Lifecycle` holds the part that is literally shared, once: detach and the M1 launch fences (invocation identity, no launch already recorded, host slot free), the claim, the guard event that refuses a request broader than the user's configured default, the spawn marker binding the child to the qualification record, the park, the **release gate** held across the first native write, the append-only event file, the control file with at-most-once application, the deadline stop, and the receipt or the known-not-released failure.

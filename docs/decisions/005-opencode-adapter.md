@@ -47,7 +47,11 @@ OpenCode holds its credentials in its own store for a provider named `minimax-co
 
 `OPENCODE_CONFIG_DIR` (equivalently `XDG_CONFIG_HOME`) **does** isolate, and is the negative control: an empty directory yields 9 models, **zero** MiniMax, and the configured default disappears.
 
-**A missing route does not refuse — it silently downgrades.** Measured: with an isolated configuration the session still initializes and the default model becomes `opencode/nemotron-3.5-lightning-free`, a built-in free model. So PIO must refuse when the required provider is absent from the session's own model list, before any prompt. An absent provider that runs a fallback model would be the worst kind of quiet success.
+**A missing route does not refuse — it silently downgrades.** Measured: with an isolated configuration the session still initializes and the default model becomes `opencode/nemotron-3.5-lightning-free`, a built-in free model. An absent provider that quietly runs a fallback model would send fixture content to a third party with nothing in the record saying so.
+
+**Owner decision, 2026-09-20, and it closes that hazard: refuse unless the session's reported provider and model equal the requested ones.** `session_configuration_guard` does exactly that, and refuses a session that reports no configuration or no model rather than assuming one.
+
+**This check genuinely precedes delivery, and the Claude one cannot.** Measured: `session/new` returns `configOptions` carrying `model.currentValue` **before any prompt is sent**, so PIO reads what the session will actually use while the turn is still unstarted. Claude Code's `system/init` never arrives until the brief has already been written (ADR 004 §4), so its equivalent check is corroboration after delivery. The two are **not** equivalent guarantees and the receipts do not describe them as such.
 
 ### 4. Model: explicit, under a new dated test-only exception
 
@@ -61,7 +65,9 @@ The session also reports `effort` (`default`, `max`, `high`, `none`) and `mode` 
 
 PIO never selects a model outside a dated, owner-authorized exception, as ADR 003 §4 and ADR 004 §4 established. The M3b token is `owner-2026-09-20-m3b-opencode-fixture-runs`, refused on its own and required whenever a model is passed.
 
-**The as-configured run is not evaluated and does not run.** It would send the owner's brief to the Juspay Grid gateway, which is a third party this project has not examined. It runs only if the owner approves that gateway on the M3b issue.
+**Owner decision, 2026-09-20: no PIO run uses the Juspay Grid provider for any purpose.** The as-configured run is therefore **not evaluated, with that decision as the stated reason** — not an oversight and not a pending measurement. `service_admission` refuses a `juspay-grid/` model outright, so the exclusion is enforced rather than merely documented.
+
+**Owner decision, 2026-09-20: the fixture model is `minimax-coding-plan/MiniMax-M2.7-highspeed`** for every run.
 
 ### 5. Permissions
 

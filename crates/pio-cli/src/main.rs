@@ -107,6 +107,59 @@ fn run() -> Result<()> {
                 ),
             }
         }
+        Some("opencode") => {
+            let option = |name: &str| -> Result<&Path> {
+                let index = args
+                    .iter()
+                    .position(|a| a == name)
+                    .with_context(|| format!("missing opencode option {name}"))?;
+                Ok(Path::new(
+                    args.get(index + 1).context("missing option value")?,
+                ))
+            };
+            let path = std::env::var_os("PATH");
+            let env =
+                |work: &Path| pio_opencode::ChildEnv::isolated(work).with_path(path.as_deref());
+            match args.get(1).map(String::as_str) {
+                Some("surface-identity") => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&pio_opencode::surface_identity(
+                        option("--executable")?,
+                        &env(option("--work")?)
+                    )?)?
+                ),
+                Some("qualify") => {
+                    let expected: serde_json::Value = if args.iter().any(|a| a == "--expected") {
+                        serde_json::from_slice(&std::fs::read(option("--expected")?)?)?
+                    } else {
+                        serde_json::from_str(pio_opencode::QUALIFIED_SURFACE)?
+                    };
+                    let record = pio_opencode::qualify(
+                        option("--executable")?,
+                        &expected,
+                        &env(option("--work")?),
+                        option("--work")?,
+                    )?;
+                    let qualified = record["qualified"] == true;
+                    println!("{}", serde_json::to_string_pretty(&record)?);
+                    if !qualified {
+                        std::process::exit(3);
+                    }
+                }
+                Some("service-admit") => {
+                    let config: serde_json::Value =
+                        serde_json::from_slice(&std::fs::read(option("--config")?)?)?;
+                    let record =
+                        pio_opencode::service_admission(option("--work")?, &config["opencode"])?;
+                    let admitted = record["admitted"] == true;
+                    println!("{}", serde_json::to_string_pretty(&record)?);
+                    if !admitted {
+                        std::process::exit(3);
+                    }
+                }
+                _ => bail!("opencode requires surface-identity, qualify or service-admit"),
+            }
+        }
         Some("claude") => {
             let option = |name: &str| -> Result<&Path> {
                 let index = args
