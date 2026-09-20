@@ -48,6 +48,7 @@ CASES = [
     'service_records_the_configured_model_from_settings',
     'service_tells_a_harness_refusal_apart_from_a_pio_decline',
     'service_denies_a_request_nobody_answers',
+    'service_records_who_decided_and_what',
     'service_refuses_an_unqualified_executable_at_start',
     'service_answers_a_request_it_will_not_act_on',
     'service_interrupt_escalates_when_the_signal_is_ignored',
@@ -286,6 +287,21 @@ class ServiceCase(Case):
         envelope = command('execution.submit', dict(kind='execution.execution', id=identity),
                            payload, command_id=identity)
         envelope['extensions'] = {CONTENT: dict(media_type='text/plain', text=brief.decode())}
+        with self.client() as c:
+            return c.call(envelope)
+
+    def respond(self, action_id, decision, revision, identity='work'):
+        """Answer one surfaced permission request as the caller would."""
+        from public_api import command
+        body = json.dumps({'decision': decision}).encode()
+        envelope = command('execution.respond_action',
+                           dict(kind='execution.execution', id=identity),
+                           dict(action_id=action_id,
+                                response=dict(digest=digest(body),
+                                              media_type='application/json')),
+                           command_id=f'{identity}.answer', revision=revision)
+        envelope['extensions'] = {CONTENT: dict(media_type='application/json',
+                                                text=body.decode())}
         with self.client() as c:
             return c.call(envelope)
 
@@ -712,6 +728,14 @@ def run_case(out, name):
         defaulted = [e for e in events if e['kind'] == 'request_denied_by_default']
         assert len(defaulted) == 1, [e['kind'] for e in events]
         assert defaulted[0]['after_seconds'] == 5, defaulted
+        # What was decided and by whom, and that it matches what the harness
+        # was actually sent. Recording one decision while sending another is a
+        # receipt that describes a run that did not happen.
+        assert defaulted[0]['decision'] == 'deny', defaulted
+        assert defaulted[0]['decided_by'] == 'pio', defaulted
+        received = case.markers_of('permission_decision')
+        assert [r['behavior'] for r in received] == [defaulted[0]['decision']], (
+            defaulted, received)
         # A single-use deny, and nothing that widens a permission.
         assert defaulted[0]['widening_fields_sent'] == [], defaulted
         assert defaulted[0]['suggestions_acted_on'] == 0, defaulted
@@ -729,6 +753,47 @@ def run_case(out, name):
         record = [e for e in events if e['kind'] == 'tool_uses'][0]['record']
         assert record['tool_uses'] == [], record
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_records_who_decided_and_what':
+        # The caller's own decision, through `execution.respond_action`, deny
+        # and allow. Until R3c and R4c this path existed only in the live
+        # runner, so a recorded decision that disagreed with the sent one
+        # would have shown up first in a live receipt.
+        for decision in ('deny', 'allow'):
+            case = ServiceCase(out, f'{name}-{decision}', scenario={
+                'permission_request': {'tool_name': 'Bash',
+                                       'input': {'command': 'git tag pio-live-marker'}}})
+            case.start()
+            case.submit()
+            view = poll(lambda: case.inspect(),
+                        lambda v: v['runtime'] in ('requires_action', 'exited'), seconds=120)
+            assert view['runtime'] == 'requires_action', view
+            action = view['runtime_detail']['action_id']
+            answered = case.respond(action, decision, view['revision'])
+            assert answered.get('result', {}).get('outcome', {}).get('state') == 'answered', answered
+            view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited', seconds=120)
+            assert view['exit'] == {'code': 0}, view
+            events = case.host_events()
+            applied = [e for e in events if e['kind'] == 'control_applied']
+            assert len(applied) == 1, [e['kind'] for e in events]
+            # Recorded: what, and by whom.
+            assert applied[0]['decision'] == decision, applied
+            assert applied[0]['decided_by'] == 'caller', applied
+            # Sent: the same thing, as the harness itself saw it.
+            received = case.markers_of('permission_decision')
+            assert [r['behavior'] for r in received] == [decision], (applied, received)
+            assert received[0]['widening_fields_received'] == [], received
+            if decision == 'allow':
+                # An allow echoes the original input; rewriting it would change
+                # the tool call the harness decided to make.
+                assert received[0]['input_echoed_unchanged'] is True, received
+            # PIO decided nothing here, and nothing defaulted.
+            assert [e for e in events if e['kind'] == 'request_declined_by_pio'] == []
+            assert [e for e in events if e['kind'] == 'request_denied_by_default'] == []
+            assert applied[0]['widening_fields_sent'] == [], applied
+            assert applied[0]['suggestions_acted_on'] == 0, applied
+            # No explicit cleanup: every case registers itself and the runner
+            # releases them all, so a failed assertion cannot leak a daemon.
 
     elif name == 'service_refuses_an_unqualified_executable_at_start':
         # A real configuration pointed at something that is not the qualified

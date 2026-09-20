@@ -118,9 +118,24 @@ pub fn run() -> Result<()> {
         .as_str()
         .unwrap_or(DEFAULT_MODEL)
         .to_owned();
-    let session = "ses_fake";
+    // A new session each time, as a real agent returns. A fixed id made two
+    // runs look identical, and a receipt field that cannot vary cannot be
+    // checked.
+    let session: &str = Box::leak(
+        format!(
+            "ses_fake_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or_default()
+        )
+        .into_boxed_str(),
+    );
     let stdin = std::io::stdin();
     let mut lines = stdin.lock().lines();
+    // Whether a client announced itself. ACP has no permission capability to
+    // declare, so this is the handshake and nothing else.
+    let mut handshook = false;
     let mut cancelled = false;
 
     while let Some(line) = lines.next() {
@@ -132,6 +147,10 @@ pub fn run() -> Result<()> {
             continue;
         };
         let id = message["id"].clone();
+        if message["method"] == "initialize" {
+            handshook = true;
+            marker(&markers, json!({"event":"initialize_received"}))?;
+        }
         match message["method"].as_str().unwrap_or_default() {
             "initialize" => reply(
                 &id,
@@ -165,7 +184,35 @@ pub fn run() -> Result<()> {
                 if let Some(delay) = scenario["delay_ms"].as_u64() {
                     std::thread::sleep(std::time::Duration::from_millis(delay));
                 }
-                if !scenario["permission_request"].is_null() {
+                // An agent asks a client that is there to be asked, and
+                // decides for itself otherwise. The Claude harness was
+                // measured doing exactly that, and this fake used to ask
+                // unconditionally — which is why the Claude attachment gap
+                // survived four live runs before anything caught it.
+                let decides_itself = !handshook || scenario["decide_by_rules"] == true;
+                if !scenario["permission_request"].is_null() && decides_itself {
+                    let state = if handshook {
+                        "denied_by_harness_rules_shadowed_the_host"
+                    } else {
+                        "denied_by_harness_no_host_attached"
+                    };
+                    update(
+                        session,
+                        json!({"sessionUpdate":"tool_call","toolCallId":"call_permission",
+                               "title":&scenario["permission_request"]["title"],
+                               "kind":scenario["permission_request"]["kind"]
+                                   .as_str().unwrap_or("execute"),
+                               "rawInput":&scenario["permission_request"]["input"],
+                               "status":"failed",
+                               "content":[{"type":"content","content":{"type":"text",
+                                   "text":"This command requires approval"}}]}),
+                    )?;
+                    marker(
+                        &markers,
+                        json!({"event":state,"attached":handshook,
+                                            "tool_call_id":"call_permission"}),
+                    )?;
+                } else if !scenario["permission_request"].is_null() {
                     request_permission(
                         &scenario["permission_request"],
                         session,

@@ -113,3 +113,11 @@ MiniMax cap **300,000,000 tokens total**, stop and report at **240,000,000**. Ea
 ## Out of scope
 
 Hermes, which comes after OpenCode and only under an isolated profile — and which is deferred with that said plainly if isolation turns out not to be possible. The as-configured Juspay Grid run, unless the owner approves it on the issue.
+## The permission shape is specified, not measured
+
+The labeled fake's `session/request_permission` — its `toolCall`, its three options and the `allow_always` among them — is taken **from the ACP specification and has never been measured against OpenCode 2.0.1**. Every offline case that exercises a permission decision therefore proves what PIO does with the shape it was told to expect, not what the harness sends.
+
+**The first live request is the measurement.** Until MiniMax R2 produces one, no receipt may be read as evidence that this harness asks at all, or that it asks in this shape. The owner's configuration carries no permission rules, so it is possible that it never asks — which is the state the Claude adapter was measured in, for a different reason, across four live runs.
+
+The fake now asks **only when a client announced itself** with the ACP handshake, and decides for itself otherwise, because a fake that always asks cannot show a harness that does not.
+

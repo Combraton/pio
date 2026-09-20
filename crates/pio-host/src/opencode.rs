@@ -182,6 +182,15 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     // the Claude one: the session reports what it will use before any prompt,
     // so a refusal here happens with the brief still inside PIO.
     let guard = pio_opencode::session_configuration_guard(&created["result"], &requested_model);
+    life.event(json!({"kind":"session_created",
+        "session_id":created["result"]["sessionId"],
+        "requested_model":requested_model,
+        "reported_model":guard["reported"],
+        "model_matches_requested":guard["allowed"],
+        // Measured on this transport: the session reports what it will use
+        // **before** any prompt, so a refusal here happens with the brief
+        // still inside PIO. The Claude adapter cannot do this.
+        "checked_before_delivery":true}))?;
     life.guard("settings_guard", &guard, "session_configuration_refused")?;
 
     let brief = pio_core::spool::Spool::open(&life.root)?.read(
@@ -212,6 +221,10 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let mut pending_actions: std::collections::BTreeMap<u64, Value> =
         std::collections::BTreeMap::new();
     let mut action_seq = 0u64;
+    // Who decided each tool call, by its ACP `toolCallId`, and which ones were
+    // refused. Without these every refusal reads as an effect PIO observed.
+    let mut decided = json!({});
+    let mut refused: Vec<Value> = Vec::new();
     let mut cancel_deadline: Option<(std::time::Instant, String)> = None;
     let mut escalation: Option<Value> = None;
     let mut result: Option<Value> = None;
@@ -276,8 +289,16 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         // on every request and is never taken.
                         child.send(&json!({"jsonrpc":"2.0","id":message["id"],
                             "result":{"outcome":{"outcome":"selected","optionId":"reject"}}}))?;
+                        if let Some(id) = message["params"]["toolCall"]["toolCallId"].as_str() {
+                            decided[id] = json!({"by":"pio","decision":"deny",
+                                "reason":classification["reason"]});
+                            refused.push(json!({"tool_use_id":id}));
+                        }
                         life.event(json!({"kind":"request_declined_by_pio",
-                            "action_seq":action_seq,"classification":classification}))?;
+                            "action_seq":action_seq,"decision":"deny",
+                            "decided_by":"pio",
+                            "tool_use_id":message["params"]["toolCall"]["toolCallId"],
+                            "classification":classification}))?;
                     } else {
                         pending_actions.insert(action_seq, message.clone());
                         life.event(json!({"kind":"action_requested",
@@ -332,8 +353,18 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                             };
                             child.send(&json!({"jsonrpc":"2.0","id":request["id"],
                                 "result":{"outcome":{"outcome":"selected","optionId":option}}}))?;
+                            if let Some(tool_id) =
+                                request["params"]["toolCall"]["toolCallId"].as_str()
+                            {
+                                decided[tool_id] = json!({"by":"caller","decision":decision});
+                                if decision == "deny" {
+                                    refused.push(json!({"tool_use_id":tool_id}));
+                                }
+                            }
                             life.event(json!({"kind":"control_applied","control_id":id,
                                 "action_seq":control["action_seq"],"decision":decision,
+                                "decided_by":"caller",
+                                "tool_use_id":request["params"]["toolCall"]["toolCallId"],
                                 "option_id":option,"always_option_taken":false,
                                 "widening_fields_sent":[]}))?;
                         }
@@ -372,10 +403,17 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
             "name":&call["kind"],"id":&call["toolCallId"],"input":&call["rawInput"]}]}})
         })
         .collect();
-    // This harness reports no denial list, so nothing is claimed about
-    // refusals here and every recorded use is treated as performed.
-    let tool_uses =
-        pio_claude::tool_use_records(&tool_use_messages, &Value::Null, &Value::Null, &cwd, &cwd);
+    // ACP sends no denial list of its own, so the refusals PIO knows about are
+    // the ones it or the caller decided. A tool call refused that way never
+    // ran, so it is an attempt rather than an effect — the defect R6 found in
+    // the Claude host, which was still open here.
+    let tool_uses = pio_claude::tool_use_records(
+        &tool_use_messages,
+        &Value::Array(refused.clone()),
+        &decided,
+        &cwd,
+        &cwd,
+    );
     // Ordered deliberately: the exit event is what turns the runtime to
     // `exited`, so everything a caller must see on a finished execution is
     // recorded first. A matrix run caught the other order.

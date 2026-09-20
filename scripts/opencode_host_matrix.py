@@ -63,9 +63,11 @@ CASES = [
     'unqualified_executable_refused',
     'forbidden_flags_are_never_passed',
     'an_always_allow_option_is_offered_and_never_taken',
+    'an_unattached_host_never_sees_the_request_the_harness_refuses',
     # Through the service, which is the only place delivery and usage land.
     'service_turn_completes',
     'service_refuses_a_downgraded_session_before_any_prompt',
+    'service_tells_a_harness_refusal_apart_from_a_pio_decline',
 ]
 
 
@@ -292,6 +294,14 @@ class ServiceCase(Case):
         with self.client() as c:
             return c.query('execution.inspect', {'execution': identity})['result']
 
+    def host_events(self):
+        """The durable host's own append-only events file, read-only."""
+        matches = sorted(self.store.glob('opencode-*.events.jsonl'))
+        if not matches:
+            return []
+        return [json.loads(line) for line in matches[0].read_text().splitlines()
+                if line.strip()]
+
     def cleanup(self):
         for daemon in self.daemons:
             daemon.kill()
@@ -422,6 +432,56 @@ def run_case(out, name):
         assert decided[0]['always_option_taken'] is False, decided
         assert decided[0]['widening_fields_received'] == [], decided
         acp.close()
+
+    elif name == 'an_unattached_host_never_sees_the_request_the_harness_refuses':
+        # The same property the Claude matrix asserts under this name, and the
+        # same reason: a fake that always asks cannot show a harness that only
+        # asks a client that is there. ACP declares no permission capability,
+        # so the handshake is the whole of attachment here.
+        case = Case(out, name, model=REQUESTED, scenario={
+            'permission_request': {'title': 'run a command', 'kind': 'execute',
+                                   'input': {'command': 'git tag pio-live-marker'}}})
+        acp = Acp(case)
+        # No `initialize`: straight to a session and a prompt.
+        created = acp.call('session/new', {'cwd': str(case.fixtures), 'mcpServers': []})
+        acp.call('session/prompt', {'sessionId': created['result']['sessionId'],
+                                    'prompt': [{'type': 'text', 'text': 'fixture task'}]})
+        refused = case.markers_of('denied_by_harness_no_host_attached')
+        assert len(refused) == 1, case.markers_of('prompt_received')
+        assert refused[0]['attached'] is False, refused
+        # Nobody was asked.
+        assert case.markers_of('permission_decision') == [], case.markers_of('permission_decision')
+        acp.close()
+        # The control: the same scenario with the handshake does reach a client.
+        attached = Case(out, name + '-attached', model=REQUESTED, scenario={
+            'permission_request': {'title': 'run a command', 'kind': 'execute',
+                                   'input': {'command': 'git tag pio-live-marker'}}})
+        attached.decision = {'outcome': 'selected', 'optionId': 'reject'}
+        acp2, session2 = new_session(attached)
+        acp2.call('session/prompt', {'sessionId': session2['sessionId'],
+                                     'prompt': [{'type': 'text', 'text': 'fixture task'}]})
+        assert len(attached.markers_of('permission_decision')) == 1, attached.markers_of('permission_decision')
+        assert attached.markers_of('denied_by_harness_no_host_attached') == []
+        acp2.close()
+
+    elif name == 'service_tells_a_harness_refusal_apart_from_a_pio_decline':
+        # A client is attached and the harness refuses anyway under its own
+        # rules. A caller must be able to tell that from PIO declining, so it
+        # is in the view and not only in the events.
+        case = ServiceCase(out, name, model=REQUESTED, scenario={
+            'decide_by_rules': True,
+            'permission_request': {'title': 'run a command', 'kind': 'execute',
+                                   'input': {'command': 'git tag pio-live-marker'}}})
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        assert view['exit'] == {'code': 0}, view
+        events = case.host_events()
+        assert case.markers_of('denied_by_harness_rules_shadowed_the_host'), case.markers_of('prompt_received')
+        # PIO declined nothing and was asked nothing.
+        assert [e for e in events if e['kind'] == 'request_declined_by_pio'] == []
+        assert [e for e in events if e['kind'] == 'action_requested'] == []
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     elif name == 'service_turn_completes':
         case = ServiceCase(out, name, model=REQUESTED)

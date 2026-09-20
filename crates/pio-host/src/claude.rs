@@ -330,7 +330,10 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                                 "reason":classification["reason"]});
                         }
                         life.event(json!({"kind":"request_declined_by_pio",
-                            "action_seq":action_seq,"classification":classification}))?;
+                            "action_seq":action_seq,"decision":"deny",
+                            "decided_by":"pio",
+                            "tool_use_id":message["request"]["tool_use_id"],
+                            "classification":classification}))?;
                     } else {
                         pending_actions.insert(
                             action_seq,
@@ -432,6 +435,9 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
             }
             life.event(json!({"kind":"request_denied_by_default",
                 "action_seq":seq,
+                "decision":"deny",
+                "decided_by":"pio",
+                "tool_use_id":original["request"]["tool_use_id"],
                 "after_seconds":answer_timeout.as_secs(),
                 "suggestions_offered":decision["suggestions_offered"],
                 "suggestions_acted_on":0,
@@ -488,6 +494,8 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                                     life.event(json!({"kind":"control_applied",
                                         "control_id":id,"action_seq":control["action_seq"],
                                         "decision":decision,
+                                        "decided_by":"caller",
+                                        "tool_use_id":original["request"]["tool_use_id"],
                                         "suggestions_offered":encoded["suggestions_offered"],
                                         "suggestions_acted_on":0,
                                         "widening_fields_sent":[]}))?;

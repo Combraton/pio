@@ -113,44 +113,49 @@ def private_dir(*parts):
     return path
 
 
-def binary_sha256():
-    return sha(BINARY.read_bytes())
+def binary_sha256(binary=None):
+    return sha((binary or BINARY).read_bytes())
 
 
-def preflight(dry_run):
+def preflight(dry_run, root=None, binary=None):
     """Refuse a live run that cannot produce trustworthy evidence.
 
     M2 produced one receipt from a dirty tree; it was preserved, disclosed and
     re-run. Recording `dirty: true` was not enough — a receipt nobody can
     reproduce is not evidence, so this refuses instead of noting it.
+
+    `root` and `binary` are for the self-test, which needs a tree it is allowed
+    to dirty and a binary it is allowed to make stale.
     """
     if dry_run:
         return {'checked': False, 'reason': 'dry run: no live evidence is produced'}
-    dirty = subprocess.run(['git', '-C', str(ROOT), 'status', '--porcelain'],
+    root = root or ROOT
+    binary = binary or BINARY
+    dirty = subprocess.run(['git', '-C', str(root), 'status', '--porcelain'],
                            capture_output=True, text=True).stdout.strip()
     if dirty:
         raise SystemExit('refusing to run live from a dirty tree:\n' + dirty)
-    head = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'],
+    head = subprocess.run(['git', '-C', str(root), 'rev-parse', 'HEAD'],
                           capture_output=True, text=True).stdout.strip()
-    if not BINARY.exists():
-        raise SystemExit(f'refusing to run live: no binary at {BINARY}')
+    if not binary.exists():
+        raise SystemExit(f'refusing to run live: no binary at {binary}')
     # The binary must be newer than every source it is built from. Comparing it
     # to the *commit* timestamp instead refused a correct binary, because
     # building before committing always loses that comparison — the binary held
     # exactly the committed code and was still called stale.
-    sources = [ROOT / 'Cargo.toml', ROOT / 'Cargo.lock']
-    sources += [p for p in (ROOT / 'crates').rglob('*')
+    sources = [root / 'Cargo.toml', root / 'Cargo.lock']
+    sources += [p for p in (root / 'crates').rglob('*')
                 if p.is_file() and p.suffix in ('.rs', '.toml')]
     newest = max(sources, key=lambda p: p.stat().st_mtime)
-    built = BINARY.stat().st_mtime
+    built = binary.stat().st_mtime
     if built < newest.stat().st_mtime:
         raise SystemExit(
-            f'refusing to run live: {BINARY.name} is older than '
-            f'{newest.relative_to(ROOT)}; rebuild from {head[:12]} first')
+            f'refusing to run live: {binary.name} is older than '
+            f'{newest.relative_to(root)}; rebuild from {head[:12]} first')
     return {'checked': True, 'commit': head, 'dirty': False,
-            'binary_sha256': binary_sha256(),
+            'binary_sha256': binary_sha256(binary),
             'binary_newer_than_every_source': True,
-            'newest_source': str(newest.relative_to(ROOT))}
+            'newest_source': str(newest.relative_to(root))}
 
 
 def ledger_path():
@@ -225,6 +230,18 @@ def make_fixture(name, outside_target=None):
     return repo, git(repo, 'rev-parse', 'HEAD')
 
 
+def deleted_nothing(before, after):
+    """Whether the owner's session history only grew.
+
+    PIO adds sessions and removes nothing, so the count must not fall. Null
+    when either listing could not be taken — a dry run reaches no owner store,
+    and an unknown is not a pass.
+    """
+    if not (before.get('observed') and after.get('observed')):
+        return None
+    return after['entry_count'] >= before['entry_count']
+
+
 def owner_service():
     """The owner's own background service, by digest. Read-only, always."""
     table = subprocess.run(['ps', '-Ao', 'pid,lstart,command'],
@@ -270,6 +287,15 @@ class Service:
         os.chmod(self.store.parent, 0o700)
         os.chmod(live_root(), 0o700)
         self.socket = private_dir(run, RUN_ID, 'socket') / 'public.sock'
+        # A Unix socket path is capped near 104 bytes. Past it `bind` fails and
+        # the only symptom is a service that never becomes ready, which says
+        # nothing about the cause. The Claude runner hit exactly this when its
+        # scratch moved to a deeper directory.
+        if len(str(self.socket).encode()) > 100:
+            raise SystemExit(
+                f'{run}: the socket path is {len(str(self.socket).encode())} bytes, '
+                f'over the ~104 the platform allows, so the service could never '
+                f'bind it. Use a shorter --out.\n  {self.socket}')
         self.transcript = self.private / 'public-transcript.jsonl'
         self.credential = 'ccred1.owner.' + base64.urlsafe_b64encode(
             os.urandom(32)).decode().rstrip('=')
@@ -283,7 +309,11 @@ class Service:
             executable.write_text(f"#!/bin/sh\nexec '{BINARY}' opencode fake-acp \"$@\"\n")
             executable.chmod(0o755)
             env['PIO_OPENCODE_FAKE_SCENARIO'] = json.dumps(
-                {'model': MODEL, 'markers': str(self.private / 'markers')})
+                {'model': MODEL, 'markers': str(self.private / 'markers'),
+                 # Different work costs different tokens. A fixed number made
+                 # every dry-run receipt identical in the one field a budget
+                 # is kept in.
+                 'usage_total': 64 + len(BRIEFS[run])})
         else:
             config_dir = HOME / '.config/opencode'
             executable = Path(shutil.which('opencode2') or str(HOME / '.local/bin/opencode2'))
@@ -380,6 +410,7 @@ def first_event(events, kind):
 def build_receipt(service, run, view, started, extra):
     events = service.events()
     init = first_event(events, 'session_started')
+    session = first_event(events, 'session_created')
     usage_event = first_event(events, 'usage')
     detail = usage_event.get('detail') or {}
     parts, total = token_breakdown(detail)
@@ -391,23 +422,24 @@ def build_receipt(service, run, view, started, extra):
         format='pio-opencode-live-receipt/1', run=run, dry_run=service.dry_run,
         platform=platform.platform(), started_at=started,
         commit=head, dirty=dirty, binary_sha256=binary_sha256(),
+        # Only what ACP actually reports. The fields this receipt used to carry
+        # were copied from the Claude one — a `claude_code_version`, six name
+        # lists and a permission mode — and were null in every receipt this
+        # runner could produce.
         harness=dict(source=view.get('deliveries', [{}])[0].get('evidence', {}).get('source'),
-                     claude_code_version=init.get('claude_code_version'),
-                     session_id=init.get('session_id')),
-        model=dict(configured=init.get('configured_model'),
-                   requested=init.get('requested_model'),
-                   effective=init.get('model'),
-                   # The product default is Opus even with no configuration, so
-                   # the model field alone proves nothing about fidelity.
-                   effective_proves_fidelity=False),
-        # Names only, never arguments, content or output.
-        loaded=dict(plugins=init.get('plugins'), mcp_servers=init.get('mcp_servers'),
-                    tools=init.get('tools'), slash_commands=init.get('slash_commands'),
-                    skills=init.get('skills'), agents=init.get('agents')),
-        permission=dict(requested=init.get('requested_permission_mode'),
-                        effective=init.get('effective_permission_mode'),
-                        matched=init.get('effective_mode_matches_requested'),
-                        checked_after_delivery=init.get('checked_after_delivery')),
+                     agent=init.get('agent'), capabilities=init.get('capabilities'),
+                     auth_methods=init.get('auth_methods'),
+                     session_id=session.get('session_id')),
+        # The owner's rule for this harness: refuse unless the session's own
+        # reported provider and model equal the requested ones. The host has
+        # measured it since the adapter was written and the receipt did not
+        # carry it.
+        model=dict(requested=session.get('requested_model'),
+                   reported=session.get('reported_model'),
+                   matched=session.get('model_matches_requested'),
+                   # Unlike the Claude adapter, this one can check before the
+                   # brief leaves PIO, because the session reports first.
+                   checked_before_delivery=session.get('checked_before_delivery')),
         delivery=dict(state=view.get('delivery'),
                       evidence=view.get('deliveries', [{}])[0].get('evidence'),
                       proof_class=view.get('deliveries', [{}])[0].get('proof_class')),
@@ -467,33 +499,23 @@ def run_one(run, args):
     try:
         service.start()
         service.submit(BRIEFS[run], repo, base)
-        if False:
-            # The daemon is killed mid-turn and restarted: the host owns the
-            # child's pipes, so the conversation survives and the brief is
-            # never re-sent.
-            before = wait(service, lambda v: v['delivery'] == 'acknowledged', 180)
-            identities_before = first_event(service.events(), 'spawned').get('identity')
-            service.stop(service.daemons[-1])
-            service.start()
-            view = wait(service, lambda v: v['runtime'] == 'exited', 900)
-            events = service.events()
-            extra['restart'] = dict(
-                generation_before=before['host']['generation'],
-                generation_after=view['host']['generation'],
-                identity_before=identities_before,
-                identity_after=first_event(events, 'spawned').get('identity'),
-                spawn_markers=len([e for e in events if e['kind'] == 'spawned']),
-                brief_releases=len([e for e in events if e['kind'] == 'turn_start_sent']))
-        else:
-            view = wait(service, lambda v: v['runtime'] == 'exited', 900)
+        # Restart is **not evaluated** for this harness. The Claude plan has a
+        # run for it (R7) and this one does not; the branch that used to sit
+        # here was unreachable — `if False:` — and read like a feature.
+        view = wait(service, lambda v: v['runtime'] == 'exited', 900)
         events = service.events()
         extra['sessions_after'] = session_listing(repo, args.dry_run)
         extra['owner_service_after'] = owner_service()
         extra['owner_service_untouched'] = owner_before == extra['owner_service_after']
-        # The sessions PIO created, which stay in the owner's history.
-        extra['sessions_created'] = [e.get('session_id') or e.get('agent', {}).get('sessionId')
-                                     for e in events if e['kind'] == 'session_started']
-        extra['pio_deleted_nothing'] = True
+        # The sessions PIO created, which stay in the owner's history. Read
+        # from `session_created`, which carries the id `session/new` returned;
+        # `session_started` is the ACP handshake and has no session in it.
+        extra['sessions_created'] = [e.get('session_id') for e in events
+                                     if e['kind'] == 'session_created']
+        # Measured, not asserted. This was the literal `True` — a field that
+        # could not be false, which is not a check.
+        extra['pio_deleted_nothing'] = deleted_nothing(extra['sessions_before'],
+                                                       extra['sessions_after'])
         extra['preflight'] = checks
         receipt = build_receipt(service, run, view, started, extra)
     finally:
@@ -520,13 +542,150 @@ def run_one(run, args):
     return receipt
 
 
+def selftest():
+    """The refusals and the receipt shape, checked without spending a token.
+
+    Three of these had no coverage at all and were named as gaps in the
+    OpenCode field audit; the fourth is the audit's own headline, that a
+    receipt field which is null or the same in every run is not evidence.
+    """
+    import tempfile
+
+    scratch = Path(tempfile.mkdtemp(prefix='oc-selftest-'))
+    try:
+        # 1. A dirty tree is refused, not noted.
+        repo = scratch / 'repo'
+        (repo / 'crates').mkdir(parents=True)
+        (repo / 'Cargo.toml').write_text('[workspace]\n')
+        (repo / 'Cargo.lock').write_text('\n')
+        git = lambda *a: subprocess.run(['git', '-C', str(repo), *a], check=True,
+                                        capture_output=True)
+        git('init', '-q')
+        git('-c', 'user.email=pio@example.invalid', '-c', 'user.name=pio', 'add', '.')
+        git('-c', 'user.email=pio@example.invalid', '-c', 'user.name=pio',
+            'commit', '-q', '-m', 'selftest')
+        binary = scratch / 'pio'
+        binary.write_bytes(b'not a binary')
+        (repo / 'dirty.txt').write_text('uncommitted\n')
+        try:
+            preflight(False, root=repo, binary=binary)
+            raise AssertionError('a dirty tree was admitted')
+        except SystemExit as refusal:
+            assert 'dirty tree' in str(refusal), refusal
+        (repo / 'dirty.txt').unlink()
+
+        # 2. A binary older than its sources is refused.
+        os.utime(binary, (0, 0))
+        try:
+            preflight(False, root=repo, binary=binary)
+            raise AssertionError('a stale binary was admitted')
+        except SystemExit as refusal:
+            assert 'older than' in str(refusal), refusal
+        binary.touch()
+        assert preflight(False, root=repo, binary=binary)['checked'] is True
+
+        # 3. A usage report that parses to zero is a stop, not a zero. ACP
+        #    sends camelCase; a measure that reads snake_case sums nothing.
+        book = ledger()
+        zero = {'usage': {'reported': True, 'observed_total_tokens': 0,
+                          'detail': {'inputTokens': 128, 'outputTokens': 128}},
+                'durable_state': {}}
+        stops = check_stops(book, 'selftest', zero)
+        assert any('parsed to zero' in stop for stop in stops), stops
+        print('opencode selftest: dirty tree, stale binary and zero-parse usage all refuse')
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def receipt_fields_selftest(out):
+    """No receipt field may be null, or the same in every run.
+
+    The audit found eighteen that were: the builder had been copied from the
+    Claude runner and carried a `claude_code_version`, six name lists and a
+    permission mode that ACP never reports. A field that is always null proves
+    nothing, and one that is constant cannot be falsified.
+    """
+    receipts = {}
+    # Short on purpose: each dry run builds a Unix socket path underneath
+    # this, and the platform caps that near 104 bytes.
+    for run in ('R1', 'R5'):
+        target = out / run[-1]
+        finished = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()),
+             '--run', run, '--dry-run', '--out', str(target / 'o')],
+            capture_output=True, text=True,
+            env=dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parent)))
+        if finished.returncode != 0:
+            raise SystemExit(f'{run}: the dry run failed, so the receipt shape '
+                             f'cannot be checked.\n{finished.stderr[-1500:]}')
+        receipts[run] = json.loads(
+            (target / 'opencode-live-dry-run' / f'{run}.json').read_text())
+
+    def leaves(value, prefix=''):
+        if isinstance(value, dict):
+            for key, inner in value.items():
+                yield from leaves(inner, f'{prefix}.{key}' if prefix else key)
+        else:
+            yield prefix, value
+
+    # Fields that are the same in every run **by design**, and why.
+    expected_constant = {
+        'format', 'run', 'dry_run', 'platform', 'commit', 'dirty', 'binary_sha256',
+        'completion_is_acceptance', 'runtime', 'started_at', 'stops',
+        'harness.source', 'harness.agent.name', 'harness.agent.version',
+        'model.requested', 'model.reported', 'model.matched',
+        'model.checked_before_delivery', 'usage.measure', 'usage.reported',
+        'usage.cap', 'usage.stop_at', 'usage.run_limit', 'usage.limit_is_next_turn_only',
+        'usage.execution_deadline_seconds', 'containment.mechanism',
+        'containment.os_sandbox_observed', 'cumulative.cap', 'cumulative.stop_at',
+    }
+    null_fields, constant_fields = [], []
+    first, second = receipts['R1'], receipts['R5']
+    for path, value in leaves(first):
+        root_key = path.split('.')[0]
+        # Null only because a dry run reaches no owner store and produces no
+        # live evidence, which the receipt states in `sessions_before.reason`
+        # and `preflight.reason` rather than leaving to the reader.
+        dry_run_dependent = ('sessions_before', 'sessions_after', 'preflight',
+                             'delivery', 'pio_deleted_nothing')
+        if value is None and root_key not in dry_run_dependent:
+            null_fields.append(path)
+    flat_second = dict(leaves(second))
+    for path, value in leaves(first):
+        # Null in a dry run for a stated reason, so it cannot vary either.
+        if path == 'pio_deleted_nothing':
+            continue
+        if path in expected_constant or path.startswith(('preflight.', 'sessions_',
+                                                         'owner_service', 'harness.capabilities',
+                                                         'harness.auth_methods', 'delivery.',
+                                                         'tool_uses.', 'durable_state.',
+                                                         'exit.', 'usage.parts.', 'usage.detail.',
+                                                         'cumulative.')):
+            continue
+        if path in flat_second and flat_second[path] == value:
+            constant_fields.append(path)
+    assert not null_fields, f'receipt fields that are always null: {null_fields}'
+    assert not constant_fields, (
+        f'receipt fields that do not vary between two scenarios: {constant_fields}')
+    print(f'opencode receipt selftest: {len(list(leaves(first)))} fields, '
+          f'none null, none unexpectedly constant')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--run', action='append', choices=RUNS, required=True)
+    parser.add_argument('--run', action='append', choices=RUNS)
+    parser.add_argument('--selftest', action='store_true',
+                        help='check the refusals and the receipt shape; no tokens')
     parser.add_argument('--out', type=Path, default=ROOT / 'docs/work/m3b/opencode-live')
     parser.add_argument('--dry-run', action='store_true',
                         help='drive the labeled fake through the same service')
     args = parser.parse_args()
+    if args.selftest:
+        selftest()
+        receipt_fields_selftest(args.out.resolve())
+        return
+    if not args.run:
+        raise SystemExit('--run is required unless --selftest is given')
     global ROOT_OVERRIDE
     # Absolute from here on: a service refuses a configuration whose paths are
     # relative, and every path below is derived from this one.
