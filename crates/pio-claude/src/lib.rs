@@ -590,5 +590,7 @@ pub fn default_config_dir() -> Option<PathBuf> {
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".claude")))
 }
 
+pub mod fake;
+
 #[cfg(test)]
 mod tests;

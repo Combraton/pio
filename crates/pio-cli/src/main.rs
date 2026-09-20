@@ -163,6 +163,9 @@ fn run() -> Result<()> {
                         std::process::exit(3);
                     }
                 }
+                // A labeled fake harness, so the offline matrix runs in CI
+                // with no Claude Code installed. It is never qualified.
+                Some("fake-cli") => pio_claude::fake::run()?,
                 Some("settings-snapshot") => println!(
                     "{}",
                     serde_json::to_string_pretty(&pio_claude::settings_snapshot(option(
