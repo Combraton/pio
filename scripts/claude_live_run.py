@@ -325,15 +325,28 @@ def dry_run_check(run):
     root = scratch_root()
     root.mkdir(parents=True, exist_ok=True)
     os.chmod(root, 0o700)
-    out = Path(tempfile.mkdtemp(prefix=f'dry-{run}-', dir=str(root)))
+    # Short on purpose: the rehearsal builds a Unix socket path underneath
+    # this, and the platform caps that near 104 bytes.
+    out = root / 'd'
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
     try:
-        subprocess.run([sys.executable, str(Path(__file__).resolve()),
-                        '--run', run, '--dry-run', '--out', str(out / 'out')],
-                       capture_output=True, text=True, timeout=900)
+        here = str(Path(__file__).resolve().parent)
+        # This script imports its siblings, so the child needs them on the path
+        # too. Without it the rehearsal fails on an import and the refusal
+        # below blames the run rather than the runner.
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(
+            [here, os.environ.get('PYTHONPATH', '')]).rstrip(os.pathsep))
+        finished = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()),
+             '--run', run, '--dry-run', '--out', str(out / 'o')],
+            capture_output=True, text=True, timeout=900, env=env)
         receipt = out / 'claude-live-dry-run' / f'{run}.json'
         if not receipt.exists():
-            raise SystemExit(f'{run}: the dry run produced no receipt; refusing '
-                             f'to spend tokens on a run that cannot be rehearsed')
+            raise SystemExit(
+                f'{run}: the dry run produced no receipt, so the run cannot be '
+                f'rehearsed and no tokens are spent on it.\n'
+                f'--- rehearsal stderr ---\n{finished.stderr[-1500:]}')
         record = json.loads(receipt.read_text())
         try:
             made = bool(predicate(record))
@@ -370,6 +383,15 @@ class Service:
         os.chmod(self.store.parent, 0o700)
         os.chmod(live_root(), 0o700)
         self.socket = private_dir(run, RUN_ID, 'socket') / 'public.sock'
+        # A Unix socket path is capped near 104 bytes. Past it `bind` fails and
+        # the only symptom is a service that never becomes ready, which says
+        # nothing about the cause. Measured: a rehearsal under a deep scratch
+        # directory produced exactly that.
+        if len(str(self.socket).encode()) > 100:
+            raise SystemExit(
+                f'{run}: the socket path is {len(str(self.socket).encode())} bytes, '
+                f'over the ~104 the platform allows, so the service could never '
+                f'bind it. Use a shorter --out.\n  {self.socket}')
         self.transcript = self.private / 'public-transcript.jsonl'
         self.credential = 'ccred1.owner.' + base64.urlsafe_b64encode(
             os.urandom(32)).decode().rstrip('=')
