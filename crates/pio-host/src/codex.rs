@@ -2,13 +2,12 @@
 //! fences, owns the app-server's stdio, and records native observations in an
 //! fsync'd append-only events file. Controls from the service arrive in a
 //! controls file and are applied at most once.
-use crate::{Lock, append_json, check_launch_guards, identity, secure_root};
+use crate::harness::{self, Lifecycle};
+use crate::{append_json, identity};
 use anyhow::{Context, Result, bail, ensure};
 use pio_codex::rpc::AppServer;
-use pio_core::Store;
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, BTreeSet};
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::collections::BTreeMap;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -28,12 +27,17 @@ pub const REFUSED_PERMISSION_GRANT: &str = "item/permissions/requestApproval";
 /// standing permissions and are never sent.
 pub const ALLOWED_DECISIONS: &[&str] = &["accept", "decline", "cancel"];
 
+/// The adapter label. It prefixes this host's event and control files, so the
+/// shared lifecycle produces exactly the paths the service already reads.
+pub const ADAPTER: &str = "codex";
+
 pub fn events_path(root: &Path, invocation: &str) -> PathBuf {
-    root.join(format!("codex-{invocation}.events.jsonl"))
+    harness::events_path(root, ADAPTER, invocation)
 }
 pub fn controls_path(root: &Path, invocation: &str) -> PathBuf {
-    root.join(format!("codex-{invocation}.controls.jsonl"))
+    harness::controls_path(root, ADAPTER, invocation)
 }
+pub use harness::read_jsonl;
 
 pub fn source(spec: &Value) -> &'static str {
     if spec["labeled_fake"] == true {
@@ -43,42 +47,9 @@ pub fn source(spec: &Value) -> &'static str {
     }
 }
 
-/// Every event carries the host's label and time; the service decides meaning.
-fn event(root: &Path, invocation: &str, spec: &Value, mut record: Value) -> Result<()> {
-    record["source"] = source(spec).into();
-    record["observed_at_unix_ms"] = (std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)?
-        .as_millis() as u64)
-        .into();
-    append_json(&events_path(root, invocation), &record)
-}
-
-/// Read JSON lines appended after `offset`; returns records and the new offset.
-/// A trailing partial line is left for the next read.
-pub fn read_jsonl(path: &Path, offset: u64) -> Result<(Vec<Value>, u64)> {
-    let Ok(file) = std::fs::File::open(path) else {
-        return Ok((vec![], offset));
-    };
-    let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(offset))?;
-    let mut records = vec![];
-    let mut position = offset;
-    loop {
-        let mut line = Vec::new();
-        let n = reader.read_until(b'\n', &mut line)?;
-        if n == 0 || line.last() != Some(&b'\n') {
-            break;
-        }
-        records.push(serde_json::from_slice(&line)?);
-        position += n as u64;
-    }
-    Ok((records, position))
-}
-
 /// Append a control for the host. Ids make repeated appends harmless.
 pub fn append_control(root: &Path, invocation: &str, control: &Value) -> Result<()> {
-    ensure!(control["id"].is_string(), "control id required");
-    append_json(&controls_path(root, invocation), control)
+    harness::append_control(root, ADAPTER, invocation, control)
 }
 
 fn child_pids(pid: u32) -> Vec<u32> {
@@ -189,253 +160,192 @@ fn response_error(message: &Value) -> Option<Value> {
 }
 
 pub fn codex_host(root: &Path, command: &str, invocation_id: &str) -> Result<()> {
-    ensure!(
-        unsafe { libc::setsid() } != -1,
-        "cannot detach codex host session"
-    );
-    let root = secure_root(root)?;
-    let mut store = Store::open(&root)?;
-    let mut state = store.get(command)?.context("missing invocation")?;
-    ensure!(
-        state.invocation_id == invocation_id,
-        "invocation_identity_fenced"
-    );
-    check_launch_guards(&root, &store)?;
-    ensure!(
-        state.phase == "intent",
-        "host_phase_fence: launch attempt already recorded"
-    );
-    let spec = state.payload.clone();
-    ensure!(spec["adapter"] == "codex", "not a codex invocation");
-    let _slot = Lock::acquire(&root.join(format!("slot-{}.lock", state.host_slot)))
-        .map_err(|_| anyhow::anyhow!("host_slot_fence: slot already owned"))?;
-    state = store.transition(
-        &state,
-        "host_claimed",
-        Some(identity(std::process::id())?),
-        None,
-        None,
-    )?;
-    let invocation = state.invocation_id.clone();
+    let mut life = Lifecycle::claim(root, command, invocation_id, ADAPTER, |spec| {
+        source(spec).to_owned()
+    })?;
     let mut server: Option<AppServer> = None;
-    let mut released = false;
-    let outcome = (|| -> Result<()> {
-        if spec["qualification"].is_object() {
-            recheck_executable(&spec)?;
-        }
-        let codex_home = PathBuf::from(spec["codex_home"].as_str().context("codex_home")?);
-        let before = pio_codex::config_snapshot(&codex_home)?;
-        event(
-            &root,
-            &invocation,
-            &spec,
-            json!({"kind":"config_before","snapshot":before}),
-        )?;
-        // Owner guard: never request thread settings broader than the user's
-        // configured default. Refused before the app-server is started.
-        let guard = pio_codex::thread_settings_guard(&before, &spec["thread"]);
-        event(
-            &root,
-            &invocation,
-            &spec,
-            json!({"kind":"thread_settings_guard","guard":guard}),
-        )?;
-        ensure!(
-            guard["allowed"] == true,
-            "thread_settings_refused: requested {} is broader than or not comparable with the configured default {}",
-            guard["requested"],
-            json!({"configured":guard["configured"],"broader":guard["broader_than_configured"],"unresolved":guard["unresolved"]})
-        );
-        let env: Vec<(String, String)> = spec["env"]
-            .as_object()
-            .context("env")?
-            .iter()
-            .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_owned()))
-            .collect();
-        let stderr = std::fs::OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .mode(0o600)
-            .open(root.join(format!("codex-{invocation}.stderr")))?;
-        let app = server.insert(AppServer::spawn(
-            Path::new(spec["executable"].as_str().context("executable")?),
-            &env,
-            stderr,
-        )?);
-        let spawned = app.child.id();
-        let child_identity = identity(spawned)?;
-        let native = if spec["qualification"].is_object() {
-            let mut native = verify_native(&spec, spawned)?;
-            native["interpreter"] = verify_interpreter(&spec, spawned)?;
-            native
-        } else {
-            json!({"verified":false,"reason":"labeled fake app-server has no qualification record"})
-        };
-        event(
-            &root,
-            &invocation,
-            &spec,
-            json!({"kind":"spawned","identity":child_identity,"native":native}),
-        )?;
-        let init = app.request(
+    let outcome = run_turn(&mut life, &mut server);
+    if let Err(error) = &outcome {
+        life.fail(error, || {
+            if let Some(app) = server.as_mut() {
+                let _ = app.child.kill();
+                let _ = app.child.wait();
+            }
+        });
+    }
+    outcome
+}
+
+/// Everything specific to the Codex app-server: its handshake, its message
+/// shapes and its controls. The lifecycle around this is shared.
+fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> {
+    if life.spec["qualification"].is_object() {
+        recheck_executable(&life.spec)?;
+    }
+    let codex_home = PathBuf::from(life.spec["codex_home"].as_str().context("codex_home")?);
+    let before = pio_codex::config_snapshot(&codex_home)?;
+    life.event(json!({"kind":"config_before","snapshot":before}))?;
+    // Owner guard: never request thread settings broader than the user's
+    // configured default. Refused before the app-server is started.
+    let guard = pio_codex::thread_settings_guard(&before, &life.spec["thread"]);
+    life.event(json!({"kind":"thread_settings_guard","guard":guard}))?;
+    ensure!(
+        guard["allowed"] == true,
+        "thread_settings_refused: requested {} is broader than or not comparable with the configured default {}",
+        guard["requested"],
+        json!({"configured":guard["configured"],"broader":guard["broader_than_configured"],"unresolved":guard["unresolved"]})
+    );
+    let env: Vec<(String, String)> = life.spec["env"]
+        .as_object()
+        .context("env")?
+        .iter()
+        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_owned()))
+        .collect();
+    let stderr = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(life.root.join(format!("codex-{}.stderr", life.invocation)))?;
+    let app = server.insert(AppServer::spawn(
+        Path::new(life.spec["executable"].as_str().context("executable")?),
+        &env,
+        stderr,
+    )?);
+    let spawned = app.child.id();
+    let child_identity = identity(spawned)?;
+    let native = if life.spec["qualification"].is_object() {
+        let mut native = verify_native(&life.spec, spawned)?;
+        native["interpreter"] = verify_interpreter(&life.spec, spawned)?;
+        native
+    } else {
+        json!({"verified":false,"reason":"labeled fake app-server has no qualification record"})
+    };
+    life.spawned(&serde_json::to_value(&child_identity)?, &native)?;
+    let init = app.request(
             "initialize",
             json!({"clientInfo":{"name":"pio","title":"PIO standalone execution host","version":env!("CARGO_PKG_VERSION")}}),
         )?;
-        let init = app.wait_response(init, Duration::from_secs(60), |_| Ok(()))?;
-        if let Some(error) = response_error(&init) {
-            bail!("initialize refused: {error}");
-        }
-        app.notify("initialized")?;
-        let account = app.request("account/read", json!({"refreshToken":false}))?;
-        let account = app.wait_response(account, Duration::from_secs(60), |_| Ok(()))?;
-        // Only the authentication type; never email, plan or tokens.
-        event(
-            &root,
-            &invocation,
-            &spec,
-            json!({"kind":"account","authentication_type":account["result"]["account"]["type"],"requires_openai_auth":account["result"]["requiresOpenaiAuth"],"error":response_error(&account)}),
+    let init = app.wait_response(init, Duration::from_secs(60), |_| Ok(()))?;
+    if let Some(error) = response_error(&init) {
+        bail!("initialize refused: {error}");
+    }
+    app.notify("initialized")?;
+    let account = app.request("account/read", json!({"refreshToken":false}))?;
+    let account = app.wait_response(account, Duration::from_secs(60), |_| Ok(()))?;
+    // Only the authentication type; never email, plan or tokens.
+    life.event(json!({"kind":"account","authentication_type":account["result"]["account"]["type"],"requires_openai_auth":account["result"]["requiresOpenaiAuth"],"error":response_error(&account)}),
         )?;
-        let mut params = spec["thread"].clone();
-        if !params.is_object() {
-            params = json!({});
-        }
-        params["cwd"] = spec["cwd"].clone();
-        let thread = app.request("thread/start", params)?;
-        let thread = app.wait_response(thread, Duration::from_secs(120), |_| Ok(()))?;
-        if let Some(error) = response_error(&thread) {
-            bail!("thread_start_refused: {error}");
-        }
-        let result = &thread["result"];
-        let thread_id = result["thread"]["id"]
+    let mut params = life.spec["thread"].clone();
+    if !params.is_object() {
+        params = json!({});
+    }
+    params["cwd"] = life.spec["cwd"].clone();
+    let thread = app.request("thread/start", params)?;
+    let thread = app.wait_response(thread, Duration::from_secs(120), |_| Ok(()))?;
+    if let Some(error) = response_error(&thread) {
+        bail!("thread_start_refused: {error}");
+    }
+    let result = &thread["result"];
+    let thread_id = result["thread"]["id"]
+        .as_str()
+        .context("thread id")?
+        .to_owned();
+    let sandbox = &result["sandbox"];
+    life.event(json!({"kind":"thread_started","thread_id":thread_id,"configured_model":before["settings"]["keys"]["model"],"requested_model":life.spec["thread"]["model"],"model":result["model"],"model_provider":result["modelProvider"],"sandbox":sandbox,"approval_policy":result["approvalPolicy"],"instruction_sources":result["instructionSources"].as_array().map(|a|a.len())}),
+        )?;
+    ensure!(
+        !matches!(
+            sandbox["type"].as_str(),
+            Some("dangerFullAccess" | "externalSandbox")
+        ) && sandbox["networkAccess"] != true,
+        "restricted_sandbox_required: effective sandbox {sandbox}"
+    );
+    life.park(child_identity)?;
+    let brief = pio_core::spool::Spool::open(&life.root)?.read(
+        life.spec["brief"]["digest"]
             .as_str()
-            .context("thread id")?
-            .to_owned();
-        let sandbox = &result["sandbox"];
-        event(
-            &root,
-            &invocation,
-            &spec,
-            json!({"kind":"thread_started","thread_id":thread_id,"configured_model":before["settings"]["keys"]["model"],"requested_model":spec["thread"]["model"],"model":result["model"],"model_provider":result["modelProvider"],"sandbox":sandbox,"approval_policy":result["approvalPolicy"],"instruction_sources":result["instructionSources"].as_array().map(|a|a.len())}),
-        )?;
-        ensure!(
-            !matches!(
-                sandbox["type"].as_str(),
-                Some("dangerFullAccess" | "externalSandbox")
-            ) && sandbox["networkAccess"] != true,
-            "restricted_sandbox_required: effective sandbox {sandbox}"
-        );
-        state = store.transition(&state, "parked", None, Some(child_identity), None)?;
-        let brief = pio_core::spool::Spool::open(&root)?
-            .read(spec["brief"]["digest"].as_str().context("brief digest")?)?;
-        let text = String::from_utf8(brief).context("brief is not UTF-8 text")?;
-        let gate = Lock::acquire_mode(&root.join("controller-gate.lock"), libc::LOCK_SH)?;
-        state = store.transition(&state, "released", None, None, None)?;
-        released = true;
-        let turn_request = app.request(
-            "turn/start",
-            json!({"threadId":thread_id,"clientUserMessageId":invocation,"input":[{"type":"text","text":text}]}),
-        )?;
-        event(
-            &root,
-            &invocation,
-            &spec,
-            json!({"kind":"turn_start_sent","request_id":turn_request,"input_sha256":pio_codex::sha256_hex(text.as_bytes())}),
-        )?;
-        drop(gate);
+            .context("brief digest")?,
+    )?;
+    let text = String::from_utf8(brief).context("brief is not UTF-8 text")?;
+    // The release and the first native write happen together under the
+    // controller gate, so a controller never sees a released invocation
+    // whose brief has not been sent.
+    let gate = life.release()?;
+    let turn_request = app.request(
+        "turn/start",
+        json!({"threadId":thread_id,"clientUserMessageId":life.invocation,"input":[{"type":"text","text":text}]}),
+    )?;
+    life.event(json!({"kind":"turn_start_sent","request_id":turn_request,"input_sha256":pio_codex::sha256_hex(text.as_bytes())}))?;
+    drop(gate);
 
-        let spool = pio_core::spool::Spool::open(&root)?;
-        let refs = root.join(format!("output-{invocation}.refs.jsonl"));
-        let mut output_offset = 0u64;
-        let mut all_output = Vec::new();
-        let mut turn_id: Option<String> = None;
-        let mut turn_status: Option<Value> = None;
-        let mut pending_actions: BTreeMap<u64, Value> = BTreeMap::new();
-        let mut action_seq = 0u64;
-        let mut requests: BTreeMap<u64, String> = BTreeMap::new();
-        let mut applied: BTreeSet<String> = BTreeSet::new();
-        let mut controls_offset = 0u64;
-        let controls = controls_path(&root, &invocation);
-        while turn_status.is_none() {
-            if let Some(message) = app.receive(Duration::from_millis(25))? {
-                let method = message["method"].as_str().unwrap_or("");
-                let has_id = message.get("id").is_some();
-                if method.is_empty() && has_id {
-                    let id = message["id"].as_u64();
-                    if id == Some(turn_request) {
-                        match message["result"]["turn"]["id"].as_str() {
-                            Some(turn) => {
-                                turn_id = Some(turn.to_owned());
-                                event(
-                                    &root,
-                                    &invocation,
-                                    &spec,
-                                    json!({"kind":"turn_acknowledged","turn_id":turn}),
-                                )?;
-                            }
-                            None => {
-                                event(
-                                    &root,
-                                    &invocation,
-                                    &spec,
-                                    json!({"kind":"turn_start_failed","error":response_error(&message)}),
-                                )?;
-                                turn_status = Some(json!("failed"));
-                            }
+    let spool = pio_core::spool::Spool::open(&life.root)?;
+    let refs = life
+        .root
+        .join(format!("output-{}.refs.jsonl", life.invocation));
+    let mut output_offset = 0u64;
+    let mut all_output = Vec::new();
+    let mut turn_id: Option<String> = None;
+    let mut turn_status: Option<Value> = None;
+    let mut pending_actions: BTreeMap<u64, Value> = BTreeMap::new();
+    let mut action_seq = 0u64;
+    let mut requests: BTreeMap<u64, String> = BTreeMap::new();
+    while turn_status.is_none() {
+        if let Some(message) = app.receive(Duration::from_millis(25))? {
+            let method = message["method"].as_str().unwrap_or("");
+            let has_id = message.get("id").is_some();
+            if method.is_empty() && has_id {
+                let id = message["id"].as_u64();
+                if id == Some(turn_request) {
+                    match message["result"]["turn"]["id"].as_str() {
+                        Some(turn) => {
+                            turn_id = Some(turn.to_owned());
+                            life.event(json!({"kind":"turn_acknowledged","turn_id":turn}))?;
                         }
-                    } else if let Some(control) = id.and_then(|id| requests.remove(&id)) {
-                        event(
-                            &root,
-                            &invocation,
-                            &spec,
-                            json!({"kind":"control_response","control_id":control,"result":message.get("result"),"error":response_error(&message)}),
-                        )?;
+                        None => {
+                            life.event(json!({"kind":"turn_start_failed","error":response_error(&message)}),
+                                )?;
+                            turn_status = Some(json!("failed"));
+                        }
                     }
-                    continue;
-                }
-                if has_id {
-                    if APPROVAL_METHODS.contains(&method) {
-                        action_seq += 1;
-                        let params = &message["params"];
-                        // 0.155.1 added `kind` to command approvals: `command`,
-                        // the default when absent, or `writeStdin`, which is
-                        // input to a terminal that is already running. A
-                        // decision must record which one it answered.
-                        let approval_kind = (method == "item/commandExecution/requestApproval")
-                            .then(|| params["kind"].as_str().unwrap_or("command").to_owned());
-                        pending_actions.insert(action_seq, message["id"].clone());
-                        event(
-                            &root,
-                            &invocation,
-                            &spec,
-                            json!({"kind":"action_requested","action_seq":action_seq,"request_id":message["id"],"method":method,"approval_kind":approval_kind,"turn_id":params["turnId"],"item_id":params["itemId"],"command":params["command"],"cwd_digest":params["cwd"].as_str().map(|c|pio_codex::sha256_hex(c.as_bytes())),"reason":params["reason"]}),
+                } else if let Some(control) = id.and_then(|id| requests.remove(&id)) {
+                    life.event(json!({"kind":"control_response","control_id":control,"result":message.get("result"),"error":response_error(&message)}),
                         )?;
+                }
+                continue;
+            }
+            if has_id {
+                if APPROVAL_METHODS.contains(&method) {
+                    action_seq += 1;
+                    let params = &message["params"];
+                    // 0.155.1 added `kind` to command approvals: `command`,
+                    // the default when absent, or `writeStdin`, which is
+                    // input to a terminal that is already running. A
+                    // decision must record which one it answered.
+                    let approval_kind = (method == "item/commandExecution/requestApproval")
+                        .then(|| params["kind"].as_str().unwrap_or("command").to_owned());
+                    pending_actions.insert(action_seq, message["id"].clone());
+                    life.event(json!({"kind":"action_requested","action_seq":action_seq,"request_id":message["id"],"method":method,"approval_kind":approval_kind,"turn_id":params["turnId"],"item_id":params["itemId"],"command":params["command"],"cwd_digest":params["cwd"].as_str().map(|c|pio_codex::sha256_hex(c.as_bytes())),"reason":params["reason"]}),
+                        )?;
+                } else {
+                    // PIO never answers user input, elicitations, tool calls
+                    // or attestation on the user's behalf, and never grants
+                    // permissions beyond the approved thread settings.
+                    let reason = if method == REFUSED_PERMISSION_GRANT {
+                        "declined by PIO: a permission grant would widen the approved thread settings"
                     } else {
-                        // PIO never answers user input, elicitations, tool calls
-                        // or attestation on the user's behalf, and never grants
-                        // permissions beyond the approved thread settings.
-                        let reason = if method == REFUSED_PERMISSION_GRANT {
-                            "declined by PIO: a permission grant would widen the approved thread settings"
-                        } else {
-                            "declined by PIO: no user is attached to answer this request"
-                        };
-                        app.send(
-                            &json!({"id":message["id"],"error":{"code":-32000,"message":reason}}),
-                        )?;
-                        event(
-                            &root,
-                            &invocation,
-                            &spec,
-                            json!({"kind":"native_request_declined","method":method,"reason":reason}),
-                        )?;
-                    }
-                    continue;
+                        "declined by PIO: no user is attached to answer this request"
+                    };
+                    app.send(
+                        &json!({"id":message["id"],"error":{"code":-32000,"message":reason}}),
+                    )?;
+                    life.event(
+                        json!({"kind":"native_request_declined","method":method,"reason":reason}),
+                    )?;
                 }
-                match method {
-                    "turn/started" => event(
-                        &root,
-                        &invocation,
-                        &spec,
-                        json!({"kind":"turn_started","turn_id":message["params"]["turn"]["id"]}),
+                continue;
+            }
+            match method {
+                    "turn/started" => life.event(json!({"kind":"turn_started","turn_id":message["params"]["turn"]["id"]}),
                     )?,
                     "item/agentMessage/delta"
                     | "item/commandExecution/outputDelta"
@@ -454,53 +364,29 @@ pub fn codex_host(root: &Path, command: &str, invocation_id: &str) -> Result<()>
                         all_output.extend_from_slice(&line);
                         if method == "item/completed" {
                             let item = &message["params"]["item"];
-                            event(
-                                &root,
-                                &invocation,
-                                &spec,
-                                json!({"kind":"item_completed","item_type":item["type"],"item_id":item["id"],"status":item["status"]}),
+                            life.event(json!({"kind":"item_completed","item_type":item["type"],"item_id":item["id"],"status":item["status"]}),
                             )?;
                         }
                     }
-                    "thread/tokenUsage/updated" => event(
-                        &root,
-                        &invocation,
-                        &spec,
-                        json!({"kind":"usage","turn_id":message["params"]["turnId"],"total":message["params"]["tokenUsage"]["total"],"last":message["params"]["tokenUsage"]["last"]}),
+                    "thread/tokenUsage/updated" => life.event(json!({"kind":"usage","turn_id":message["params"]["turnId"],"total":message["params"]["tokenUsage"]["total"],"last":message["params"]["tokenUsage"]["last"]}),
                     )?,
-                    "serverRequest/resolved" => event(
-                        &root,
-                        &invocation,
-                        &spec,
-                        json!({"kind":"request_resolved","request_id":message["params"]["requestId"]}),
+                    "serverRequest/resolved" => life.event(json!({"kind":"request_resolved","request_id":message["params"]["requestId"]}),
                     )?,
                     "turn/completed" => {
                         let turn = &message["params"]["turn"];
-                        event(
-                            &root,
-                            &invocation,
-                            &spec,
-                            json!({"kind":"turn_completed","turn_id":turn["id"],"status":turn["status"],"error":turn["error"]}),
+                        life.event(json!({"kind":"turn_completed","turn_id":turn["id"],"status":turn["status"],"error":turn["error"]}),
                         )?;
                         turn_status = Some(turn["status"].clone());
                     }
-                    "error" => event(
-                        &root,
-                        &invocation,
-                        &spec,
-                        json!({"kind":"native_error","error":message["params"]["error"]}),
+                    "error" => life.event(json!({"kind":"native_error","error":message["params"]["error"]}),
                     )?,
                     _ => {}
                 }
-            }
-            let (new_controls, offset) = read_jsonl(&controls, controls_offset)?;
-            controls_offset = offset;
-            for control in new_controls {
-                let id = control["id"].as_str().unwrap_or_default().to_owned();
-                if id.is_empty() || !applied.insert(id.clone()) {
-                    continue;
-                }
-                match control["kind"].as_str() {
+        }
+        // Controls are deduplicated by the lifecycle; each arrives once.
+        for control in life.controls()? {
+            let id = control["id"].as_str().unwrap_or_default().to_owned();
+            match control["kind"].as_str() {
                     Some("respond_action") => {
                         let decision = control["decision"].as_str().unwrap_or("");
                         let rpc = control["action_seq"]
@@ -509,18 +395,10 @@ pub fn codex_host(root: &Path, command: &str, invocation_id: &str) -> Result<()>
                         match rpc {
                             Some(rpc) if ALLOWED_DECISIONS.contains(&decision) => {
                                 app.respond(&rpc, json!({"decision":decision}))?;
-                                event(
-                                    &root,
-                                    &invocation,
-                                    &spec,
-                                    json!({"kind":"control_applied","control_id":id,"action_seq":control["action_seq"],"decision":decision}),
+                                life.event(json!({"kind":"control_applied","control_id":id,"action_seq":control["action_seq"],"decision":decision}),
                                 )?;
                             }
-                            _ => event(
-                                &root,
-                                &invocation,
-                                &spec,
-                                json!({"kind":"control_rejected","control_id":id,"reason":"no pending action or decision not allowed"}),
+                            _ => life.event(json!({"kind":"control_rejected","control_id":id,"reason":"no pending action or decision not allowed"}),
                             )?,
                         }
                     }
@@ -531,18 +409,10 @@ pub fn codex_host(root: &Path, command: &str, invocation_id: &str) -> Result<()>
                                 json!({"threadId":thread_id,"turnId":turn}),
                             )?;
                             requests.insert(request, id.clone());
-                            event(
-                                &root,
-                                &invocation,
-                                &spec,
-                                json!({"kind":"control_sent","control_id":id,"method":"turn/interrupt"}),
+                            life.event(json!({"kind":"control_sent","control_id":id,"method":"turn/interrupt"}),
                             )?;
                         }
-                        None => event(
-                            &root,
-                            &invocation,
-                            &spec,
-                            json!({"kind":"control_rejected","control_id":id,"reason":"no acknowledged turn"}),
+                        None => life.event(json!({"kind":"control_rejected","control_id":id,"reason":"no acknowledged turn"}),
                         )?,
                     },
                     Some("steer") => match (
@@ -555,80 +425,25 @@ pub fn codex_host(root: &Path, command: &str, invocation_id: &str) -> Result<()>
                         (Some(turn), Some(text)) => {
                             let request = app.request("turn/steer", json!({"threadId":thread_id,"expectedTurnId":turn,"clientUserMessageId":id,"input":[{"type":"text","text":text}]}))?;
                             requests.insert(request, id.clone());
-                            event(
-                                &root,
-                                &invocation,
-                                &spec,
-                                json!({"kind":"control_sent","control_id":id,"method":"turn/steer"}),
+                            life.event(json!({"kind":"control_sent","control_id":id,"method":"turn/steer"}),
                             )?;
                         }
-                        _ => event(
-                            &root,
-                            &invocation,
-                            &spec,
-                            json!({"kind":"control_rejected","control_id":id,"reason":"no acknowledged turn or steering text unavailable"}),
+                        _ => life.event(json!({"kind":"control_rejected","control_id":id,"reason":"no acknowledged turn or steering text unavailable"}),
                         )?,
                     },
-                    _ => event(
-                        &root,
-                        &invocation,
-                        &spec,
-                        json!({"kind":"control_rejected","control_id":id,"reason":"unknown control"}),
+                    _ => life.event(json!({"kind":"control_rejected","control_id":id,"reason":"unknown control"}),
                     )?,
                 }
-            }
-        }
-        app.close_stdin();
-        let deadline = Instant::now() + Duration::from_secs(20);
-        let exit = loop {
-            if let Some(status) = app.child.try_wait()? {
-                break status.code();
-            }
-            if Instant::now() >= deadline {
-                let _ = app.child.kill();
-                break app.child.wait()?.code();
-            }
-            std::thread::sleep(Duration::from_millis(25));
-        };
-        let after = pio_codex::config_snapshot(&codex_home)?;
-        let fixture_root = spec["fixture_root"].as_str().map(Path::new);
-        let diff = pio_codex::config_diff(&before, &after, fixture_root);
-        event(
-            &root,
-            &invocation,
-            &spec,
-            json!({"kind":"app_server_exited","code":exit}),
-        )?;
-        event(
-            &root,
-            &invocation,
-            &spec,
-            json!({"kind":"config_after","snapshot":after,"diff":diff}),
-        )?;
-        let receipt = json!({"source":source(&spec),"kind":"native_turn_completed","turn_status":turn_status,"app_server_exit":exit,"output_digest":pio_core::digest(&all_output),"output_bytes":output_offset,"completion_is_acceptance":false});
-        store.transition(&state, "completed", None, None, Some(receipt))?;
-        Ok(())
-    })();
-    if let Err(error) = &outcome {
-        let _ = event(
-            &root,
-            &invocation,
-            &spec,
-            json!({"kind":"host_error","released":released,"error":format!("{error:#}")}),
-        );
-        if let Some(app) = server.as_mut() {
-            let _ = app.child.kill();
-            let _ = app.child.wait();
-        }
-        if !released && matches!(state.phase.as_str(), "host_claimed" | "parked") {
-            let _ = store.transition(
-                &state,
-                "known_not_released",
-                None,
-                None,
-                Some(json!({"source":source(&spec),"kind":"known_not_released","release_attempted":false,"reason":format!("{error:#}")})),
-            );
         }
     }
-    outcome
+    app.close_stdin();
+    let exit = life.stop(&mut app.child)?;
+    let after = pio_codex::config_snapshot(&codex_home)?;
+    let fixture_root = life.spec["fixture_root"].as_str().map(Path::new);
+    let diff = pio_codex::config_diff(&before, &after, fixture_root);
+    life.event(json!({"kind":"app_server_exited","code":exit}))?;
+    life.event(json!({"kind":"config_after","snapshot":after,"diff":diff}))?;
+    let receipt = json!({"source":source(&life.spec),"kind":"native_turn_completed","turn_status":turn_status,"app_server_exit":exit,"output_digest":pio_core::digest(&all_output),"output_bytes":output_offset,"completion_is_acceptance":false});
+    life.complete(receipt)?;
+    Ok(())
 }

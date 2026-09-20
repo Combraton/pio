@@ -1,5 +1,6 @@
 //! Experimental local fake host. No native harness or Protocol capability claim.
 pub mod codex;
+pub mod harness;
 pub mod script;
 use anyhow::{Context, Result, bail, ensure};
 use pio_core::{ProcessIdentity, Store};

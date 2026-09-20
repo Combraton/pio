@@ -159,6 +159,14 @@ Stops are the **runner's** rules, not the product's: PIO enforces no budget, and
 
 Results and the journey marks they support are in the [M2 acceptance packet](work/m2/ACCEPTANCE.md).
 
+## The shared host lifecycle
+
+Codex, Claude Code and OpenCode differ in the protocol they speak and in nothing else that matters to the host. `pio_host::harness::Lifecycle` holds the part that is literally shared, once: detach and the M1 launch fences (invocation identity, no launch already recorded, host slot free), the claim, the guard event that refuses a request broader than the user's configured default, the spawn marker binding the child to the qualification record, the park, the **release gate** held across the first native write, the append-only event file, the control file with at-most-once application, the deadline stop, and the receipt or the known-not-released failure.
+
+What a harness says on the wire stays in its own module; the lifecycle never parses a harness message. The event and control files keep each adapter's own prefix, so extracting this changed no path the service reads.
+
+**The proof that the extraction changed nothing** is that every existing count is unchanged: the offline Codex matrix is **51 of 51** across its 17 cases, the public Unix process matrix is **72** (51 pass, 6 expected property failures, 9 expected defense refusals, 6 expected classifier failures), the diagnostic fake-host matrix is **54** (39/3/9/3), and caller recovery passes.
+
 ## M3 Claude Code qualification
 
 `pio-claude` binds the user-selected Claude Code executable before any native work. `target/debug/pio claude qualify --executable PATH --work DIR [--expected SURFACE]` resolves the path to the binary that actually runs, hashes it, requires version 2.1.278, and then digests the command-line surface: the top-level help plus seven subcommand helps, compared with the checked-in [surface identity](../adapters/claude/2.1.278/surface-identity.json). Claude Code publishes no schemas, so the surface is what the adapter can pin; it is byte-identical across runs and costs 50 ms, which keeps re-qualification cheap for a cask that self-updates. Exit 0 when qualified and 3 when refused; refusals are data (`unresolved_executable`, `version_unavailable`, `unsupported_version`, `surface_drift`). Every invocation uses an isolated `CLAUDE_CONFIG_DIR` and an explicit environment with no credential variable.
