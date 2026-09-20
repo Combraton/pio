@@ -44,6 +44,8 @@ jobs:
           python3 scripts/client_recovery.py --out target/client-recovery
       - name: Offline Codex adapter matrix (labeled fake app-server)
         run: python3 scripts/codex_host_matrix.py --out target/codex-host --repetitions 3
+      - name: Offline Claude adapter matrix (labeled fake CLI)
+        run: python3 scripts/claude_host_matrix.py --out target/claude-host --repetitions 3
       - name: Start isolated runner user manager
         if: runner.os == 'Linux'
         run: |

@@ -72,6 +72,11 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 /// exports. No credential variable is ever passed.
 pub const ENV_ALLOWLIST: &[&str] = &["PATH", "HOME", "USER", "CLAUDE_CONFIG_DIR"];
 
+/// How the labeled fake is told which scenario to play. It is allowed in a
+/// service environment **only** when `labeled_fake` is true, so it can never
+/// sit unnoticed in a configuration that drives a real Claude Code.
+pub const FAKE_SCENARIO_VAR: &str = "PIO_CLAUDE_FAKE_SCENARIO";
+
 /// The environment a child process runs with, built explicitly.
 ///
 /// `USER` is in the allowlist because the credential route is **not observable
@@ -84,6 +89,8 @@ pub struct ChildEnv {
     config_dir: Option<PathBuf>,
     user: Option<OsString>,
     path: Option<OsString>,
+    /// Extra variables, for the labeled fake's scenario and nothing else.
+    extra: BTreeMap<String, String>,
 }
 
 impl ChildEnv {
@@ -96,6 +103,7 @@ impl ChildEnv {
             config_dir: Some(dir.to_path_buf()),
             user: std::env::var_os("USER"),
             path: None,
+            extra: BTreeMap::new(),
         }
     }
 
@@ -112,6 +120,7 @@ impl ChildEnv {
             config_dir: None,
             user: std::env::var_os("USER"),
             path: None,
+            extra: BTreeMap::new(),
         }
     }
 
@@ -123,6 +132,16 @@ impl ChildEnv {
     /// Only for tests that must prove a missing `USER` is what breaks the route.
     pub fn with_user(mut self, user: Option<OsString>) -> Self {
         self.user = user;
+        self
+    }
+
+    /// Pass the labeled fake its scenario. Refused for any other variable, so
+    /// the allowlist still describes what a real harness receives.
+    pub fn with_fake_scenario(mut self, scenario: Option<&str>) -> Self {
+        if let Some(scenario) = scenario {
+            self.extra
+                .insert(FAKE_SCENARIO_VAR.to_owned(), scenario.to_owned());
+        }
         self
     }
 
@@ -141,6 +160,9 @@ impl ChildEnv {
         }
         if let Some(path) = &self.path {
             command.env("PATH", path);
+        }
+        for (name, value) in &self.extra {
+            command.env(name, value);
         }
     }
 }
@@ -239,7 +261,7 @@ pub fn surface_drift(expected: &Value, actual: &Value) -> Vec<Value> {
 pub fn qualify(
     selected: &Path,
     expected_surface: &Value,
-    path: Option<&OsStr>,
+    env: &ChildEnv,
     work: &Path,
 ) -> Result<Value> {
     let pinned = json!({"version":PINNED_VERSION});
@@ -257,7 +279,13 @@ pub fn qualify(
     let config = work.join("isolated-claude-config");
     std::fs::create_dir_all(&config)?;
     let mut refusals = Vec::new();
-    let isolated = ChildEnv::isolated(&config).with_path(path);
+    // Qualification always runs against an isolated configuration, whatever
+    // else the caller asked for: no credential of the user's is reachable.
+    let isolated = ChildEnv {
+        home: config.clone(),
+        config_dir: Some(config.clone()),
+        ..env.clone()
+    };
     let (status, output) = run(selected, &["--version"], &isolated)?;
     let version = parse_version(&output);
     if status != 0 || version.is_none() {
@@ -576,6 +604,188 @@ pub fn tool_use_records(messages: &[Value], fixture: &Path) -> Value {
         "unclassifiable_target_count":unclassified,
         "liability":if outside > 0 || unclassified > 0 { "unresolved" } else { "none_observed" },
     })
+}
+
+/// Settings a `pio-claude-service/1` configuration may carry. Anything else is
+/// refused, so a flag cannot arrive by accident.
+pub const SERVICE_SETTINGS: &[&str] = &[
+    "executable",
+    "env",
+    "config_dir",
+    "home",
+    "fixture_root",
+    "permission_mode",
+    "labeled_fake",
+    "model",
+    "test_only_model_exception",
+    "expected_surface",
+];
+
+/// Owner decision of 2026-09-20: PIO may pass an explicit model for the M3
+/// Claude fixture runs, because the configured model is expensive. It is
+/// test-only and dated on purpose; the product still never selects a model.
+pub const MODEL_EXCEPTION: &str = "owner-2026-09-20-m3-fixture-runs";
+
+/// Substrings that mark a variable as carrying a credential. None may appear
+/// in the environment PIO hands the harness: the harness authenticates itself
+/// from the user's own configuration, and PIO passes nothing.
+pub const CREDENTIAL_MARKERS: &[&str] = &["ANTHROPIC", "API_KEY", "TOKEN", "CREDENTIAL", "SECRET"];
+
+fn refusal(reason: &str, detail: Value) -> Value {
+    json!({"reason":reason,"detail":detail})
+}
+
+/// Decide whether a service configuration may start a Claude Code turn, and
+/// say why not when it may not.
+///
+/// Every check here runs **before the harness is ever spawned for a turn**.
+/// The order is recorded because it is the claim: an unqualified executable, a
+/// permission mode that is not the user's configured default, and a missing
+/// credential route each stop the service at start rather than mid-run.
+///
+/// Observing the credential route does run `auth status`, which is a process;
+/// it makes no model call, takes no brief and starts no session. The record
+/// states `stream_spawned: false` so the distinction is auditable rather than
+/// implied. ADR 004 §§2–4.
+pub fn service_admission(work: &Path, claude: &Value) -> Result<Value> {
+    let mut refusals = Vec::new();
+    let mut checks = Vec::new();
+    let object = claude.as_object().context("claude settings object")?;
+    for name in object.keys() {
+        if !SERVICE_SETTINGS.contains(&name.as_str()) {
+            refusals.push(refusal("unsupported_setting", json!(name)));
+        }
+    }
+    for name in ["executable", "config_dir", "home", "fixture_root"] {
+        if !claude[name]
+            .as_str()
+            .is_some_and(|p| Path::new(p).is_absolute())
+        {
+            refusals.push(refusal("setting_must_be_an_absolute_path", json!(name)));
+        }
+    }
+    checks.push("settings");
+
+    // The environment is an allowlist and carries no credential.
+    match claude["env"].as_object() {
+        None => refusals.push(refusal("env_must_be_an_object", Value::Null)),
+        Some(env) => {
+            if !env.values().all(Value::is_string) || !env.contains_key("PATH") {
+                refusals.push(refusal(
+                    "env_needs_string_values_including_path",
+                    Value::Null,
+                ));
+            }
+            for name in env.keys() {
+                let upper = name.to_uppercase();
+                if CREDENTIAL_MARKERS.iter().any(|m| upper.contains(m)) {
+                    refusals.push(refusal("env_carries_a_credential_variable", json!(name)));
+                }
+                let fake_scenario = name == FAKE_SCENARIO_VAR && claude["labeled_fake"] == true;
+                if !ENV_ALLOWLIST.contains(&name.as_str()) && !fake_scenario {
+                    refusals.push(refusal("env_variable_not_in_the_allowlist", json!(name)));
+                }
+            }
+        }
+    }
+    checks.push("environment");
+
+    // PIO never selects a model outside the owner's dated, test-only exception,
+    // and the exception is refused on its own so it cannot sit unused.
+    let model = claude["model"].as_str();
+    let exception = claude["test_only_model_exception"].as_str();
+    if model.is_some_and(str::is_empty) {
+        refusals.push(refusal("model_must_be_a_non_empty_name", Value::Null));
+    } else if model.is_some() != exception.is_some_and(|e| e == MODEL_EXCEPTION) {
+        refusals.push(refusal(
+            "model_requires_the_dated_test_only_exception",
+            json!({"model":model,"exception":exception,"required":MODEL_EXCEPTION}),
+        ));
+    }
+    checks.push("model");
+
+    // The requested permission mode must equal the user's configured default.
+    // Read from their settings, both files, before anything is spawned.
+    let requested = claude["permission_mode"].as_str().unwrap_or_default();
+    let guard = match claude["config_dir"].as_str() {
+        Some(dir) => settings_snapshot(Path::new(dir))
+            .map(|settings| permission_mode_guard(&settings, requested))?,
+        None => json!({"allowed":false,"unresolved":[{"reason":"no config_dir to read"}]}),
+    };
+    if guard["allowed"] != true {
+        refusals.push(refusal("permission_mode_refused", guard.clone()));
+    }
+    checks.push("permission_mode");
+
+    // Qualification. A labeled fake is never qualified and is reported as not
+    // Claude Code; it still passes every other check.
+    let labeled_fake = claude["labeled_fake"] == true;
+    let path = claude["env"]["PATH"].as_str().map(OsStr::new);
+    let mut qualification = json!({"skipped":"labeled_fake"});
+    if !labeled_fake {
+        match claude["executable"].as_str() {
+            Some(exe) => {
+                let expected: Value = match claude["expected_surface"].as_str() {
+                    Some(path) => serde_json::from_slice(&std::fs::read(path)?)?,
+                    None => serde_json::from_str(QUALIFIED_SURFACE)?,
+                };
+                let scenario = (claude["labeled_fake"] == true)
+                    .then(|| claude["env"][FAKE_SCENARIO_VAR].as_str())
+                    .flatten();
+                let record = qualify(
+                    Path::new(exe),
+                    &expected,
+                    &ChildEnv::isolated(&work.join("qualify-config"))
+                        .with_path(path)
+                        .with_fake_scenario(scenario),
+                    &work.join("qualification"),
+                )?;
+                if record["qualified"] != true {
+                    refusals.push(refusal("claude_not_qualified", record["refusals"].clone()));
+                }
+                qualification = record;
+            }
+            None => refusals.push(refusal("claude_not_qualified", json!("no executable"))),
+        }
+    }
+    checks.push("qualification");
+
+    // The credential route, observed and never read. No turn is spawned if it
+    // is unusable, and the refusal is recorded as preceding any stream.
+    let mut route = json!({"skipped":"no executable"});
+    if let Some(exe) = claude["executable"].as_str() {
+        let home = claude["home"].as_str().map(Path::new);
+        let scenario = (claude["labeled_fake"] == true)
+            .then(|| claude["env"][FAKE_SCENARIO_VAR].as_str())
+            .flatten();
+        let env = match home {
+            Some(home) => ChildEnv::as_configured(home).with_path(path),
+            None => ChildEnv::isolated(&work.join("no-home")).with_path(path),
+        }
+        .with_fake_scenario(scenario);
+        route = auth_route(Path::new(exe), &env)?;
+        if route["usable"] != true {
+            refusals.push(refusal(
+                "missing_credential_route",
+                route["observed"].clone(),
+            ));
+        }
+    }
+    checks.push("credential_route");
+
+    Ok(json!({
+        "format":"pio-claude-service-admission/1",
+        "adapter":"claude",
+        "labeled_fake":labeled_fake,
+        "checks_in_order":checks,
+        "permission_mode":guard,
+        "qualification":qualification,
+        "credential_route":route,
+        "refusals":refusals,
+        "admitted":refusals.is_empty(),
+        // Nothing above starts a session, takes a brief or makes a model call.
+        "stream_spawned":false,
+    }))
 }
 
 /// Path helper used by callers that pass an explicit `PATH`.

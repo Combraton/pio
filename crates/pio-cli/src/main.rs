@@ -132,10 +132,20 @@ fn run() -> Result<()> {
                     } else {
                         serde_json::from_str(pio_claude::QUALIFIED_SURFACE)?
                     };
+                    // `--fake-scenario` reaches the labeled fake only; a real
+                    // Claude Code ignores it and the allowlist never carries it.
+                    let scenario = args
+                        .iter()
+                        .position(|a| a == "--fake-scenario")
+                        .and_then(|i| args.get(i + 1))
+                        .map(String::as_str);
+                    let env = pio_claude::ChildEnv::isolated(option("--work")?)
+                        .with_path(path.as_deref())
+                        .with_fake_scenario(scenario);
                     let record = pio_claude::qualify(
                         option("--executable")?,
                         &expected,
-                        path.as_deref(),
+                        &env,
                         option("--work")?,
                     )?;
                     let qualified = record["qualified"] == true;
@@ -163,6 +173,64 @@ fn run() -> Result<()> {
                         std::process::exit(3);
                     }
                 }
+                // Everything a service must decide before it spawns a turn:
+                // qualification, the permission mode against the user's own
+                // settings, and the credential route. Exit 3 on refusal.
+                Some("service-admit") => {
+                    let config: serde_json::Value =
+                        serde_json::from_slice(&std::fs::read(option("--config")?)?)?;
+                    let record =
+                        pio_claude::service_admission(option("--work")?, &config["claude"])?;
+                    let admitted = record["admitted"] == true;
+                    println!("{}", serde_json::to_string_pretty(&record)?);
+                    if !admitted {
+                        std::process::exit(3);
+                    }
+                }
+                // Encode a permission decision from a control request on
+                // stdin. Only a single-use allow or deny is encodable, so the
+                // matrix exercises the adapter's own encoder rather than a
+                // decision the test wrote by hand.
+                // The full surface identity, so a drift control can pin a
+                // baseline without hand-writing digests.
+                Some("surface-identity") => {
+                    let scenario = args
+                        .iter()
+                        .position(|a| a == "--fake-scenario")
+                        .and_then(|i| args.get(i + 1))
+                        .map(String::as_str);
+                    let env = pio_claude::ChildEnv::isolated(option("--work")?)
+                        .with_path(path.as_deref())
+                        .with_fake_scenario(scenario);
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&pio_claude::surface_identity(
+                            option("--executable")?,
+                            &env
+                        )?)?
+                    );
+                }
+                Some("encode-decision") => {
+                    let mut request = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut request)?;
+                    let behavior = args
+                        .iter()
+                        .position(|a| a == "--behavior")
+                        .and_then(|i| args.get(i + 1))
+                        .context("missing claude option --behavior")?;
+                    let reason = args
+                        .iter()
+                        .position(|a| a == "--reason")
+                        .and_then(|i| args.get(i + 1))
+                        .map(String::as_str)
+                        .unwrap_or("refused by PIO");
+                    let decision = pio_claude::permission_decision(
+                        &serde_json::from_str(&request)?,
+                        behavior,
+                        reason,
+                    )?;
+                    println!("{}", serde_json::to_string_pretty(&decision)?);
+                }
                 // A labeled fake harness, so the offline matrix runs in CI
                 // with no Claude Code installed. It is never qualified.
                 Some("fake-cli") => pio_claude::fake::run()?,
@@ -173,7 +241,7 @@ fn run() -> Result<()> {
                     )?)?)?
                 ),
                 _ => bail!(
-                    "claude requires qualify --executable PATH --work DIR, auth-route --executable PATH (--home DIR | --isolated DIR) or settings-snapshot --config-dir DIR"
+                    "claude requires qualify --executable PATH --work DIR, auth-route --executable PATH (--home DIR | --isolated DIR), service-admit --config FILE --work DIR, fake-cli or settings-snapshot --config-dir DIR"
                 ),
             }
         }

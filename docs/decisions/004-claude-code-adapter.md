@@ -189,6 +189,8 @@ This is the same discipline that limited the Codex adapter to `accept`, `decline
 - The offline matrix must cover, at minimum: a turn that completes; the replay acknowledgment; a declined out-of-fixture tool request; a permission decision denied and allowed; a widening decision refused; an unqualified executable refused at service start; the missing-credential-route refusal before any spawn; a requested permission mode that is not the configured default, refused before any spawn; and surface or stream drift refused.
 - Journeys are marked from live evidence only, in the shared model's vocabulary. Nothing here accepts a journey.
 
+**Built so far:** the labeled fake (`pio claude fake-cli`), the admission decisions (`pio claude service-admit`), and the ten-case offline matrix covering every item above. **Not yet built:** the service binding that runs these through `pio serve-*` and the durable host, as the Codex adapter does. Until it exists the matrix proves the adapter's decisions and the stream shapes, and nothing about journal, restart or reattach behaviour for this harness.
+
 ### Disclosure: a defect in the first probe
 
 The probe committed in `b5e0f6b` **filtered** the environment — dropping variables whose names contained `ANTHROPIC`, `API_KEY` or `TOKEN` — instead of clearing it, so the `CLAUDE_CODE_*` variables exported by the enclosing Claude Code session reached the child. The Rust adapter always cleared the environment; the script did not match it.

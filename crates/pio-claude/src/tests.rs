@@ -122,7 +122,13 @@ fn qualify_accepts_the_pinned_version_in_an_isolated_config() {
     let record = serialized(|| {
         let expected = expected_surface(dir.path(), "top help v1");
         let claude = fake_claude(dir.path(), PINNED_VERSION, "top help v1", "{}");
-        qualify(&claude, &expected, path_var().as_deref(), &work).unwrap()
+        qualify(
+            &claude,
+            &expected,
+            &ChildEnv::isolated(&work).with_path(path_var().as_deref()),
+            &work,
+        )
+        .unwrap()
     });
     assert_eq!(record["qualified"], true, "{record:#}");
     assert_eq!(record["surface"]["drift_count"], 0);
@@ -155,7 +161,7 @@ fn qualify_refuses_an_unsupported_version_without_running_claude_arguments() {
         qualify(
             &claude,
             &expected,
-            path_var().as_deref(),
+            &ChildEnv::isolated(&dir.path().join("work")).with_path(path_var().as_deref()),
             &dir.path().join("work"),
         )
         .unwrap()
@@ -184,7 +190,7 @@ fn qualify_refuses_surface_drift_naming_the_command() {
         qualify(
             &claude,
             &expected,
-            path_var().as_deref(),
+            &ChildEnv::isolated(&dir.path().join("work")).with_path(path_var().as_deref()),
             &dir.path().join("work"),
         )
         .unwrap()
@@ -206,7 +212,7 @@ fn qualify_refuses_a_missing_executable_as_data() {
     let record = qualify(
         &dir.path().join("absent"),
         &json!({"commands":{}}),
-        path_var().as_deref(),
+        &ChildEnv::isolated(&dir.path().join("work")).with_path(path_var().as_deref()),
         &dir.path().join("work"),
     )
     .unwrap();
