@@ -36,6 +36,8 @@ jobs:
           cargo clippy --workspace --locked -- -D warnings
           python3 scripts/check_docs.py
           git diff --exit-code -- Cargo.lock
+      - name: Case cleanup guard self-test
+        run: python3 scripts/case_cleanup.py
       - name: Experimental fake-host fault matrix
         run: python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3
       - name: Public Unix process matrix and caller recovery

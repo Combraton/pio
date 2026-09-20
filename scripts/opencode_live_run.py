@@ -524,6 +524,9 @@ def main():
                         help='drive the labeled fake through the same service')
     args = parser.parse_args()
     global ROOT_OVERRIDE
+    # Absolute from here on: a service refuses a configuration whose paths are
+    # relative, and every path below is derived from this one.
+    args.out = args.out.resolve()
     if args.dry_run:
         # A dry run lives entirely under --out: it must never write into, or
         # append to, the tree a live receipt comes from.

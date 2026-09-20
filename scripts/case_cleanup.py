@@ -141,10 +141,11 @@ def _removable(root):
     path = os.path.realpath(root)
     if not os.path.isdir(path) or os.path.islink(root):
         return False, 'not a directory, or a symlink'
-    if not any(path == p or path.startswith(p + os.sep) for p in PERMITTED_PREFIXES):
+    # Strictly *under* a permitted prefix, never the prefix itself. Counting
+    # separators instead got this wrong across platforms: `/tmp/pio-x` has two
+    # on Linux and three on macOS, where realpath prepends `/private`.
+    if not any(path.startswith(p + os.sep) for p in PERMITTED_PREFIXES):
         return False, f'outside every permitted prefix: {PERMITTED_PREFIXES}'
-    if path.count(os.sep) < 3:
-        return False, 'too close to the filesystem root'
     for forbidden in (os.path.realpath(os.path.expanduser('~')), os.getcwd()):
         if path == forbidden or forbidden.startswith(path + os.sep):
             return False, 'contains the home directory or the working directory'
@@ -171,3 +172,38 @@ def release(root, remove=True):
     assert not groups_under(root), f'process groups survived cleanup of {root}'
     if remove:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def _selftest():
+    """Check the guard on both platforms' path shapes.
+
+    `/tmp/pio-x` has two separators on Linux and three on macOS, where
+    realpath prepends `/private`. Counting separators therefore passed
+    locally and refused every store in CI, which is why this runs there.
+    """
+    import tempfile
+
+    root = tempfile.mkdtemp(prefix='pio-selftest-', dir='/tmp')
+    os.chmod(root, 0o700)
+    allowed, reason = _removable(root)
+    assert allowed, f'a private store under /tmp must be removable: {reason}'
+    release(root)
+    assert not os.path.exists(root), 'the store was not removed'
+
+    for refused in ('/', '/tmp', '/private/tmp', '/usr', os.path.expanduser('~'), os.getcwd()):
+        if not os.path.isdir(refused):
+            continue
+        allowed, _ = _removable(refused)
+        assert not allowed, f'{refused} must never be removable'
+
+    # A world-readable directory is not a private store.
+    loose = tempfile.mkdtemp(prefix='pio-selftest-loose-', dir='/tmp')
+    os.chmod(loose, 0o755)
+    allowed, reason = _removable(loose)
+    shutil.rmtree(loose, ignore_errors=True)
+    assert not allowed, 'a world-readable directory must not be removable'
+    print('case_cleanup selftest: guard behaves on this platform')
+
+
+if __name__ == '__main__':
+    _selftest()
