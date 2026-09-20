@@ -1,0 +1,22 @@
+{
+  "arithmetic": {
+    "charged_before": 670500,
+    "comparable_run": {
+      "charged": 97730,
+      "run": "R6"
+    },
+    "note": "R6 is the closest comparable: same brief, same shape, two reads. Every run since has cost between 64,000 and 98,000, so no plausible outcome lands under the threshold.",
+    "projected_charged_after": 768230,
+    "threshold": 700000,
+    "under_threshold_afterwards": false
+  },
+  "completion_is_acceptance": false,
+  "date": "2026-09-20",
+  "format": "pio-claude-live-not-run/1",
+  "intended": "the same out-of-fixture read as R6, with a host attached, to show whether attachment changes what the harness does with a read outside the workspace",
+  "not_run": true,
+  "reason": "the budget rule was not met",
+  "rule": "owner, 2026-09-20: run R6b only if the charged total is under 700,000 afterwards",
+  "run": "R6b",
+  "what_remains_unmeasured": "whether an attached host is offered the out-of-fixture read at all. R6 measured that the harness refuses it with nobody attached; whether it would instead ask an attached host is unknown, and PIO must not assume it would."
+}
