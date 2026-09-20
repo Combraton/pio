@@ -259,11 +259,16 @@ class Service:
             executable = self.private / 'fake-claude'
             executable.write_text(f"#!/bin/sh\nexec '{BINARY}' claude fake-cli \"$@\"\n")
             executable.chmod(0o755)
-            env['PIO_CLAUDE_FAKE_SCENARIO'] = json.dumps(
-                {'markers': str(self.private / 'markers'),
-                 # The fake writes a transcript where the real harness does,
-                 # under its own stand-in configuration directory.
-                 'config_dir': str(config_dir)})
+            scenario = {'markers': str(self.private / 'markers'),
+                        # The fake writes a transcript where the real harness
+                        # does, under its own stand-in configuration directory.
+                        'config_dir': str(config_dir)}
+            if run in ('R3', 'R4'):
+                # So a dry run exercises the decision path end to end rather
+                # than only the runner's plumbing around it.
+                scenario['permission_request'] = {
+                    'tool_name': 'Bash', 'input': {'command': DECISION_COMMAND}}
+            env['PIO_CLAUDE_FAKE_SCENARIO'] = json.dumps(scenario)
         else:
             config_dir = HOME / '.claude'
             executable = Path(shutil.which('claude') or '/opt/homebrew/bin/claude')
@@ -319,6 +324,25 @@ class Service:
         envelope = command('execution.submit', dict(kind='execution.execution', id=identity),
                            payload, command_id=identity)
         envelope['extensions'] = {CONTENT: dict(media_type='text/plain', text=brief.decode())}
+        with self.client() as c:
+            return c.call(envelope)
+
+    def respond(self, action_id, decision, revision, identity='work'):
+        """Answer one surfaced permission request.
+
+        The decision is the caller's and PIO forwards it unchanged. Only the
+        single-use vocabulary of this harness is encodable, so a widening
+        decision cannot be expressed here even by mistake.
+        """
+        body = json.dumps({'decision': decision}).encode()
+        envelope = command('execution.respond_action',
+                           dict(kind='execution.execution', id=identity),
+                           dict(action_id=action_id,
+                                response=dict(digest=digest(body),
+                                              media_type='application/json')),
+                           command_id=f'{identity}.answer-{action_id}', revision=revision)
+        envelope['extensions'] = {CONTENT: dict(media_type='application/json',
+                                                text=body.decode())}
         with self.client() as c:
             return c.call(envelope)
 
@@ -457,6 +481,56 @@ def run_one(run, args):
                 identity_after=first_event(events, 'spawned').get('identity'),
                 spawn_markers=len([e for e in events if e['kind'] == 'spawned']),
                 brief_releases=len([e for e in events if e['kind'] == 'turn_start_sent']))
+        elif run in ('R3', 'R4'):
+            # The decision is the caller's, and it is the whole point of these
+            # two runs: R3 denies, R4 allows. If the harness never asks, that
+            # is a negative result for the decision path and is recorded as
+            # one — never re-run with a different command until something
+            # prompts.
+            decision = 'deny' if run == 'R3' else 'allow'
+            marker = repo / 'pio-live-marker.txt'
+            answered = []
+            view = wait(service, lambda v: v['runtime'] in ('requires_action', 'exited'), 300)
+            while view['runtime'] == 'requires_action' and len(answered) < 4:
+                action = view['runtime_detail']['action_id']
+                response = service.respond(action, decision, view['revision'])
+                answered.append(dict(action_id=action, decision=decision,
+                                     result=response.get('result'),
+                                     error=response.get('error', {}).get('data')))
+                view = wait(service, lambda v: v['runtime'] in ('requires_action', 'exited'), 900)
+            if view['runtime'] != 'exited':
+                view = wait(service, lambda v: v['runtime'] == 'exited', 900)
+            events = service.events()
+            requests = [e for e in events if e['kind'] == 'action_requested']
+            # PIO's own declines are a different thing from the caller's, and
+            # a receipt that merged them would hide which one happened.
+            declined_by_pio = [e for e in events
+                               if e['kind'] == 'request_declined_by_pio']
+            extra['decision'] = dict(
+                intended=decision,
+                requested=bool(requests),
+                request_count=len(requests),
+                classifications=[e.get('classification')
+                                 for e in requests + declined_by_pio],
+                declined_by_pio=len(declined_by_pio),
+                answered=answered,
+                applied=[{k: e.get(k) for k in
+                          ('decision', 'suggestions_offered', 'suggestions_acted_on',
+                           'widening_fields_sent')}
+                         for e in events if e['kind'] == 'control_applied'],
+                # What the decision actually did, read from the filesystem.
+                # The command creates this file, so a deny that held leaves no
+                # file and an allow that took effect leaves one. Without this
+                # the receipt would only prove PIO sent something.
+                marker_label='<fixture>/pio-live-marker.txt',
+                marker_created=marker.exists(),
+                # The labeled fake runs no command, so the filesystem says
+                # nothing about a decision in a dry run and `held` stays null.
+                held=None if (args.dry_run or not requests)
+                     else marker.exists() == (decision == 'allow'),
+                note=None if requests else
+                     'no permission request arrived: this run proves the turn '
+                     'completed, not the decision path')
         else:
             view = wait(service, lambda v: v['runtime'] == 'exited', 900)
         extra['preflight'] = checks
