@@ -394,7 +394,7 @@ impl Provider {
         json!({"oldest_retained":self.data.oldest,"current":self.data.generation})
     }
     pub fn execution_features(&self) -> &'static [&'static str] {
-        if self.codex() {
+        if self.native() {
             crate::codex::FEATURES
         } else if self.durable.is_some() {
             &[

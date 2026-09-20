@@ -9,7 +9,7 @@ fn run() -> Result<()> {
             pio_host::IMPLEMENTATION
         ),
         Some("participant") => println!("{}", pio_core::participant()),
-        Some("conformance" | "serve-fake" | "serve-codex") => {
+        Some("conformance" | "serve-fake" | "serve-codex" | "serve-claude") => {
             let option = |name: &str| -> Result<&Path> {
                 let index = args
                     .iter()
@@ -22,6 +22,7 @@ fn run() -> Result<()> {
             let serve = match args[0].as_str() {
                 "serve-fake" => pio_protocol::serve_fake,
                 "serve-codex" => pio_protocol::serve_codex,
+                "serve-claude" => pio_protocol::serve_claude,
                 _ => pio_protocol::serve,
             };
             serve(

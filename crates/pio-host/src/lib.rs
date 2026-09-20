@@ -311,10 +311,18 @@ impl Controller {
     }
 }
 impl Controller {
-    /// Admit and launch a Codex invocation (ADR 003). Journal intent, launch
-    /// guard and host slot fences are the same as for the fake host.
+    /// Admit and launch a Codex invocation (ADR 003).
     pub fn submit_codex(&self, command: &str, spec: Value) -> Result<Value> {
-        ensure!(spec["adapter"] == "codex", "codex spec required");
+        self.submit_harness("codex", command, spec)
+    }
+
+    /// Admit and launch a harness invocation. Journal intent, launch guard and
+    /// host slot fences are the same as for the fake host, and the same for
+    /// every harness — only the argv and the source label differ, so a second
+    /// adapter does not get a second copy of this.
+    pub fn submit_harness(&self, adapter: &str, command: &str, spec: Value) -> Result<Value> {
+        ensure!(spec["adapter"] == adapter, "{adapter} spec required");
+        let source = format!("{adapter}-host");
         let mut store = Store::open(&self.root)?;
         check_launch_guards(&self.root, &store)?;
         let (invocation, inserted) = store.admit(command, spec, self.generation, false)?;
@@ -330,8 +338,9 @@ impl Controller {
                 .mode(0o600)
                 .open(&stderr_path)?;
             let outcome_path = self.root.join(format!("attempt-{attempt_id}.json"));
+            let outcome_source = source.clone();
             let mut child = Command::new(std::env::current_exe()?)
-                .args(["codex", "host"])
+                .args([adapter, "host"])
                 .arg(&self.root)
                 .arg(command)
                 .arg(&invocation.invocation_id)
@@ -345,12 +354,12 @@ impl Controller {
                 let error = std::fs::read_to_string(&stderr_path).unwrap_or_default();
                 let _ = atomic_json(
                     &outcome_path,
-                    &json!({"source":"codex-host","exit_code":result.ok().and_then(|s|s.code()),"reason":error.trim().strip_prefix("PIO: ").unwrap_or(error.trim())}),
+                    &json!({"source":outcome_source,"exit_code":result.ok().and_then(|s|s.code()),"reason":error.trim().strip_prefix("PIO: ").unwrap_or(error.trim())}),
                 );
             });
         }
         Ok(
-            json!({"source":"codex-host","replay":!inserted,"launch_attempt":attempt,"launch_decision":if inserted {"attempted"} else {"admit_replay_suppressed"},"invocation":invocation,"controller_generation":self.generation}),
+            json!({"source":source,"replay":!inserted,"launch_attempt":attempt,"launch_decision":if inserted {"attempted"} else {"admit_replay_suppressed"},"invocation":invocation,"controller_generation":self.generation}),
         )
     }
 }

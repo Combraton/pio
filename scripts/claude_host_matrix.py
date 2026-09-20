@@ -13,6 +13,8 @@ Each case runs three times; a case passes only when all three agree.
 import argparse
 import json
 import os
+import hashlib
+import time
 from pathlib import Path
 import platform
 import shutil
@@ -21,6 +23,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = ROOT / 'target/debug/pio'
+CONTENT = 'pio.combraton.dev/content'
+FEATURES = ['execution.controller', 'execution.output', 'execution.discovery',
+            'execution.workspaces', 'execution.usage', 'execution.actions']
 STREAM_ARGS = ['--print', '--input-format', 'stream-json', '--output-format', 'stream-json',
                '--verbose', '--replay-user-messages']
 CASES = [
@@ -35,7 +40,28 @@ CASES = [
     'missing_credential_route_refused',
     'permission_mode_not_the_configured_default_refused',
     'surface_drift_refused',
+    # Through the service, which is the only place these can be observed.
+    'service_turn_completes',
+    'service_refuses_an_unqualified_executable_at_start',
 ]
+
+
+def digest(data):
+    return 'sha256:' + hashlib.sha256(data).hexdigest()
+
+
+def poll(action, predicate, seconds=60):
+    deadline = time.monotonic() + seconds
+    last = None
+    while time.monotonic() < deadline:
+        try:
+            last = action()
+            if predicate(last):
+                return last
+        except (OSError, ValueError, KeyError):
+            pass
+        time.sleep(0.05)
+    raise AssertionError(f'bounded observation timed out; last={json.dumps(last)[:1500]}')
 
 
 class Case:
@@ -130,6 +156,100 @@ class Case:
 
     def cleanup(self):
         shutil.rmtree(self.root, ignore_errors=True)
+
+
+class ServiceCase(Case):
+    """A case driven through `pio serve-claude` over the public Unix API, which
+    is the only way journal, delivery and usage behaviour can be observed."""
+
+    def __init__(self, out, name, **kw):
+        super().__init__(out, name, **kw)
+        from public_api import Client, CREDENTIAL
+
+        class ClaudeClient(Client):
+            """Negotiates the execution features this adapter actually uses;
+            the base client's list does not carry workspaces or actions."""
+
+            def __init__(self, path, transcript=None, timeout=10):
+                self.features = FEATURES
+                super().__init__(path, transcript, timeout)
+
+            def query(self, operation, payload):
+                if operation == 'core.negotiate':
+                    payload = dict(payload, profiles=[
+                        dict(name='core', majors=[1], required=True,
+                             required_features=['core.events', 'core.capabilities', 'core.effects'],
+                             optional_features=[]),
+                        dict(name='execution', majors=[1], required=True,
+                             required_features=FEATURES, optional_features=[])])
+                return super().query(operation, payload)
+
+        self._client = ClaudeClient
+        self.store = self.root / 'store'
+        self.socket = self.root / 'public.sock'
+        self.transcript = self.out / 'public-transcript.jsonl'
+        self.daemons = []
+        self.files = []
+        config = json.loads(self.config_path.read_text())
+        config['format'] = 'pio-claude-service/1'
+        config['protocol'] = dict(
+            format='combraton-conformance-config/1', principal='owner',
+            credentials=[dict(credential=CREDENTIAL)],
+            executor=dict(host_id='claude-host'))
+        self.config_path.write_text(json.dumps(config))
+
+    def client(self):
+        return self._client(self.socket, self.transcript)
+
+    def start(self, expect_ready=True):
+        n = len(self.daemons)
+        stdout = (self.out / f'daemon-{n}.stdout').open('w')
+        stderr = (self.out / f'daemon-{n}.stderr').open('w')
+        self.files += [stdout, stderr]
+        daemon = subprocess.Popen(
+            [str(BINARY), 'serve-claude', '--data-dir', str(self.store),
+             '--config', str(self.config_path), '--socket', str(self.socket)],
+            stdout=stdout, stderr=stderr, env=self.env())
+        self.daemons.append(daemon)
+        if expect_ready:
+            poll(lambda: self.client().query('core.describe', {}), lambda r: 'result' in r)
+        return daemon
+
+    def fixture_repo(self, name='repo'):
+        repo = self.fixtures / name
+        repo.mkdir(exist_ok=True)
+        (repo / 'README.md').write_text('fixture\n')
+        git = lambda *a: subprocess.run(['git', '-C', str(repo), *a], check=True,
+                                        capture_output=True, text=True)
+        git('init', '-q')
+        git('-c', 'user.email=pio@example.invalid', '-c', 'user.name=pio', 'add', '.')
+        git('-c', 'user.email=pio@example.invalid', '-c', 'user.name=pio',
+            'commit', '-q', '-m', 'fixture')
+        return repo, git('rev-parse', 'HEAD').stdout.strip()
+
+    def submit(self, identity='work', brief=b'Fixture task: reply with one line.'):
+        from public_api import command
+        repo, base = self.fixture_repo(identity)
+        payload = dict(brief=dict(digest=digest(brief), media_type='text/plain'),
+                       workspace=dict(repository=str(repo), base=base, cleanup='retain'),
+                       timeouts=dict(delivery=120, execution_deadline=600))
+        envelope = command('execution.submit', dict(kind='execution.execution', id=identity),
+                           payload, command_id=identity)
+        envelope['extensions'] = {CONTENT: dict(media_type='text/plain', text=brief.decode())}
+        with self.client() as c:
+            return c.call(envelope)
+
+    def inspect(self, identity='work'):
+        with self.client() as c:
+            return c.query('execution.inspect', {'execution': identity})['result']
+
+    def cleanup(self):
+        for daemon in self.daemons:
+            daemon.kill()
+            daemon.wait(timeout=10)
+        for handle in self.files:
+            handle.close()
+        super().cleanup()
 
 
 def kinds(messages):
@@ -336,6 +456,43 @@ def run_case(out, name):
         # Every command's help moved, and each is named.
         assert {d['change'] for d in drifted['surface']['drift']} == {'changed'}, drifted
         (case.out / 'drift.json').write_text(json.dumps(drifted, indent=2))
+
+    elif name == 'service_turn_completes':
+        case = ServiceCase(out, name)
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        # The replay echo is the delivery proof, and it reached the journal as
+        # a delivery with its own evidence class rather than an inference.
+        assert view['delivery'] == 'acknowledged', view
+        delivery = view['deliveries'][0]
+        assert delivery['evidence']['class'] == 'native_replay_echo', delivery
+        assert delivery['proof_class'] == 'provider_ack_id', delivery
+        assert delivery['evidence']['source'] == 'pio-fake-claude-cli/host', delivery
+        assert view['exit'] == {'code': 0}, view
+        # Containment is recorded on every execution, not only when something
+        # went wrong, and usage came from the harness's own report.
+        assert view['containment'] == {
+            'mechanism': 'harness_permission_rules_only',
+            'os_sandbox_observed': False}, view
+        assert view['usage']['liability'] == 'resolved', view['usage']
+        observations = view['usage']['observations']
+        assert [o['measure'] for o in observations] == ['claude.tokens.total'], observations
+        assert observations[0]['amount'] > 0 and observations[0]['basis'] == 'observed', observations
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_refuses_an_unqualified_executable_at_start':
+        # A real configuration pointed at something that is not the qualified
+        # Claude Code: the service must refuse to start at all.
+        case = ServiceCase(out, name, labeled_fake=False)
+        daemon = case.start(expect_ready=False)
+        assert daemon.wait(timeout=120) != 0, 'the service started on an unqualified executable'
+        stderr = (case.out / 'daemon-0.stderr').read_text()
+        assert 'claude_not_admitted' in stderr, stderr[:500]
+        assert 'claude_not_qualified' in stderr, stderr[:500]
+        admission = json.loads((case.store / 'claude-admission.json').read_text())
+        assert admission['stream_spawned'] is False, admission
+
 
     else:
         raise AssertionError(f'unknown case {name}')

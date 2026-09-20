@@ -32,11 +32,15 @@ pub fn serve_fake(root: &Path, config: &Path, socket: &Path) -> Result<()> {
 pub fn serve_codex(root: &Path, config: &Path, socket: &Path) -> Result<()> {
     serve_mode(root, config, socket, Mode::Codex)
 }
+pub fn serve_claude(root: &Path, config: &Path, socket: &Path) -> Result<()> {
+    serve_mode(root, config, socket, Mode::Claude)
+}
 #[derive(PartialEq)]
 enum Mode {
     Conformance,
     FakeProcess,
     Codex,
+    Claude,
 }
 /// Validate a `pio-codex-service/1` configuration and qualify the selected
 /// executable before any native work. A labeled fake app-server skips
@@ -170,6 +174,38 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
     });
     Ok(host)
 }
+/// Validate a `pio-claude-service/1` configuration and make every decision
+/// that must precede a spawn: the settings allowlist, the environment, the
+/// dated model exception, the permission mode against the user's own settings,
+/// qualification, and the credential route.
+///
+/// The decisions themselves live in `pio_claude::service_admission`, which the
+/// offline matrix already exercises; this records the admission record beside
+/// the store and refuses to start when it refuses.
+fn claude_host_config(root: &Path, claude: &Value) -> Result<Value> {
+    let record = pio_claude::service_admission(&root.join("qualification"), claude)?;
+    std::fs::write(
+        root.join("claude-admission.json"),
+        serde_json::to_vec_pretty(&record)?,
+    )?;
+    anyhow::ensure!(
+        record["admitted"] == true,
+        "claude_not_admitted: {}",
+        record["refusals"]
+    );
+    let mut host = claude.clone();
+    host["adapter"] = "claude".into();
+    host["configured_model"] = record["permission_mode"]["configured_model"].clone();
+    host["qualification_binding"] = if claude["labeled_fake"] == true {
+        Value::Null
+    } else {
+        json!({"binary_sha256":record["qualification"]["resolution"]["binary_sha256"],
+               "version":record["qualification"]["version"],
+               "surface_listing_sha256":record["qualification"]["surface"]["surface_listing_sha256"]})
+    };
+    Ok(host)
+}
+
 fn serve_mode(root: &Path, config: &Path, socket: &Path, mode: Mode) -> Result<()> {
     let durable = mode != Mode::Conformance;
     if durable {
@@ -178,7 +214,20 @@ fn serve_mode(root: &Path, config: &Path, socket: &Path, mode: Mode) -> Result<(
     pio_host::secure_root(socket.parent().context("socket parent")?)?;
     let _lock = StoreLock::acquire(root)?;
     let config: Value = serde_json::from_slice(&std::fs::read(config)?)?;
-    let provider = if mode == Mode::Codex {
+    let provider = if mode == Mode::Claude {
+        anyhow::ensure!(
+            config["format"] == "pio-claude-service/1",
+            "invalid claude service config"
+        );
+        let protocol = config["protocol"].clone();
+        anyhow::ensure!(
+            protocol["executor"]["scripts"].is_null()
+                && protocol["executor"]["default_script"].is_null(),
+            "executor.script is conformance-only"
+        );
+        let host = claude_host_config(root, &config["claude"])?;
+        Provider::with_host(root, protocol, Some(host))?
+    } else if mode == Mode::Codex {
         anyhow::ensure!(
             config["format"] == "pio-codex-service/1",
             "invalid codex service config"

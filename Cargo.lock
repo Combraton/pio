@@ -713,6 +713,7 @@ dependencies = [
  "chrono",
  "jsonschema",
  "libc",
+ "pio-claude",
  "pio-codex",
  "pio-core",
  "pio-host",

@@ -3,7 +3,8 @@
 //! facts and delivers committed controls to it.
 use crate::provider::*;
 use anyhow::{Context, Result};
-use pio_host::codex::{ALLOWED_DECISIONS, append_control, events_path, read_jsonl};
+use pio_host::codex::ALLOWED_DECISIONS;
+use pio_host::harness::{append_control, events_path, read_jsonl};
 use serde_json::{Value, json};
 
 pub const CONTENT_EXTENSION: &str = "pio.combraton.dev/content";
@@ -18,7 +19,7 @@ pub const FEATURES: &[&str] = &[
     "execution.steering",
 ];
 
-fn push(v: &mut Value, x: Value) {
+pub(crate) fn push(v: &mut Value, x: Value) {
     if !v.is_array() {
         *v = json!([]);
     }
@@ -35,17 +36,36 @@ fn content_reference<'a>(method: &str, p: &'a Value) -> Option<&'a Value> {
     }
 }
 
+/// Harness adapters that run behind the durable host. Each speaks its own
+/// protocol and shares everything else, so the provider dispatches on the
+/// adapter rather than carrying a branch per harness.
+pub const NATIVE_ADAPTERS: &[&str] = &["codex", "claude"];
+
 impl Provider {
-    pub(crate) fn codex(&self) -> bool {
-        self.host_config["adapter"] == "codex"
+    pub(crate) fn adapter(&self) -> &str {
+        self.host_config["adapter"].as_str().unwrap_or_default()
+    }
+
+    /// True for any qualified harness adapter, false for the fake host and the
+    /// conformance service.
+    pub(crate) fn native(&self) -> bool {
+        NATIVE_ADAPTERS.contains(&self.adapter())
+    }
+
+    /// The label every record from this adapter carries. A labeled fake is
+    /// never reported as the real harness.
+    pub(crate) fn native_source(&self) -> &'static str {
+        let fake = self.host_config["labeled_fake"] == true;
+        match (self.adapter(), fake) {
+            ("claude", true) => pio_claude::fake::SOURCE,
+            ("claude", false) => "claude-code",
+            (_, true) => pio_codex::fake::SOURCE,
+            _ => "codex-app-server",
+        }
     }
 
     pub(crate) fn codex_source(&self) -> &'static str {
-        if self.host_config["labeled_fake"] == true {
-            pio_codex::fake::SOURCE
-        } else {
-            "codex-app-server"
-        }
+        self.native_source()
     }
 
     /// Verify and spool the optional content extension. The digest in the
@@ -89,6 +109,9 @@ impl Provider {
     /// Workspace, content and launch-spec checks for a Codex submit. Returns
     /// a refusal reason or stores the spec on the execution.
     pub(crate) fn codex_admission(&self, e: &mut Value, p: &Value) -> Option<&'static str> {
+        // The journal namespace is the adapter; for Codex this is `codex`,
+        // so no persisted field name changes.
+        let ns = self.adapter().to_owned();
         let Some(workspace) = p["payload"].get("workspace") else {
             e["view"]["alternative"] =
                 "Request a workspace under the configured fixture root".into();
@@ -123,18 +146,32 @@ impl Provider {
             return Some("capability_unavailable");
         }
         let host = &self.host_config;
-        e["codex_spec"] = json!({
-            "adapter":"codex",
+        // The checks above are the same for every harness; only what the host
+        // needs to launch differs.
+        let mut spec = json!({
+            "adapter":&ns,
             "labeled_fake":host["labeled_fake"] == true,
             "executable":host["executable"],
             "env":host["env"],
-            "codex_home":host["codex_home"],
             "fixture_root":host["fixture_root"],
-            "thread":host["thread"],
             "qualification":host["qualification_binding"],
             "cwd":repository,
             "brief":p["payload"]["brief"],
         });
+        match ns.as_str() {
+            "claude" => {
+                spec["config_dir"] = host["config_dir"].clone();
+                spec["home"] = host["home"].clone();
+                spec["permission_mode"] = host["permission_mode"].clone();
+                spec["model"] = host["model"].clone();
+                spec["configured_model"] = host["configured_model"].clone();
+            }
+            _ => {
+                spec["codex_home"] = host["codex_home"].clone();
+                spec["thread"] = host["thread"].clone();
+            }
+        }
+        e[format!("{ns}_spec")] = spec;
         None
     }
 
@@ -148,6 +185,9 @@ impl Provider {
         op: &str,
         effects: &mut Vec<Value>,
     ) -> Reply {
+        // The journal namespace is the adapter; for Codex this is `codex`,
+        // so no persisted field name changes.
+        let ns = self.adapter().to_owned();
         let id = text(&e["view"]["execution"]["id"]).to_owned();
         match method {
             "execution.steer" => {
@@ -156,7 +196,7 @@ impl Provider {
                 let steer_id = format!("{id}.steer-{n}");
                 let delivery = format!("{id}.steering-{n}");
                 let message = p["payload"]["message"].clone();
-                let live = e["codex"]["turn_id"].is_string() && e["view"]["runtime"] != "exited";
+                let live = e[&ns]["turn_id"].is_string() && e["view"]["runtime"] != "exited";
                 if self.content_available(&message).is_none() {
                     return Err(invalid(CONTENT_PATH));
                 }
@@ -190,7 +230,7 @@ impl Provider {
                     json!({"steer_id":steer_id,"request":"recorded","recorded_at":self.now,"delivery_id":delivery,"delivery":"pending","behavior":"not_observed"}),
                 );
                 push(
-                    &mut e["codex_controls"],
+                    &mut e[format!("{ns}_controls")],
                     json!({"id":delivery,"kind":"steer","digest":message["digest"],"appended":false}),
                 );
                 self.execution_event(
@@ -220,7 +260,7 @@ impl Provider {
                 }) else {
                     return Err(invalid("/payload/response"));
                 };
-                let seq = e["codex_actions"][&action_id]["seq"].clone();
+                let seq = e[format!("{ns}_actions")][&action_id]["seq"].clone();
                 let n = num(&e["response_count"]) + 1;
                 e["response_count"] = n.into();
                 let effect = format!("{id}.response-{n}");
@@ -245,7 +285,7 @@ impl Provider {
                     e["view"]["runtime"] = "active".into();
                 }
                 push(
-                    &mut e["codex_controls"],
+                    &mut e[format!("{ns}_controls")],
                     json!({"id":effect,"kind":"respond_action","action_seq":seq,"decision":decision,"appended":false}),
                 );
                 self.execution_event(
@@ -281,7 +321,13 @@ impl Provider {
         push(&mut e["view"]["effects"], json!(id));
     }
 
-    fn codex_observe_effect(&mut self, id: &str, status: &str, class: &str, close: bool) {
+    pub(crate) fn codex_observe_effect(
+        &mut self,
+        id: &str,
+        status: &str,
+        class: &str,
+        close: bool,
+    ) {
         let evidence = self.host_evidence(class);
         let Some(r) = self.data.effects.get_mut(id) else {
             return;
@@ -302,6 +348,9 @@ impl Provider {
     }
 
     pub(crate) fn codex_discovery(&self) -> Value {
+        // The journal namespace is the adapter; for Codex this is `codex`,
+        // so no persisted field name changes.
+        let ns = self.adapter().to_owned();
         let executable = text(&self.host_config["executable"]);
         let detected = std::path::Path::new(executable).exists();
         let fake = self.host_config["labeled_fake"] == true;
@@ -312,20 +361,20 @@ impl Provider {
             .data
             .executions
             .values()
-            .filter(|e| e["codex"]["account_observed_at"].is_string())
+            .filter(|e| e[&ns]["account_observed_at"].is_string())
             .max_by(|a, b| {
                 text(&a["codex"]["account_observed_at"])
                     .cmp(text(&b["codex"]["account_observed_at"]))
             });
         let (authentication, reachable, verified) = match observed {
             Some(e) => (
-                if e["codex"]["authentication_type"].is_string() {
+                if e[&ns]["authentication_type"].is_string() {
                     "authenticated"
                 } else {
                     "unauthenticated"
                 },
                 "yes",
-                Some(e["codex"]["account_observed_at"].clone()),
+                Some(e[&ns]["account_observed_at"].clone()),
             ),
             None => ("unknown", "unknown", None),
         };
@@ -356,7 +405,13 @@ impl Provider {
     /// One durable tick for a Codex execution: journal the dispatch marker,
     /// admit to the host, deliver committed controls, then translate host
     /// events and output into Protocol facts.
-    pub(crate) fn run_codex(&mut self, e: &mut Value) -> Result<()> {
+    /// Launch the harness host for this execution and fold everything it
+    /// has observed since the last pass into the view. Adapter-agnostic apart
+    /// from the event codec it dispatches to.
+    pub(crate) fn run_native(&mut self, e: &mut Value) -> Result<()> {
+        // The journal namespace is the adapter; for Codex this is `codex`,
+        // so no persisted field name changes.
+        let ns = self.adapter().to_owned();
         let id = text(&e["view"]["execution"]["id"]).to_owned();
         let command = pio_core::digest(id.as_bytes());
         let command = command.trim_start_matches("sha256:").to_owned();
@@ -364,41 +419,47 @@ impl Provider {
             || matches!(
                 text(&e["view"]["delivery"]),
                 "failed_before_delivery" | "not_delivered"
-            ) && e["codex_events_offset"].is_null()
+            ) && e[format!("{ns}_events_offset")].is_null()
         {
             return Ok(());
         }
         self.dispatch_marker(e)?;
         let host = self.durable.as_ref().context("durable host")?;
         if host.inspect(&command).is_err() {
-            e["host_submission"] = host.submit_codex(&command, e["codex_spec"].clone())?;
+            e["host_submission"] =
+                host.submit_harness(&ns, &command, e[format!("{ns}_spec")].clone())?;
         }
         let observed = host.inspect(&command)?;
         let invocation = text(&observed["invocation"]["invocation_id"]).to_owned();
-        e["codex"]["invocation_id"] = invocation.clone().into();
+        e[&ns]["invocation_id"] = invocation.clone().into();
         let root = host.root.clone();
         let phase = text(&observed["invocation"]["phase"]).to_owned();
-        e["codex"]["phase"] = phase.clone().into();
+        e[&ns]["phase"] = phase.clone().into();
 
         // Controls are appended only after the command that created them was
         // committed; a repeated append after a crash is ignored by the host.
         let mut controls_changed = false;
-        if let Some(controls) = e["codex_controls"].as_array_mut() {
+        if let Some(controls) = e[format!("{ns}_controls")].as_array_mut() {
             for control in controls.iter_mut() {
                 if control["appended"] != true {
                     let mut record = control.clone();
                     record.as_object_mut().unwrap().remove("appended");
-                    append_control(&root, &invocation, &record)?;
+                    append_control(&root, &ns, &invocation, &record)?;
                     control["appended"] = true.into();
                     controls_changed = true;
                 }
             }
         }
         if let Some(cancel) = e["pending_cancel"].as_str().map(str::to_owned)
-            && e["codex_cancel_appended"] != true
+            && e[format!("{ns}_cancel_appended")] != true
         {
-            append_control(&root, &invocation, &json!({"id":cancel,"kind":"interrupt"}))?;
-            e["codex_cancel_appended"] = true.into();
+            append_control(
+                &root,
+                &ns,
+                &invocation,
+                &json!({"id":cancel,"kind":"interrupt"}),
+            )?;
+            e[format!("{ns}_cancel_appended")] = true.into();
             controls_changed = true;
         }
         let _ = controls_changed;
@@ -407,25 +468,30 @@ impl Provider {
         // is never killed for it.
         if list(&e["timeouts_passed"]).contains(&json!("execution_deadline"))
             && e["view"]["runtime"] != "exited"
-            && e["codex"]["deadline_stop"].is_null()
+            && e[&ns]["deadline_stop"].is_null()
         {
             let control = format!("{id}.deadline-stop");
             append_control(
                 &root,
+                &ns,
                 &invocation,
                 &json!({"id":control,"kind":"interrupt"}),
             )?;
-            e["codex"]["deadline_stop"] =
+            e[&ns]["deadline_stop"] =
                 json!({"control_id":control,"requested_at":self.now,"request":"appended_for_host"});
         }
 
         let (events, offset) = read_jsonl(
-            &events_path(&root, &invocation),
-            num(&e["codex_events_offset"]),
+            &events_path(&root, &ns, &invocation),
+            num(&e[format!("{ns}_events_offset")]),
         )?;
-        e["codex_events_offset"] = offset.into();
+        e[format!("{ns}_events_offset")] = offset.into();
         for event in events {
-            self.codex_event(e, &id, &event)?;
+            // The one genuinely per-harness step: what each event kind means.
+            match ns.as_str() {
+                "claude" => self.claude_event(e, &id, &event)?,
+                _ => self.codex_event(e, &id, &event)?,
+            }
         }
         if phase == "known_not_released" && e["view"]["delivery"] == "pending" {
             let reason = observed["invocation"]["receipt"]["reason"].clone();
@@ -437,7 +503,7 @@ impl Provider {
                 true,
                 false,
             );
-            e["codex"]["refusal"] = reason;
+            e[&ns]["refusal"] = reason;
         } else if observed["recovery"] == "uncertain_no_respawn" {
             // A lost host after release is never respawned or re-sent.
             if e["view"]["delivery"] == "pending" {
@@ -466,25 +532,28 @@ impl Provider {
     }
 
     fn codex_event(&mut self, e: &mut Value, id: &str, event: &Value) -> Result<()> {
+        // The journal namespace is the adapter; for Codex this is `codex`,
+        // so no persisted field name changes.
+        let ns = self.adapter().to_owned();
         match text(&event["kind"]) {
             "account" => {
-                e["codex"]["authentication_type"] = event["authentication_type"].clone();
-                e["codex"]["account_observed_at"] = self.now.clone().into();
+                e[&ns]["authentication_type"] = event["authentication_type"].clone();
+                e[&ns]["account_observed_at"] = self.now.clone().into();
             }
             "spawned" => {
-                e["codex"]["native"] = event["native"].clone();
+                e[&ns]["native"] = event["native"].clone();
             }
             "config_before" => {
-                e["codex"]["config_before_sha256"] = event["snapshot"]["raw_sha256"].clone();
+                e[&ns]["config_before_sha256"] = event["snapshot"]["raw_sha256"].clone();
             }
             "config_after" => {
-                e["codex"]["config_diff"] = event["diff"].clone();
+                e[&ns]["config_diff"] = event["diff"].clone();
             }
             "thread_started" => {
-                e["codex"]["thread"] = json!({"thread_id":event["thread_id"],"configured_model":event["configured_model"],"requested_model":event["requested_model"],"model":event["model"],"model_provider":event["model_provider"],"sandbox":event["sandbox"],"approval_policy":event["approval_policy"]});
+                e[&ns]["thread"] = json!({"thread_id":event["thread_id"],"configured_model":event["configured_model"],"requested_model":event["requested_model"],"model":event["model"],"model_provider":event["model_provider"],"sandbox":event["sandbox"],"approval_policy":event["approval_policy"]});
             }
             "turn_acknowledged" => {
-                e["codex"]["turn_id"] = event["turn_id"].clone();
+                e[&ns]["turn_id"] = event["turn_id"].clone();
                 if matches!(text(&e["view"]["delivery"]), "pending" | "ambiguous") {
                     let reconcile = e["view"]["delivery"] == "ambiguous";
                     self.delivery_observed(
@@ -517,11 +586,11 @@ impl Provider {
                         false,
                     );
                 }
-                e["codex"]["turn_error"] = event["error"].clone();
+                e[&ns]["turn_error"] = event["error"].clone();
             }
             "action_requested" => {
                 let action_id = format!("{id}.action-{}", num(&event["action_seq"]));
-                e["codex_actions"][&action_id] = json!({"seq":event["action_seq"],"method":event["method"],"approval_kind":event["approval_kind"],"request_id":event["request_id"]});
+                e[format!("{ns}_actions")][&action_id] = json!({"seq":event["action_seq"],"method":event["method"],"approval_kind":event["approval_kind"],"request_id":event["request_id"]});
                 push(
                     &mut e["view"]["actions"],
                     json!({"action_id":action_id,"owner":"codex","state":"pending","requested_at":self.now}),
@@ -536,12 +605,12 @@ impl Provider {
                 );
             }
             "thread_settings_guard" => {
-                e["codex"]["thread_settings"] = event["guard"].clone();
+                e[&ns]["thread_settings"] = event["guard"].clone();
             }
             "control_sent" | "control_response" | "control_rejected"
-                if e["codex"]["deadline_stop"]["control_id"] == event["control_id"] =>
+                if e[&ns]["deadline_stop"]["control_id"] == event["control_id"] =>
             {
-                let stop = &mut e["codex"]["deadline_stop"];
+                let stop = &mut e[&ns]["deadline_stop"];
                 match text(&event["kind"]) {
                     "control_sent" => stop["request"] = "turn_interrupt_sent".into(),
                     "control_response" => {
@@ -569,7 +638,7 @@ impl Provider {
                     .iter()
                     .filter(|a| a["state"] == "answered" && a["response_effect"].is_string())
                     .filter(|a| {
-                        e["codex_actions"][text(&a["action_id"])]["request_id"]
+                        e[format!("{ns}_actions")][text(&a["action_id"])]["request_id"]
                             == event["request_id"]
                     })
                     .map(|a| text(&a["response_effect"]).to_owned())
@@ -634,7 +703,7 @@ impl Provider {
             }
             "usage" => {
                 if let Some(total) = event["total"]["totalTokens"].as_u64() {
-                    let invocation = e["codex"]["invocation_id"]
+                    let invocation = e[&ns]["invocation_id"]
                         .as_str()
                         .map(str::to_owned)
                         .unwrap_or_else(|| format!("{id}.invocation-1"));
@@ -646,12 +715,12 @@ impl Provider {
             }
             "turn_completed" => {
                 let status = text(&event["status"]).to_owned();
-                e["codex"]["turn_status"] = status.clone().into();
-                if e["codex"]["deadline_stop"].is_object()
-                    && e["codex"]["deadline_stop"]["outcome"].is_null()
+                e[&ns]["turn_status"] = status.clone().into();
+                if e[&ns]["deadline_stop"].is_object()
+                    && e[&ns]["deadline_stop"]["outcome"].is_null()
                 {
-                    e["codex"]["deadline_stop"]["outcome"] = status.clone().into();
-                    e["codex"]["deadline_stop"]["observed_at"] = self.now.clone().into();
+                    e[&ns]["deadline_stop"]["outcome"] = status.clone().into();
+                    e[&ns]["deadline_stop"]["observed_at"] = self.now.clone().into();
                 }
                 if let Some(cancel) = e["pending_cancel"].as_str().map(str::to_owned)
                     && e["view"]["cancellation"].get("outcome").is_none()
@@ -688,7 +757,7 @@ impl Provider {
                 self.execution_event(e, "execution.exit.observed", json!({"exit":exit}), None);
             }
             "host_error" => {
-                e["codex"]["host_error"] = event["error"].clone();
+                e[&ns]["host_error"] = event["error"].clone();
             }
             _ => {}
         }
