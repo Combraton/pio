@@ -11,5 +11,9 @@
     "project": "fa6e79173381d13045aacb1d41e46ed3f0aab4ac9db57ee3ef13f496ac429449"
   },
   "format": "pio-claude-surface-identity/1",
-  "surface_listing_sha256": "0dd17ec774e837b830d0800697b0cad251f7c9fdf46c0ea95e1730181b9ff7c5"
+  "surface_listing_sha256": "0dd17ec774e837b830d0800697b0cad251f7c9fdf46c0ea95e1730181b9ff7c5",
+  "top_help_digests_over_3_runs": [
+    "ae85d661e9c086f05637ebcd868f5702b477ff6e55e2e65b8ada7807cd51a4b6"
+  ],
+  "version": "2.1.278"
 }

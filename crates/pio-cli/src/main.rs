@@ -116,6 +116,12 @@ fn run() -> Result<()> {
                     args.get(index + 1).context("missing option value")?,
                 ))
             };
+            let flag = |name: &str| -> Option<&Path> {
+                args.iter()
+                    .position(|a| a == name)
+                    .and_then(|index| args.get(index + 1))
+                    .map(Path::new)
+            };
             let path = std::env::var_os("PATH");
             match args.get(1).map(String::as_str) {
                 Some("qualify") => {
@@ -140,11 +146,17 @@ fn run() -> Result<()> {
                 }
                 Some("auth-route") => {
                     // Observes the route only. Never reads a credential file.
-                    let record = pio_claude::auth_route(
-                        option("--executable")?,
-                        option("--config-dir")?,
-                        path.as_deref(),
-                    )?;
+                    // Two shapes, differing in exactly one thing: which
+                    // configuration the harness may see. `--home` observes the
+                    // route the user actually has; `--isolated` is the negative
+                    // control. Both pass USER, without which the route reads as
+                    // absent whatever the configuration. ADR 004 §3.
+                    let env = match flag("--isolated") {
+                        Some(dir) => pio_claude::ChildEnv::isolated(dir),
+                        None => pio_claude::ChildEnv::as_configured(option("--home")?),
+                    }
+                    .with_path(path.as_deref());
+                    let record = pio_claude::auth_route(option("--executable")?, &env)?;
                     let usable = record["usable"] == true;
                     println!("{}", serde_json::to_string_pretty(&record)?);
                     if !usable {
@@ -158,7 +170,7 @@ fn run() -> Result<()> {
                     )?)?)?
                 ),
                 _ => bail!(
-                    "claude requires qualify --executable PATH --work DIR, auth-route --executable PATH --config-dir DIR or settings-snapshot --config-dir DIR"
+                    "claude requires qualify --executable PATH --work DIR, auth-route --executable PATH (--home DIR | --isolated DIR) or settings-snapshot --config-dir DIR"
                 ),
             }
         }
