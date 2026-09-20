@@ -244,11 +244,12 @@ fn the_fake_detects_a_widening_response_so_its_absence_is_evidence() {
 fn tool_uses_are_reported_so_the_receipt_can_record_every_one() {
     let dir = tempfile::tempdir().unwrap();
     let scenario = json!({"tool_uses":[
-        {"name":"Read","input":{"file_path":"/tmp/fixture/a.txt"}},
+        {"name":"Read","input":{"file_path":"a.txt"}},
         {"name":"Edit","input":{"file_path":"/etc/hosts"}}]});
     let messages = turn(dir.path(), &scenario, None);
-    let fixture = Path::new("/tmp/fixture");
-    let record = pio_claude::tool_use_records(&messages, fixture);
+    let fixture = dir.path().join("fixture");
+    std::fs::create_dir_all(&fixture).unwrap();
+    let record = pio_claude::tool_use_records(&messages, &fixture, &fixture);
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses.len(), 2);
     assert_eq!(uses[1]["placement"], "outside_fixture");

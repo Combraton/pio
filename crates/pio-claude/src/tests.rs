@@ -500,14 +500,115 @@ fn tool_use(name: &str, id: &str, input: Value) -> Value {
         {"type":"tool_use","name":name,"id":id,"input":input}]}})
 }
 
+/// A fixture workspace and a sibling directory outside it, both real, because
+/// symlink resolution only means anything against the filesystem.
+fn workspace(dir: &Path) -> (PathBuf, PathBuf) {
+    let fixture = dir.join("fixture");
+    let outside = dir.join("outside");
+    std::fs::create_dir_all(fixture.join("src")).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(outside.join("secret.txt"), "not yours\n").unwrap();
+    std::fs::write(fixture.join("src/calc.py"), "print(1)\n").unwrap();
+    (
+        std::fs::canonicalize(fixture).unwrap(),
+        std::fs::canonicalize(outside).unwrap(),
+    )
+}
+
+fn placement_of(input: Value, fixture: &Path, cwd: &Path) -> String {
+    let record = tool_use_records(&[tool_use("Read", "t1", input)], fixture, cwd);
+    record["tool_uses"][0]["placement"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+/// A prefix test on the raw string is wrong in both directions. Both of these
+/// were mislabeled before the reviewer's probe.
+#[test]
+fn a_traversal_out_of_the_fixture_is_not_inside_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, _) = workspace(dir.path());
+    let escape = format!("{}/../outside/secret.txt", fixture.display());
+    assert_eq!(
+        placement_of(json!({"file_path":escape}), &fixture, &fixture),
+        "outside_fixture"
+    );
+    // The same path without the traversal is inside, so the test is about `..`
+    // and not about the fixture being unreadable.
+    assert_eq!(
+        placement_of(
+            json!({"file_path":format!("{}/src/calc.py", fixture.display())}),
+            &fixture,
+            &fixture
+        ),
+        "inside_fixture"
+    );
+}
+
+#[test]
+fn a_relative_target_resolves_against_the_session_working_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    assert_eq!(
+        placement_of(json!({"file_path":"src/calc.py"}), &fixture, &fixture),
+        "inside_fixture"
+    );
+    assert_eq!(
+        placement_of(
+            json!({"file_path":"./src/../src/calc.py"}),
+            &fixture,
+            &fixture
+        ),
+        "inside_fixture"
+    );
+    // The same relative name is outside when the session runs elsewhere.
+    assert_eq!(
+        placement_of(json!({"file_path":"secret.txt"}), &fixture, &outside),
+        "outside_fixture"
+    );
+}
+
+#[test]
+fn a_symlink_pointing_out_of_the_fixture_is_followed() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    std::os::unix::fs::symlink(&outside, fixture.join("escape")).unwrap();
+    assert_eq!(
+        placement_of(json!({"file_path":"escape/secret.txt"}), &fixture, &fixture),
+        "outside_fixture"
+    );
+    // A link that stays inside is still inside.
+    std::os::unix::fs::symlink(fixture.join("src"), fixture.join("inside")).unwrap();
+    assert_eq!(
+        placement_of(json!({"file_path":"inside/calc.py"}), &fixture, &fixture),
+        "inside_fixture"
+    );
+}
+
+#[test]
+fn a_symlink_loop_terminates_instead_of_hanging() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, _) = workspace(dir.path());
+    std::os::unix::fs::symlink(fixture.join("b"), fixture.join("a")).unwrap();
+    std::os::unix::fs::symlink(fixture.join("a"), fixture.join("b")).unwrap();
+    // The only requirement is that it returns; the answer is not meaningful.
+    let _ = resolve_target("a", &fixture);
+}
+
 #[test]
 fn every_tool_use_is_recorded_and_targets_outside_the_fixture_are_flagged() {
-    let fixture = Path::new("/tmp/fixture");
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
     let messages = vec![
-        tool_use("Read", "t1", json!({"file_path":"/tmp/fixture/README.md"})),
-        tool_use("Edit", "t2", json!({"file_path":"/etc/hosts"})),
+        tool_use("Read", "t1", json!({"file_path":"src/calc.py"})),
+        tool_use(
+            "Edit",
+            "t2",
+            json!({"file_path":outside.join("secret.txt")}),
+        ),
     ];
-    let record = tool_use_records(&messages, fixture);
+    let record = tool_use_records(&messages, &fixture, &fixture);
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses.len(), 2, "a tool use went unrecorded");
     assert_eq!(uses[0]["placement"], "inside_fixture");
@@ -516,23 +617,49 @@ fn every_tool_use_is_recorded_and_targets_outside_the_fixture_are_flagged() {
     assert_eq!(record["out_of_fixture_effect_observed"], true);
     assert_eq!(record["out_of_fixture_count"], 1);
     assert_eq!(record["liability"], "unresolved");
-    // The receipt states what containment actually is, every time.
     assert_eq!(
         record["containment"],
         json!({"mechanism":"harness_permission_rules_only","os_sandbox_observed":false})
     );
 }
 
+/// A receipt names a target by digest and a fixture-relative label. Neither a
+/// raw path nor the absolute fixture path may appear anywhere in it.
+#[test]
+fn a_receipt_carries_labels_and_digests_rather_than_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    let messages = vec![
+        tool_use("Read", "t1", json!({"file_path":"src/calc.py"})),
+        tool_use(
+            "Edit",
+            "t2",
+            json!({"file_path":outside.join("secret.txt")}),
+        ),
+    ];
+    let record = tool_use_records(&messages, &fixture, &fixture);
+    let uses = record["tool_uses"].as_array().unwrap();
+    assert_eq!(uses[0]["target_label"], "<fixture>/src/calc.py");
+    assert_eq!(uses[1]["target_label"], "<outside>");
+    assert!(uses[0]["target_sha256"].is_string());
+    assert_ne!(uses[0]["target_sha256"], uses[1]["target_sha256"]);
+    let text = serde_json::to_string(&record).unwrap();
+    for leaked in [fixture.display().to_string(), outside.display().to_string()] {
+        assert!(!text.contains(&leaked), "receipt leaked {leaked} in {text}");
+    }
+}
+
 /// A shell command names no path PIO can resolve. Reporting it as inside the
 /// fixture would be a claim the adapter cannot support.
 #[test]
 fn a_shell_command_is_not_classifiable_rather_than_assumed_contained() {
-    let fixture = Path::new("/tmp/fixture");
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, _) = workspace(dir.path());
     let messages = vec![tool_use("Bash", "t1", json!({"command":"cat /etc/passwd"}))];
-    let record = tool_use_records(&messages, fixture);
+    let record = tool_use_records(&messages, &fixture, &fixture);
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses[0]["placement"], "not_classifiable");
-    assert!(uses[0]["target"].is_null());
+    assert!(uses[0]["target_label"].is_null());
     assert_eq!(record["unclassifiable_target_count"], 1);
     assert_eq!(record["out_of_fixture_effect_observed"], false);
     assert_eq!(record["liability"], "unresolved");
@@ -540,14 +667,63 @@ fn a_shell_command_is_not_classifiable_rather_than_assumed_contained() {
 
 #[test]
 fn a_clean_run_inside_the_fixture_reports_no_outstanding_liability() {
-    let messages = vec![tool_use(
-        "Read",
-        "t1",
-        json!({"file_path":"/tmp/fixture/a.txt"}),
-    )];
-    let record = tool_use_records(&messages, Path::new("/tmp/fixture"));
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, _) = workspace(dir.path());
+    let messages = vec![tool_use("Read", "t1", json!({"file_path":"src/calc.py"}))];
+    let record = tool_use_records(&messages, &fixture, &fixture);
     assert_eq!(record["liability"], "none_observed");
     assert_eq!(record["out_of_fixture_effect_observed"], false);
+}
+
+/// PIO declines an out-of-fixture request itself, and never auto-allows
+/// anything: an allow is always somebody's decision.
+#[test]
+fn pio_declines_out_of_fixture_requests_and_surfaces_the_rest() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    let request = |input: Value| {
+        json!({"type":"control_request","request_id":"req_1",
+               "request":{"subtype":"can_use_tool","tool_name":"Read",
+                          "input":input,"tool_use_id":"toolu_1"}})
+    };
+    let outside_request = classify_permission_request(
+        &request(json!({"file_path":outside.join("secret.txt")})),
+        &fixture,
+        &fixture,
+    );
+    assert_eq!(outside_request["disposition"], "decline");
+    assert_eq!(
+        outside_request["reason"],
+        "target_outside_the_fixture_workspace"
+    );
+    assert_eq!(outside_request["target_label"], "<outside>");
+
+    // A traversal is declined for the same reason, not admitted by a prefix test.
+    let traversal = classify_permission_request(
+        &request(json!({"file_path":"../outside/secret.txt"})),
+        &fixture,
+        &fixture,
+    );
+    assert_eq!(traversal["disposition"], "decline");
+
+    // A shell command is surfaced, never auto-allowed.
+    let shell = classify_permission_request(
+        &request(json!({"command":"cat README.md"})),
+        &fixture,
+        &fixture,
+    );
+    assert_eq!(shell["disposition"], "surface_as_action");
+    assert_eq!(shell["placement"], "not_classifiable");
+
+    let inside = classify_permission_request(
+        &request(json!({"file_path":"src/calc.py"})),
+        &fixture,
+        &fixture,
+    );
+    assert_eq!(inside["disposition"], "surface_as_action");
+    for classification in [&outside_request, &traversal, &shell, &inside] {
+        assert_eq!(classification["auto_allowed"], false);
+    }
 }
 
 /// The environment is an allowlist, and `USER` earns its place there.
@@ -587,7 +763,10 @@ fn a_route_that_depends_on_user_is_observed_only_when_user_is_passed() {
         })
     };
     let config = dir.path().join("route-config");
-    assert_eq!(route(ChildEnv::isolated(&config))["usable"], true);
+    // Set explicitly rather than inherited: a test that depends on the ambient
+    // USER passes or fails on the runner's environment, not on the adapter.
+    let present = ChildEnv::isolated(&config).with_user(Some(OsString::from("somebody")));
+    assert_eq!(route(present)["usable"], true);
     assert_eq!(
         route(ChildEnv::isolated(&config).with_user(None))["usable"],
         false,

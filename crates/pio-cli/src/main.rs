@@ -210,6 +210,38 @@ fn run() -> Result<()> {
                         )?)?
                     );
                 }
+                // PIO's own decision about one tool permission request: an
+                // out-of-fixture target is declined here, and everything else
+                // is surfaced to the caller. Nothing is ever auto-allowed.
+                Some("classify-request") => {
+                    let mut request = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut request)?;
+                    let classification = pio_claude::classify_permission_request(
+                        &serde_json::from_str(&request)?,
+                        option("--fixture")?,
+                        option("--cwd")?,
+                    );
+                    println!("{}", serde_json::to_string_pretty(&classification)?);
+                }
+                // The receipt view of a transcript on stdin: every tool use
+                // by digest and fixture-relative label.
+                Some("tool-uses") => {
+                    let mut transcript = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut transcript)?;
+                    let messages: Vec<serde_json::Value> = transcript
+                        .lines()
+                        .filter(|line| !line.trim().is_empty())
+                        .map(serde_json::from_str)
+                        .collect::<std::result::Result<_, _>>()?;
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&pio_claude::tool_use_records(
+                            &messages,
+                            option("--fixture")?,
+                            option("--cwd")?
+                        ))?
+                    );
+                }
                 Some("encode-decision") => {
                     let mut request = String::new();
                     std::io::Read::read_to_string(&mut std::io::stdin(), &mut request)?;

@@ -543,69 +543,6 @@ pub fn permission_decision(request: &Value, behavior: &str, reason: &str) -> Res
     }))
 }
 
-/// Where a tool use landed, relative to the fixture workspace.
-///
-/// A Bash command names no path PIO can resolve, so it is reported as
-/// `not_classifiable` rather than assumed to be inside. ADR 004 §5.
-fn classify_target(input: &Value, fixture: &Path) -> (Option<String>, &'static str) {
-    for key in ["file_path", "path", "notebook_path"] {
-        if let Some(target) = input[key].as_str() {
-            let placement = if Path::new(target).starts_with(fixture) {
-                "inside_fixture"
-            } else {
-                "outside_fixture"
-            };
-            return (Some(target.to_owned()), placement);
-        }
-    }
-    (None, "not_classifiable")
-}
-
-/// Record every tool use the stream reported, by tool name and target digest,
-/// whether or not it prompted.
-///
-/// Containment here is the harness's permission rules only. The user's settings
-/// carry no sandbox key, so no OS sandbox is in effect, and a pre-approved
-/// command never produces a permission request — it never reaches PIO at all.
-/// A target outside the fixture is therefore an **observed effect with
-/// unresolved liability**, not a declined request. ADR 004 §5.
-pub fn tool_use_records(messages: &[Value], fixture: &Path) -> Value {
-    let mut records = Vec::new();
-    for message in messages {
-        let Some(blocks) = message["message"]["content"].as_array() else {
-            continue;
-        };
-        for block in blocks.iter().filter(|b| b["type"] == "tool_use") {
-            let input = &block["input"];
-            let (target, placement) = classify_target(input, fixture);
-            let digest_source = target.clone().unwrap_or_else(|| input.to_string());
-            records.push(json!({
-                "tool": &block["name"],
-                "tool_use_id": &block["id"],
-                "target": target,
-                "target_sha256": sha256_hex(digest_source.as_bytes()),
-                "placement": placement,
-            }));
-        }
-    }
-    let count = |what: &str| records.iter().filter(|r| r["placement"] == what).count();
-    let outside = count("outside_fixture");
-    let unclassified = count("not_classifiable");
-    json!({
-        "format":"pio-claude-tool-uses/1",
-        "containment":{
-            "mechanism":"harness_permission_rules_only",
-            "os_sandbox_observed":false,
-        },
-        "fixture":fixture.display().to_string(),
-        "tool_uses":records,
-        "out_of_fixture_effect_observed":outside > 0,
-        "out_of_fixture_count":outside,
-        "unclassifiable_target_count":unclassified,
-        "liability":if outside > 0 || unclassified > 0 { "unresolved" } else { "none_observed" },
-    })
-}
-
 /// Settings a `pio-claude-service/1` configuration may carry. Anything else is
 /// refused, so a flag cannot arrive by accident.
 pub const SERVICE_SETTINGS: &[&str] = &[
@@ -786,6 +723,185 @@ pub fn service_admission(work: &Path, claude: &Value) -> Result<Value> {
         // Nothing above starts a session, takes a brief or makes a model call.
         "stream_spawned":false,
     }))
+}
+
+/// Inputs that name a filesystem target. A tool call carrying one of these is
+/// classifiable; anything else is not, and is never assumed to be contained.
+pub const TARGET_FIELDS: &[&str] = &["file_path", "path", "notebook_path"];
+
+/// How many symlinks may be followed before a target is treated as a loop.
+const SYMLINK_LIMIT: usize = 40;
+
+/// Resolve a target the way the filesystem would, without requiring it to
+/// exist.
+///
+/// A prefix test on the raw string is wrong in both directions: it calls
+/// `<fixture>/../../outside.txt` contained, and it calls a relative `calc.py`
+/// outside. So this resolves relative targets against the session's working
+/// directory, walks the path component by component, removes `.` and `..`
+/// lexically, and follows a symlink wherever one actually exists — which is
+/// the only way a link pointing out of the fixture can be seen.
+pub fn resolve_target(target: &str, cwd: &Path) -> PathBuf {
+    let joined = if Path::new(target).is_absolute() {
+        PathBuf::from(target)
+    } else {
+        cwd.join(target)
+    };
+    let mut resolved = PathBuf::new();
+    let mut pending: Vec<std::ffi::OsString> = joined
+        .components()
+        .map(|c| c.as_os_str().to_owned())
+        .rev()
+        .collect();
+    let mut followed = 0;
+    while let Some(component) = pending.pop() {
+        match component.to_str() {
+            Some("/") => resolved = PathBuf::from("/"),
+            Some(".") => {}
+            Some("..") => {
+                resolved.pop();
+            }
+            _ => {
+                resolved.push(&component);
+                // Only an existing link reads, so this is the "existing prefix"
+                // the reviewer asked for, resolved one component at a time.
+                if followed < SYMLINK_LIMIT
+                    && let Ok(link) = std::fs::read_link(&resolved)
+                {
+                    followed += 1;
+                    resolved.pop();
+                    let target = if link.is_absolute() {
+                        link
+                    } else {
+                        resolved.join(link)
+                    };
+                    let mut restored: Vec<std::ffi::OsString> = target
+                        .components()
+                        .map(|c| c.as_os_str().to_owned())
+                        .rev()
+                        .collect();
+                    resolved = PathBuf::new();
+                    restored.append(&mut pending);
+                    pending = restored;
+                }
+            }
+        }
+    }
+    resolved
+}
+
+/// Where a tool use landed, relative to the fixture workspace.
+///
+/// A shell command names no path PIO can resolve, so it is reported as
+/// `not_classifiable` rather than assumed to be inside. ADR 004 §5.
+fn classify_target(input: &Value, fixture: &Path, cwd: &Path) -> (Option<String>, &'static str) {
+    for key in TARGET_FIELDS {
+        if let Some(target) = input[*key].as_str() {
+            let resolved = resolve_target(target, cwd);
+            let placement = if resolved.starts_with(fixture) {
+                "inside_fixture"
+            } else {
+                "outside_fixture"
+            };
+            return (Some(resolved.display().to_string()), placement);
+        }
+    }
+    (None, "not_classifiable")
+}
+
+/// A receipt names a target by digest and a fixture-relative label, never by a
+/// raw path and never by the absolute fixture path, as the Codex receipts did.
+fn target_label(resolved: &Option<String>, fixture: &Path, placement: &str) -> Value {
+    match (resolved, placement) {
+        (Some(path), "inside_fixture") => Path::new(path)
+            .strip_prefix(fixture)
+            .map(|rest| json!(format!("<fixture>/{}", rest.display())))
+            .unwrap_or_else(|_| json!("<fixture>")),
+        (Some(_), _) => json!("<outside>"),
+        (None, _) => Value::Null,
+    }
+}
+
+/// Record every tool use the stream reported, by tool name, target digest and
+/// fixture-relative label, whether or not it prompted.
+///
+/// Containment here is the harness's permission rules only. The user's settings
+/// carry no sandbox key, so no OS sandbox is in effect, and a pre-approved
+/// command never produces a permission request — it never reaches PIO at all.
+/// A target outside the fixture is therefore an **observed effect with
+/// unresolved liability**, not a declined request. ADR 004 §5.
+pub fn tool_use_records(messages: &[Value], fixture: &Path, cwd: &Path) -> Value {
+    let fixture = std::fs::canonicalize(fixture).unwrap_or_else(|_| fixture.to_path_buf());
+    let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let mut records = Vec::new();
+    for message in messages {
+        let Some(blocks) = message["message"]["content"].as_array() else {
+            continue;
+        };
+        for block in blocks.iter().filter(|b| b["type"] == "tool_use") {
+            let input = &block["input"];
+            let (resolved, placement) = classify_target(input, &fixture, &cwd);
+            let digest_source = resolved.clone().unwrap_or_else(|| input.to_string());
+            records.push(json!({
+                "tool": &block["name"],
+                "tool_use_id": &block["id"],
+                "target_label": target_label(&resolved, &fixture, placement),
+                "target_sha256": sha256_hex(digest_source.as_bytes()),
+                "placement": placement,
+            }));
+        }
+    }
+    let count = |what: &str| records.iter().filter(|r| r["placement"] == what).count();
+    let outside = count("outside_fixture");
+    let unclassified = count("not_classifiable");
+    json!({
+        "format":"pio-claude-tool-uses/2",
+        "containment":{
+            "mechanism":"harness_permission_rules_only",
+            "os_sandbox_observed":false,
+        },
+        "fixture_sha256":sha256_hex(fixture.display().to_string().as_bytes()),
+        "tool_uses":records,
+        "out_of_fixture_effect_observed":outside > 0,
+        "out_of_fixture_count":outside,
+        "unclassifiable_target_count":unclassified,
+        "liability":if outside > 0 || unclassified > 0 { "unresolved" } else { "none_observed" },
+    })
+}
+
+/// Decide what PIO does with one `can_use_tool` request.
+///
+/// A path-bearing input that resolves outside the fixture is **declined**, with
+/// the reason recorded. Anything else — including a shell command, whose
+/// targets PIO cannot resolve — is **surfaced to the caller as a Protocol
+/// action**. PIO never auto-allows: an allow is always somebody's decision.
+pub fn classify_permission_request(request: &Value, fixture: &Path, cwd: &Path) -> Value {
+    let fixture = std::fs::canonicalize(fixture).unwrap_or_else(|_| fixture.to_path_buf());
+    let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let input = &request["request"]["input"];
+    let (resolved, placement) = classify_target(input, &fixture, &cwd);
+    let (disposition, reason) = match placement {
+        "outside_fixture" => ("decline", "target_outside_the_fixture_workspace"),
+        "inside_fixture" => (
+            "surface_as_action",
+            "a decision inside the fixture is the caller's",
+        ),
+        _ => (
+            "surface_as_action",
+            "no resolvable target; PIO cannot classify this request",
+        ),
+    };
+    json!({
+        "format":"pio-claude-request-classification/1",
+        "tool_name":&request["request"]["tool_name"],
+        "tool_use_id":&request["request"]["tool_use_id"],
+        "placement":placement,
+        "target_label":target_label(&resolved, &fixture, placement),
+        "target_sha256":resolved.as_ref().map(|r| sha256_hex(r.as_bytes())),
+        "disposition":disposition,
+        "reason":reason,
+        "auto_allowed":false,
+    })
 }
 
 /// Path helper used by callers that pass an explicit `PATH`.

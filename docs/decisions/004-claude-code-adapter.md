@@ -86,9 +86,13 @@ The consequence, stated plainly: **a pre-approved command never produces a permi
 
 Therefore:
 
-- every `tool_use` block in the stream is recorded in the receipt by **tool name and target digest**, whether or not it prompted;
+- every `tool_use` block in the stream is recorded in the receipt by **tool name, target digest and a fixture-relative label** — `<fixture>/src/calc.py` or `<outside>`, never a raw path and never the absolute fixture path, as the Codex receipts did;
 - any target outside the fixture workspace is flagged **`out_of_fixture_effect_observed`, with unresolved liability** — PIO observed it and did not authorize it, and calling that "declined" would be false;
 - every receipt carries `containment: {"mechanism": "harness_permission_rules_only", "os_sandbox_observed": false}`.
+
+**Placement is resolved, not matched.** A prefix test on the raw string is wrong in both directions, and the reviewer's probe showed both: `<fixture>/../../outside.txt` was called contained, and a relative `calc.py` was called outside. A target is therefore resolved the way the filesystem would resolve it, without requiring it to exist — relative paths against the session's working directory from `system/init`, `.` and `..` removed component by component, and a symlink followed wherever one exists, which is the only way a link out of the fixture is visible at all. Traversal, relative and symlink cases are tested, and a symlink loop terminates instead of hanging.
+
+**The decline is PIO's.** `classify_permission_request` inspects each `can_use_tool` request: a path-bearing input resolving outside the fixture is **declined with a recorded reason**; anything else — including a shell command, whose targets PIO cannot resolve — is **surfaced to the caller as a Protocol action**. PIO never auto-allows; an allow is always somebody's decision. Until the service binding exists the offline matrix transports that decision to the fake, and the case says so rather than implying the host made it.
 
 `--restricted` and `--safe-mode` are **not** used. Both change which of the user's customizations load — `--safe-mode` sets `CLAUDE_CODE_SAFE_MODE=1` — so neither is the harness as configured, and a containment claim bought by ignoring the user's settings would not be the thing M3 is measuring.
 

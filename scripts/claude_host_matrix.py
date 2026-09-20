@@ -28,7 +28,8 @@ CASES = [
     'replay_acknowledges_delivery',
     'permission_denied',
     'permission_allowed',
-    'out_of_fixture_tool_request_declined',
+    'out_of_fixture_request_declined_by_pio',
+    'unclassifiable_request_surfaced_not_auto_allowed',
     'widening_decision_never_sent',
     'unqualified_executable_refused',
     'missing_credential_route_refused',
@@ -175,18 +176,76 @@ def run_case(out, name):
         # tool call the user's harness decided to make.
         assert recorded[0]['input_echoed_unchanged'] is True, recorded
 
-    elif name == 'out_of_fixture_tool_request_declined':
-        case = Case(out, name, scenario={
-            'permission_request': {'tool_name': 'Read', 'input': {'file_path': '/etc/hosts'}},
-            'tool_uses': [{'name': 'Read', 'input': {'file_path': '/etc/hosts'}}]})
-        _, messages = case.turn(decision={'behavior': 'deny', 'message': 'target outside the fixture'})
+    elif name == 'out_of_fixture_request_declined_by_pio':
+        # PIO classifies the request and encodes the decision. Until the service
+        # binding lands the script only *transports* that decision to the fake;
+        # it does not choose it. The traversal is the point: a prefix test would
+        # have called this target contained.
+        case = Case(out, name)
+        (case.root / 'outside').mkdir(exist_ok=True)
+        (case.root / 'outside' / 'secret.txt').write_text('not yours\n')
+        # Written the way a prefix test gets *wrong*: an absolute path that
+        # begins with the fixture and then climbs out of it. A relative
+        # `../outside/...` would be declined even by the broken classifier, so
+        # it would not prove anything.
+        escape = f'{case.fixtures}/../outside/secret.txt'
+        case.scenario = dict(case.scenario,
+                             permission_request={'tool_name': 'Read',
+                                                 'input': {'file_path': escape}},
+                             tool_uses=[{'name': 'Read', 'input': {'file_path': escape}}])
+        request = {'type': 'control_request', 'request_id': 'req_1_fake',
+                   'request': {'subtype': 'can_use_tool', 'tool_name': 'Read',
+                               'input': {'file_path': escape},
+                               'tool_use_id': 'toolu_fake_1'}}
+        classification = json.loads(subprocess.run(
+            [str(BINARY), 'claude', 'classify-request', '--fixture', str(case.fixtures),
+             '--cwd', str(case.fixtures)],
+            input=json.dumps(request), capture_output=True, text=True, check=True).stdout)
+        assert classification['disposition'] == 'decline', classification
+        assert classification['reason'] == 'target_outside_the_fixture_workspace', classification
+        assert classification['target_label'] == '<outside>', classification
+        assert classification['auto_allowed'] is False, classification
+        encoded = json.loads(subprocess.run(
+            [str(BINARY), 'claude', 'encode-decision', '--behavior', 'deny',
+             '--reason', classification['reason']],
+            input=json.dumps(request), capture_output=True, text=True, check=True).stdout)
+        _, messages = case.turn(decision=encoded['envelope']['response']['response'])
         assert messages[-1]['permission_denials'] == 1, messages[-1]
-        # The decline covers the prompt. The tool use is still recorded, and a
-        # target outside the fixture is an observed effect with unresolved
+        recorded = case.markers_of('permission_decision')
+        assert [r['behavior'] for r in recorded] == ['deny'], recorded
+        # The decline covers the prompt. The tool use is still recorded, because
+        # a target outside the fixture is an observed effect with unresolved
         # liability, not a containment claim. ADR 004 §5.
         uses = [b for m in messages if m.get('type') == 'assistant'
                 for b in m['message']['content'] if b.get('type') == 'tool_use']
-        assert [u['input']['file_path'] for u in uses] == ['/etc/hosts'], uses
+        assert len(uses) == 1, uses
+        record = json.loads(subprocess.run(
+            [str(BINARY), 'claude', 'tool-uses', '--fixture', str(case.fixtures),
+             '--cwd', str(case.fixtures)],
+            input=''.join(json.dumps(m) + '\n' for m in messages),
+            capture_output=True, text=True, check=True).stdout)
+        assert record['out_of_fixture_effect_observed'] is True, record
+        assert record['liability'] == 'unresolved', record
+        assert record['tool_uses'][0]['target_label'] == '<outside>', record
+        # A receipt carries labels and digests, never raw paths.
+        assert str(case.fixtures) not in json.dumps(record), record
+
+    elif name == 'unclassifiable_request_surfaced_not_auto_allowed':
+        # A shell command names no path PIO can resolve. It is surfaced to the
+        # caller, never auto-allowed, and the run stops rather than guessing.
+        case = Case(out, name)
+        request = {'type': 'control_request', 'request_id': 'req_1_fake',
+                   'request': {'subtype': 'can_use_tool', 'tool_name': 'Bash',
+                               'input': {'command': 'cat README.md'},
+                               'tool_use_id': 'toolu_fake_1'}}
+        classification = json.loads(subprocess.run(
+            [str(BINARY), 'claude', 'classify-request', '--fixture', str(case.fixtures),
+             '--cwd', str(case.fixtures)],
+            input=json.dumps(request), capture_output=True, text=True, check=True).stdout)
+        assert classification['disposition'] == 'surface_as_action', classification
+        assert classification['placement'] == 'not_classifiable', classification
+        assert classification['auto_allowed'] is False, classification
+        assert classification['target_label'] is None, classification
 
     elif name == 'widening_decision_never_sent':
         command = {'command': 'cat README.md'}
