@@ -146,6 +146,30 @@ fn run() -> Result<()> {
                         std::process::exit(3);
                     }
                 }
+                // A labeled fake ACP server, so the offline matrix runs in CI
+                // with no OpenCode installed and never near the owner's service.
+                Some("fake-acp") => pio_opencode::fake::run()?,
+                // The owner's rule of 2026-09-20: refuse unless the session's
+                // reported provider and model equal the requested ones. ACP
+                // reports them before any prompt, so this precedes delivery.
+                Some("session-guard") => {
+                    let mut session = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut session)?;
+                    let requested = args
+                        .iter()
+                        .position(|a| a == "--requested")
+                        .and_then(|i| args.get(i + 1))
+                        .context("missing opencode option --requested")?;
+                    let guard = pio_opencode::session_configuration_guard(
+                        &serde_json::from_str(&session)?,
+                        requested,
+                    );
+                    let allowed = guard["allowed"] == true;
+                    println!("{}", serde_json::to_string_pretty(&guard)?);
+                    if !allowed {
+                        std::process::exit(3);
+                    }
+                }
                 Some("service-admit") => {
                     let config: serde_json::Value =
                         serde_json::from_slice(&std::fs::read(option("--config")?)?)?;

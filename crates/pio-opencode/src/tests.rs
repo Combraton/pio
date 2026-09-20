@@ -237,3 +237,33 @@ fn the_flags_pio_never_passes_are_named() {
         ["PATH", "HOME", "USER", "OPENCODE_CONFIG_DIR"]
     );
 }
+
+/// A verdict that nothing acts on is not a check. The first version of
+/// `service_admission` computed qualification and admitted the configuration
+/// anyway; the offline matrix caught it on an unqualified executable.
+#[test]
+fn an_unqualified_executable_is_refused_and_not_merely_reported() {
+    let dir = tempfile::tempdir().unwrap();
+    let record = serialized(|| {
+        let exe = fake_opencode(
+            dir.path(),
+            PINNED_VERSION,
+            "a help that is not the pinned one",
+        );
+        let mut config = service(
+            json!("minimax-coding-plan/MiniMax-M2.7-highspeed"),
+            json!({}),
+        );
+        config["labeled_fake"] = json!(false);
+        config["executable"] = json!(exe.display().to_string());
+        config["env"] = json!({"PATH":"/usr/bin:/bin"});
+        service_admission(&dir.path().join("work"), &config).unwrap()
+    });
+    assert_eq!(record["qualification"]["qualified"], false, "{record}");
+    assert!(
+        reasons(&record).contains(&"opencode_not_qualified".to_owned()),
+        "an unqualified executable was admitted: {record}"
+    );
+    assert_eq!(record["admitted"], false);
+    assert_eq!(record["session_started"], false);
+}

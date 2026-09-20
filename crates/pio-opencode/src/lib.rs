@@ -408,13 +408,22 @@ pub fn service_admission(work: &Path, opencode: &Value) -> Result<Value> {
             }
         }
     }
+    // Qualification is computed *and acted on*. Computing a verdict and then
+    // admitting anyway is how an unqualified executable would have run.
+    let qualification = qualification_of(work, opencode, &refusals)?;
+    if qualification["qualified"] == false {
+        refusals.push(refusal(
+            "opencode_not_qualified",
+            qualification["refusals"].clone(),
+        ));
+    }
     Ok(json!({
         "format":"pio-opencode-service-admission/1",
         "adapter":"opencode",
         "labeled_fake":opencode["labeled_fake"] == true,
         "requested_model":model,
         "owner_service_before":owner_service(),
-        "qualification":qualification_of(work, opencode, &refusals)?,
+        "qualification":qualification,
         "refusals":refusals,
         "admitted":refusals.is_empty(),
         // Nothing here starts a session, sends a prompt or makes a model call.
@@ -447,6 +456,8 @@ fn qualification_of(work: &Path, opencode: &Value, refusals: &[Value]) -> Result
 
 /// How the labeled fake is told which scenario to play.
 pub const FAKE_SCENARIO_VAR: &str = "PIO_OPENCODE_FAKE_SCENARIO";
+
+pub mod fake;
 
 #[cfg(test)]
 mod tests;
