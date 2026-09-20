@@ -15,6 +15,9 @@
 //! `tool_uses` (blocks to report), `usage_total` (default 128), `delay_ms`,
 //! `init` (members merged into `system/init`), `ignore_interrupt` (the fake
 //! ignores SIGINT and hangs, so a host's escalation can be proven),
+//! `abort_on_interrupt` (SIGINT during `delay_ms` ends the turn the way the
+//! real harness was measured to: an aborted `result` with an empty usage
+//! block),
 //! `foreign_control_request` (a control request PIO must not answer on the
 //! user's behalf, used to prove it still answers *something*),
 //! `markers` (directory for independent records).
@@ -24,6 +27,34 @@ use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
 pub const SOURCE: &str = "pio-fake-claude-cli";
+
+/// Set by the SIGINT handler when the scenario asks the fake to abort the way
+/// the real harness does. Only a flag is touched from the handler.
+static INTERRUPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+extern "C" fn note_interrupt(_signal: libc::c_int) {
+    INTERRUPTED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Measured on the live R5 cancel: after SIGINT the real harness emits a
+/// `result` with `terminal_reason: aborted_streaming`, `is_error: true`, an
+/// empty `iterations` and **every usage part zero**. Reproduced here because
+/// that empty block is what PIO was passing on as an observation of zero.
+fn aborted_result() -> Value {
+    json!({
+        "type":"result","subtype":"error_during_execution","uuid":"fake-abort-uuid",
+        "session_id":"fake-session","is_error":true,"result_index":0,
+        "terminal_reason":"aborted_streaming","stop_reason":Value::Null,
+        "num_turns":1,"duration_ms":1,"duration_api_ms":1,"queued_turn_count":0,
+        "permission_denials":0,"permission_decision":Value::Null,
+        "total_cost_usd":0.0,"subagent_stats":{},
+        "usage":{"input_tokens":0,"output_tokens":0,
+                 "cache_creation_input_tokens":0,"cache_read_input_tokens":0,
+                 "iterations":[]},
+        "modelUsage":{},
+        "source":SOURCE,
+    })
+}
 
 /// Fields a permission response may never carry. The fake records an attempt
 /// rather than refusing it, so the matrix proves PIO did not send one instead
@@ -249,7 +280,25 @@ pub fn run() -> Result<()> {
         return Ok(());
     }
     if let Some(delay) = scenario["delay_ms"].as_u64() {
-        std::thread::sleep(std::time::Duration::from_millis(delay));
+        if scenario["abort_on_interrupt"] == true {
+            unsafe {
+                libc::signal(
+                    libc::SIGINT,
+                    note_interrupt as *const () as libc::sighandler_t,
+                )
+            };
+            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(delay);
+            while std::time::Instant::now() < deadline {
+                if INTERRUPTED.load(std::sync::atomic::Ordering::SeqCst) {
+                    marker(&markers, json!({"event":"aborted_on_interrupt"}))?;
+                    emit(&aborted_result())?;
+                    return Ok(());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        } else {
+            std::thread::sleep(std::time::Duration::from_millis(delay));
+        }
     }
 
     // A request PIO will not answer on the user's behalf. It must still get a

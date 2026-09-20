@@ -48,6 +48,7 @@ CASES = [
     'service_refuses_an_unqualified_executable_at_start',
     'service_answers_a_request_it_will_not_act_on',
     'service_interrupt_escalates_when_the_signal_is_ignored',
+    'service_reports_a_cancelled_turn_as_unknown_not_zero',
     'service_restart_reattaches_without_a_duplicate_launch',
     'service_host_lost_after_release_is_never_respawned',
     'cleanup_kills_a_harness_that_ignores_signals',
@@ -655,6 +656,37 @@ def run_case(out, name):
         assert escalated[0]['killed'] is True, escalated
         assert escalated[0]['usage'] == 'unknown', escalated
         # A killed child sends no result, so usage is unknown, never zero.
+        assert view['usage']['liability'] == 'unresolved', view['usage']
+        assert view['usage'].get('observations', []) == [], view['usage']
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_reports_a_cancelled_turn_as_unknown_not_zero':
+        # Measured on the live R5 cancel: the harness does answer SIGINT with a
+        # `result`, but it carries `terminal_reason: aborted_streaming`, an
+        # empty `iterations` and every usage part zero. PIO passed that on as
+        # `basis: observed, amount: 0, liability: resolved` — it told the
+        # protocol a cancelled turn provably cost nothing, and the ledger
+        # counted zero for a turn that had spent a session's prefix.
+        case = ServiceCase(out, name, scenario={'delay_ms': 30000,
+                                                'abort_on_interrupt': True})
+        case.start()
+        case.submit()
+        poll(lambda: case.inspect(), lambda v: v['delivery'] == 'acknowledged')
+        case.cancel()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited', seconds=120)
+        events = case.host_events()
+        assert case.markers_of('aborted_on_interrupt'), 'the fake never took the signal'
+        completed = [e for e in events if e['kind'] == 'turn_completed']
+        assert len(completed) == 1, events[-6:]
+        # The result did arrive. That is the point: this is not the killed-child
+        # case, and an empty usage block is not the same as no result.
+        assert completed[0]['terminal_reason'] == 'aborted_streaming', completed
+        assert completed[0]['status'] == 'failed', completed
+        unknown = [e for e in events if e['kind'] == 'usage_unknown']
+        assert len(unknown) == 1, [e['kind'] for e in events]
+        assert unknown[0]['reason'] == 'the harness reported an empty usage block', unknown
+        assert [e for e in events if e['kind'] == 'usage'] == [], 'usage was reported as zero'
+        # And nothing reached the protocol as a measurement.
         assert view['usage']['liability'] == 'unresolved', view['usage']
         assert view['usage'].get('observations', []) == [], view['usage']
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))

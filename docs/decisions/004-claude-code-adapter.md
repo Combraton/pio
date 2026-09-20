@@ -209,6 +209,14 @@ It is now controlled and fixed. A cleared-environment run and an inherited-envir
 
 The same disclosure answers the reviewer's question about that probe reporting `acceptEdits` and Opus. The mode came from a flag the probe itself passed, `--permission-mode acceptEdits`; the control run without the flag reports `default`. The model is the **product default**, reproduced with an empty configuration and a cleared environment, and it is not evidence of a leak — nor, as §8 now records, evidence of fidelity.
 
+### Disclosure: a cancelled turn counted as zero
+
+R5's cancel worked and PIO mis-recorded what came back. The harness answers SIGINT with a `result` whose usage block is empty; the host turned that into an observation, and the protocol was told `basis: observed, amount: 0, liability: resolved` for a turn that had spent a session's prefix plus five seconds of generation. The ledger counted nothing and no stop rule fired, because the rule tested whether a report was *present*.
+
+Two further defects surfaced with it. The total summed `input_tokens` and `output_tokens` only, which for R2 is **129 against the 64,375 the cap actually counts** — on this harness the cache parts are most of a turn. And the per-run token limit appeared in every receipt while being enforced nowhere.
+
+All three are fixed and covered offline: an empty usage block becomes `usage_unknown` and never reaches the protocol as a measurement, the total is the cap's four parts, and a reported zero or a run over its own limit each stop the sequence. The labeled fake now reproduces the measured abort, so the case fails if the host ever reports zero again.
+
 ### Disclosure: a false durable-state statement in R1
 
 The R1 receipt said `new_transcript_entries: 0`. It was false. `~/.claude/projects/` held a directory for the run's workspace with a 194,375-byte session file and a `memory` directory beside it, both created during the turn.
@@ -223,7 +231,9 @@ The same mistake made the **containment boundary** the fixtures area rather than
 
 ## Named unmeasured items and obligations
 
-- Usage-reporting granularity, the in-band interrupt, and the permission wire shapes (§8), each `not_evaluated` until the live plan measures them.
+- ~~Usage-reporting granularity~~ **measured on R1**: `assistant` messages carry a full `usage` block and `result.usage.iterations` holds one entry per model call, so a mid-turn stop is possible. The host still records usage once, from `result`, so PIO's stops remain next-turn stops until it reads per-message usage. That gap is PIO's, not the harness's.
+- **Usage is not knowable on cancel** (measured on R5). SIGINT is answered: a `result` arrives with `terminal_reason: aborted_streaming`, `status: failed`, an empty `iterations` and every usage part zero. The tokens the turn spent before the signal are **unaccounted**, and PIO records them as unknown rather than zero. The defect this found is recorded in the disclosure below.
+- The in-band interrupt and the permission wire shapes (§8), each `not_evaluated`.
 - **The caller's own permission decision is unexercised against the real harness.** R3 measured that a mutating shell command inside the workspace runs with **no prompt at all** under the owner's `acceptEdits` default: the file it created is the evidence, and no request reached PIO. The decision path — `execution.respond_action` to a single-use `allow` or `deny` — is proven only against the labeled fake. R4 was to be the allow and is not run, because it carries the same brief; [its record](../work/m3/claude-live/R4-not-run.json) says so. Reaching it needs a tool call this harness actually asks about, which is a measurement, not a guess.
 - Whether the CLI's `manual` is the flag spelling of the `default` mode `system/init` reports (§4).
 - **Obligation for M6:** the guard refuses an absent configured `defaultMode`, which is the state of most installations. The product's own default is `default` as `init` reports it — a name `--permission-mode` does not accept — so PIO cannot today request "whatever the user would get". Resolve before release.

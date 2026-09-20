@@ -282,13 +282,33 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                 }
                 "result" => {
                     if let Some(usage) = message["usage"].as_object() {
-                        let total: u64 = ["input_tokens", "output_tokens"]
+                        let total: u64 = pio_claude::USAGE_PARTS
                             .iter()
                             .filter_map(|k| usage.get(*k).and_then(Value::as_u64))
                             .sum();
-                        life.event(json!({"kind":"usage",
-                            "total":{"totalTokens":total},
-                            "detail":message["usage"]}))?;
+                        let iterations = usage
+                            .get("iterations")
+                            .and_then(Value::as_array)
+                            .map(Vec::len)
+                            .unwrap_or(0);
+                        if total > 0 || iterations > 0 {
+                            life.event(json!({"kind":"usage",
+                                "total":{"totalTokens":total},
+                                "detail":message["usage"]}))?;
+                        } else {
+                            // Measured on a cancelled turn: the harness sends a
+                            // `result` with `terminal_reason: aborted_streaming`,
+                            // an empty `iterations` and every part zero. Passing
+                            // that on as an observation claims the turn provably
+                            // cost nothing, and PIO would publish `basis:
+                            // observed, amount: 0, liability: resolved` for a
+                            // turn that had already spent a session's prefix.
+                            // Unknown is not zero.
+                            life.event(json!({"kind":"usage_unknown",
+                                "reason":"the harness reported an empty usage block",
+                                "terminal_reason":message["terminal_reason"],
+                                "detail":message["usage"]}))?;
+                        }
                     }
                     life.event(json!({"kind":"turn_completed",
                         "status":if message["is_error"] == true { "failed" }

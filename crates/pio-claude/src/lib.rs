@@ -908,6 +908,17 @@ pub fn classify_permission_request(request: &Value, workspace: &Path, cwd: &Path
     })
 }
 
+/// The parts the cap's measure is made of. Summing input and output alone
+/// under-reported R2 by 64,246 tokens: on this harness the cache parts are
+/// most of a turn, and a total that leaves them out is not the number any
+/// budget is kept in.
+pub const USAGE_PARTS: &[&str] = &[
+    "input_tokens",
+    "output_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+];
+
 /// Keys of `~/.claude.json` that change whenever Claude Code starts, whoever
 /// started it. A whole-file digest would report "changed" on every run and
 /// tell the reader nothing, so these are counted rather than named. ADR 004 §7.

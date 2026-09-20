@@ -284,8 +284,12 @@ class Service:
                     'tool_name': 'Bash', 'input': {'command': DECISION_COMMAND}}
             if run == 'R5':
                 # The fake must still be running when the signal arrives, or
-                # the dry run would rehearse cancelling nothing.
+                # the dry run would rehearse cancelling nothing, and it must
+                # end the turn the way the real harness does: an aborted
+                # `result` with an empty usage block, which is what made PIO
+                # report zero.
                 scenario['delay_ms'] = (CANCEL_AFTER + 10) * 1000
+                scenario['abort_on_interrupt'] = True
             env['PIO_CLAUDE_FAKE_SCENARIO'] = json.dumps(scenario)
         else:
             config_dir = HOME / '.claude'
@@ -445,6 +449,12 @@ def build_receipt(service, run, view, started, extra):
         usage=dict(measure='input+output+cache_creation+cache_read',
                    parts=parts, observed_total_tokens=total if usage_event else None,
                    reported=bool(usage_event),
+                   # Why there is no report, when there is none. A cancelled
+                   # turn sends a `result` whose usage block is empty, and the
+                   # host refuses to pass that on as an observation of zero.
+                   unknown_reason=first_event(events, 'usage_unknown').get('reason'),
+                   terminal_reason=(first_event(events, 'usage_unknown').get('terminal_reason')
+                                    or first_event(events, 'turn_completed').get('terminal_reason')),
                    cap=CAP, stop_at=STOP_AT, run_limit=service.limit,
                    limit_is_next_turn_only=True,
                    execution_deadline_seconds=EXECUTION_DEADLINE),
@@ -461,6 +471,14 @@ def check_stops(book, run, receipt):
     stops = []
     if not receipt['usage']['reported']:
         stops.append('no usage report: usage is unknown, never zero')
+    # A report of zero for a turn that ran is the same failure wearing a
+    # number. R5 produced one: a cancelled turn whose usage block was empty.
+    elif not receipt['usage']['observed_total_tokens']:
+        stops.append('usage reported as zero for a turn that ran: unknown, never zero')
+    # The per-run limit was recorded in every receipt and enforced nowhere.
+    elif receipt['usage']['observed_total_tokens'] > receipt['usage']['run_limit']:
+        stops.append(f"run used {receipt['usage']['observed_total_tokens']} tokens, "
+                     f"over its own {receipt['usage']['run_limit']} limit")
     if receipt['permission']['matched'] is False:
         stops.append('effective permission mode did not match the requested one')
     diff = receipt.get('durable_state') or {}
@@ -548,6 +566,11 @@ def run_one(run, args):
                 # The question the plan asked: does a `result` arrive after the
                 # signal, and is usage therefore knowable on cancel?
                 turn_completed=bool(first_event(events, 'turn_completed')),
+                # `turn_completed` is the event's name, not a verdict: after a
+                # signal it carries `status: failed` and
+                # `terminal_reason: aborted_streaming`.
+                turn_status=first_event(events, 'turn_completed').get('status'),
+                terminal_reason=first_event(events, 'turn_completed').get('terminal_reason'),
                 usage_reported=bool(usage_event),
                 usage_basis='observed' if usage_event else 'unknown',
                 note=None if sent else
