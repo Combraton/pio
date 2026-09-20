@@ -48,6 +48,7 @@ CASES = [
     'service_interrupt_escalates_when_the_signal_is_ignored',
     'service_restart_reattaches_without_a_duplicate_launch',
     'service_host_lost_after_release_is_never_respawned',
+    'cleanup_kills_a_harness_that_ignores_signals',
 ]
 
 
@@ -635,6 +636,36 @@ def run_case(out, name):
         assert len(case.markers_of('turn_received')) == 1, case.markers_of('turn_received')
         assert case.harness_processes() == [], case.harness_processes()
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'cleanup_kills_a_harness_that_ignores_signals':
+        # The harness is spawned with the arguments a real Claude Code would
+        # get, so its command line names no store. Killing only what names the
+        # store left it running; the host leads its own session, so the process
+        # group is what must go.
+        case = ServiceCase(out, name, scenario={'ignore_interrupt': True})
+        case.start()
+        case.submit()
+        poll(lambda: case.inspect(), lambda v: v['delivery'] == 'acknowledged')
+        harness = poll(lambda: [p for p in case_cleanup.processes_under(case.root)
+                                if 'fake-cli' in p[2]], bool, seconds=60)
+        host = [p for p in case_cleanup.processes_under(case.root) if 'claude host' in p[2]]
+        assert host and harness, (host, harness)
+        # Killed from outside, the way a crash would, not through cancel.
+        for pid, _, _ in host:
+            os.kill(pid, 9)
+        time.sleep(0.5)
+        still = [p for p in case_cleanup.processes_under(case.root) if 'fake-cli' in p[2]]
+        assert still, 'the harness was expected to outlive the killed host'
+        # Cleanup must now take the whole group, not just what names the store.
+        case_cleanup.release(case.root, remove=False)
+        assert case_cleanup.processes_under(case.root) == [], \
+            case_cleanup.processes_under(case.root)
+        assert case_cleanup.groups_under(case.root) == set(), \
+            case_cleanup.groups_under(case.root)
+        for daemon in case.daemons:
+            daemon.kill()
+            daemon.wait(timeout=10)
+        case.daemons.clear()
 
     else:
         raise AssertionError(f'unknown case {name}')

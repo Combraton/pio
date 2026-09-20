@@ -183,6 +183,10 @@ A run's receipt carries `delivery_proof_class: null`, because this harness retur
 
 **Scope, stated plainly:** the other ten cases drive the adapter and the fake directly. Restart, reattach and host-loss are **not** yet covered for this harness the way they are for Codex and Claude Code.
 
+**Cleanup kills process groups, not processes.** The harness is spawned with the arguments a real harness would get, so its command line names no store: killing only what names the store left `pio claude fake-cli` running. The host calls `setsid`, so it leads its own group and the harness is inside it. And once the host is killed the harness is reparented to init — it descends from nothing that names the store, so a walk cannot find it either. The groups seen while the host was alive are therefore remembered, and a remembered group is signalled only while a process it recorded is still alive under that group with the same command line, which is what stops a reused group id reaching a stranger. A matrix case proves it: the fake ignores signals, the host is killed from outside, and cleanup must still leave nothing.
+
+**`release()` validates before it kills.** It refuses any root that is not a private directory this run created — outside the permitted prefixes, not owned privately, a symlink, or containing the home or working directory. The guard runs *first*: validating after killing means a wrong root such as `/` matches every command line on the machine and signals every process group before anything refuses it. Writing it the other way round killed this developer's own shell, which is the cheapest demonstration available.
+
 **Both service-backed matrices clean up after a failure, not only after a pass.** Each case registers itself and is released in a `finally`, because cleanup on the success path alone left six daemons running, parented to init, and 949 store directories on `/tmp` during development. A deliberate failure now leaves no process and no directory behind, and that is checked by forcing one.
 
 ## The live runners
@@ -192,6 +196,10 @@ A run's receipt carries `delivery_proof_class: null`, because this harness retur
 Every submit carries a **120 second delivery timeout and a 600 second execution deadline**, and the deadline stop is the one already built into the host.
 
 The cap's measure is **input, output, cache creation and cache read, summed, and reported separately** in every receipt. ACP reports input and output only, and the receipt says so rather than implying the other two were zero.
+
+**A dry run is separated from the live tree entirely.** It writes under `--out`, with its own settings directory, its own store and its own transcript, so it can never append to a file a live receipt comes from. Every live run gets a **fresh private directory keyed by the run and a new id**, never reused.
+
+**The runners refuse rather than record.** A live run from a dirty tree is refused, not noted — M2 produced one such receipt and it had to be preserved, disclosed and re-run, which is what recording alone buys you. A binary older than the last commit touching `crates`, `Cargo.toml` or `Cargo.lock` is refused too, because the receipt would describe code that is not what ran. Every receipt carries the binary's SHA-256.
 
 A dry run uses **its own stand-in settings directory**, never the owner's. On a machine with no `~/.claude/settings.json` the permission-mode guard correctly refuses an absent default and the service never starts — which is what CI showed — and a run exercising the runner has no business reading the owner's configuration anyway.
 

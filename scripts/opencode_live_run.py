@@ -84,12 +84,24 @@ def digest(data):
     return 'sha256:' + sha(data)
 
 
+RUN_ID = uuid.uuid4().hex[:8]
+# Set by main(): a dry run never writes into the live tree, and a live run
+# never reuses or appends to a previous run's private directory.
+ROOT_OVERRIDE = None
+
+
+def live_root():
+    return Path(ROOT_OVERRIDE) if ROOT_OVERRIDE else LIVE
+
+
 def private_dir(*parts):
     # The whole tree is private: the service refuses a store whose parent
     # chain is world-readable, and raw transcripts live under here.
-    LIVE.mkdir(parents=True, exist_ok=True)
-    os.chmod(LIVE, 0o700)
-    path = LIVE / 'private'
+    base = live_root()
+    base.mkdir(parents=True, exist_ok=True)
+    os.chmod(base, 0o700)
+    case_cleanup.permit_prefix(base)
+    path = base / 'private'
     path.mkdir(parents=True, exist_ok=True)
     os.chmod(path, 0o700)
     for part in parts:
@@ -99,6 +111,42 @@ def private_dir(*parts):
         # directory that is group or world accessible.
         os.chmod(path, 0o700)
     return path
+
+
+def binary_sha256():
+    return sha(BINARY.read_bytes())
+
+
+def preflight(dry_run):
+    """Refuse a live run that cannot produce trustworthy evidence.
+
+    M2 produced one receipt from a dirty tree; it was preserved, disclosed and
+    re-run. Recording `dirty: true` was not enough — a receipt nobody can
+    reproduce is not evidence, so this refuses instead of noting it.
+    """
+    if dry_run:
+        return {'checked': False, 'reason': 'dry run: no live evidence is produced'}
+    dirty = subprocess.run(['git', '-C', str(ROOT), 'status', '--porcelain'],
+                           capture_output=True, text=True).stdout.strip()
+    if dirty:
+        raise SystemExit('refusing to run live from a dirty tree:\n' + dirty)
+    head = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'],
+                          capture_output=True, text=True).stdout.strip()
+    # The binary must be newer than the last commit that could have changed it,
+    # or the receipt describes code that is not what ran.
+    last = subprocess.run(['git', '-C', str(ROOT), 'log', '-1', '--format=%ct',
+                           '--', 'crates', 'Cargo.lock', 'Cargo.toml'],
+                          capture_output=True, text=True).stdout.strip()
+    if not BINARY.exists():
+        raise SystemExit(f'refusing to run live: no binary at {BINARY}')
+    built = BINARY.stat().st_mtime
+    if last and built < float(last):
+        raise SystemExit(
+            f'refusing to run live: {BINARY.name} was built before the last commit '
+            f'touching crates or the lockfile; rebuild from {head[:12]} first')
+    return {'checked': True, 'commit': head, 'dirty': False,
+            'binary_sha256': binary_sha256(),
+            'binary_built_after_last_code_commit': True}
 
 
 def ledger_path():
@@ -161,7 +209,7 @@ def git(repo, *args):
 
 
 def make_fixture(name, outside_target=None):
-    repo = LIVE / 'fixtures' / f'{name}-{uuid.uuid4().hex[:8]}'
+    repo = live_root() / 'fixtures' / f'{name}-{uuid.uuid4().hex[:8]}'
     repo.mkdir(parents=True)
     (repo / 'README.md').write_text('PIO M3 live fixture. A throwaway repository.\n')
     if outside_target:
@@ -200,7 +248,7 @@ def session_listing(repo, dry_run):
 def outside_marker():
     """A marker file the runner creates outside the fixture, with known
     harmless content. Never a real personal or system file."""
-    directory = LIVE / 'outside'
+    directory = live_root() / 'outside'
     directory.mkdir(parents=True, exist_ok=True)
     marker = directory / 'pio-out-of-fixture-marker.txt'
     marker.write_text('PIO out-of-fixture marker. Created by the runner. Harmless.\n')
@@ -212,12 +260,12 @@ class Service:
         self.run = run
         self.dry_run = dry_run
         self.limit = limit
-        self.private = private_dir(run)
-        self.store = LIVE / 'stores' / f'{run}-{uuid.uuid4().hex[:8]}'
+        self.private = private_dir(run, RUN_ID)
+        self.store = live_root() / 'stores' / f'{run}-{RUN_ID}'
         self.store.parent.mkdir(parents=True, exist_ok=True)
         os.chmod(self.store.parent, 0o700)
-        os.chmod(LIVE, 0o700)
-        self.socket = private_dir(run, 'socket') / 'public.sock'
+        os.chmod(live_root(), 0o700)
+        self.socket = private_dir(run, RUN_ID, 'socket') / 'public.sock'
         self.transcript = self.private / 'public-transcript.jsonl'
         self.credential = 'ccred1.owner.' + base64.urlsafe_b64encode(
             os.urandom(32)).decode().rstrip('=')
@@ -226,7 +274,7 @@ class Service:
         if dry_run:
             # A dry run exercises the runner, not the owner's machine, so it
             # never points at the real configuration directory.
-            config_dir = private_dir(self.run, 'opencode-config')
+            config_dir = private_dir(self.run, RUN_ID, 'opencode-config')
             executable = self.private / 'fake-opencode'
             executable.write_text(f"#!/bin/sh\nexec '{BINARY}' opencode fake-acp \"$@\"\n")
             executable.chmod(0o755)
@@ -237,7 +285,7 @@ class Service:
             executable = Path(shutil.which('opencode2') or str(HOME / '.local/bin/opencode2'))
         opencode = dict(executable=str(executable), env=env,
                         config_dir=str(config_dir), home=str(HOME),
-                        fixture_root=str(LIVE / 'fixtures'), labeled_fake=dry_run)
+                        fixture_root=str(live_root() / 'fixtures'), labeled_fake=dry_run)
         # Every run passes an explicit MiniMax model: the configured default is
         # a provider the owner has excluded from PIO entirely.
         opencode['model'] = model
@@ -338,7 +386,7 @@ def build_receipt(service, run, view, started, extra):
     return dict(
         format='pio-opencode-live-receipt/1', run=run, dry_run=service.dry_run,
         platform=platform.platform(), started_at=started,
-        commit=head, dirty=dirty,
+        commit=head, dirty=dirty, binary_sha256=binary_sha256(),
         harness=dict(source=view.get('deliveries', [{}])[0].get('evidence', {}).get('source'),
                      claude_code_version=init.get('claude_code_version'),
                      session_id=init.get('session_id')),
@@ -395,6 +443,7 @@ def check_stops(book, run, receipt):
 
 
 def run_one(run, args):
+    checks = preflight(args.dry_run)
     book = ledger()
     if cumulative(book) >= STOP_AT and not args.dry_run:
         raise SystemExit(f'stop: cumulative observed usage {cumulative(book)} '
@@ -441,6 +490,7 @@ def run_one(run, args):
         extra['sessions_created'] = [e.get('session_id') or e.get('agent', {}).get('sessionId')
                                      for e in events if e['kind'] == 'session_started']
         extra['pio_deleted_nothing'] = True
+        extra['preflight'] = checks
         receipt = build_receipt(service, run, view, started, extra)
     finally:
         service.release()
@@ -473,7 +523,11 @@ def main():
     parser.add_argument('--dry-run', action='store_true',
                         help='drive the labeled fake through the same service')
     args = parser.parse_args()
+    global ROOT_OVERRIDE
     if args.dry_run:
+        # A dry run lives entirely under --out: it must never write into, or
+        # append to, the tree a live receipt comes from.
+        ROOT_OVERRIDE = args.out / 'tree'
         args.out = args.out.parent / 'opencode-live-dry-run'
     for run in args.run:
         run_one(run, args)
