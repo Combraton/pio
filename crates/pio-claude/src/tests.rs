@@ -773,3 +773,92 @@ fn a_route_that_depends_on_user_is_observed_only_when_user_is_passed() {
         "a child without USER saw a route it should not have"
     );
 }
+
+fn durable_fixture(dir: &Path) -> (PathBuf, PathBuf, PathBuf) {
+    let home = dir.join("home");
+    let config = home.join(".claude");
+    let fixture = dir.join("fixture");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::create_dir_all(&fixture).unwrap();
+    std::fs::write(
+        config.join("settings.json"),
+        r#"{"permissions":{"defaultMode":"acceptEdits","allow":["Bash(cat)"]}}"#,
+    )
+    .unwrap();
+    (home, config, fixture)
+}
+
+/// `~/.claude.json` holds the account's email, name and organization under
+/// `oauthAccount`. It is never recorded, not even as a list of its keys.
+#[test]
+fn a_durable_snapshot_never_records_the_account() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, config, fixture) = durable_fixture(dir.path());
+    std::fs::write(
+        home.join(".claude.json"),
+        json!({
+            "numStartups": 7,
+            "oauthAccount": {"emailAddress":"person@example.invalid",
+                             "organizationName":"Their Organization"},
+            "projects": {}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let snapshot = durable_snapshot(&home, &config, &fixture).unwrap();
+    let text = serde_json::to_string(&snapshot).unwrap();
+    for leaked in [
+        "person@example.invalid",
+        "Their Organization",
+        "oauthAccount",
+    ] {
+        assert!(!text.contains(leaked), "snapshot leaked {leaked}");
+    }
+    assert_eq!(snapshot["claude_json"]["account_fields_recorded"], false);
+    // The key count excludes it, so the digest cannot be reversed into it.
+    assert_eq!(snapshot["claude_json"]["top_level_key_count"], 2);
+}
+
+/// A run creates the fixture's project entry, and `--print` trusts the
+/// directory without asking. Both are disclosed rather than glossed.
+#[test]
+fn a_diff_separates_what_the_run_caused_from_bookkeeping() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, config, fixture) = durable_fixture(dir.path());
+    let state = home.join(".claude.json");
+    std::fs::write(&state, json!({"numStartups":7,"projects":{}}).to_string()).unwrap();
+    let before = durable_snapshot(&home, &config, &fixture).unwrap();
+
+    std::fs::write(
+        &state,
+        json!({"numStartups": 8, "promptQueueUseCount": 3,
+               "projects": {fixture.display().to_string(): {
+                   "hasTrustDialogAccepted": true,
+                   "lastTotalInputTokens": 120, "lastCost": 0.01}}})
+        .to_string(),
+    )
+    .unwrap();
+    let after = durable_snapshot(&home, &config, &fixture).unwrap();
+    let diff = durable_diff(&before, &after);
+
+    assert_eq!(diff["fixture_project_created"], true);
+    assert_eq!(diff["fixture_project_trusted_without_asking"], true);
+    assert_eq!(diff["claude_json_key_count_changed"], true);
+    // PIO edits and removes nothing, so the settings must never move.
+    assert_eq!(diff["settings_changed"], false);
+    assert_eq!(diff["usage_secondary"]["last_total_input_tokens"], 120);
+}
+
+#[test]
+fn a_settings_change_is_reported_because_pio_must_never_cause_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, config, fixture) = durable_fixture(dir.path());
+    let before = durable_snapshot(&home, &config, &fixture).unwrap();
+    std::fs::write(
+        config.join("settings.json"),
+        r#"{"permissions":{"defaultMode":"acceptEdits","allow":["Bash(cat)","Bash(rm)"]}}"#,
+    )
+    .unwrap();
+    let after = durable_snapshot(&home, &config, &fixture).unwrap();
+    assert_eq!(durable_diff(&before, &after)["settings_changed"], true);
+}

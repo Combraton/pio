@@ -904,6 +904,103 @@ pub fn classify_permission_request(request: &Value, fixture: &Path, cwd: &Path) 
     })
 }
 
+/// Keys of `~/.claude.json` that change whenever Claude Code starts, whoever
+/// started it. A whole-file digest would report "changed" on every run and
+/// tell the reader nothing, so these are counted rather than named. ADR 004 §7.
+pub const VOLATILE_PREFIXES: &[&str] = &["num", "last", "cached", "tips", "prompt", "fallback"];
+
+/// Never recorded, in any form, not even as a list of its keys: measured, it
+/// holds the account's email address, full name and organization.
+pub const NEVER_RECORDED: &[&str] = &["oauthAccount"];
+
+/// The durable state a run can touch, snapshotted before and after.
+///
+/// Reported by digest and by fixture-relative label. PIO edits and removes
+/// nothing; this only observes. ADR 004 §7.
+pub fn durable_snapshot(home: &Path, config_dir: &Path, fixture: &Path) -> Result<Value> {
+    let settings = settings_snapshot(config_dir)?;
+    let state_path = home.join(".claude.json");
+    let state: Value = std::fs::read(&state_path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or(Value::Null);
+    let keys: Vec<&String> = state
+        .as_object()
+        .map(|o| {
+            o.keys()
+                .filter(|k| !NEVER_RECORDED.contains(&k.as_str()))
+                .collect()
+        })
+        .unwrap_or_default();
+    // The project entry for the fixture is what a run causes; everything else
+    // in this file is bookkeeping.
+    let fixture_key = fixture.display().to_string();
+    let project = &state["projects"][&fixture_key];
+    let transcripts = transcript_listing(config_dir, fixture);
+    Ok(json!({
+        "format":"pio-claude-durable-snapshot/1",
+        "settings":settings,
+        "claude_json":{
+            "exists":state_path.exists(),
+            "top_level_key_count":keys.len(),
+            "key_digest":sha256_hex(keys.iter().map(|k| k.as_str())
+                .collect::<Vec<_>>().join("\n").as_bytes()),
+            "account_fields_recorded":false,
+        },
+        "fixture_project":{
+            "present":!project.is_null(),
+            "has_trust_dialog_accepted":project["hasTrustDialogAccepted"],
+            "usage":{
+                "last_total_input_tokens":project["lastTotalInputTokens"],
+                "last_total_output_tokens":project["lastTotalOutputTokens"],
+                "last_cost":project["lastCost"],
+            },
+        },
+        "transcripts":transcripts,
+    }))
+}
+
+/// A listing of the project transcript directory: names by digest and a count,
+/// never their contents.
+fn transcript_listing(config_dir: &Path, fixture: &Path) -> Value {
+    // Claude Code stores a project's transcripts under a slug of its path.
+    let slug = fixture.display().to_string().replace(['/', '.'], "-");
+    let directory = config_dir.join("projects").join(&slug);
+    let entries: Vec<String> = std::fs::read_dir(&directory)
+        .map(|dir| {
+            let mut names: Vec<String> = dir
+                .filter_map(|entry| entry.ok())
+                .map(|entry| sha256_hex(entry.file_name().as_encoded_bytes()))
+                .collect();
+            names.sort();
+            names
+        })
+        .unwrap_or_default();
+    json!({"exists":directory.exists(),"entry_count":entries.len(),"entry_digests":entries})
+}
+
+/// What changed between two snapshots, separating what the run caused from
+/// bookkeeping that changes whoever starts the harness.
+pub fn durable_diff(before: &Value, after: &Value) -> Value {
+    let settings_changed = before["settings"] != after["settings"];
+    let new_transcripts = after["transcripts"]["entry_count"].as_u64().unwrap_or(0) as i64
+        - before["transcripts"]["entry_count"].as_u64().unwrap_or(0) as i64;
+    json!({
+        "format":"pio-claude-durable-diff/1",
+        // PIO edits and removes nothing, so this must always be false.
+        "settings_changed":settings_changed,
+        "fixture_project_created":before["fixture_project"]["present"] == false
+            && after["fixture_project"]["present"] == true,
+        "fixture_project_trusted_without_asking":
+            after["fixture_project"]["has_trust_dialog_accepted"] == true
+            && before["fixture_project"]["has_trust_dialog_accepted"] != true,
+        "claude_json_key_count_changed":
+            before["claude_json"]["top_level_key_count"] != after["claude_json"]["top_level_key_count"],
+        "new_transcript_entries":new_transcripts,
+        "usage_secondary":after["fixture_project"]["usage"],
+    })
+}
+
 /// Path helper used by callers that pass an explicit `PATH`.
 pub fn path_of(value: &str) -> OsString {
     OsString::from(value)

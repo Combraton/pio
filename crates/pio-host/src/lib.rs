@@ -1,4 +1,5 @@
 //! Experimental local fake host. No native harness or Protocol capability claim.
+pub mod claude;
 pub mod codex;
 pub mod harness;
 pub mod script;

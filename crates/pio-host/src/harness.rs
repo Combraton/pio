@@ -251,3 +251,85 @@ impl Lifecycle {
         }
     }
 }
+
+/// A child speaking newline-delimited JSON on stdin and stdout.
+///
+/// Codex, Claude Code and OpenCode all speak this shape; only the messages
+/// differ. `pio_codex::rpc::AppServer` keeps its own copy of the reader thread
+/// because `pio-codex` cannot depend on `pio-host`, and it also owns JSON-RPC
+/// id bookkeeping that is not shared. If a fourth harness arrives, the
+/// transport belongs in a crate both can see.
+pub struct StdioChild {
+    pub child: std::process::Child,
+    stdin: Option<std::process::ChildStdin>,
+    incoming: std::sync::mpsc::Receiver<Result<Value, String>>,
+}
+
+impl StdioChild {
+    /// Spawn with exactly `env` and nothing inherited. Stderr goes to a file
+    /// the caller owns, so a harness that writes there cannot block on a pipe.
+    pub fn spawn(
+        executable: &Path,
+        args: &[String],
+        env: &[(String, String)],
+        cwd: &Path,
+        stderr: std::fs::File,
+    ) -> Result<Self> {
+        let mut child = std::process::Command::new(executable)
+            .args(args)
+            .current_dir(cwd)
+            .env_clear()
+            .envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::from(stderr))
+            .spawn()
+            .with_context(|| format!("spawn {}", executable.display()))?;
+        let stdout = child.stdout.take().context("child stdout")?;
+        let stdin = child.stdin.take();
+        let (sender, incoming) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for line in BufReader::new(stdout).lines() {
+                let parsed = match line {
+                    Ok(line) if line.trim().is_empty() => continue,
+                    Ok(line) => serde_json::from_str::<Value>(&line)
+                        .map_err(|error| format!("invalid JSON: {error}")),
+                    Err(error) => Err(format!("read error: {error}")),
+                };
+                if sender.send(parsed).is_err() {
+                    return;
+                }
+            }
+        });
+        Ok(Self {
+            child,
+            stdin,
+            incoming,
+        })
+    }
+
+    pub fn send(&mut self, message: &Value) -> Result<()> {
+        use std::io::Write;
+        let stdin = self.stdin.as_mut().context("child stdin closed")?;
+        let mut bytes = serde_json::to_vec(message)?;
+        bytes.push(b'\n');
+        stdin.write_all(&bytes)?;
+        stdin.flush()?;
+        Ok(())
+    }
+
+    /// The next message, or `None` if none arrived within `timeout`.
+    /// An unparseable line is an error, never a silently dropped message.
+    pub fn receive(&self, timeout: Duration) -> Result<Option<Value>> {
+        match self.incoming.recv_timeout(timeout) {
+            Ok(Ok(message)) => Ok(Some(message)),
+            Ok(Err(error)) => anyhow::bail!("{error}"),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Ok(None),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Ok(None),
+        }
+    }
+
+    pub fn close_stdin(&mut self) {
+        self.stdin.take();
+    }
+}

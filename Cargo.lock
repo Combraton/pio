@@ -696,6 +696,7 @@ version = "0.1.0-dev"
 dependencies = [
  "anyhow",
  "libc",
+ "pio-claude",
  "pio-codex",
  "pio-core",
  "serde",

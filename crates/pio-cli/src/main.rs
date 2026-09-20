@@ -266,6 +266,12 @@ fn run() -> Result<()> {
                 // A labeled fake harness, so the offline matrix runs in CI
                 // with no Claude Code installed. It is never qualified.
                 Some("fake-cli") => pio_claude::fake::run()?,
+                // Launched only by the service controller.
+                Some("host") => pio_host::claude::claude_host(
+                    Path::new(args.get(2).context("missing store")?),
+                    args.get(3).context("missing command id")?,
+                    args.get(4).context("missing invocation identity")?,
+                )?,
                 Some("settings-snapshot") => println!(
                     "{}",
                     serde_json::to_string_pretty(&pio_claude::settings_snapshot(option(
