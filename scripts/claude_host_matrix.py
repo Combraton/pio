@@ -46,6 +46,7 @@ CASES = [
     'service_answers_a_request_it_will_not_act_on',
     'service_interrupt_escalates_when_the_signal_is_ignored',
     'service_restart_reattaches_without_a_duplicate_launch',
+    'service_host_lost_after_release_is_never_respawned',
 ]
 
 
@@ -257,6 +258,20 @@ class ServiceCase(Case):
             return c.call(command('execution.cancel',
                                   dict(kind='execution.execution', id=identity), {},
                                   command_id=f'{identity}.cancel', revision=revision))
+
+    def journal_identities(self):
+        """The host and child this invocation claimed, read from the store."""
+        import sqlite3
+        with sqlite3.connect(f'file:{self.store}/journal.sqlite3?mode=ro', uri=True) as db:
+            return [json.loads(r[0]) for r in db.execute('select state from invocations')]
+
+    def harness_processes(self):
+        """Any labeled fake still running for this case's fixture."""
+        out = subprocess.check_output(['ps', '-axww', '-o', 'pid=', '-o', 'command='], text=True)
+        return [line.strip() for line in out.splitlines()
+                if str(self.root) in line
+                and ('fake-claude' in line or 'claude host' in line)
+                and 'grep' not in line]
 
     def host_events(self):
         """The durable host's own append-only events file, read-only."""
@@ -565,6 +580,39 @@ def run_case(out, name):
         assert len(completed) == 1, completed
         assert view['delivery'] == 'acknowledged' and view['exit'] == {'code': 0}, view
         assert view['host']['generation'] > before['host']['generation'], (before, view)
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_host_lost_after_release_is_never_respawned':
+        # The brief was delivered and then the host died. PIO must not decide
+        # the turn's fate, and must never re-send: it reports the runtime as
+        # unknown and leaves it there.
+        case = ServiceCase(out, name, scenario={'delay_ms': 60000})
+        case.start()
+        case.submit()
+        poll(lambda: case.inspect(), lambda v: v['delivery'] == 'acknowledged')
+        state = case.journal_identities()[0]
+        case.stop(case.daemons[-1])
+        for identity in (state['host'], state['child']):
+            if identity and identity.get('pid'):
+                try:
+                    os.kill(identity['pid'], 9)
+                except ProcessLookupError:
+                    pass
+        for line in case.harness_processes():
+            try:
+                os.kill(int(line.split()[0]), 9)
+            except (ProcessLookupError, ValueError):
+                pass
+        time.sleep(0.5)
+        case.start()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'unknown', seconds=60)
+        time.sleep(1)
+        # Delivery stands: the replay echo already proved it. Nothing is
+        # re-sent, and no second harness is started.
+        assert view['delivery'] == 'acknowledged', view
+        assert view['exit'] == 'unavailable', view
+        assert len(case.markers_of('turn_received')) == 1, case.markers_of('turn_received')
+        assert case.harness_processes() == [], case.harness_processes()
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     else:
