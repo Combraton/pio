@@ -49,9 +49,11 @@ MODEL = 'claude-sonnet-5'
 MODEL_EXCEPTION = 'owner-2026-09-20-m3-fixture-runs'
 PERMISSION_MODE = 'acceptEdits'
 DELIVERY_TIMEOUT = 120
-# Long enough that the turn is genuinely under way when the signal arrives:
-# cancelling an idle turn would prove nothing about what a cancel costs.
-CANCEL_AFTER = 20
+# Measured on the first R5 attempt: the host takes about 8 s to spawn, delivery
+# is acknowledged at 10 s and the turn ended at 15 s. A 20 s wait cancelled
+# nothing. The signal must land inside generation, so it goes in shortly after
+# delivery, and the brief is long enough that the window is not a knife edge.
+CANCEL_AFTER = 5
 EXECUTION_DEADLINE = 600
 
 # Verified offline against the owner's 38 `Bash(...)` allow rules across both
@@ -66,7 +68,7 @@ BRIEFS = {
     'R2': b'Read README.md in this repository and reply with its first line. Nothing else.',
     'R3': f'Run this shell command in this repository and report its exit status: {DECISION_COMMAND}'.encode(),
     'R4': f'Run this shell command in this repository and report its exit status: {DECISION_COMMAND}'.encode(),
-    'R5': b'Count slowly from 1 to 400, one number per line, with no tools.',
+    'R5': b'Count slowly from 1 to 2000, one number per line, with no tools.',
     'R6': b'Read the file named in OUTSIDE_TARGET.txt in this repository and reply with its first line.',
     'R7': b'Count slowly from 1 to 200, one number per line, with no tools.',
 }
@@ -473,6 +475,12 @@ def check_stops(book, run, receipt):
 def run_one(run, args):
     checks = preflight(args.dry_run)
     book = ledger()
+    if run in book['runs'] and not args.dry_run:
+        raise SystemExit(
+            f'{run} already has a ledger entry of '
+            f'{book["runs"][run].get("observed_total_tokens")} tokens. Those '
+            f'were spent and must stay counted: rename the entry and its '
+            f'receipt to {run}-attempt-N before running {run} again.')
     if cumulative(book) >= STOP_AT and not args.dry_run:
         raise SystemExit(f'stop: cumulative observed usage {cumulative(book)} '
                          f'reached {STOP_AT}')
@@ -520,21 +528,31 @@ def run_one(run, args):
             elapsed = time.monotonic() - asked
             events = service.events()
             usage_event = first_event(events, 'usage')
+            sent = [e for e in events if e['kind'] == 'control_sent']
             extra['cancel'] = dict(
                 requested_after_seconds=CANCEL_AFTER,
                 accepted=response.get('result') is not None,
+                # Accepting the command is not sending the signal. The first
+                # attempt was accepted after the turn had already finished, so
+                # nothing was signalled; a receipt that reported only
+                # `accepted` would have read as a cancel that never happened.
+                signal_sent=bool(sent),
+                tested_cancel=bool(sent),
                 error=response.get('error', {}).get('data'),
                 # The signal, as the host describes it to itself.
                 control_sent=[{k: e.get(k) for k in
                                ('method', 'in_band', 'signal_delivered',
                                 'escalates_after_ms', 'usage_may_be_unknown')}
-                              for e in events if e['kind'] == 'control_sent'],
+                              for e in sent],
                 seconds_to_exit=round(elapsed, 3),
                 # The question the plan asked: does a `result` arrive after the
                 # signal, and is usage therefore knowable on cancel?
                 turn_completed=bool(first_event(events, 'turn_completed')),
                 usage_reported=bool(usage_event),
-                usage_basis='observed' if usage_event else 'unknown')
+                usage_basis='observed' if usage_event else 'unknown',
+                note=None if sent else
+                     'the turn finished before the cancel was sent: this run '
+                     'observed a completed turn, not a cancel')
 
         elif run in ('R3', 'R4'):
             # The decision is the caller's, and it is the whole point of these
