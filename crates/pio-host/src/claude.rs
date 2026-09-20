@@ -20,6 +20,11 @@ pub const ADAPTER: &str = "claude";
 
 /// The arguments PIO drives. `--permission-prompts host` routes decisions to
 /// PIO; neither dangerous-skip flag appears here or anywhere else.
+/// How long a turn is given to end after SIGINT before the child is killed.
+/// The wait is bounded because a harness that ignores the signal must not hold
+/// the host open, and what happened is recorded either way.
+pub const INTERRUPT_ESCALATION: Duration = Duration::from_secs(10);
+
 pub const STREAM_ARGS: &[&str] = &[
     "--print",
     "--input-format",
@@ -87,7 +92,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     // Refused before the spawn: a mode that is not the user's configured
     // default, and a credential route that is not usable.
     let guard = pio_claude::permission_mode_guard(&before["settings"], &requested);
-    life.guard("permission_mode_guard", &guard, "permission_mode_refused")?;
+    life.guard("settings_guard", &guard, "permission_mode_refused")?;
 
     let env: Vec<(String, String)> = life.spec["env"]
         .as_object()
@@ -155,19 +160,23 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let mut result: Option<Value> = None;
     let mut acknowledged = false;
     let mut mode_matched: Option<bool> = None;
+    // Only what the audit needs is retained: the requests still awaiting a
+    // decision, and the messages that carried a tool use. A long turn's
+    // transcript is spooled, not held in memory.
     let mut pending_actions: std::collections::BTreeMap<u64, Value> =
         std::collections::BTreeMap::new();
     let mut action_seq = 0u64;
-    let mut messages: Vec<Value> = Vec::new();
+    let mut tool_use_messages: Vec<Value> = Vec::new();
+    let mut interrupt_deadline: Option<(std::time::Instant, String)> = None;
+    let mut escalation: Option<Value> = None;
 
     while result.is_none() {
         if let Some(message) = child.receive(Duration::from_millis(25))? {
-            messages.push(message.clone());
             match message["type"].as_str().unwrap_or_default() {
                 "system" if message["subtype"] == "init" => {
                     let effective = message["permissionMode"].as_str().unwrap_or_default();
                     mode_matched = Some(effective == requested);
-                    life.event(json!({"kind":"session_init",
+                    life.event(json!({"kind":"session_started",
                         "session_id":message["session_id"],
                         "claude_code_version":message["claude_code_version"],
                         "requested_permission_mode":requested,
@@ -203,6 +212,12 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         "replay_matches_sent":acknowledged}))?;
                 }
                 "assistant" => {
+                    if message["message"]["content"]
+                        .as_array()
+                        .is_some_and(|blocks| blocks.iter().any(|b| b["type"] == "tool_use"))
+                    {
+                        tool_use_messages.push(message.clone());
+                    }
                     let mut line = serde_json::to_vec(&json!({"type":"assistant",
                         "message":message["message"]}))?;
                     line.push(b'\n');
@@ -231,20 +246,44 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         life.event(json!({"kind":"request_declined_by_pio",
                             "action_seq":action_seq,"classification":classification}))?;
                     } else {
-                        pending_actions.insert(action_seq, message["request_id"].clone());
+                        pending_actions.insert(action_seq, message.clone());
                         life.event(json!({"kind":"action_requested",
                             "action_seq":action_seq,"request_id":message["request_id"],
                             "classification":classification}))?;
                     }
                 }
                 "control_request" => {
-                    // PIO answers nothing else on the user's behalf.
+                    // PIO answers nothing else on the user's behalf — but it
+                    // does answer, with the error response the control
+                    // protocol defines. Recording a decline while sending
+                    // nothing would leave the harness waiting forever.
+                    let reason = "declined by PIO: no user is attached to answer this request";
+                    let sent = child
+                        .send(&json!({"type":"control_response","response":{
+                            "subtype":"error",
+                            "request_id":message["request_id"],
+                            "error":reason}}))
+                        .is_ok();
                     life.event(json!({"kind":"native_request_declined",
                         "subtype":message["request"]["subtype"],
-                        "reason":"declined by PIO: no user is attached to answer this request"}))?;
+                        "request_id":message["request_id"],
+                        "error_response_sent":sent,
+                        "reason":reason}))?;
                 }
                 "result" => {
+                    if let Some(usage) = message["usage"].as_object() {
+                        let total: u64 = ["input_tokens", "output_tokens"]
+                            .iter()
+                            .filter_map(|k| usage.get(*k).and_then(Value::as_u64))
+                            .sum();
+                        life.event(json!({"kind":"usage",
+                            "total":{"totalTokens":total},
+                            "detail":message["usage"]}))?;
+                    }
                     life.event(json!({"kind":"turn_completed",
+                        "status":if message["is_error"] == true { "failed" }
+                                 else if message["terminal_reason"] == "interrupted" { "interrupted" }
+                                 else { "completed" },
                         "is_error":message["is_error"],
                         "terminal_reason":message["terminal_reason"],
                         "stop_reason":message["stop_reason"],
@@ -257,9 +296,25 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                 }
                 _ => {}
             }
+        } else if let Some((deadline, control)) = interrupt_deadline.as_ref()
+            && std::time::Instant::now() >= *deadline
+        {
+            let control = control.clone();
+            let killed = child.child.kill().is_ok();
+            let _ = child.child.wait();
+            escalation = Some(json!({"control_id":control,"from":"SIGINT","to":"SIGKILL",
+                "waited_ms":INTERRUPT_ESCALATION.as_millis() as u64,"killed":killed}));
+            life.event(json!({"kind":"interrupt_escalated","control_id":control,
+                "from":"SIGINT","to":"SIGKILL",
+                "waited_ms":INTERRUPT_ESCALATION.as_millis() as u64,
+                "killed":killed,
+                // A killed child sends no `result`, and `result` is the only
+                // message that reports usage.
+                "usage":"unknown"}))?;
+            break;
         } else if let Ok(Some(status)) = child.child.try_wait() {
             // The harness left without a result; say so rather than waiting.
-            life.event(json!({"kind":"child_exited_without_result","code":status.code()}))?;
+            life.event(json!({"kind":"result_missing","code":status.code()}))?;
             break;
         }
 
@@ -272,13 +327,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         .as_u64()
                         .and_then(|seq| pending_actions.remove(&seq));
                     match request {
-                        Some(request_id) => {
-                            let original = messages
-                                .iter()
-                                .rev()
-                                .find(|m| m["request_id"] == request_id)
-                                .cloned()
-                                .unwrap_or(Value::Null);
+                        Some(original) => {
                             match pio_claude::permission_decision(
                                 &original,
                                 decision,
@@ -310,7 +359,13 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                     let sent = unsafe { libc::kill(pid, libc::SIGINT) } == 0;
                     life.event(json!({"kind":"control_sent","control_id":id,
                         "method":"SIGINT","in_band":false,"signal_delivered":sent,
+                        "escalates_after_ms":INTERRUPT_ESCALATION.as_millis() as u64,
                         "usage_may_be_unknown":true}))?;
+                    // A harness that ignores the signal must not hold the host
+                    // open forever, so the wait is bounded and what happened
+                    // is recorded either way.
+                    interrupt_deadline
+                        .get_or_insert((std::time::Instant::now() + INTERRUPT_ESCALATION, id));
                 }
                 _ => life.event(json!({"kind":"control_rejected",
                     "control_id":id,"reason":"unknown control"}))?,
@@ -322,8 +377,8 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let exit = life.stop(&mut child.child)?;
     let after = pio_claude::durable_snapshot(&home, &config_dir, &fixture)?;
     let diff = pio_claude::durable_diff(&before, &after);
-    let tool_uses = pio_claude::tool_use_records(&messages, &fixture, &cwd);
-    life.event(json!({"kind":"child_exited","code":exit}))?;
+    let tool_uses = pio_claude::tool_use_records(&tool_use_messages, &fixture, &cwd);
+    life.event(json!({"kind":"harness_exited","code":exit}))?;
     life.event(json!({"kind":"tool_uses","record":tool_uses}))?;
     life.event(json!({"kind":"config_after","snapshot":after,"diff":diff}))?;
     let receipt = json!({
@@ -333,6 +388,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
         "delivery_acknowledged":acknowledged,
         "effective_mode_matches_requested":mode_matched,
         "child_exit":exit,
+        "interrupt_escalation":escalation,
         "output_digest":pio_core::digest(&all_output),
         "output_bytes":output_offset,
         "containment":tool_uses["containment"],

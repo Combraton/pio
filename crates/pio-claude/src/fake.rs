@@ -13,8 +13,11 @@
 //! digest, for drift cases), `route` (`"claude.ai"` default, `null` for none),
 //! `permission_request` (`{"tool_name":…,"input":…}` asks for a decision),
 //! `tool_uses` (blocks to report), `usage_total` (default 128), `delay_ms`,
-//! `init` (members merged into `system/init`), `markers` (directory for
-//! independent records).
+//! `init` (members merged into `system/init`), `ignore_interrupt` (the fake
+//! ignores SIGINT and hangs, so a host's escalation can be proven),
+//! `foreign_control_request` (a control request PIO must not answer on the
+//! user's behalf, used to prove it still answers *something*),
+//! `markers` (directory for independent records).
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 use std::io::{BufRead, Write};
@@ -211,8 +214,47 @@ pub fn run() -> Result<()> {
     replay["isReplay"] = json!(true);
     emit(&replay)?;
 
+    // A harness that ignores the interrupt. Nothing in PIO produces this; it
+    // exists so a host's bounded escalation can be proven rather than assumed.
+    if scenario["ignore_interrupt"] == true {
+        unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) };
+        marker(&markers, json!({"event":"ignoring_interrupt"}))?;
+        std::thread::sleep(std::time::Duration::from_secs(300));
+        return Ok(());
+    }
     if let Some(delay) = scenario["delay_ms"].as_u64() {
         std::thread::sleep(std::time::Duration::from_millis(delay));
+    }
+
+    // A request PIO will not answer on the user's behalf. It must still get a
+    // response, or a real harness would wait forever.
+    if let Some(subtype) = scenario["foreign_control_request"].as_str() {
+        emit(
+            &json!({"type":"control_request","request_id":"req_foreign_1",
+            "request":{"subtype":subtype},"source":SOURCE}),
+        )?;
+        let mut answered = Value::Null;
+        for line in lines.by_ref() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(message) = serde_json::from_str::<Value>(&line)
+                && message["type"] == "control_response"
+                && message["response"]["request_id"] == "req_foreign_1"
+            {
+                answered = message["response"].clone();
+                break;
+            }
+        }
+        marker(
+            &markers,
+            json!({"event":"foreign_control_request",
+                   "subtype":subtype,
+                   "answered":!answered.is_null(),
+                   "response_subtype":&answered["subtype"],
+                   "error":&answered["error"]}),
+        )?;
     }
 
     let mut denials = 0;

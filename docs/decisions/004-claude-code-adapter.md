@@ -181,6 +181,10 @@ This is the same discipline that limited the Codex adapter to `accept`, `decline
 
 **Interrupt, and the cost of the fallback.** The in-band form above is preferred once measured against 2.1.278, and `capabilities` advertising `interrupt_receipt_v1` is consistent with it existing. Until then PIO's cancel is **SIGINT to the child**, described as exactly that. **If SIGINT remains the fallback, it is not free:** in `--print` mode a signal may end the process before the `result` message, and `result` is the only place turn usage is reported — so a signal-cancelled turn leaves **usage unknown**, and the receipt must record it as unknown rather than as zero. SIGTERM is not used: it leaves the turn unfinished with no recorded result at all.
 
+**The wait after the signal is bounded.** A harness that ignores SIGINT must not hold the host open, so the host waits a recorded interval and then kills the child, recording the escalation from SIGINT to SIGKILL, how long it waited, and that usage is unknown. A fake that ignores the signal proves it.
+
+**A request PIO will not answer still gets an answer.** Anything other than a tool permission request receives the control protocol's error response — `{"type":"control_response","response":{"subtype":"error","request_id":…,"error":…}}`, the shape §9 reads from the pinned SDK — because recording a decline while sending nothing would leave the harness waiting on a decision nobody will make.
+
 ### 10. Steering, recovery and resume
 
 - **A second user message sent mid-turn** is writable: stdin stays open and another `{"type":"user",…}` line can be sent. With `--replay-user-messages` the harness echoes it, and **that echo proves delivery and nothing more**. Whether the running turn incorporates it, queues it for the next turn, or drops it is **not observed**. M3 claims no steering. The `msg_lifecycle_v1` and `interrupt_cancel_queued_v1` capabilities are consistent with a queue existing; that is a hint, not a measurement.

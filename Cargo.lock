@@ -648,6 +648,7 @@ name = "pio-claude"
 version = "0.1.0-dev"
 dependencies = [
  "anyhow",
+ "libc",
  "serde_json",
  "sha2",
  "tempfile",

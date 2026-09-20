@@ -43,6 +43,9 @@ CASES = [
     # Through the service, which is the only place these can be observed.
     'service_turn_completes',
     'service_refuses_an_unqualified_executable_at_start',
+    'service_answers_a_request_it_will_not_act_on',
+    'service_interrupt_escalates_when_the_signal_is_ignored',
+    'service_restart_reattaches_without_a_duplicate_launch',
 ]
 
 
@@ -242,6 +245,25 @@ class ServiceCase(Case):
     def inspect(self, identity='work'):
         with self.client() as c:
             return c.query('execution.inspect', {'execution': identity})['result']
+
+    def stop(self, daemon):
+        daemon.kill()
+        daemon.wait(timeout=10)
+
+    def cancel(self, identity='work'):
+        from public_api import command
+        with self.client() as c:
+            revision = c.query('execution.inspect', {'execution': identity})['result']['revision']
+            return c.call(command('execution.cancel',
+                                  dict(kind='execution.execution', id=identity), {},
+                                  command_id=f'{identity}.cancel', revision=revision))
+
+    def host_events(self):
+        """The durable host's own append-only events file, read-only."""
+        matches = sorted(self.store.glob('claude-*.events.jsonl'))
+        if not matches:
+            return []
+        return [json.loads(line) for line in matches[0].read_text().splitlines() if line.strip()]
 
     def cleanup(self):
         for daemon in self.daemons:
@@ -493,6 +515,57 @@ def run_case(out, name):
         admission = json.loads((case.store / 'claude-admission.json').read_text())
         assert admission['stream_spawned'] is False, admission
 
+
+    elif name == 'service_answers_a_request_it_will_not_act_on':
+        # PIO answers nothing on the user's behalf — but it must answer, or a
+        # real harness waits forever on a request nobody will decide.
+        case = ServiceCase(out, name, scenario={'foreign_control_request': 'mcp_message'})
+        case.start()
+        case.submit()
+        poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        answered = case.markers_of('foreign_control_request')
+        assert len(answered) == 1, answered
+        assert answered[0]['answered'] is True, 'the harness was left waiting'
+        assert answered[0]['response_subtype'] == 'error', answered
+        assert 'no user is attached' in (answered[0]['error'] or ''), answered
+        declined = [e for e in case.host_events() if e['kind'] == 'native_request_declined']
+        assert [d['error_response_sent'] for d in declined] == [True], declined
+
+    elif name == 'service_interrupt_escalates_when_the_signal_is_ignored':
+        # A harness that ignores the interrupt must not hold the host open.
+        case = ServiceCase(out, name, scenario={'ignore_interrupt': True})
+        case.start()
+        case.submit()
+        poll(lambda: case.inspect(), lambda v: v['delivery'] == 'acknowledged')
+        case.cancel()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited', seconds=120)
+        escalated = [e for e in case.host_events() if e['kind'] == 'interrupt_escalated']
+        assert len(escalated) == 1, case.host_events()[-6:]
+        assert escalated[0]['from'] == 'SIGINT' and escalated[0]['to'] == 'SIGKILL', escalated
+        assert escalated[0]['killed'] is True, escalated
+        assert escalated[0]['usage'] == 'unknown', escalated
+        # A killed child sends no result, so usage is unknown, never zero.
+        assert view['usage']['liability'] == 'unresolved', view['usage']
+        assert view['usage'].get('observations', []) == [], view['usage']
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_restart_reattaches_without_a_duplicate_launch':
+        # The conversation lives in the host that owns the child's pipes, so a
+        # restarted daemon reattaches and never re-sends the brief.
+        case = ServiceCase(out, name, scenario={'delay_ms': 4000})
+        case.start()
+        case.submit()
+        before = poll(lambda: case.inspect(), lambda v: v['delivery'] == 'acknowledged')
+        case.stop(case.daemons[-1])
+        case.start()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited', seconds=120)
+        received = case.markers_of('turn_received')
+        completed = case.markers_of('turn_complete')
+        assert len(received) == 1, f'the brief was delivered {len(received)} times'
+        assert len(completed) == 1, completed
+        assert view['delivery'] == 'acknowledged' and view['exit'] == {'code': 0}, view
+        assert view['host']['generation'] > before['host']['generation'], (before, view)
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     else:
         raise AssertionError(f'unknown case {name}')

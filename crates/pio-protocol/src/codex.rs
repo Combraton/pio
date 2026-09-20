@@ -3,7 +3,6 @@
 //! facts and delivers committed controls to it.
 use crate::provider::*;
 use anyhow::{Context, Result};
-use pio_host::codex::ALLOWED_DECISIONS;
 use pio_host::harness::{append_control, events_path, read_jsonl};
 use serde_json::{Value, json};
 
@@ -36,10 +35,71 @@ fn content_reference<'a>(method: &str, p: &'a Value) -> Option<&'a Value> {
     }
 }
 
-/// Harness adapters that run behind the durable host. Each speaks its own
-/// protocol and shares everything else, so the provider dispatches on the
-/// adapter rather than carrying a branch per harness.
-pub const NATIVE_ADAPTERS: &[&str] = &["codex", "claude"];
+/// What differs between harnesses, in one place.
+///
+/// Both hosts emit the same normalized events; only these strings differ, so
+/// the provider dispatches on one adapter value and reads the rest from here
+/// rather than carrying a branch per harness. Codex's event names are the ones
+/// its committed M2 receipts already use and are not renamed.
+pub struct Profile {
+    pub adapter: &'static str,
+    pub fake_source: &'static str,
+    pub real_source: &'static str,
+    /// Evidence class for the delivery proof this harness gives, and the
+    /// field on `turn_acknowledged` that must hold for the proof to stand.
+    pub delivery_evidence: &'static str,
+    pub ack_proof_field: &'static str,
+    pub usage_measure: &'static str,
+    /// Decisions PIO may forward. Anything else widens a permission.
+    pub decisions: &'static [&'static str],
+    /// How cancel is actually performed, in the words the receipt uses.
+    pub cancel_description: &'static str,
+    /// Event names that differ between the two hosts.
+    pub session_event: &'static str,
+    pub session_key: &'static str,
+    pub guard_event: &'static str,
+    pub guard_key: &'static str,
+    pub exited_event: &'static str,
+}
+
+pub const PROFILES: &[Profile] = &[
+    Profile {
+        adapter: "codex",
+        fake_source: "pio-fake-app-server",
+        real_source: "codex-app-server",
+        delivery_evidence: "native_turn_acknowledged",
+        ack_proof_field: "turn_id",
+        usage_measure: "codex.tokens.total",
+        decisions: &["accept", "decline", "cancel"],
+        cancel_description: "turn/interrupt, in band",
+        session_event: "thread_started",
+        session_key: "thread",
+        guard_event: "thread_settings_guard",
+        guard_key: "thread_settings",
+        exited_event: "app_server_exited",
+    },
+    Profile {
+        adapter: "claude",
+        fake_source: "pio-fake-claude-cli",
+        real_source: "claude-code",
+        // The replay echo: the exact message PIO sent, returned by the harness.
+        delivery_evidence: "native_replay_echo",
+        ack_proof_field: "replay_matches_sent",
+        usage_measure: "claude.tokens.total",
+        decisions: &["allow", "deny"],
+        // Measured: the in-band interrupt is unverified against 2.1.278.
+        cancel_description: "SIGINT, escalating to SIGKILL, not in band",
+        session_event: "session_started",
+        session_key: "session",
+        guard_event: "settings_guard",
+        guard_key: "permission_mode",
+        exited_event: "harness_exited",
+    },
+];
+
+pub fn profile(adapter: &str) -> Option<&'static Profile> {
+    PROFILES.iter().find(|p| p.adapter == adapter)
+}
 
 impl Provider {
     pub(crate) fn adapter(&self) -> &str {
@@ -49,18 +109,22 @@ impl Provider {
     /// True for any qualified harness adapter, false for the fake host and the
     /// conformance service.
     pub(crate) fn native(&self) -> bool {
-        NATIVE_ADAPTERS.contains(&self.adapter())
+        profile(self.adapter()).is_some()
+    }
+
+    /// What differs for this harness. Only called on a native adapter.
+    pub(crate) fn profile(&self) -> &'static Profile {
+        profile(self.adapter()).expect("native adapter")
     }
 
     /// The label every record from this adapter carries. A labeled fake is
     /// never reported as the real harness.
     pub(crate) fn native_source(&self) -> &'static str {
-        let fake = self.host_config["labeled_fake"] == true;
-        match (self.adapter(), fake) {
-            ("claude", true) => pio_claude::fake::SOURCE,
-            ("claude", false) => "claude-code",
-            (_, true) => pio_codex::fake::SOURCE,
-            _ => "codex-app-server",
+        let profile = self.profile();
+        if self.host_config["labeled_fake"] == true {
+            profile.fake_source
+        } else {
+            profile.real_source
         }
     }
 
@@ -254,9 +318,11 @@ impl Provider {
                     .content_available(&response)
                     .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
                     .and_then(|v| v["decision"].as_str().map(str::to_owned));
+                // The decision vocabulary is this harness's, from the table.
+                // Anything outside it widens a permission and is refused here.
                 let Some(decision) = decision.filter(|d| {
                     response["media_type"] == "application/json"
-                        && ALLOWED_DECISIONS.contains(&d.as_str())
+                        && self.profile().decisions.contains(&d.as_str())
                 }) else {
                     return Err(invalid("/payload/response"));
                 };
@@ -487,11 +553,7 @@ impl Provider {
         )?;
         e[format!("{ns}_events_offset")] = offset.into();
         for event in events {
-            // The one genuinely per-harness step: what each event kind means.
-            match ns.as_str() {
-                "claude" => self.claude_event(e, &id, &event)?,
-                _ => self.codex_event(e, &id, &event)?,
-            }
+            self.native_event(e, &id, &event)?;
         }
         if phase == "known_not_released" && e["view"]["delivery"] == "pending" {
             let reason = observed["invocation"]["receipt"]["reason"].clone();
@@ -531,10 +593,15 @@ impl Provider {
         Ok(())
     }
 
-    fn codex_event(&mut self, e: &mut Value, id: &str, event: &Value) -> Result<()> {
+    /// Fold one host event into the view.
+    ///
+    /// Both hosts emit the same normalized events; what differs is in
+    /// [`Profile`]. Kinds a harness never emits simply never match.
+    fn native_event(&mut self, e: &mut Value, id: &str, event: &Value) -> Result<()> {
         // The journal namespace is the adapter; for Codex this is `codex`,
         // so no persisted field name changes.
         let ns = self.adapter().to_owned();
+        let profile = self.profile();
         match text(&event["kind"]) {
             "account" => {
                 e[&ns]["authentication_type"] = event["authentication_type"].clone();
@@ -549,17 +616,22 @@ impl Provider {
             "config_after" => {
                 e[&ns]["config_diff"] = event["diff"].clone();
             }
-            "thread_started" => {
-                e[&ns]["thread"] = json!({"thread_id":event["thread_id"],"configured_model":event["configured_model"],"requested_model":event["requested_model"],"model":event["model"],"model_provider":event["model_provider"],"sandbox":event["sandbox"],"approval_policy":event["approval_policy"]});
+            k if k == profile.session_event => {
+                e[&ns][profile.session_key] = json!({"thread_id":event["thread_id"],"configured_model":event["configured_model"],"requested_model":event["requested_model"],"model":event["model"],"model_provider":event["model_provider"],"sandbox":event["sandbox"],"approval_policy":event["approval_policy"]});
             }
-            "turn_acknowledged" => {
+            "turn_acknowledged"
+                if matches!(
+                    &event[profile.ack_proof_field],
+                    Value::String(_) | Value::Bool(true)
+                ) =>
+            {
                 e[&ns]["turn_id"] = event["turn_id"].clone();
                 if matches!(text(&e["view"]["delivery"]), "pending" | "ambiguous") {
                     let reconcile = e["view"]["delivery"] == "ambiguous";
                     self.delivery_observed(
                         e,
                         "acknowledged",
-                        "native_turn_acknowledged",
+                        profile.delivery_evidence,
                         Some("provider_ack_id"),
                         true,
                         reconcile,
@@ -593,19 +665,20 @@ impl Provider {
                 e[format!("{ns}_actions")][&action_id] = json!({"seq":event["action_seq"],"method":event["method"],"approval_kind":event["approval_kind"],"request_id":event["request_id"]});
                 push(
                     &mut e["view"]["actions"],
-                    json!({"action_id":action_id,"owner":"codex","state":"pending","requested_at":self.now}),
+                    json!({"action_id":action_id,"owner":profile.adapter,"state":"pending","requested_at":self.now}),
                 );
                 e["view"]["runtime"] = "requires_action".into();
-                e["view"]["runtime_detail"] = json!({"action_id":action_id,"owner":"codex"});
+                e["view"]["runtime_detail"] =
+                    json!({"action_id":action_id,"owner":profile.adapter});
                 self.execution_event(
                     e,
                     "execution.runtime.changed",
-                    json!({"runtime":"requires_action","action_id":action_id,"owner":"codex"}),
+                    json!({"runtime":"requires_action","action_id":action_id,"owner":profile.adapter}),
                     None,
                 );
             }
-            "thread_settings_guard" => {
-                e[&ns]["thread_settings"] = event["guard"].clone();
+            k if k == profile.guard_event => {
+                e[&ns][profile.guard_key] = event["guard"].clone();
             }
             "control_sent" | "control_response" | "control_rejected"
                 if e[&ns]["deadline_stop"]["control_id"] == event["control_id"] =>
@@ -707,7 +780,7 @@ impl Provider {
                         .as_str()
                         .map(str::to_owned)
                         .unwrap_or_else(|| format!("{id}.invocation-1"));
-                    let observation = json!({"invocation_id":invocation,"basis":"observed","measure":"codex.tokens.total","amount":total,"recorded_at":self.now});
+                    let observation = json!({"invocation_id":invocation,"basis":"observed","measure":profile.usage_measure,"amount":total,"recorded_at":self.now});
                     e["view"]["usage"]["observations"] = json!([observation.clone()]);
                     e["view"]["usage"]["liability"] = "resolved".into();
                     self.execution_event(e, "execution.usage.observed", observation, None);
@@ -740,7 +813,7 @@ impl Provider {
                     );
                 }
             }
-            "app_server_exited" => {
+            k if k == profile.exited_event => {
                 let exit = event["code"]
                     .as_i64()
                     .map(|code| json!({"code":code}))
@@ -756,6 +829,51 @@ impl Provider {
                 e["view"].as_object_mut().unwrap().remove("runtime_detail");
                 self.execution_event(e, "execution.exit.observed", json!({"exit":exit}), None);
             }
+            // An acknowledgment whose proof did not hold is not a delivery.
+            "turn_acknowledged" => e[&ns]["acknowledgment_unproven"] = true.into(),
+
+            // PIO's own decline. It is not an action the caller was asked
+            // about and never becomes one.
+            "request_declined_by_pio" => {
+                push(
+                    &mut e[&ns]["declined_by_pio"],
+                    event["classification"].clone(),
+                );
+            }
+
+            // Containment is the harness's permission rules only, so a target
+            // outside the fixture is an observed effect with unresolved
+            // liability, not a refusal.
+            "tool_uses" => {
+                let record = &event["record"];
+                e[&ns]["tool_uses"] = record.clone();
+                e["view"]["containment"] = record["containment"].clone();
+                if record["out_of_fixture_effect_observed"] == true
+                    || record["unclassifiable_target_count"].as_u64().unwrap_or(0) > 0
+                {
+                    e["view"]["effects_liability"] = "unresolved".into();
+                }
+            }
+
+            // A turn that ended without the message that reports usage leaves
+            // usage unknown, never zero.
+            "result_missing" => {
+                e[&ns]["result_missing"] = true.into();
+                e["view"]["usage"]["liability"] = "unresolved".into();
+            }
+
+            // A harness that ignored the interrupt was killed. Say so, and say
+            // what it cost.
+            "interrupt_escalated" => {
+                e[&ns]["interrupt_escalation"] = json!({
+                    "control_id":event["control_id"],
+                    "from":event["from"],"to":event["to"],
+                    "waited_ms":event["waited_ms"],
+                    "cancel_description":profile.cancel_description,
+                    "usage":"unknown"});
+                e["view"]["usage"]["liability"] = "unresolved".into();
+            }
+
             "host_error" => {
                 e[&ns]["host_error"] = event["error"].clone();
             }
