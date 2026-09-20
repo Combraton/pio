@@ -112,13 +112,15 @@ An as-configured session loads the user's **eleven enabled plugins** with their 
 
 Snapshotted before and after every run, reported by digest with fixture labels: **`~/.claude/settings.json`**, **`~/.claude/settings.local.json`**, **`~/.claude.json`**, and a **listing of the project transcript directory**. PIO edits and removes nothing.
 
+**Everything here is keyed by the session's working directory, which is the workspace repository.** The harness slugs that path for its transcript directory and uses it verbatim for the `projects` entry. The directory a runner happens to create its fixtures in is a parent of the workspace and is neither: keying on it names a path the harness never writes to, so the listing is empty before and after and the diff reports that nothing was written. That is what R1 did; the disclosure below records it. The listing **descends**, because a directory that appears during a run is state the run created.
+
 `settings.local.json` is in the set because it exists on this workstation and carries permission rules of its own; a snapshot that missed it would under-report the user's configured allow list by three entries and miss a bare `Bash(cat)`.
 
 **`~/.claude.json` is volatile and a whole-file digest is not disclosure.** Measured: it holds 109 top-level keys, most of them counters, caches and timestamps — `numStartups`, `promptQueueUseCount`, cached experiment and feature data with fetch times — that change whenever Claude Code starts, whoever started it. A before-and-after digest would report "changed" on every run and tell the reader nothing.
 
 The diff therefore separates:
 
-- **what the run caused**: a new entry under `projects` for the fixture path, including `hasTrustDialogAccepted`, which is this harness's analogue of the Codex trusted-project entry. Note that `--print` skips the workspace trust dialog, so a non-interactive run trusts the directory without asking;
+- **what the run caused**: a new entry under `projects` for the workspace path, including `hasTrustDialogAccepted`, which is this harness's analogue of the Codex trusted-project entry. Note that `--print` skips the workspace trust dialog, so a non-interactive run trusts the directory without asking;
 - **bookkeeping**: counters, caches and timestamps, reported as a count of changed keys and nothing more.
 
 **`oauthAccount` is never recorded, in any form**, not even as a list of its keys: measured, it holds the account's email address, full name, organization name and identifiers.
@@ -206,6 +208,18 @@ The probe committed in `b5e0f6b` **filtered** the environment — dropping varia
 It is now controlled and fixed. A cleared-environment run and an inherited-environment run return identical `permissionMode`, `model`, `capabilities` and name-list lengths, so **no measurement in `b5e0f6b` changed**, and `scripts/claude_requalify.py` now clears the environment for every child.
 
 The same disclosure answers the reviewer's question about that probe reporting `acceptEdits` and Opus. The mode came from a flag the probe itself passed, `--permission-mode acceptEdits`; the control run without the flag reports `default`. The model is the **product default**, reproduced with an empty configuration and a cleared environment, and it is not evidence of a leak — nor, as §8 now records, evidence of fidelity.
+
+### Disclosure: a false durable-state statement in R1
+
+The R1 receipt said `new_transcript_entries: 0`. It was false. `~/.claude/projects/` held a directory for the run's workspace with a 194,375-byte session file and a `memory` directory beside it, both created during the turn.
+
+The cause was the key, not the observation: the host passed the directory fixtures are created in to the snapshot, so the listing slugged that path instead of the workspace beneath it. The slugged directory does not exist and never will, so the before and the after were both empty and the diff subtracted one nothing from another. The same key was used for the `projects` lookup, so `workspace_project_created` was false for the same reason.
+
+The offline matrix could not have caught it: nothing in it exercised the durable diff at all, and the labeled fake wrote no transcript. Both are fixed — the fake now writes the shape the harness writes, and a case asserts the diff reports it.
+
+The same mistake made the **containment boundary** the fixtures area rather than the workspace, which would have called a sibling fixture contained. R1 used no tool, so nothing was misclassified; the boundary is now the workspace and a matrix case proves a sibling is outside.
+
+[R1's receipt](../work/m3/claude-live/R1.json) carries a dated addendum rather than a rewrite, with the directory as observed after the fact.
 
 ## Named unmeasured items and obligations
 

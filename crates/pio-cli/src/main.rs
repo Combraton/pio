@@ -303,7 +303,7 @@ fn run() -> Result<()> {
                     std::io::Read::read_to_string(&mut std::io::stdin(), &mut request)?;
                     let classification = pio_claude::classify_permission_request(
                         &serde_json::from_str(&request)?,
-                        option("--fixture")?,
+                        option("--workspace")?,
                         option("--cwd")?,
                     );
                     println!("{}", serde_json::to_string_pretty(&classification)?);
@@ -322,7 +322,7 @@ fn run() -> Result<()> {
                         "{}",
                         serde_json::to_string_pretty(&pio_claude::tool_use_records(
                             &messages,
-                            option("--fixture")?,
+                            option("--workspace")?,
                             option("--cwd")?
                         ))?
                     );

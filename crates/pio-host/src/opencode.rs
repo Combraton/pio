@@ -90,7 +90,8 @@ impl Rpc {
 
 fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()> {
     let home = PathBuf::from(life.spec["home"].as_str().context("home")?);
-    let fixture = PathBuf::from(life.spec["fixture_root"].as_str().context("fixture_root")?);
+    // The boundary is this run's workspace repository, not the directory
+    // fixtures are created in; see the note in the Claude host.
     let cwd = PathBuf::from(life.spec["cwd"].as_str().context("cwd")?);
     let requested_model = life.spec["model"].as_str().context("model")?.to_owned();
 
@@ -267,7 +268,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         &json!({"request":{"input":input,
                             "tool_name":message["params"]["toolCall"]["kind"],
                             "tool_use_id":message["params"]["toolCall"]["toolCallId"]}}),
-                        &fixture,
+                        &cwd,
                         &cwd,
                     );
                     if classification["disposition"] == "decline" {
@@ -371,7 +372,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
             "name":&call["kind"],"id":&call["toolCallId"],"input":&call["rawInput"]}]}})
         })
         .collect();
-    let tool_uses = pio_claude::tool_use_records(&tool_use_messages, &fixture, &cwd);
+    let tool_uses = pio_claude::tool_use_records(&tool_use_messages, &cwd, &cwd);
     // Ordered deliberately: the exit event is what turns the runtime to
     // `exited`, so everything a caller must see on a finished execution is
     // recorded first. A matrix run caught the other order.

@@ -43,6 +43,8 @@ CASES = [
     'surface_drift_refused',
     # Through the service, which is the only place these can be observed.
     'service_turn_completes',
+    'service_reports_the_transcript_the_run_wrote',
+    'service_records_the_configured_model_from_settings',
     'service_refuses_an_unqualified_executable_at_start',
     'service_answers_a_request_it_will_not_act_on',
     'service_interrupt_escalates_when_the_signal_is_ignored',
@@ -100,9 +102,14 @@ class Case:
         self.config_dir = self.root / 'claude-config'
         self.markers = self.root / 'markers'
         self.work = self.root / 'work'
-        for directory in (self.fixtures, self.config_dir, self.markers, self.work):
+        # The fixtures area holds this run's workspace and could hold another
+        # run's. The workspace is the boundary; its parent never is.
+        self.workspace = self.fixtures / 'workspace'
+        for directory in (self.fixtures, self.config_dir, self.markers, self.work,
+                          self.workspace):
             directory.mkdir()
         (self.fixtures / 'README.md').write_text('PIO M3 offline fixture. No task runs here.\n')
+        (self.workspace / 'README.md').write_text('PIO M3 offline workspace.\n')
         # Stands in for the user's settings: an accept-edits default, so a
         # request for anything else must be refused before a spawn.
         (self.config_dir / 'settings.json').write_text(json.dumps(
@@ -111,7 +118,8 @@ class Case:
         self.wrapper = self.root / 'fake-claude'
         self.wrapper.write_text(f"#!/bin/sh\nexec '{BINARY}' claude fake-cli \"$@\"\n")
         self.wrapper.chmod(0o755)
-        self.scenario = dict(scenario or {}, markers=str(self.markers))
+        self.scenario = dict(scenario or {}, markers=str(self.markers),
+                             config_dir=str(self.config_dir))
         self.config_path = self.root / 'service.json'
         self.config_path.write_text(json.dumps({'claude': {
             'executable': str(executable or self.wrapper),
@@ -145,7 +153,7 @@ class Case:
     def turn(self, decision=None, brief='do the fixture task'):
         """Drive one turn against the fake, answering any permission request."""
         argv = [str(self.wrapper), *STREAM_ARGS, '--permission-mode', 'acceptEdits']
-        child = subprocess.Popen(argv, cwd=str(self.fixtures), env=self.env(),
+        child = subprocess.Popen(argv, cwd=str(self.workspace), env=self.env(),
                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                  text=True, bufsize=1)
         sent = {'type': 'user', 'message': {'role': 'user',
@@ -377,8 +385,8 @@ def run_case(out, name):
                                'input': {'file_path': escape},
                                'tool_use_id': 'toolu_fake_1'}}
         classification = json.loads(subprocess.run(
-            [str(BINARY), 'claude', 'classify-request', '--fixture', str(case.fixtures),
-             '--cwd', str(case.fixtures)],
+            [str(BINARY), 'claude', 'classify-request', '--workspace', str(case.workspace),
+             '--cwd', str(case.workspace)],
             input=json.dumps(request), capture_output=True, text=True, check=True).stdout)
         assert classification['disposition'] == 'decline', classification
         assert classification['reason'] == 'target_outside_the_fixture_workspace', classification
@@ -399,8 +407,8 @@ def run_case(out, name):
                 for b in m['message']['content'] if b.get('type') == 'tool_use']
         assert len(uses) == 1, uses
         record = json.loads(subprocess.run(
-            [str(BINARY), 'claude', 'tool-uses', '--fixture', str(case.fixtures),
-             '--cwd', str(case.fixtures)],
+            [str(BINARY), 'claude', 'tool-uses', '--workspace', str(case.workspace),
+             '--cwd', str(case.workspace)],
             input=''.join(json.dumps(m) + '\n' for m in messages),
             capture_output=True, text=True, check=True).stdout)
         assert record['out_of_fixture_effect_observed'] is True, record
@@ -408,6 +416,22 @@ def run_case(out, name):
         assert record['tool_uses'][0]['target_label'] == '<outside>', record
         # A receipt carries labels and digests, never raw paths.
         assert str(case.fixtures) not in json.dumps(record), record
+        # A sibling fixture is outside too. It sits under the area fixtures are
+        # created in, so a boundary drawn there would have called another run's
+        # workspace contained. No traversal is needed to show it.
+        sibling = case.fixtures / 'another-run' / 'notes.txt'
+        sibling.parent.mkdir(exist_ok=True)
+        sibling.write_text('another run\'s workspace\n')
+        neighbour = json.loads(subprocess.run(
+            [str(BINARY), 'claude', 'classify-request', '--workspace', str(case.workspace),
+             '--cwd', str(case.workspace)],
+            input=json.dumps({'type': 'control_request', 'request_id': 'req_2_fake',
+                              'request': {'subtype': 'can_use_tool', 'tool_name': 'Read',
+                                          'input': {'file_path': str(sibling)},
+                                          'tool_use_id': 'toolu_fake_2'}}),
+            capture_output=True, text=True, check=True).stdout)
+        assert neighbour['disposition'] == 'decline', neighbour
+        assert neighbour['target_label'] == '<outside>', neighbour
 
     elif name == 'unclassifiable_request_surfaced_not_auto_allowed':
         # A shell command names no path PIO can resolve. It is surfaced to the
@@ -418,8 +442,8 @@ def run_case(out, name):
                                'input': {'command': 'cat README.md'},
                                'tool_use_id': 'toolu_fake_1'}}
         classification = json.loads(subprocess.run(
-            [str(BINARY), 'claude', 'classify-request', '--fixture', str(case.fixtures),
-             '--cwd', str(case.fixtures)],
+            [str(BINARY), 'claude', 'classify-request', '--workspace', str(case.workspace),
+             '--cwd', str(case.workspace)],
             input=json.dumps(request), capture_output=True, text=True, check=True).stdout)
         assert classification['disposition'] == 'surface_as_action', classification
         assert classification['placement'] == 'not_classifiable', classification
@@ -539,6 +563,55 @@ def run_case(out, name):
         assert [o['measure'] for o in observations] == ['claude.tokens.total'], observations
         assert observations[0]['amount'] > 0 and observations[0]['basis'] == 'observed', observations
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_reports_the_transcript_the_run_wrote':
+        # The harness writes a session file and a `memory` directory under a
+        # slug of the session's working directory. R1 snapshotted the area
+        # fixtures are created in instead, which names a directory the harness
+        # never writes to, so the receipt reported that nothing had been
+        # written while 194 KB sat on disk. The fake writes the same shape, so
+        # this case fails if the snapshot slugs anything but the workspace.
+        case = ServiceCase(out, name)
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        assert view['exit'] == {'code': 0}, view
+        before = [e for e in case.host_events() if e['kind'] == 'config_before']
+        after = [e for e in case.host_events() if e['kind'] == 'config_after']
+        assert len(before) == 1 and len(after) == 1, case.host_events()
+        # Nothing before the run, and both entries after: the session file and
+        # the nested directory beside it, which a non-recursive listing misses.
+        assert before[0]['snapshot']['transcripts']['entry_count'] == 0, before[0]
+        assert after[0]['snapshot']['transcripts']['exists'] is True, after[0]
+        assert after[0]['snapshot']['transcripts']['entry_count'] == 2, after[0]
+        diff = after[0]['diff']
+        assert diff['new_transcript_entries'] == 2, diff
+        # PIO still changed nothing of the user's own.
+        assert diff['settings_changed'] is False, diff
+        # The directory the harness actually used, named here and nowhere in
+        # the receipt, which carries digests only.
+        slug = str(case.fixtures / 'work').replace('/', '-').replace('.', '-')
+        written = case.config_dir / 'projects' / slug
+        assert written.is_dir(), f'the fake wrote no transcript at {written}'
+        assert (written / 'memory').is_dir(), sorted(p.name for p in written.iterdir())
+        assert slug not in json.dumps(after[0]), 'the snapshot named a path'
+
+    elif name == 'service_records_the_configured_model_from_settings':
+        # The model the user configured is read from their settings. R1 took it
+        # from a service-configuration field that the admission list does not
+        # allow, so it could only ever be absent, and the receipt said the
+        # configuration named no model while it named one.
+        case = ServiceCase(out, name, settings={
+            'model': 'a-configured-model-name',
+            'permissions': {'defaultMode': 'acceptEdits', 'allow': ['Bash(cat)']}})
+        case.start()
+        case.submit()
+        poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        started = [e for e in case.host_events() if e['kind'] == 'session_started']
+        assert len(started) == 1, case.host_events()
+        assert started[0]['configured_model'] == 'a-configured-model-name', started[0]
+        # Nothing was passed, so the two are distinguishable in the receipt.
+        assert started[0]['requested_model'] is None, started[0]
 
     elif name == 'service_refuses_an_unqualified_executable_at_start':
         # A real configuration pointed at something that is not the qualified

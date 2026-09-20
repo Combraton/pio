@@ -236,7 +236,6 @@ impl Provider {
             "labeled_fake":host["labeled_fake"] == true,
             "executable":host["executable"],
             "env":host["env"],
-            "fixture_root":host["fixture_root"],
             "qualification":host["qualification_binding"],
             "cwd":repository,
             "brief":p["payload"]["brief"],
@@ -247,7 +246,6 @@ impl Provider {
                 spec["home"] = host["home"].clone();
                 spec["permission_mode"] = host["permission_mode"].clone();
                 spec["model"] = host["model"].clone();
-                spec["configured_model"] = host["configured_model"].clone();
             }
             "opencode" => {
                 spec["config_dir"] = host["config_dir"].clone();
@@ -259,6 +257,10 @@ impl Provider {
             _ => {
                 spec["codex_home"] = host["codex_home"].clone();
                 spec["thread"] = host["thread"].clone();
+                // Codex alone uses this, to label which projects it recorded
+                // trust for. It is never a containment boundary: the boundary
+                // is the workspace repository, which `cwd` already carries.
+                spec["fixture_root"] = host["fixture_root"].clone();
             }
         }
         e[format!("{ns}_spec")] = spec;

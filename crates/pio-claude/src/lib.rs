@@ -792,13 +792,17 @@ pub fn resolve_target(target: &str, cwd: &Path) -> PathBuf {
 
 /// Where a tool use landed, relative to the fixture workspace.
 ///
+/// The boundary is **this run's workspace repository**, not the directory the
+/// runner creates fixtures in. Measured on R1: those are different paths, and
+/// taking the parent would have called a sibling fixture contained.
+///
 /// A shell command names no path PIO can resolve, so it is reported as
 /// `not_classifiable` rather than assumed to be inside. ADR 004 §5.
-fn classify_target(input: &Value, fixture: &Path, cwd: &Path) -> (Option<String>, &'static str) {
+fn classify_target(input: &Value, workspace: &Path, cwd: &Path) -> (Option<String>, &'static str) {
     for key in TARGET_FIELDS {
         if let Some(target) = input[*key].as_str() {
             let resolved = resolve_target(target, cwd);
-            let placement = if resolved.starts_with(fixture) {
+            let placement = if resolved.starts_with(workspace) {
                 "inside_fixture"
             } else {
                 "outside_fixture"
@@ -811,10 +815,10 @@ fn classify_target(input: &Value, fixture: &Path, cwd: &Path) -> (Option<String>
 
 /// A receipt names a target by digest and a fixture-relative label, never by a
 /// raw path and never by the absolute fixture path, as the Codex receipts did.
-fn target_label(resolved: &Option<String>, fixture: &Path, placement: &str) -> Value {
+fn target_label(resolved: &Option<String>, workspace: &Path, placement: &str) -> Value {
     match (resolved, placement) {
         (Some(path), "inside_fixture") => Path::new(path)
-            .strip_prefix(fixture)
+            .strip_prefix(workspace)
             .map(|rest| json!(format!("<fixture>/{}", rest.display())))
             .unwrap_or_else(|_| json!("<fixture>")),
         (Some(_), _) => json!("<outside>"),
@@ -830,8 +834,8 @@ fn target_label(resolved: &Option<String>, fixture: &Path, placement: &str) -> V
 /// command never produces a permission request — it never reaches PIO at all.
 /// A target outside the fixture is therefore an **observed effect with
 /// unresolved liability**, not a declined request. ADR 004 §5.
-pub fn tool_use_records(messages: &[Value], fixture: &Path, cwd: &Path) -> Value {
-    let fixture = std::fs::canonicalize(fixture).unwrap_or_else(|_| fixture.to_path_buf());
+pub fn tool_use_records(messages: &[Value], workspace: &Path, cwd: &Path) -> Value {
+    let workspace = std::fs::canonicalize(workspace).unwrap_or_else(|_| workspace.to_path_buf());
     let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
     let mut records = Vec::new();
     for message in messages {
@@ -840,12 +844,12 @@ pub fn tool_use_records(messages: &[Value], fixture: &Path, cwd: &Path) -> Value
         };
         for block in blocks.iter().filter(|b| b["type"] == "tool_use") {
             let input = &block["input"];
-            let (resolved, placement) = classify_target(input, &fixture, &cwd);
+            let (resolved, placement) = classify_target(input, &workspace, &cwd);
             let digest_source = resolved.clone().unwrap_or_else(|| input.to_string());
             records.push(json!({
                 "tool": &block["name"],
                 "tool_use_id": &block["id"],
-                "target_label": target_label(&resolved, &fixture, placement),
+                "target_label": target_label(&resolved, &workspace, placement),
                 "target_sha256": sha256_hex(digest_source.as_bytes()),
                 "placement": placement,
             }));
@@ -855,12 +859,12 @@ pub fn tool_use_records(messages: &[Value], fixture: &Path, cwd: &Path) -> Value
     let outside = count("outside_fixture");
     let unclassified = count("not_classifiable");
     json!({
-        "format":"pio-claude-tool-uses/2",
+        "format":"pio-claude-tool-uses/3",
         "containment":{
             "mechanism":"harness_permission_rules_only",
             "os_sandbox_observed":false,
         },
-        "fixture_sha256":sha256_hex(fixture.display().to_string().as_bytes()),
+        "workspace_sha256":sha256_hex(workspace.display().to_string().as_bytes()),
         "tool_uses":records,
         "out_of_fixture_effect_observed":outside > 0,
         "out_of_fixture_count":outside,
@@ -875,11 +879,11 @@ pub fn tool_use_records(messages: &[Value], fixture: &Path, cwd: &Path) -> Value
 /// the reason recorded. Anything else — including a shell command, whose
 /// targets PIO cannot resolve — is **surfaced to the caller as a Protocol
 /// action**. PIO never auto-allows: an allow is always somebody's decision.
-pub fn classify_permission_request(request: &Value, fixture: &Path, cwd: &Path) -> Value {
-    let fixture = std::fs::canonicalize(fixture).unwrap_or_else(|_| fixture.to_path_buf());
+pub fn classify_permission_request(request: &Value, workspace: &Path, cwd: &Path) -> Value {
+    let workspace = std::fs::canonicalize(workspace).unwrap_or_else(|_| workspace.to_path_buf());
     let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
     let input = &request["request"]["input"];
-    let (resolved, placement) = classify_target(input, &fixture, &cwd);
+    let (resolved, placement) = classify_target(input, &workspace, &cwd);
     let (disposition, reason) = match placement {
         "outside_fixture" => ("decline", "target_outside_the_fixture_workspace"),
         "inside_fixture" => (
@@ -896,7 +900,7 @@ pub fn classify_permission_request(request: &Value, fixture: &Path, cwd: &Path) 
         "tool_name":&request["request"]["tool_name"],
         "tool_use_id":&request["request"]["tool_use_id"],
         "placement":placement,
-        "target_label":target_label(&resolved, &fixture, placement),
+        "target_label":target_label(&resolved, &workspace, placement),
         "target_sha256":resolved.as_ref().map(|r| sha256_hex(r.as_bytes())),
         "disposition":disposition,
         "reason":reason,
@@ -917,7 +921,7 @@ pub const NEVER_RECORDED: &[&str] = &["oauthAccount"];
 ///
 /// Reported by digest and by fixture-relative label. PIO edits and removes
 /// nothing; this only observes. ADR 004 §7.
-pub fn durable_snapshot(home: &Path, config_dir: &Path, fixture: &Path) -> Result<Value> {
+pub fn durable_snapshot(home: &Path, config_dir: &Path, workspace: &Path) -> Result<Value> {
     let settings = settings_snapshot(config_dir)?;
     let state_path = home.join(".claude.json");
     let state: Value = std::fs::read(&state_path)
@@ -932,13 +936,14 @@ pub fn durable_snapshot(home: &Path, config_dir: &Path, fixture: &Path) -> Resul
                 .collect()
         })
         .unwrap_or_default();
-    // The project entry for the fixture is what a run causes; everything else
-    // in this file is bookkeeping.
-    let fixture_key = fixture.display().to_string();
-    let project = &state["projects"][&fixture_key];
-    let transcripts = transcript_listing(config_dir, fixture);
+    // The project entry for the workspace is what a run causes; everything
+    // else in this file is bookkeeping. The harness keys this by the session's
+    // working directory, so anything else names an entry that never exists.
+    let workspace_key = workspace.display().to_string();
+    let project = &state["projects"][&workspace_key];
+    let transcripts = transcript_listing(config_dir, workspace);
     Ok(json!({
-        "format":"pio-claude-durable-snapshot/1",
+        "format":"pio-claude-durable-snapshot/2",
         "settings":settings,
         "claude_json":{
             "exists":state_path.exists(),
@@ -947,7 +952,7 @@ pub fn durable_snapshot(home: &Path, config_dir: &Path, fixture: &Path) -> Resul
                 .collect::<Vec<_>>().join("\n").as_bytes()),
             "account_fields_recorded":false,
         },
-        "fixture_project":{
+        "workspace_project":{
             "present":!project.is_null(),
             "has_trust_dialog_accepted":project["hasTrustDialogAccepted"],
             "usage":{
@@ -962,21 +967,37 @@ pub fn durable_snapshot(home: &Path, config_dir: &Path, fixture: &Path) -> Resul
 
 /// A listing of the project transcript directory: names by digest and a count,
 /// never their contents.
-fn transcript_listing(config_dir: &Path, fixture: &Path) -> Value {
-    // Claude Code stores a project's transcripts under a slug of its path.
-    let slug = fixture.display().to_string().replace(['/', '.'], "-");
+///
+/// Claude Code stores a project's transcripts under a slug of **the session's
+/// working directory**, which is the workspace repository. R1 slugged the
+/// directory fixtures are created in instead, which names a path the harness
+/// never writes to, so the listing reported an empty before and an empty after
+/// and the diff said nothing had been written. It had: a session file and a
+/// `memory` directory. Nested entries are counted for the same reason — a
+/// directory that appears during a run is state the run created.
+fn transcript_listing(config_dir: &Path, workspace: &Path) -> Value {
+    let slug = workspace.display().to_string().replace(['/', '.'], "-");
     let directory = config_dir.join("projects").join(&slug);
-    let entries: Vec<String> = std::fs::read_dir(&directory)
-        .map(|dir| {
-            let mut names: Vec<String> = dir
-                .filter_map(|entry| entry.ok())
-                .map(|entry| sha256_hex(entry.file_name().as_encoded_bytes()))
-                .collect();
-            names.sort();
-            names
-        })
-        .unwrap_or_default();
+    let mut entries = Vec::new();
+    walk_entries(&directory, &directory, &mut entries);
+    entries.sort();
     json!({"exists":directory.exists(),"entry_count":entries.len(),"entry_digests":entries})
+}
+
+/// Every entry under `directory`, directories included, digested by its path
+/// relative to `root`. Names are never recorded, only their digests.
+fn walk_entries(root: &Path, directory: &Path, entries: &mut Vec<String>) {
+    let Ok(listing) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in listing.filter_map(|entry| entry.ok()) {
+        let path = entry.path();
+        let relative = path.strip_prefix(root).unwrap_or(&path);
+        entries.push(sha256_hex(relative.as_os_str().as_encoded_bytes()));
+        if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            walk_entries(root, &path, entries);
+        }
+    }
 }
 
 /// What changed between two snapshots, separating what the run caused from
@@ -986,18 +1007,18 @@ pub fn durable_diff(before: &Value, after: &Value) -> Value {
     let new_transcripts = after["transcripts"]["entry_count"].as_u64().unwrap_or(0) as i64
         - before["transcripts"]["entry_count"].as_u64().unwrap_or(0) as i64;
     json!({
-        "format":"pio-claude-durable-diff/1",
+        "format":"pio-claude-durable-diff/2",
         // PIO edits and removes nothing, so this must always be false.
         "settings_changed":settings_changed,
-        "fixture_project_created":before["fixture_project"]["present"] == false
-            && after["fixture_project"]["present"] == true,
-        "fixture_project_trusted_without_asking":
-            after["fixture_project"]["has_trust_dialog_accepted"] == true
-            && before["fixture_project"]["has_trust_dialog_accepted"] != true,
+        "workspace_project_created":before["workspace_project"]["present"] == false
+            && after["workspace_project"]["present"] == true,
+        "workspace_project_trusted_without_asking":
+            after["workspace_project"]["has_trust_dialog_accepted"] == true
+            && before["workspace_project"]["has_trust_dialog_accepted"] != true,
         "claude_json_key_count_changed":
             before["claude_json"]["top_level_key_count"] != after["claude_json"]["top_level_key_count"],
         "new_transcript_entries":new_transcripts,
-        "usage_secondary":after["fixture_project"]["usage"],
+        "usage_secondary":after["workspace_project"]["usage"],
     })
 }
 

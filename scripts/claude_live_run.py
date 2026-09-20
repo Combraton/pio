@@ -254,12 +254,16 @@ class Service:
             # it is exercising the runner, not the owner's machine.
             config_dir = private_dir(self.run, RUN_ID, 'claude-config')
             (config_dir / 'settings.json').write_text(json.dumps(
-                {'permissions': {'defaultMode': PERMISSION_MODE, 'allow': ['Bash(cat)']}}))
+                {'model': 'a-stand-in-model-name',
+                 'permissions': {'defaultMode': PERMISSION_MODE, 'allow': ['Bash(cat)']}}))
             executable = self.private / 'fake-claude'
             executable.write_text(f"#!/bin/sh\nexec '{BINARY}' claude fake-cli \"$@\"\n")
             executable.chmod(0o755)
             env['PIO_CLAUDE_FAKE_SCENARIO'] = json.dumps(
-                {'markers': str(self.private / 'markers')})
+                {'markers': str(self.private / 'markers'),
+                 # The fake writes a transcript where the real harness does,
+                 # under its own stand-in configuration directory.
+                 'config_dir': str(config_dir)})
         else:
             config_dir = HOME / '.claude'
             executable = Path(shutil.which('claude') or '/opt/homebrew/bin/claude')

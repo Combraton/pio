@@ -1,4 +1,50 @@
 {
+  "addenda": [
+    {
+      "boundary_note": "the same key was the containment boundary, which would have called a sibling fixture contained. R1 used no tool, so nothing was misclassified.",
+      "cause": "the host passed the directory fixtures are created in to the durable snapshot, so the transcript listing and the `projects` lookup were keyed by that path instead of the workspace repository beneath it. The harness keys both by the session working directory. The slugged directory does not exist, so the before and the after were both empty and the diff subtracted one nothing from another. `model.configured` came from a service-configuration field the admission list does not permit, so it could only ever be absent.",
+      "corrected_by": {
+        "adr": "docs/decisions/004-claude-code-adapter.md \u00a77 and its disclosure",
+        "offline_cases": [
+          "service_reports_the_transcript_the_run_wrote",
+          "service_records_the_configured_model_from_settings",
+          "out_of_fixture_request_declined_by_pio (sibling assertion)"
+        ],
+        "unit_test": "the_transcript_listing_follows_the_session_working_directory"
+      },
+      "date": "2026-09-20",
+      "not_affected": [
+        "delivery, its evidence and its proof class",
+        "the usage parts and the ledger",
+        "the permission check and the containment statement",
+        "settings_changed, which was false and is false: PIO changed nothing of the user's own"
+      ],
+      "raised_by": "independent review of commit 6026436",
+      "reason": "false_durable_state_statement",
+      "receipt_rewritten": false,
+      "what_is_on_disk": {
+        "note_on_the_model": "the configured model is an alias; the effective model recorded above resolves it. The product default is also Opus, so effective_proves_fidelity stays false",
+        "note_on_the_project_entry": "the run created a transcript directory but no `projects` entry, so that half of the statement was right for the wrong reason",
+        "observed": "after the fact, from the directory as it stands",
+        "settings_model": "opus[1m]",
+        "transcripts": {
+          "entry_count": 2,
+          "entry_digests": [
+            "aca07d64fde19729cb618656995729eff9c38463fc2d68bd183e55bddc9c8bf2",
+            "c064fbca9d9de8dd9bb0624984403b28d0da807a69365d4f7fb09123ecb0c405"
+          ],
+          "exists": true,
+          "note": "a session file of 194,375 bytes and an empty directory beside it, both created during the turn; counted the way the corrected listing counts, which descends"
+        },
+        "workspace_project_present": false
+      },
+      "what_the_receipt_claimed": {
+        "durable_state.fixture_project_created": false,
+        "durable_state.new_transcript_entries": 0,
+        "model.configured": null
+      }
+    }
+  ],
   "binary_sha256": "1f1a79357c8b4e0a27d04f47bc0fc1074f0519f8f56186d22f16cbb9fa411ae4",
   "commit": "ef2e531e0fc4598b032d116742f6c5ff8e53ef02",
   "completion_is_acceptance": false,

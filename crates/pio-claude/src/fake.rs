@@ -91,6 +91,32 @@ fn init_message(scenario: &Value, args: &[String]) -> Value {
     init
 }
 
+/// The real harness keeps a session transcript under a slug of **the
+/// session's working directory**, with a `memory` directory beside it, both
+/// created during the turn. Measured on the R1 live run, after a receipt had
+/// claimed nothing was written.
+///
+/// The fake reproduces that shape — an empty directory and a one-line file,
+/// never content — so an offline case can catch a snapshot that slugs any
+/// other path. The scenario names the configuration directory because an
+/// as-configured run is not passed `CLAUDE_CONFIG_DIR`.
+fn write_transcript(scenario: &Value) -> Result<()> {
+    let Some(config_dir) = scenario["config_dir"].as_str() else {
+        return Ok(());
+    };
+    let slug = std::env::current_dir()?
+        .display()
+        .to_string()
+        .replace(['/', '.'], "-");
+    let directory = PathBuf::from(config_dir).join("projects").join(slug);
+    std::fs::create_dir_all(directory.join("memory"))?;
+    std::fs::write(
+        directory.join("fake-session.jsonl"),
+        format!("{{\"source\":\"{SOURCE}\"}}\n"),
+    )?;
+    Ok(())
+}
+
 fn assistant(content: Value) -> Value {
     json!({"type":"assistant","message":{"role":"assistant","content":content},"source":SOURCE})
 }
@@ -285,6 +311,8 @@ pub fn run() -> Result<()> {
     emit(&assistant(json!([{
         "type":"text",
         "text":scenario["agent_text"].as_str().unwrap_or("fake turn complete")}])))?;
+
+    write_transcript(&scenario)?;
 
     let total = scenario["usage_total"].as_u64().unwrap_or(128);
     emit(&json!({

@@ -79,14 +79,24 @@ pub fn claude_host(root: &Path, command: &str, invocation_id: &str) -> Result<()
 fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()> {
     let home = PathBuf::from(life.spec["home"].as_str().context("home")?);
     let config_dir = PathBuf::from(life.spec["config_dir"].as_str().context("config_dir")?);
-    let fixture = PathBuf::from(life.spec["fixture_root"].as_str().context("fixture_root")?);
+    // The session's working directory is the workspace repository; the launch
+    // spec sets it from the submitted workspace. It is both the boundary for
+    // the out-of-fixture classifier and the path the harness slugs its
+    // transcript directory by. The directory fixtures are created in is a
+    // parent of it and is never either: taking it called a sibling fixture
+    // contained and named a transcript directory that never exists, which is
+    // how R1 came to report durable state it had in fact caused.
     let cwd = PathBuf::from(life.spec["cwd"].as_str().context("cwd")?);
     let requested = life.spec["permission_mode"]
         .as_str()
         .context("permission_mode")?
         .to_owned();
 
-    let before = pio_claude::durable_snapshot(&home, &config_dir, &fixture)?;
+    let before = pio_claude::durable_snapshot(&home, &config_dir, &cwd)?;
+    // The model the user's settings name. Read from the snapshot, because the
+    // service configuration need not carry it and a missing field there is
+    // indistinguishable from a configuration that names no model.
+    let configured_model = before["settings"]["model"].clone();
     life.event(json!({"kind":"config_before","snapshot":before}))?;
 
     // Refused before the spawn: a mode that is not the user's configured
@@ -186,7 +196,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         // check cannot precede delivery.
                         "checked_after_delivery":true,
                         "api_key_source":message["apiKeySource"],
-                        "configured_model":life.spec["configured_model"],
+                        "configured_model":configured_model,
                         "requested_model":life.spec["model"],
                         "model":message["model"],
                         "capabilities":message["capabilities"],
@@ -232,7 +242,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                 "control_request" if message["request"]["subtype"] == "can_use_tool" => {
                     action_seq += 1;
                     let classification =
-                        pio_claude::classify_permission_request(&message, &fixture, &cwd);
+                        pio_claude::classify_permission_request(&message, &cwd, &cwd);
                     if classification["disposition"] == "decline" {
                         // PIO's own decline, not a caller's decision.
                         let decision = pio_claude::permission_decision(
@@ -375,9 +385,9 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
 
     child.close_stdin();
     let exit = life.stop(&mut child.child)?;
-    let after = pio_claude::durable_snapshot(&home, &config_dir, &fixture)?;
+    let after = pio_claude::durable_snapshot(&home, &config_dir, &cwd)?;
     let diff = pio_claude::durable_diff(&before, &after);
-    let tool_uses = pio_claude::tool_use_records(&tool_use_messages, &fixture, &cwd);
+    let tool_uses = pio_claude::tool_use_records(&tool_use_messages, &cwd, &cwd);
     // Ordered deliberately: the exit event is what turns the runtime to
     // `exited`, so everything a caller must see on a finished execution is
     // recorded first. A matrix run caught the other order.

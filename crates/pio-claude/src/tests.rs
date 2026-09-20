@@ -774,18 +774,20 @@ fn a_route_that_depends_on_user_is_observed_only_when_user_is_passed() {
     );
 }
 
-fn durable_fixture(dir: &Path) -> (PathBuf, PathBuf, PathBuf) {
+/// A home, a configuration directory and **this run's workspace**, which sits
+/// inside the area fixtures are created in rather than being it.
+fn durable_workspace(dir: &Path) -> (PathBuf, PathBuf, PathBuf) {
     let home = dir.join("home");
     let config = home.join(".claude");
-    let fixture = dir.join("fixture");
+    let workspace = dir.join("fixtures").join("workspace");
     std::fs::create_dir_all(&config).unwrap();
-    std::fs::create_dir_all(&fixture).unwrap();
+    std::fs::create_dir_all(&workspace).unwrap();
     std::fs::write(
         config.join("settings.json"),
         r#"{"permissions":{"defaultMode":"acceptEdits","allow":["Bash(cat)"]}}"#,
     )
     .unwrap();
-    (home, config, fixture)
+    (home, config, workspace)
 }
 
 /// `~/.claude.json` holds the account's email, name and organization under
@@ -793,7 +795,7 @@ fn durable_fixture(dir: &Path) -> (PathBuf, PathBuf, PathBuf) {
 #[test]
 fn a_durable_snapshot_never_records_the_account() {
     let dir = tempfile::tempdir().unwrap();
-    let (home, config, fixture) = durable_fixture(dir.path());
+    let (home, config, workspace) = durable_workspace(dir.path());
     std::fs::write(
         home.join(".claude.json"),
         json!({
@@ -805,7 +807,7 @@ fn a_durable_snapshot_never_records_the_account() {
         .to_string(),
     )
     .unwrap();
-    let snapshot = durable_snapshot(&home, &config, &fixture).unwrap();
+    let snapshot = durable_snapshot(&home, &config, &workspace).unwrap();
     let text = serde_json::to_string(&snapshot).unwrap();
     for leaked in [
         "person@example.invalid",
@@ -824,41 +826,85 @@ fn a_durable_snapshot_never_records_the_account() {
 #[test]
 fn a_diff_separates_what_the_run_caused_from_bookkeeping() {
     let dir = tempfile::tempdir().unwrap();
-    let (home, config, fixture) = durable_fixture(dir.path());
+    let (home, config, workspace) = durable_workspace(dir.path());
     let state = home.join(".claude.json");
     std::fs::write(&state, json!({"numStartups":7,"projects":{}}).to_string()).unwrap();
-    let before = durable_snapshot(&home, &config, &fixture).unwrap();
+    let before = durable_snapshot(&home, &config, &workspace).unwrap();
 
     std::fs::write(
         &state,
         json!({"numStartups": 8, "promptQueueUseCount": 3,
-               "projects": {fixture.display().to_string(): {
+               "projects": {workspace.display().to_string(): {
                    "hasTrustDialogAccepted": true,
                    "lastTotalInputTokens": 120, "lastCost": 0.01}}})
         .to_string(),
     )
     .unwrap();
-    let after = durable_snapshot(&home, &config, &fixture).unwrap();
+    let after = durable_snapshot(&home, &config, &workspace).unwrap();
     let diff = durable_diff(&before, &after);
 
-    assert_eq!(diff["fixture_project_created"], true);
-    assert_eq!(diff["fixture_project_trusted_without_asking"], true);
+    assert_eq!(diff["workspace_project_created"], true);
+    assert_eq!(diff["workspace_project_trusted_without_asking"], true);
     assert_eq!(diff["claude_json_key_count_changed"], true);
     // PIO edits and removes nothing, so the settings must never move.
     assert_eq!(diff["settings_changed"], false);
     assert_eq!(diff["usage_secondary"]["last_total_input_tokens"], 120);
 }
 
+/// The harness slugs the session's working directory. R1 slugged the area
+/// fixtures are created in, a path the harness never writes to, so the listing
+/// was empty before and after and the diff reported nothing written while a
+/// 194 KB session file and a `memory` directory sat on disk.
+#[test]
+fn the_transcript_listing_follows_the_session_working_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, config, workspace) = durable_workspace(dir.path());
+    let before = durable_snapshot(&home, &config, &workspace).unwrap();
+    assert_eq!(before["transcripts"]["exists"], false);
+    assert_eq!(before["transcripts"]["entry_count"], 0);
+
+    let slug = |path: &Path| path.display().to_string().replace(['/', '.'], "-");
+    // What the harness writes: a session file and a directory beside it. The
+    // directory is empty in the run this was measured from; a file is put in
+    // it here because a listing that does not descend would otherwise report
+    // the same count and this assertion would prove nothing.
+    let written = config.join("projects").join(slug(&workspace));
+    std::fs::create_dir_all(written.join("memory")).unwrap();
+    std::fs::write(written.join("session.jsonl"), "{}\n").unwrap();
+    std::fs::write(written.join("memory").join("note.md"), "nested\n").unwrap();
+    // What a snapshot of the parent would have read instead. Nothing here may
+    // ever reach the listing, however much of it there is.
+    let parent = config
+        .join("projects")
+        .join(slug(workspace.parent().unwrap()));
+    std::fs::create_dir_all(&parent).unwrap();
+    for name in ["decoy-a.jsonl", "decoy-b.jsonl", "decoy-c.jsonl"] {
+        std::fs::write(parent.join(name), "{}\n").unwrap();
+    }
+
+    let after = durable_snapshot(&home, &config, &workspace).unwrap();
+    assert_eq!(after["transcripts"]["exists"], true);
+    // The file, the directory beside it and the file within: three, not the
+    // two a listing that stops at the top would report, and never the decoys.
+    assert_eq!(after["transcripts"]["entry_count"], 3);
+    assert_eq!(durable_diff(&before, &after)["new_transcript_entries"], 3);
+    // Names never appear, only digests of paths relative to the listing root.
+    let text = serde_json::to_string(&after).unwrap();
+    for name in ["session.jsonl", "memory", "note.md", "decoy-a.jsonl"] {
+        assert!(!text.contains(name), "the listing named {name}");
+    }
+}
+
 #[test]
 fn a_settings_change_is_reported_because_pio_must_never_cause_one() {
     let dir = tempfile::tempdir().unwrap();
-    let (home, config, fixture) = durable_fixture(dir.path());
-    let before = durable_snapshot(&home, &config, &fixture).unwrap();
+    let (home, config, workspace) = durable_workspace(dir.path());
+    let before = durable_snapshot(&home, &config, &workspace).unwrap();
     std::fs::write(
         config.join("settings.json"),
         r#"{"permissions":{"defaultMode":"acceptEdits","allow":["Bash(cat)","Bash(rm)"]}}"#,
     )
     .unwrap();
-    let after = durable_snapshot(&home, &config, &fixture).unwrap();
+    let after = durable_snapshot(&home, &config, &workspace).unwrap();
     assert_eq!(durable_diff(&before, &after)["settings_changed"], true);
 }
