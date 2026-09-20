@@ -81,6 +81,22 @@ PIO never selects a model outside a dated, owner-authorized exception, as ADR 00
 
 A private instance **watches the user's home directory and `~/.config/opencode`** while it runs. That is recorded as an observed outward surface, the way `messaging_socket_path` is for Claude. `OPENCODE_DISABLE_FILEWATCHER` exists; using it would change how the harness runs and is not used.
 
+### 7. Delivery: this harness acknowledges nothing, and that weakens the proof
+
+**Measured:** an ACP session's messages up to and including `session/new` are `initialize`'s result, a `session/update` carrying `available_commands_update`, and `session/new`'s result. `session/prompt` is a JSON-RPC **request whose response arrives at the end of the turn**, carrying `stopReason`. There is no acknowledgment of the prompt itself.
+
+So OpenCode gives PIO **no delivery acknowledgment**, and this is a real difference from both existing adapters rather than a gap in the measurement:
+
+| Harness | What proves delivery | Proof class |
+| --- | --- | --- |
+| Codex | the `turn/start` response, carrying a turn id | `provider_ack_id` |
+| Claude Code | the replay echo of the exact message sent | `provider_ack_id` |
+| **OpenCode** | **nothing the harness sends says "I received it"** | **none** |
+
+The strongest honest statement is that the first `session/update` after a prompt shows the harness acting on it. That is evidence of receipt, but it is **not an identifier the provider returned**, so PIO records delivery as `acknowledged` with evidence class `native_session_update` and **no proof class**, rather than borrowing a proof class it has not earned.
+
+The consequence is stated rather than worked around: on an ambiguous outcome — a host lost after release, say — OpenCode gives less to reconcile with than Codex or Claude Code, so more outcomes stay `ambiguous`. Whether a prompt acknowledgment exists under some other ACP option is an open question below, not an assumption.
+
 ## Open, to be measured before any live run
 
 1. **The `session/request_permission` request and response shapes on the wire.** ACP specifies them; they are unverified against 2.0.1, and PIO forwards no decision whose single-use form it has not measured.
@@ -88,6 +104,7 @@ A private instance **watches the user's home directory and `~/.config/opencode`*
 3. **Cancellation**: `session/cancel` semantics, and whether a cancelled turn still reports usage.
 4. Whether `mode: plan` is a genuinely narrower posture worth requesting for fixture runs.
 5. The **surface and session identity** to pin, and whether npm self-update moves it, as the Homebrew cask does for Claude.
+6. Whether any ACP option yields a **prompt acknowledgment** (§7). Until one is measured, delivery carries no proof class for this harness.
 
 ## Budget and stops (owner decision, 2026-09-20)
 
