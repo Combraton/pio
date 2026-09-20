@@ -185,6 +185,18 @@ A run's receipt carries `delivery_proof_class: null`, because this harness retur
 
 **Both service-backed matrices clean up after a failure, not only after a pass.** Each case registers itself and is released in a `finally`, because cleanup on the success path alone left six daemons running, parented to init, and 949 store directories on `/tmp` during development. A deliberate failure now leaves no process and no directory behind, and that is checked by forcing one.
 
+## The live runners
+
+`scripts/claude_live_run.py` and `scripts/opencode_live_run.py` drive the owner's installed harnesses through `pio serve-claude` and `pio serve-opencode` exactly as the plans on issues #7 and #10 state. **Both take `--dry-run`, which drives the labeled fake through the same service and the same code path**, so CI exercises the runners themselves with no harness installed and no model call.
+
+Every submit carries a **120 second delivery timeout and a 600 second execution deadline**, and the deadline stop is the one already built into the host.
+
+The cap's measure is **input, output, cache creation and cache read, summed, and reported separately** in every receipt. ACP reports input and output only, and the receipt says so rather than implying the other two were zero.
+
+Stop rules are applied to every finished run and abort the sequence: no usage report (recorded as **unknown, never zero**), a usage report that parses to zero while the harness sent something, an effective permission mode that did not match the requested one, a change to the owner's settings, the owner's OpenCode service moving, or cumulative usage reaching 80 per cent of the cap.
+
+The zero-parse stop exists because the first OpenCode dry run produced a receipt claiming a *reported* usage of zero: ACP spells its counters in camelCase and the measure read the Claude spellings. A reported zero is indistinguishable from unknown and worse than either.
+
 ## The shared host lifecycle
 
 Codex, Claude Code and OpenCode differ in the protocol they speak and in nothing else that matters to the host. `pio_host::harness::Lifecycle` holds the part that is literally shared, once: detach and the M1 launch fences (invocation identity, no launch already recorded, host slot free), the claim, the guard event that refuses a request broader than the user's configured default, the spawn marker binding the child to the qualification record, the park, the **release gate** held across the first native write, the append-only event file, the control file with at-most-once application, the deadline stop, and the receipt or the known-not-released failure.

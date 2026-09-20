@@ -48,6 +48,10 @@ jobs:
         run: PYTHONPATH=scripts python3 scripts/claude_host_matrix.py --out target/claude-host --repetitions 3
       - name: Offline OpenCode adapter matrix (labeled fake ACP server)
         run: PYTHONPATH=scripts python3 scripts/opencode_host_matrix.py --out target/opencode-host --repetitions 3
+      - name: Live runners, dry run against the labeled fakes
+        run: |
+          PYTHONPATH=scripts python3 scripts/claude_live_run.py --run R1 --dry-run --out target/claude-dry
+          PYTHONPATH=scripts python3 scripts/opencode_live_run.py --run R1 --dry-run --out target/opencode-dry
       - name: Start isolated runner user manager
         if: runner.os == 'Linux'
         run: |

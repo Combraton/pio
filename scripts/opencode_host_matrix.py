@@ -14,6 +14,7 @@ a different model, **no prompt is ever sent**.
 Each case runs three times; a case passes only when all three agree.
 """
 import argparse
+import case_cleanup
 import json
 import os
 from pathlib import Path
@@ -209,7 +210,9 @@ class Case:
     def cleanup(self):
         if self in LIVE_CASES:
             LIVE_CASES.remove(self)
-        shutil.rmtree(self.root, ignore_errors=True)
+        # Kills anything still naming this store and asserts none survives,
+        # so a host that refuses to exit is a failure rather than a leak.
+        case_cleanup.release(self.root)
 
 
 class ServiceCase(Case):
