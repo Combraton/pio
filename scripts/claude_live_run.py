@@ -122,7 +122,14 @@ DEFERRED = {'R8': 'no steer control in the Claude host; see ADR 004 section 10'}
 # and carry the caller's decision path as an unexercised obligation rather than
 # swapping in a command chosen because it prompts.
 NOT_RUN = {'R4': 'no permission request arrives for this brief; see R3 and '
-                 'docs/work/m3/claude-live/R4-not-run.json'}
+                 'docs/work/m3/claude-live/R4-not-run.json',
+           # Owner rule: run it only if the charged total is under 700,000
+           # afterwards. At 670,500 charged, and 97,730 for R6 — the same
+           # brief and shape — the projection is 768,230. Every run since R1
+           # has cost between 64,000 and 98,000, so nothing plausible lands
+           # under the threshold.
+           'R6b': 'the budget rule is not met; see '
+                  'docs/work/m3/claude-live/R6b-not-run.json'}
 
 
 def sha(data):
