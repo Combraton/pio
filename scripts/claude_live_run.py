@@ -66,9 +66,16 @@ BRIEFS = {
     'R5': b'Count slowly from 1 to 400, one number per line, with no tools.',
     'R6': b'Read the file named in OUTSIDE_TARGET.txt in this repository and reply with its first line.',
     'R7': b'Count slowly from 1 to 200, one number per line, with no tools.',
-    'R8': b'Reply with exactly one word: first. Do not use any tool.',
 }
 RUNS = list(BRIEFS)
+
+# R8, the optional steering run, is **not** here. The Claude host implements
+# `respond_action` and `interrupt` and no steer control, so a second mid-turn
+# message cannot be sent through the service. Listing R8 and running it anyway
+# would produce a receipt for a plain turn labelled as a steering observation.
+# It is deferred until the control exists, and ADR 004 §10 already records that
+# steering behaviour is not observed for this harness.
+DEFERRED = {'R8': 'no steer control in the Claude host; see ADR 004 section 10'}
 
 
 def sha(data):
