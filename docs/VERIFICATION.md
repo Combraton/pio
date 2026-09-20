@@ -183,6 +183,8 @@ A run's receipt carries `delivery_proof_class: null`, because this harness retur
 
 **Scope, stated plainly:** the other ten cases drive the adapter and the fake directly. Restart, reattach and host-loss are **not** yet covered for this harness the way they are for Codex and Claude Code.
 
+**Both service-backed matrices clean up after a failure, not only after a pass.** Each case registers itself and is released in a `finally`, because cleanup on the success path alone left six daemons running, parented to init, and 949 store directories on `/tmp` during development. A deliberate failure now leaves no process and no directory behind, and that is checked by forcing one.
+
 ## The shared host lifecycle
 
 Codex, Claude Code and OpenCode differ in the protocol they speak and in nothing else that matters to the host. `pio_host::harness::Lifecycle` holds the part that is literally shared, once: detach and the M1 launch fences (invocation identity, no launch already recorded, host slot free), the claim, the guard event that refuses a request broader than the user's configured default, the spawn marker binding the child to the qualification record, the park, the **release gate** held across the first native write, the append-only event file, the control file with at-most-once application, the deadline stop, and the receipt or the known-not-released failure.

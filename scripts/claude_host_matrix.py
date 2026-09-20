@@ -68,6 +68,21 @@ def poll(action, predicate, seconds=60):
     raise AssertionError(f'bounded observation timed out; last={json.dumps(last)[:1500]}')
 
 
+# Every case registers itself, so a failing assertion cannot leak a daemon or
+# its store. Cleanup on the success path alone left six services running,
+# parented to init, during this adapter's development.
+LIVE_CASES = []
+
+
+def release_live_cases():
+    while LIVE_CASES:
+        case = LIVE_CASES.pop()
+        try:
+            case.cleanup()
+        except Exception:
+            pass
+
+
 class Case:
     """One offline case: a fixture workspace, a labeled fake, and a settings
     file standing in for the user's own."""
@@ -108,6 +123,7 @@ class Case:
             config = json.loads(self.config_path.read_text())
             config['claude']['env']['PIO_CLAUDE_FAKE_SCENARIO'] = json.dumps(self.scenario)
             self.config_path.write_text(json.dumps(config))
+        LIVE_CASES.append(self)
 
     def env(self):
         return {'PATH': '/usr/bin:/bin', 'HOME': str(self.root),
@@ -159,6 +175,8 @@ class Case:
                 if line.strip() and json.loads(line)['event'] == event]
 
     def cleanup(self):
+        if self in LIVE_CASES:
+            LIVE_CASES.remove(self)
         shutil.rmtree(self.root, ignore_errors=True)
 
 
@@ -638,6 +656,8 @@ def main():
             except Exception as error:
                 results.append((name, repetition, 'fail', repr(error)))
                 failures.append((name, repetition, repr(error)))
+            finally:
+                release_live_cases()
     summary = dict(format='pio-claude-host-matrix/1', platform=platform.platform(),
                    harness='pio-fake-claude-cli', model_calls=0, live_run=False,
                    cases=len(selected), repetitions=args.repetitions,

@@ -119,6 +119,21 @@ class Acp:
         self.child.wait(timeout=10)
 
 
+# Every case registers itself, so a failing assertion cannot leak a daemon or
+# its store. Cleanup on the success path alone left six services running,
+# parented to init, during this adapter's development.
+LIVE_CASES = []
+
+
+def release_live_cases():
+    while LIVE_CASES:
+        case = LIVE_CASES.pop()
+        try:
+            case.cleanup()
+        except Exception:
+            pass
+
+
 class Case:
     def __init__(self, out, name, scenario=None, model=None, exception=True,
                  labeled_fake=True, env_extra=None, executable=None):
@@ -156,6 +171,7 @@ class Case:
                 'owner-2026-09-20-m3b-opencode-fixture-runs'
         self.config_path = self.root / 'service.json'
         self.config_path.write_text(json.dumps(config))
+        LIVE_CASES.append(self)
 
     def env(self):
         return {'PATH': '/usr/bin:/bin', 'HOME': str(self.root),
@@ -191,6 +207,8 @@ class Case:
             "the owner's OpenCode service moved during this case"
 
     def cleanup(self):
+        if self in LIVE_CASES:
+            LIVE_CASES.remove(self)
         shutil.rmtree(self.root, ignore_errors=True)
 
 
@@ -455,6 +473,8 @@ def main():
             except Exception as error:
                 results.append((name, repetition, 'fail', repr(error)))
                 failures.append((name, repetition, repr(error)))
+            finally:
+                release_live_cases()
     summary = dict(format='pio-opencode-host-matrix/1', platform=platform.platform(),
                    harness='pio-fake-opencode-acp', model_calls=0, live_run=False,
                    owner_service_touched=False,
