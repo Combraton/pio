@@ -64,10 +64,20 @@ pub const SERVICE_SETTINGS: &[&str] = &[
     "expected_surface",
 ];
 
-/// Owner decision of 2026-09-20: PIO may pass an explicit model for the M3b
-/// OpenCode fixture runs. Test-only and dated on purpose; the product still
-/// never selects a model.
+/// Owner decision of 2026-09-20, widened 2026-09-21: PIO may pass an explicit
+/// model for the M3b OpenCode fixture runs. Test-only and dated on purpose;
+/// the product still never selects a model.
 pub const MODEL_EXCEPTION: &str = "owner-2026-09-20-m3b-opencode-fixture-runs";
+
+/// The **only** provider the exception covers (owner, 2026-09-21).
+///
+/// The exception was widened from one model id to this provider, so runs may
+/// use any model on the owner's MiniMax plan and choose the one that suits
+/// the evidence. It is a provider allowlist of exactly one entry, not a
+/// relaxation: every other provider is still refused, including OpenCode's
+/// own free models — which is what a silently downgraded session would land
+/// on — and the Juspay Grid gateway the owner excluded outright.
+pub const ALLOWED_PROVIDER: &str = "minimax-coding-plan";
 
 /// The owner's own background service, which PIO must never touch.
 pub const OWNER_SERVICE_PATTERN: &str = "serve --service";
@@ -406,9 +416,21 @@ pub fn service_admission(work: &Path, opencode: &Value) -> Result<Value> {
                 ));
             }
             // Owner decision, 2026-09-20: no PIO run uses this provider for
-            // any purpose. It is excluded here, not merely unevaluated.
+            // any purpose. It is excluded here, not merely unevaluated, and
+            // it is named separately from the allowlist below so the record
+            // says *why* rather than only that it was not allowed.
             if model.starts_with("juspay-grid/") {
                 refusals.push(refusal("provider_excluded_by_the_owner", json!(model)));
+            }
+            // Owner decision, 2026-09-21: the exception covers the MiniMax
+            // provider, so any model on the owner's plan may be used. Nothing
+            // else may — including `opencode/` free models, which is exactly
+            // what a silently downgraded session reports.
+            else if !model.starts_with(&format!("{ALLOWED_PROVIDER}/")) {
+                refusals.push(refusal(
+                    "provider_not_covered_by_the_exception",
+                    json!({"model":model,"allowed_provider":ALLOWED_PROVIDER}),
+                ));
             }
         }
     }

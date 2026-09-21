@@ -268,7 +268,16 @@ def run_case(out, name):
             assert guard['allowed'] is False and guard['broader_than_configured'] == [{'setting': 'sandbox_mode', 'requested': 'workspace-write', 'configured': 'read-only'}], guard
             assert case.markers_records() == [] and events_of(case, 'spawned') == [], 'refused before any app-server starts'
             assert 'thread_settings_refused' in invocations[0]['receipt']['reason']
-            return dict(outcome='pass', guard=guard, delivery=final['delivery'], app_server_spawned=False)
+            # A refusal before delivery is a **finished** execution. The fix is
+            # in the shared projection, so it holds here too: before it, a
+            # caller polling the runtime could not tell a refusal from a slow
+            # start, and a live OpenCode run waited at `preparing` until it was
+            # stopped by hand. `exit` stays `unavailable`: no exit code was
+            # observed and none is claimed.
+            final = poll(lambda: case.inspect()['result'], lambda v: v['runtime'] == 'exited')
+            assert final['exit'] == 'unavailable', final
+            return dict(outcome='pass', guard=guard, delivery=final['delivery'],
+                        runtime=final['runtime'], exit=final['exit'], app_server_spawned=False)
         brief = b'Fixture task: reply with one line.'
         response, repo = case.submit(brief=brief, deadline=3 if name == 'deadline_stop_interrupts' else 600)
         assert response['result']['outcome']['admission'] == 'admitted', response

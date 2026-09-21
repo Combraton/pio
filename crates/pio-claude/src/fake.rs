@@ -284,6 +284,14 @@ pub fn run() -> Result<()> {
         }
         let message: Value = serde_json::from_str(&line).context("stdin line is not JSON")?;
         if message["type"] == "control_request" && message["request"]["subtype"] == "initialize" {
+            // A CLI that receives the handshake and never answers it. PIO
+            // must refuse before the brief leaves, not discover mid-turn that
+            // it was never the permission host — which is the shape of the
+            // defect that cost four live Claude runs.
+            if scenario["ignore_initialize"] == true {
+                marker(&markers, json!({"event":"initialize_ignored"}))?;
+                continue;
+            }
             handshook = true;
             marker(&markers, json!({"event":"initialize_received"}))?;
             // The answer measured from 2.1.278, by its keys.

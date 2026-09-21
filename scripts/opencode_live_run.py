@@ -53,7 +53,31 @@ CAP = 300_000_000
 STOP_AT = 240_000_000
 RUN_LIMIT = 2_000_000
 R1_LIMIT = RUN_LIMIT
-MODEL = 'minimax-coding-plan/MiniMax-M2.7-highspeed'
+# Owner decision, 2026-09-21: the dated exception covers the **provider**
+# `minimax-coding-plan`, so a run may use whichever model on the owner's plan
+# suits the evidence it is for. Everything else is still refused, including
+# OpenCode's own free models — which is what a silently downgraded session
+# lands on — and the Juspay Grid gateway.
+#
+# Used for evidence, not volume: a fast model where the question is *how
+# much*, the strongest where the question is whether a clean single tool call
+# happens at all. The seven ids were confirmed from the session's own option
+# list at zero tokens; see docs/work/m3b/opencode-model-ids.json.
+MODEL_FAST = 'minimax-coding-plan/MiniMax-M2.5-highspeed'
+MODEL_MID = 'minimax-coding-plan/MiniMax-M2.7-highspeed'
+MODEL_STRONGEST = 'minimax-coding-plan/MiniMax-M3'
+MODELS = {
+    # The usage measurement. The cheapest turn that completes is enough.
+    'R1': MODEL_FAST,
+    # The decision runs. The strongest model is the most likely to make one
+    # clean tool call rather than talk about making one.
+    'R2': MODEL_STRONGEST,
+    'R3': MODEL_STRONGEST,
+    # A long turn to cancel: what this costs is time, not judgement.
+    'R4': MODEL_MID,
+    # An out-of-fixture read it has to decide to attempt.
+    'R5': MODEL_STRONGEST,
+}
 MODEL_EXCEPTION = 'owner-2026-09-20-m3b-opencode-fixture-runs'
 DELIVERY_TIMEOUT = 120
 EXECUTION_DEADLINE = 600
@@ -272,6 +296,31 @@ def session_listing(repo, dry_run):
             'entry_count': len(lines), 'digest': sha('\n'.join(lines))}
 
 
+def configured_model(dry_run):
+    """What the owner's own configuration declares.
+
+    Read from the **non-secret file only**. PIO never reads the credential
+    store, never reads the Keychain and passes no key; OpenCode authenticates
+    itself. A dry run does not read it at all.
+    """
+    path = HOME / '.config/opencode/opencode.jsonc'
+    if dry_run:
+        return {'read': False,
+                'reason': "dry run: the owner's configuration is never read",
+                'source': str(path)}
+    if not path.exists():
+        return {'read': False, 'reason': 'no configuration file', 'source': str(path)}
+    try:
+        body = ''.join(line for line in path.read_text().splitlines(keepends=True)
+                       if not line.strip().startswith('//'))
+        config = json.loads(body)
+    except (OSError, ValueError) as error:
+        return {'read': False, 'reason': f'unreadable: {error}', 'source': str(path)}
+    return {'read': True, 'source': str(path), 'model': config.get('model'),
+            'providers': sorted(config.get('provider') or {}),
+            'permission_rules_configured': 'permission' in config}
+
+
 def outside_marker():
     """A marker file the runner creates outside the fixture, with known
     harmless content. Never a real personal or system file."""
@@ -316,7 +365,7 @@ class Service:
             executable.write_text(f"#!/bin/sh\nexec '{BINARY}' opencode fake-acp \"$@\"\n")
             executable.chmod(0o755)
             scenario = {
-                'model': MODEL, 'markers': str(self.private / 'markers'),
+                'model': MODELS[run], 'markers': str(self.private / 'markers'),
                 # Different work costs different tokens. A fixed number made
                 # every dry-run receipt identical in the one field a budget
                 # is kept in.
@@ -649,7 +698,15 @@ def build_receipt(service, run, view, started, extra):
         # reported provider and model equal the requested ones. The host has
         # measured it since the adapter was written and the receipt did not
         # carry it.
-        model=dict(requested=session.get('requested_model'),
+        # Configured, requested and reported, in one place (owner, 2026-09-21).
+        # `configured` is what the owner's own file declares; `on_creation` is
+        # what a new session actually starts on, which 2.0.11 does not take
+        # from that file.
+        configured=extra.pop('configured_block'),
+        model=dict(configured=extra.pop('configured_model'),
+                   on_creation=session.get('model_on_creation'),
+                   selected_by_pio=session.get('model_selected_by_pio'),
+                   requested=session.get('requested_model'),
                    reported=session.get('reported_model'),
                    matched=session.get('model_matches_requested'),
                    # Unlike the Claude adapter, this one can check before the
@@ -728,13 +785,17 @@ def run_one(run, args):
     # Every run passes an explicit MiniMax model. There is no as-configured
     # run here: the configured default is a provider the owner excluded, so
     # that run stays not evaluated with the owner's decision as the reason.
-    model = MODEL
+    model = MODELS[run]
     marker = outside_marker() if run == 'R5' else None
     repo, base = make_fixture(run, outside_target=marker)
     service = Service(run, args.dry_run, model=model, limit=limit)
     started = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
     owner_before = owner_service()
+    declared = configured_model(args.dry_run)
     extra = {'owner_service_before': owner_before,
+             'configured_block': declared,
+             'configured_model': declared.get('model') if declared['read']
+             else f"not read ({declared['reason']})",
              'sessions_before': session_listing(repo, args.dry_run)}
     try:
         service.start()
@@ -792,9 +853,14 @@ def run_one(run, args):
     if receipt['usage']['reported']:
         book['runs'][run] = dict(observed_total_tokens=receipt['usage']['observed_total_tokens'],
                                  parts=receipt['usage']['parts'],
-                                 reported_total=receipt['usage']['reported_total'], at=started)
+                                 reported_total=receipt['usage']['reported_total'],
+                                 # So cost can be reported per model, which is
+                                 # the point of spreading the runs across
+                                 # models rather than picking one.
+                                 model=model, at=started)
     else:
-        book['runs'][run] = dict(observed_total_tokens=None, usage='unknown', at=started)
+        book['runs'][run] = dict(observed_total_tokens=None, usage='unknown',
+                                 model=model, at=started)
     if not args.dry_run:
         ledger_path().write_text(json.dumps(book, indent=2) + '\n')
     receipt['cumulative'] = dict(observed=cumulative(book), cap=CAP, stop_at=STOP_AT)
@@ -905,7 +971,8 @@ def receipt_fields_selftest(out):
         'model.requested', 'model.reported', 'model.matched',
         'model.checked_before_delivery', 'usage.measure', 'usage.reported',
         'usage.cap', 'usage.stop_at', 'usage.run_limit', 'usage.limit_is_next_turn_only',
-        'usage.execution_deadline_seconds', 'usage.path',
+        'usage.execution_deadline_seconds', 'usage.path', 'model.configured',
+        'model.on_creation', 'model.selected_by_pio',
         'usage.parts_sum_matches_reported_total',
         # The fake reports usage exactly once, at turn end, in every scenario
         # it has. Whether the real harness does is precisely what R1 measures,
@@ -929,12 +996,18 @@ def receipt_fields_selftest(out):
         # and `preflight.reason` rather than leaving to the reader.
         dry_run_dependent = ('sessions_before', 'sessions_after', 'preflight',
                              'rehearsal', 'decision', 'cancel', 'decline',
-                             'delivery', 'pio_deleted_nothing',
+                             'delivery', 'pio_deleted_nothing', 'configured',
+                             # Null only in a dry run, which never reads the
+                             # owner's configuration, and the receipt says so
+                             # in `configured.reason` rather than leaving the
+                             # reader to work it out.
+                             'model.configured',
                              # No permission is requested in either scenario
                              # the shape check runs, so there is no option list
                              # to record. R2 is where a live one first arrives.
                              'permission_options')
-        if value is None and root_key not in dry_run_dependent:
+        if (value is None and root_key not in dry_run_dependent
+                and path not in dry_run_dependent):
             null_fields.append(path)
     flat_second = dict(leaves(second))
     for path, value in leaves(first):
@@ -942,6 +1015,10 @@ def receipt_fields_selftest(out):
         if path == 'pio_deleted_nothing':
             continue
         if path in expected_constant or path.startswith(('preflight.', 'rehearsal.',
+                                                         # Never read in a dry
+                                                         # run, so it cannot
+                                                         # vary between two.
+                                                         'configured.',
                                                          'decision.', 'cancel.', 'decline.',
                                                          'sessions_',
                                                          'owner_service', 'harness.capabilities',

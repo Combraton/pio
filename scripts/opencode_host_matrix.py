@@ -58,6 +58,7 @@ CASES = [
     'wrong_model_from_the_right_provider_refused',
     'a_session_reporting_nothing_is_refused',
     'excluded_provider_refused_at_admission',
+    'the_exception_covers_the_provider_and_nothing_else',
     'model_without_the_dated_exception_refused',
     'credential_variable_refused_at_admission',
     'unqualified_executable_refused',
@@ -408,6 +409,37 @@ def run_case(out, name):
         assert status == 3, record
         assert 'provider_excluded_by_the_owner' in [r['reason'] for r in record['refusals']], record
         assert record['session_started'] is False, record
+
+    elif name == 'the_exception_covers_the_provider_and_nothing_else':
+        # Owner decision, 2026-09-21: the dated exception was widened from one
+        # model id to the provider, so a run may use whichever model on the
+        # owner's plan suits the evidence. It is an allowlist of exactly one
+        # provider, not a relaxation.
+        for model in ('minimax-coding-plan/MiniMax-M3',
+                      'minimax-coding-plan/MiniMax-M2.5-highspeed',
+                      'minimax-coding-plan/MiniMax-M2'):
+            case = Case(out, f'{name}-{model.split("/")[-1]}', model=model)
+            status, record = case.admit()
+            assert status == 0, (model, record)
+            assert record['refusals'] == [], (model, record)
+            case.finish()
+            case.cleanup()
+        # Everything else is still refused, and the record says which rule.
+        # `opencode/` matters most: it is what a silently downgraded session
+        # reports, so the admission refuses what the session guard would.
+        for model, reason in (
+                ('opencode/deepseek-v4.1-flash', 'provider_not_covered_by_the_exception'),
+                ('opencode/jev-1.13-free', 'provider_not_covered_by_the_exception'),
+                ('anthropic/claude-sonnet-5', 'provider_not_covered_by_the_exception'),
+                ('juspay-grid/glm-latest', 'provider_excluded_by_the_owner')):
+            case = Case(out, f'{name}-{model.split("/")[0]}-refused', model=model)
+            status, record = case.admit()
+            assert status == 3, (model, record)
+            assert reason in [r['reason'] for r in record['refusals']], (model, record)
+            assert record['session_started'] is False, (model, record)
+            case.finish()
+            case.cleanup()
+        case = Case(out, name, model=REQUESTED)
 
     elif name == 'model_without_the_dated_exception_refused':
         case = Case(out, name, model=REQUESTED, exception=False)

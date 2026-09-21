@@ -83,7 +83,11 @@ PIO never selects a model outside a dated, owner-authorized exception, as ADR 00
 
 **Owner decision, 2026-09-20: no PIO run uses the Juspay Grid provider for any purpose.** The as-configured run is therefore **not evaluated, with that decision as the stated reason** — not an oversight and not a pending measurement. `service_admission` refuses a `juspay-grid/` model outright, so the exclusion is enforced rather than merely documented.
 
-**Owner decision, 2026-09-20: the fixture model is `minimax-coding-plan/MiniMax-M2.7-highspeed`** for every run.
+**Owner decision, 2026-09-20: the fixture model is `minimax-coding-plan/MiniMax-M2.7-highspeed`** for every run. **Widened 2026-09-21: the exception covers the provider `minimax-coding-plan`, not one model id**, so a run may use whichever model on the owner's plan suits the evidence it is for.
+
+It is an allowlist of exactly one provider, not a relaxation. Admission refuses everything else by name, and the record says which rule: `provider_excluded_by_the_owner` for Juspay Grid, `provider_not_covered_by_the_exception` for anything else — including `opencode/` free models, which is precisely what a silently downgraded session reports, so the admission refuses what the session guard would. The seven ids were confirmed from the session's own option list at zero tokens and recorded in [`opencode-model-ids.json`](../work/m3b/opencode-model-ids.json).
+
+**The freedom is used for evidence, not volume.** R1 runs on the fastest model, because its question is *how much*; the two decision runs use the strongest, because their question is whether a clean single tool call happens at all; the cancel run uses a middle model, because what it costs is time rather than judgement. Three models across five runs, and the packet reports cost and behaviour per model. Every receipt records **configured, requested and reported** model, plus what the session started on before PIO selected anything.
 
 #### Passing a model is not selecting one — measured 2026-09-21, at zero tokens
 

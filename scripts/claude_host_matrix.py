@@ -50,6 +50,7 @@ CASES = [
     'service_denies_a_request_nobody_answers',
     'service_records_who_decided_and_what',
     'service_refuses_an_unqualified_executable_at_start',
+    'service_refuses_a_host_that_was_never_attached',
     'service_answers_a_request_it_will_not_act_on',
     'service_interrupt_escalates_when_the_signal_is_ignored',
     'service_reports_a_cancelled_turn_as_unknown_not_zero',
@@ -863,6 +864,37 @@ def run_case(out, name):
         admission = json.loads((case.store / 'claude-admission.json').read_text())
         assert admission['stream_spawned'] is False, admission
 
+
+    elif name == 'service_refuses_a_host_that_was_never_attached':
+        # A pre-delivery refusal through the service, which this matrix did not
+        # have. The CLI receives the permission-prompt handshake and never
+        # answers it, so PIO is not the permission host — the exact shape of
+        # the defect that cost four live Claude runs. It must refuse **before**
+        # the brief leaves, and the refusal must be a **finished** execution:
+        # the fix for that is in the shared projection, and before it a caller
+        # polling the runtime could not tell a refusal from a slow start.
+        case = ServiceCase(out, name, scenario={'ignore_initialize': True})
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(),
+                    lambda v: v['delivery'] in ('failed_before_delivery', 'not_delivered'),
+                    seconds=120)
+        assert view['delivery'] == 'failed_before_delivery', view
+        events = case.host_events()
+        attached = [e for e in events if e['kind'] == 'host_attached']
+        assert len(attached) == 1, [e['kind'] for e in events]
+        assert attached[0]['outcome']['attached'] is False, attached
+        assert attached[0]['sent_before_delivery'] is True, attached
+        error = [e for e in events if e['kind'] == 'host_error']
+        assert error and 'host_not_attached' in error[0]['error'], error
+        # The brief never left PIO, and the CLI was never asked for a turn.
+        assert [e for e in events if e['kind'] == 'turn_start_sent'] == [], \
+            'the brief was sent after a refusal'
+        assert len(case.markers_of('initialize_ignored')) == 1, case.markers_of('initialize_ignored')
+        assert case.markers_of('turn_received') == [], case.markers_of('turn_received')
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited', seconds=120)
+        assert view['exit'] == 'unavailable', view
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     elif name == 'service_answers_a_request_it_will_not_act_on':
         # PIO answers nothing on the user's behalf — but it must answer, or a
