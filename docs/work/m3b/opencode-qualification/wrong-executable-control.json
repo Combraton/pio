@@ -1,7 +1,7 @@
 {
   "format": "pio-opencode-qualification/1",
   "pinned": {
-    "version": "2.0.1"
+    "version": "2.0.11"
   },
   "qualified": false,
   "refusals": [

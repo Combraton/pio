@@ -3,14 +3,18 @@
 //! Everything it produces is labeled `pio-fake-opencode-acp`; it is never a
 //! qualified OpenCode and never real-harness evidence.
 //!
-//! **Measured against 2.0.1 at zero tokens:** the `initialize` result, and
+//! **Measured against 2.0.11 at zero tokens:** the `initialize` result, and
 //! `session/new` returning `configOptions` with the model, effort and mode the
 //! session will use — which is why the provider and model can be checked
 //! before any prompt.
 //!
 //! **From the ACP specification, not measured:** the `session/request_permission`
-//! request and its response. ADR 005 records them as unverified against 2.0.1,
-//! and PIO forwards no decision whose single-use form it has not measured.
+//! request and its response. ADR 005 records them as unverified against the
+//! real harness, and PIO forwards no decision whose single-use form it has
+//! not measured. The option **ids** are this fake's own invention outright:
+//! `opt_1`, `opt_2`, `opt_3`, chosen so that no id is its own kind and a host
+//! that hard-codes one fails here rather than in front of the owner's
+//! harness.
 //!
 //! Scenario (JSON in `PIO_OPENCODE_FAKE_SCENARIO`, all members optional):
 //! `version`, `model` (what the session reports, so a silent downgrade can be

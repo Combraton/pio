@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Zero-token OpenCode 2.0.1 probe for M3b (ADR 005).
+"""Zero-token OpenCode probe for M3b (ADR 005).
 
 Measures everything the adapter design rests on without a single model call:
 the install and version, the ACP stdio transport's `initialize` and

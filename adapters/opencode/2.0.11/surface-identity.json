@@ -1,0 +1,15 @@
+{
+  "command_count": 7,
+  "commands": {
+    "<top>": "d8961ffe07e5322f62a05c689e0d92eea705560a925bc7230cf4c95db28c6c5f",
+    "acp": "3e65b6db4f77f7d4f7ceab258a14093b93e081fcbf4c9aafa764bf0eee3874a3",
+    "api": "70d0c1990db00c8da64d311989d5093736ffea4c8732ac338e376e4665bbce7c",
+    "auth": "ad60c932ca185c7447cf887f44e6d887f8bc4cc8f2454993166d1474eeb2cf13",
+    "models": "0a1b5487d60536345703d15cacd4027e16ae101fe6bccc2ae2f420e829869a57",
+    "run": "c8fbca9c5eeb3ffa31a82fa6d3d78ae9b0a6b5d6bd907973ca7682f26204b9e9",
+    "serve": "9b2617e8076233d7529dcc95948058c58e7c17462cda8e29da3d22e5a107b121"
+  },
+  "format": "pio-opencode-surface-identity/1",
+  "surface_listing_sha256": "dfe71fe139579e2e00f7fefd0a5a4d376458750549766a00907c2d2ca23f4d6d",
+  "version": "2.0.11"
+}

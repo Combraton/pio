@@ -2,7 +2,22 @@
 
 - Status: **proposed builder design**, 2026-09-20, for independent review on the M3b pull request. Scope: [issue #10](https://github.com/Combraton/pio/issues/10) and the owner's request of 2026-09-20 to run MiniMax through OpenCode.
 - Supersedes nothing. It follows the shape of [ADR 003](003-codex-app-server-adapter.md) and [ADR 004](004-claude-code-adapter.md).
-- Every fact marked **measured** was observed on this workstation on 2026-09-20 against OpenCode 2.0.1, at a cost of **zero model tokens**, by `scripts/opencode_probe.py`. Facts that are not measured are named as open questions rather than assumed.
+- Every fact marked **measured** was observed on this workstation by `scripts/opencode_probe.py` at a cost of **zero model tokens**. Facts that are not measured are named as open questions rather than assumed.
+- **Re-pinned to OpenCode 2.0.11 on 2026-09-21, from 2.0.1.** npm had self-updated the owner's install — open question 5 below asked whether it would, and the answer is yes. The adapter refused to qualify, which is the refusal working. Re-measured at zero tokens the same day; the deltas are in §0 and every other measured fact below held.
+
+## 0. What the self-update moved
+
+| | 2.0.1, 2026-09-20 | 2.0.11, 2026-09-21 |
+| --- | --- | --- |
+| Command-line surface | 7 commands | 7 commands; **only the top-level help digest moved**, the six subcommand helps are byte-identical |
+| `initialize` result | as §1 records it | unchanged, but for `agentInfo.version` |
+| Models offered to a session | 68 | 127 |
+| The seven MiniMax ids | present | **present, unchanged** |
+| The session's own current model, as-configured | `juspay-grid/glm-latest` | **`opencode/deepseek-v4.1-flash`** |
+| The isolated control's substitute | `opencode/nemotron-3.5-lightning-free` (9 models) | `opencode/jev-1.13-free` (8 models) |
+| Private server child | `acp` spawning `serve --stdio --port 0` | unchanged |
+
+**The owner's configuration file did not change.** It still declares `model: juspay-grid/glm-latest` and still has no `permission` key. What changed is that **2.0.11 does not give a new ACP session the configured model**: it reports a free `opencode/` model instead. That makes §3's hazard worse rather than better — the substitution now happens on the owner's own configuration, not only under an isolated one — and it is the reason the equality guard of §4 is a refusal and not a warning.
 
 ## Problem
 
@@ -14,7 +29,7 @@ PIO must drive the user's installed OpenCode against a MiniMax model, behind the
 
 PIO spawns `opencode acp` and speaks Agent Client Protocol over its stdin and stdout — the same newline-delimited JSON shape the durable host already drives for Codex and Claude.
 
-**Measured**, `initialize` answers at zero tokens with `protocolVersion: 1`, `agentInfo: {name: "OpenCode", version: "2.0.1"}`, `authMethods: [{id: "opencode-login"}]`, and `agentCapabilities` carrying `loadSession`, `promptCapabilities`, `mcpCapabilities` and session `close`, `delete`, `fork`, `list`, `resume`.
+**Measured**, `initialize` answers at zero tokens with `protocolVersion: 1`, `agentInfo: {name: "OpenCode", version: "2.0.11"}`, `authMethods: [{id: "opencode-login"}]`, and `agentCapabilities` carrying `loadSession`, `promptCapabilities`, `mcpCapabilities` and session `close`, `delete`, `fork`, `list`, `resume`.
 
 The three candidates were weighed against the owner's constraints:
 
@@ -55,7 +70,7 @@ OpenCode holds its credentials in its own store for a provider named `minimax-co
 
 ### 4. Model: explicit, under a new dated test-only exception
 
-**Measured**, the user's configured default is `juspay-grid/glm-latest` — an OpenAI-compatible gateway at `grid.ai.juspay.net`, declared in `~/.config/opencode/opencode.jsonc`. It is **not** MiniMax.
+**Measured**, the user's configured default is `juspay-grid/glm-latest` — an OpenAI-compatible gateway at `grid.ai.juspay.net`, declared in `~/.config/opencode/opencode.jsonc`. It is **not** MiniMax. Under 2.0.11 a new ACP session does not even use it: it reports `opencode/deepseek-v4.1-flash` (§0). Neither is MiniMax, and neither is what PIO runs.
 
 Every OpenCode run therefore passes an explicit MiniMax model. **Measured at zero tokens** from `session/new`'s own `configOptions`, the available ids are exactly:
 
@@ -104,7 +119,7 @@ The consequence is stated rather than worked around: on an ambiguous outcome —
 2. **Usage reporting granularity**, first, exactly as for Claude. The stops cannot be set before it is known whether usage arrives during a turn or only at its end. The host now **searches** each `session/update` and the turn result for any key named `usage` or ending in `tokens`, and records a census — every update kind seen, which of them carried usage, and where — so R1 can report a place PIO did not expect rather than confirm the one it assumed. The Claude adapter summed two of four usage parts for five live runs because it looked only where it expected.
 3. **Cancellation**: `session/cancel` semantics, and whether a cancelled turn still reports usage.
 4. Whether `mode: plan` is a genuinely narrower posture worth requesting for fixture runs.
-5. The **surface and session identity** to pin, and whether npm self-update moves it, as the Homebrew cask does for Claude.
+5. ~~The **surface and session identity** to pin, and whether npm self-update moves it, as the Homebrew cask does for Claude.~~ **Answered 2026-09-21: it moves.** npm took the install from 2.0.1 to 2.0.11 between the plan and the first live run; qualification refused, the pin was moved and the surface recaptured (§0). Expect it to move again, and expect a refusal rather than a silent run on a version nobody measured.
 6. Whether any ACP option yields a **prompt acknowledgment** (§7). Until one is measured, delivery carries no proof class for this harness.
 
 ## Budget and stops (owner decision, 2026-09-20)

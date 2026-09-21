@@ -93,7 +93,7 @@ The harness test scope expands from the two initial candidates to the four harne
 |---|---|---|
 | Codex | `codex-cli 0.146.0`; `codex-cli 0.155.1` after the owner updated it on 2026-09-19 | M2 adapter; the user's own login and configured model |
 | Claude Code | `2.1.273 (Claude Code)` | M3 adapter; authentication route below |
-| OpenCode | `opencode v2.0.1` (`@opencode/cli`, invoked as `opencode2`) | Additional adapter; the owner has MiniMax, GLM and Kimi models configured. Preferred for heavy-usage testing |
+| OpenCode | `opencode v2.0.11` (`@opencode/cli`, invoked as `opencode2`; re-pinned from 2.0.1 on 2026-09-21 after an npm self-update) | Additional adapter; the owner has MiniMax, GLM and Kimi models configured. Preferred for heavy-usage testing |
 | Hermes Agent | `v0.20.1 (2026.8.13)` | Additional adapter; the owner has MiniMax configured |
 
 These are version-command observations, not qualification: each adapter still binds the resolved executable, exact version and binary hash. A separately installed `opencode` reporting 1.18.18 is a different version and is not selected. Test scope is not a support claim; advertised support follows per-version qualification evidence.

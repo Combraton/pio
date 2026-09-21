@@ -1,4 +1,8 @@
-//! OpenCode 2.0.1 qualification and admission (ADR 005).
+//! OpenCode 2.0.11 qualification and admission (ADR 005).
+//!
+//! Re-pinned from 2.0.1 on 2026-09-21: npm had self-updated the owner's
+//! install, exactly as ADR 005 asked whether it would. Only the top-level
+//! help moved; the six subcommand helps are byte-identical.
 //!
 //! Two facts shape everything here, both measured:
 //!
@@ -21,11 +25,11 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub const PINNED_VERSION: &str = "2.0.1";
+pub const PINNED_VERSION: &str = "2.0.11";
 
 /// Command-line surface captured from the qualified executable.
 pub const QUALIFIED_SURFACE: &str =
-    include_str!("../../../adapters/opencode/2.0.1/surface-identity.json");
+    include_str!("../../../adapters/opencode/2.0.11/surface-identity.json");
 
 /// Helps that make up the surface identity.
 pub const SURFACE_COMMANDS: &[&str] = &["<top>", "acp", "run", "models", "auth", "serve", "api"];
