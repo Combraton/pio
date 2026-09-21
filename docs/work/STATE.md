@@ -2,7 +2,7 @@
 
 Dated snapshot; reconcile Git with [M3 issue #7](https://github.com/Combraton/pio/issues/7) and the [M3 task packet](m3/TASK.md). Issues own live progress.
 
-- **Updated:** 2026-09-19. **Owner:** fresh builder session for M3 (assigned by the owner). Independent review and owner acceptance remain separate.
+- **Updated:** 2026-09-21. **Owner:** fresh builder session for M3 (assigned by the owner). Independent review and owner acceptance remain separate.
 - **Task:** M3 — Claude Code adapter with real journeys. Issue [#7](https://github.com/Combraton/pio/issues/7). Start from the [kickoff prompt](m3/KICKOFF.md).
 - **Branch/base:** `codex/m3-claude-code` in the `pio-m3` worktree, based on **`16fb22912f93…`**, the merge of [PR #6](https://github.com/Combraton/pio/pull/6). Its tree is byte-identical to the reviewed head `699bf6f`. Worktrees `pio`, `pio-m1` and `pio-m2` are preserved; never modify a sibling.
 
@@ -13,6 +13,36 @@ Dated snapshot; reconcile Git with [M3 issue #7](https://github.com/Combraton/pi
 - **Live evidence:** R1 on the user's configured model with nothing passed, R2–R6 on an explicit model under a dated test-only exception, plus zero-token `model-list`, `discovery` and `wrong-executable` runs. **421,450 observed tokens** of the 1,000,000 Codex cap. Receipts in [codex-live](m2/codex-live/); the [acceptance packet](m2/ACCEPTANCE.md) marks J1, J3, J4 and J5 as **partial acceptances** with their obligations, and J2 and J6 `not_evaluated`.
 - **Named obligations carried into M3 and beyond:** incremental changed-key commits before M3b or M4; **product budget enforcement is unproven** — the M2 stops were the live runner's, not PIO's; `test_only_model_exception` must be removed or compiled out before release; J5's negative control does not exist; the exact-version pin refuses every Codex that is not 0.155.1, which is right for M2 and wrong for real users.
 - **Upstream:** [Protocol #13](https://github.com/Combraton/protocol/issues/13) capacity error, [#14](https://github.com/Combraton/protocol/issues/14) content path for digest-only fields, [#15](https://github.com/Combraton/protocol/issues/15) reattach recovery decision. All open; none widened locally.
+
+## M3 complete — Claude Code, with M3b offline-only
+
+**The Claude live sequence is closed.** Eleven turns, charged 670,500 of the 1,000,000 cap and observed 590,500; the 800,000 stop was never reached. The [M3 acceptance packet](m3/ACCEPTANCE.md) records four partial acceptances from live evidence only, and [JOURNEYS](../JOURNEYS.md) now lists Codex and Claude Code side by side. Receipts in [claude-live](m3/claude-live/).
+
+What the live runs actually found was five defects in **PIO**, not in the harness, each hidden the same way — a field that was present and therefore looked checked:
+
+- a transcript listing keyed by the directory fixtures are created in, so a run that wrote 194 KB reported that it had written nothing;
+- two runs named for a decision the runner could not send, and a third for a cancel it never sent;
+- an **empty** usage block counted as an observation of zero, with the stop rule reading `if not reported`;
+- **PIO never attached as the host that answers permission prompts**: it passed `--permission-prompts host`, named no prompt tool and sent no handshake, so the CLI denied anything that would prompt and PIO never learned it was asked;
+- refusals attributed to the harness when the caller had just decided them — a defect created by the fix for the one above it.
+
+All are fixed, mutation-checked, and disclosed in dated addenda on the receipts rather than by rewriting them.
+
+**M3b is offline-only and held.** The [OpenCode field audit](https://github.com/Combraton/pio/issues/10) found eighteen receipt fields null or constant, because the receipt builder was copied from the Claude one and never adapted to ACP; the model evidence the owner's rule turns on was measured by the host and thrown away. All six audit fixes are in, with a runner self-test that fails if any receipt field is null or unchanged across two scenarios. **No MiniMax run has happened**, and the first live `session/request_permission` will be the first measurement of a shape taken from the ACP specification.
+
+## M3, the work behind it
+
+Branch `codex/m3-claude-code`, draft [PR #9](https://github.com/Combraton/pio/pull/9), CI green at `e2792e0` on both platforms. Five reviewer reviews so far; every correction is closed.
+
+**Landed:** [ADR 004](../decisions/004-claude-code-adapter.md) choosing the executable's own structured I/O over the SDK bridge; `pio-claude` qualification by **command-line surface identity and a pinned stream identity**, because a help digest cannot see the wire; the credential route observed and never read; an equality-only permission-mode guard; the labeled fake `pio claude fake-cli`; the pre-spawn admission decisions; an eleven-case offline matrix; and `pio_host::claude`, the first harness written on the **shared host lifecycle** extracted in `53b37c6`.
+
+**Measured at zero tokens, and each changed the design:** `system/init` does not arrive until a message is written to stdin, so the effective mode cannot be checked before the brief is released; the product's default model is Opus even with an empty configuration, so a receipt showing Opus is no evidence the user's settings were honoured; containment is the permission rules only, because the user has no sandbox key and 38 Bash allow rules across two settings files, so a pre-approved command never reaches PIO at all.
+
+**Two defects found in committed code and fixed:** `auth-route` refused a route that works, because it passed no `USER` and pointed `CLAUDE_CONFIG_DIR` at a directory the product then could not read; and fixture placement was a lexical prefix test that called a traversal contained and a relative path outside.
+
+**The service binding is in.** `pio serve-claude` admits a `pio-claude-service/1` configuration, refuses to start when admission refuses, and launches `pio claude host` through the same `submit_harness` path, launch guard and host-slot fence Codex uses. A turn through the service records `delivery: acknowledged` with evidence class `native_replay_echo` and proof class `provider_ack_id`, the containment statement, and an observed `claude.tokens.total`. The provider layer is now adapter-generic with a **per-harness event codec**, so OpenCode gets the third adapter without a third copy. [SERVICE-BINDING.md](m3/SERVICE-BINDING.md) records the analysis that shaped it. Restart, reattach and host-loss are now covered as they are for Codex.
+
+**M3b** is open as [issue #10](https://github.com/Combraton/pio/issues/10) with [ADR 005](../decisions/005-opencode-adapter.md), pulled forward for OpenCode at the owner's request. Qualification, the labeled fake, the offline matrix (12 cases, two through `serve-opencode`) and the durable host are in; the MiniMax live plan is next and waits for the owner's go. Transport is the ACP stdio server, chosen because isolation is structural: `opencode acp` starts its own private server as a child and never touches the owner's running service, which every probe records by pid and start time. Two hazards are recorded rather than worked around: the environment does **not** isolate OpenCode's configuration, and a missing route does not refuse but silently downgrades to a free model. Two owner decisions are open on #10: which MiniMax model for fixtures, and whether the Juspay Grid gateway is approved for an as-configured run.
 
 ## Owner decisions still binding (recorded at M2 start)
 
@@ -28,19 +58,24 @@ Full text: [ADR 001 amendment](../decisions/001-standalone-stack.md#amendment--o
 
 ## Live-run spend ledger
 
-Counted from each harness's own usage reports; missing usage is unknown liability, not zero. Stop and report at 80 percent. At most three concurrent live sessions. Codex and Claude Code caps are separate, per harness (owner confirmation 2026-09-16).
+Counted from each harness's own usage reports; missing usage is unknown liability, not zero. Stop and report at 80 percent. Codex and Claude Code caps are separate, per harness (owner confirmation 2026-09-16); the three-session limit was waived for the M3 runs (owner, 2026-09-20).
+
+The Claude ledger carries two numbers per run (owner decision, 2026-09-20). **Observed** is what the harness reported; **charged** is what the cap is measured against, and **every stop rule uses charged**. They differ only for the two cancelled turns, which reported an empty usage block: each is charged a flat **40,000**, the basis being the only two single-call turns measured, at 33,793 and 32,957.
 
 | Cap | Limit (tokens) | Stop at | Used | Runs |
 | --- | ---: | ---: | ---: | ---: |
 | Codex, all tests | 1,000,000 | 800,000 | **421,450** | 7 |
-| Claude Code, all tests | 1,000,000 | 800,000 | 0 | 0 |
+| Claude Code, all tests | 1,000,000 | 800,000 | **670,500 charged**, 590,500 observed | 11 |
 | MiniMax via OpenCode + Hermes | 300,000,000 | 240,000,000 | 0 | 0 |
 | GLM/Kimi via OpenCode — **proxy-counted** in the MiniMax row until the owner sets per-provider caps (required before M3b) | proxy | — | 0 | 0 |
+
+Two runs are kept under their own names rather than replaced, because their tokens were spent: `R5-attempt-1`, which cancelled nothing, and `R5-attempt-2`, whose cancelled turn PIO counted as zero. Two are recorded as **not run** with their reasons: `R4`, because no permission request arrives for its brief, and `R6b`, because the charged total would not have stayed under the owner's 700,000 threshold afterwards.
 
 ## Accepted baseline and current counts
 
 - **M1** owner-accepted at `2048e84` and merged as `9cf7047`: journal-backed Core/Execution slice, public durable labeled fake-process host, caller operation ledger, content-addressed output, recovery and order fences, truthful fake discovery, packaging skeleton. [Acceptance corrections](m1/ACCEPTANCE-CORRECTIONS.md), [CHECKPOINTS](m1/CHECKPOINTS.md).
 - **M2** merged as `16fb2291`. Current counts at that head: **46 Cargo tests + 1 ignored probe**; offline Codex matrix **17 cases × 3 = 51**; public matrix **72** (51/6/9/6); diagnostic matrix **54** (39/3/9/3); caller recovery; pinned runner **206 pass / 73 unsupported / 1 skipped** plus two supplemental passes counted separately. Three repetitions per case. Green on macOS 15 arm64 and Ubuntu 24.04 x86_64.
+- **M3/M3b current counts:** **100 Cargo tests + 1 ignored probe**; Claude matrix **25 × 3 = 75**, thirteen through `serve-claude`; OpenCode matrix **15 × 3 = 45**, four through `serve-opencode`, plus the OpenCode runner self-test; Codex matrix, public matrix and diagnostic matrix unchanged at 51, 72 and 54, which is the proof the shared work changed nothing else.
 - **What is still not established:** no TUI, no CBR composition, no packaged-install journey, no Claude Code adapter, no throughput claim, no total-disk or spool-GC bound, no universal exactly-once property, and **no product budget enforcement**. Process cancellation, workspace and usage adapters are unavailable in the fake process mode. Protocol #9, #10, #13, #14, #15 and the undeclared subscription authorization-recheck barrier remain coverage limits.
 
 ## M2 history
@@ -49,6 +84,8 @@ The narrative of M2 — the capacity-bound checkpoint, Codex qualification, the 
 
 ## Resources and next action
 
-- **Active resources:** worktrees `pio`, `pio-m1`, `pio-m2` and `pio-m3` under `Combraton/`. After the M2 runs, no PIO daemon, host, user job or live harness session was left running (process table and launchd list inspected). Temporary matrix stores under `/tmp`, private live evidence under `$HOME/pio-m2-live` at mode 0700, and CI artifacts in session scratch all stay outside Git.
-- **Next:** M3, the Claude Code adapter, on [issue #7](https://github.com/Combraton/pio/issues/7). A fresh builder session starts from the [kickoff prompt](m3/KICKOFF.md), then this file, then the [task packet](m3/TASK.md).
-- **Before any M3 live run:** qualification, the offline matrix against a labeled fake and the credential-route negative control must be committed with CI green, and the tree must be clean. A receipt from a dirty tree is not evidence.
+- **Active resources:** worktrees `pio`, `pio-m1`, `pio-m2` and `pio-m3` under `Combraton/`, and a scratch directory beside them at `Combraton/pio-scratch` for rehearsal output. After the M2 and M3 runs, no PIO daemon, host, user job or live harness session was left running (process table inspected). Private live evidence lives under `$HOME/pio-m2-live` and `$HOME/pio-m3-live` at mode 0700; matrix stores, rehearsals and CI artifacts stay outside Git. **Scratch paths must stay short:** a Unix socket path is capped near 104 bytes, and both live runners now refuse a run whose socket would exceed it rather than failing as a service that never becomes ready.
+- **Next: PR #9 is ready for review and the owner's merge, pinned to its reviewed head.** The Claude sequence is closed and **no further Claude runs happen**. MiniMax live runs come afterwards, on a **fresh M3b branch and pull request**, starting with **R1 alone** under the plan on [issue #10](https://github.com/Combraton/pio/issues/10) and only after the owner clears the posted field audit. **Hermes comes after that, and only under an isolated profile.** A fresh session starts from the [kickoff prompt](m3/KICKOFF.md), then this file, then the [task packet](m3/TASK.md) and the [M3 packet](m3/ACCEPTANCE.md).
+- **Three adapters now share one lifecycle and one provider.** `pio_host::harness::Lifecycle` owns the fences, guard, spawn marker, park, release gate, event and control files, deadline stop and receipt; `pio_protocol::codex::PROFILES` holds the per-harness table — delivery evidence and its proof field, usage measure, decision vocabulary, cancel description, and the event names that could not be shared. OpenCode needed **no new provider code** beyond a table row.
+- **What each harness can actually prove differs, and the receipts say so.** Codex returns a turn id and Claude Code echoes the message sent, both `provider_ack_id`. **OpenCode acknowledges nothing**, so its delivery carries evidence class `native_session_update` and **no proof class**, and more of its outcomes will stay ambiguous. Conversely OpenCode's provider-and-model refusal **precedes delivery**, which Claude Code's cannot, because `system/init` never arrives until the brief is already sent.
+- **Before any M3 live run:** the ADR, qualification with its negative controls, the offline matrix against a labeled fake, the missing-credential-route refusal **and the service binding** must be committed with CI green, and the tree must be clean. A receipt from a dirty tree is not evidence.

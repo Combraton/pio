@@ -3,6 +3,7 @@
 import argparse
 from collections import Counter
 import hashlib
+import case_cleanup
 import json
 import os
 from pathlib import Path
@@ -124,6 +125,7 @@ class Case:
         finally:
             db.close()
         self.identities.extend(row['identity'] for row in records(self.root / 'spawn.jsonl'))
+        case_cleanup.release(self.root)
         for item in self.identities:
             terminate(item)
         for daemon in self.daemons:

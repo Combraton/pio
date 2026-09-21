@@ -213,20 +213,23 @@ impl Provider {
                 "legacy inline output requires explicit migration"
             );
             let persisted = execution["source"].as_str().unwrap_or("");
-            let expected = match host
-                .as_ref()
-                .map(|h| h["adapter"].as_str().unwrap_or("fake"))
-            {
+            // A restarted daemon must resume its own executions and refuse
+            // someone else's adapter. The source it expects comes from the
+            // harness table, so a new adapter cannot be silently rejected
+            // here — which a restart case caught for Claude Code.
+            let expected = match host.as_ref() {
                 None => persisted == pio_host::script::SOURCE,
-                Some("codex") => {
-                    persisted
-                        == if host.as_ref().unwrap()["labeled_fake"] == true {
-                            pio_codex::fake::SOURCE
-                        } else {
-                            "codex-app-server"
-                        }
-                }
-                Some(_) => persisted == "fake-host/process",
+                Some(host) => match crate::codex::profile(host["adapter"].as_str().unwrap_or("")) {
+                    Some(profile) => {
+                        persisted
+                            == if host["labeled_fake"] == true {
+                                profile.fake_source
+                            } else {
+                                profile.real_source
+                            }
+                    }
+                    None => persisted == "fake-host/process",
+                },
             };
             ensure!(expected, "cannot switch persisted execution adapter mode");
         }
@@ -394,7 +397,7 @@ impl Provider {
         json!({"oldest_retained":self.data.oldest,"current":self.data.generation})
     }
     pub fn execution_features(&self) -> &'static [&'static str] {
-        if self.codex() {
+        if self.native() {
             crate::codex::FEATURES
         } else if self.durable.is_some() {
             &[

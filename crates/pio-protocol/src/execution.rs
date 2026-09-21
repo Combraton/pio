@@ -43,7 +43,7 @@ impl Provider {
             .unwrap_or("scripted-host")
     }
     pub fn execution_gate(&self, session: &Session, method: &str, p: &Value) -> Result<(), Error> {
-        if self.codex() {
+        if self.native() {
             self.codex_content(method, p)?;
         }
         if method == "execution.submit" {
@@ -278,7 +278,7 @@ impl Provider {
                 .map_err(|_| err("unavailable", json!({"reason":"script spool unavailable"})))?;
             e["script_digest"] = digest.into();
         }
-        if self.codex() {
+        if self.native() {
             e["source"] = self.codex_source().into();
             e["view"]["host"]["generation"] = self.durable.as_ref().unwrap().generation.into();
             if let Some(extensions) = e["submit"]["extensions"].as_object_mut() {
@@ -352,7 +352,7 @@ impl Provider {
                     }
                 }
                 self.execution_budget(&mut e, p, &mut refusal);
-                if refusal.is_none() && self.codex() {
+                if refusal.is_none() && self.native() {
                     refusal = self.codex_admission(&mut e, p);
                 }
                 if let Some(reason) = refusal {
@@ -551,7 +551,7 @@ impl Provider {
         Ok(checkpoint)
     }
     fn execution_discovery(&self) -> Value {
-        if self.codex() {
+        if self.native() {
             return self.codex_discovery();
         }
         if self.durable.is_some() {

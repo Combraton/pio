@@ -19,6 +19,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+import case_cleanup
 from public_api import Client, CREDENTIAL, command
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,6 +77,7 @@ class Case:
         self.transcript = self.out / 'public-transcript.jsonl'
         self.daemons = []
         self.files = []
+        self.extra_roots = []
         wrapper = self.root / 'fake-codex'
         wrapper.write_text(f"#!/bin/sh\nexec '{BINARY}' codex fake-app-server \"$@\"\n")
         wrapper.chmod(0o755)
@@ -181,6 +183,12 @@ class Case:
                     self.stop(d)
             for f in self.files:
                 f.close()
+            # Kill anything still naming this store, assert none survives, and
+            # remove it. A retained store per attempt is a leak; a store removed
+            # under a live host is worse.
+            case_cleanup.release(self.root)
+            for extra in self.extra_roots:
+                case_cleanup.release(extra)
 
 
 def exited(case, identity='work', seconds=30):
@@ -232,6 +240,9 @@ def run_case(out, name):
         if name in ('missing_content_refused', 'outside_fixture_refused'):
             if name == 'outside_fixture_refused':
                 outside = Path(tempfile.mkdtemp(prefix='pio-cx-outside-', dir='/tmp'))
+                # Deliberately outside the fixture root, so it is this case's
+                # to remove; the store's own release cannot reach it.
+                case.extra_roots.append(outside)
                 response, _ = case.submit(repository=outside)
             else:
                 response, _ = case.submit(content=False)

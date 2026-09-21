@@ -1,0 +1,24 @@
+{
+  "format": "pio-opencode-qualification/1",
+  "pinned": {
+    "version": "2.0.1"
+  },
+  "qualified": false,
+  "refusals": [
+    {
+      "exit": 0,
+      "reason": "version_unavailable"
+    }
+  ],
+  "resolution": {
+    "binary_sha256": "bd245662fb8a0e321b3bf133e930371d6563c387527885f30b2613aef3ba14d6",
+    "install": "npm",
+    "resolved": "/opt/homebrew/Caskroom/claude-code@latest/2.1.278/claude",
+    "selected": "/opt/homebrew/bin/claude"
+  },
+  "selected": "/opt/homebrew/bin/claude",
+  "surface": {
+    "skipped": "version_not_qualified"
+  },
+  "version": null
+}

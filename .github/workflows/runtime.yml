@@ -36,6 +36,8 @@ jobs:
           cargo clippy --workspace --locked -- -D warnings
           python3 scripts/check_docs.py
           git diff --exit-code -- Cargo.lock
+      - name: Case cleanup guard self-test
+        run: python3 scripts/case_cleanup.py
       - name: Experimental fake-host fault matrix
         run: python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3
       - name: Public Unix process matrix and caller recovery
@@ -44,6 +46,17 @@ jobs:
           python3 scripts/client_recovery.py --out target/client-recovery
       - name: Offline Codex adapter matrix (labeled fake app-server)
         run: python3 scripts/codex_host_matrix.py --out target/codex-host --repetitions 3
+      - name: Offline Claude adapter matrix (labeled fake CLI)
+        run: PYTHONPATH=scripts python3 scripts/claude_host_matrix.py --out target/claude-host --repetitions 3
+      - name: Offline OpenCode adapter matrix (labeled fake ACP server)
+        run: PYTHONPATH=scripts python3 scripts/opencode_host_matrix.py --out target/opencode-host --repetitions 3
+
+      - name: OpenCode runner self-test (refusals and receipt shape, no tokens)
+        run: PYTHONPATH=scripts python3 scripts/opencode_live_run.py --selftest --out target/oc-st
+      - name: Live runners, dry run against the labeled fakes
+        run: |
+          PYTHONPATH=scripts python3 scripts/claude_live_run.py --run R1 --dry-run --out target/claude-dry
+          PYTHONPATH=scripts python3 scripts/opencode_live_run.py --run R1 --dry-run --out target/opencode-dry
       - name: Start isolated runner user manager
         if: runner.os == 'Linux'
         run: |

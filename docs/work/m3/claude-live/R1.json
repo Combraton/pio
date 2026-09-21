@@ -1,0 +1,473 @@
+{
+  "addenda": [
+    {
+      "boundary_note": "the same key was the containment boundary, which would have called a sibling fixture contained. R1 used no tool, so nothing was misclassified.",
+      "cause": "the host passed the directory fixtures are created in to the durable snapshot, so the transcript listing and the `projects` lookup were keyed by that path instead of the workspace repository beneath it. The harness keys both by the session working directory. The slugged directory does not exist, so the before and the after were both empty and the diff subtracted one nothing from another. `model.configured` came from a service-configuration field the admission list does not permit, so it could only ever be absent.",
+      "corrected_by": {
+        "adr": "docs/decisions/004-claude-code-adapter.md \u00a77 and its disclosure",
+        "offline_cases": [
+          "service_reports_the_transcript_the_run_wrote",
+          "service_records_the_configured_model_from_settings",
+          "out_of_fixture_request_declined_by_pio (sibling assertion)"
+        ],
+        "unit_test": "the_transcript_listing_follows_the_session_working_directory"
+      },
+      "date": "2026-09-20",
+      "not_affected": [
+        "delivery, its evidence and its proof class",
+        "the usage parts and the ledger",
+        "the permission check and the containment statement",
+        "settings_changed, which was false and is false: PIO changed nothing of the user's own"
+      ],
+      "raised_by": "independent review of commit 6026436",
+      "reason": "false_durable_state_statement",
+      "receipt_rewritten": false,
+      "what_is_on_disk": {
+        "note_on_the_model": "the configured model is an alias; the effective model recorded above resolves it. The product default is also Opus, so effective_proves_fidelity stays false",
+        "note_on_the_project_entry": "the run created a transcript directory but no `projects` entry, so that half of the statement was right for the wrong reason",
+        "observed": "after the fact, from the directory as it stands",
+        "settings_model": "opus[1m]",
+        "transcripts": {
+          "entry_count": 2,
+          "entry_digests": [
+            "aca07d64fde19729cb618656995729eff9c38463fc2d68bd183e55bddc9c8bf2",
+            "c064fbca9d9de8dd9bb0624984403b28d0da807a69365d4f7fb09123ecb0c405"
+          ],
+          "exists": true,
+          "note": "a session file of 194,375 bytes and an empty directory beside it, both created during the turn; counted the way the corrected listing counts, which descends"
+        },
+        "workspace_project_present": false
+      },
+      "what_the_receipt_claimed": {
+        "durable_state.fixture_project_created": false,
+        "durable_state.new_transcript_entries": 0,
+        "model.configured": null
+      }
+    },
+    {
+      "charge_basis": "observed",
+      "charged": 33793,
+      "cumulative_after_this_policy": {
+        "cap": 1000000,
+        "charged": 341070,
+        "observed": 261070,
+        "stop_at": 800000
+      },
+      "date": "2026-09-20",
+      "raised_by": "owner decision after R5",
+      "reason": "charge_policy_introduced",
+      "receipt_rewritten": false,
+      "what_changed": "the ledger now carries observed and charged, and every stop rule is applied to charged. Observed is what the harness reported; charged is what the cap is measured against. The figures in the body above are unchanged and remain what this run observed."
+    }
+  ],
+  "binary_sha256": "1f1a79357c8b4e0a27d04f47bc0fc1074f0519f8f56186d22f16cbb9fa411ae4",
+  "commit": "ef2e531e0fc4598b032d116742f6c5ff8e53ef02",
+  "completion_is_acceptance": false,
+  "containment": {
+    "mechanism": "harness_permission_rules_only",
+    "os_sandbox_observed": false
+  },
+  "cumulative": {
+    "cap": 1000000,
+    "observed": 33793,
+    "stop_at": 800000
+  },
+  "delivery": {
+    "evidence": {
+      "class": "native_replay_echo",
+      "source": "claude-code/host"
+    },
+    "proof_class": "provider_ack_id",
+    "state": "acknowledged"
+  },
+  "dirty": false,
+  "dry_run": false,
+  "durable_state": {
+    "claude_json_key_count_changed": false,
+    "fixture_project_created": false,
+    "fixture_project_trusted_without_asking": false,
+    "format": "pio-claude-durable-diff/1",
+    "new_transcript_entries": 0,
+    "settings_changed": false,
+    "usage_secondary": {
+      "last_cost": null,
+      "last_total_input_tokens": null,
+      "last_total_output_tokens": null
+    }
+  },
+  "exit": {
+    "code": 0
+  },
+  "format": "pio-claude-live-receipt/1",
+  "harness": {
+    "claude_code_version": "2.1.278",
+    "session_id": "127d3e46-518b-45cc-be68-65c59b9ae860",
+    "source": "claude-code/host"
+  },
+  "loaded": {
+    "agents": 8,
+    "mcp_servers": [
+      {
+        "name": "plugin:vercel:vercel",
+        "source": "plugin",
+        "status": "needs-auth"
+      },
+      {
+        "name": "plugin:github:github",
+        "source": "plugin",
+        "status": "failed"
+      },
+      {
+        "name": "plugin:playwright:playwright",
+        "source": "plugin",
+        "status": "connected"
+      },
+      {
+        "name": "plugin:chrome-devtools-mcp:chrome-devtools",
+        "source": "plugin",
+        "status": "connected"
+      },
+      {
+        "name": "claude.ai Claude Docs",
+        "source": "claudeai",
+        "status": "connected"
+      },
+      {
+        "name": "claude.ai higgsfield",
+        "source": "claudeai",
+        "status": "connected"
+      },
+      {
+        "name": "claude.ai Gmail",
+        "source": "claudeai",
+        "status": "needs-auth"
+      },
+      {
+        "name": "claude.ai Google Calendar",
+        "source": "claudeai",
+        "status": "needs-auth"
+      },
+      {
+        "name": "claude.ai Google Drive",
+        "source": "claudeai",
+        "status": "needs-auth"
+      }
+    ],
+    "plugins": [
+      {
+        "name": "clangd-lsp",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0",
+        "source": "clangd-lsp@claude-plugins-official",
+        "version": "1.0.0"
+      },
+      {
+        "name": "planning-with-files",
+        "path": "~/.claude/plugins/cache/planning-with-files/planning-with-files/2.34.0",
+        "source": "planning-with-files@planning-with-files",
+        "version": "2.34.0"
+      },
+      {
+        "name": "superpowers",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0",
+        "source": "superpowers@claude-plugins-official",
+        "version": "6.3.0"
+      },
+      {
+        "name": "ralph-loop",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/ralph-loop/1.0.0",
+        "source": "ralph-loop@claude-plugins-official",
+        "version": "1.0.0"
+      },
+      {
+        "name": "frontend-design",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/frontend-design/c447c3207a42",
+        "source": "frontend-design@claude-plugins-official"
+      },
+      {
+        "name": "rust-analyzer-lsp",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0",
+        "source": "rust-analyzer-lsp@claude-plugins-official",
+        "version": "1.0.0"
+      },
+      {
+        "name": "vercel",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/vercel/0.49.2",
+        "source": "vercel@claude-plugins-official",
+        "version": "0.49.2"
+      },
+      {
+        "name": "php-lsp",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/php-lsp/1.0.0",
+        "source": "php-lsp@claude-plugins-official",
+        "version": "1.0.0"
+      },
+      {
+        "name": "github",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/github/c447c3207a42",
+        "source": "github@claude-plugins-official"
+      },
+      {
+        "name": "playwright",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/playwright/c447c3207a42",
+        "source": "playwright@claude-plugins-official"
+      },
+      {
+        "name": "chrome-devtools-mcp",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/chrome-devtools-mcp/1.9.0",
+        "source": "chrome-devtools-mcp@claude-plugins-official",
+        "version": "1.9.0"
+      },
+      {
+        "name": "agents-md",
+        "path": "builtin",
+        "source": "agents-md@builtin"
+      }
+    ],
+    "skills": 93,
+    "slash_commands": 140,
+    "tools": [
+      "Task",
+      "Bash",
+      "CronCreate",
+      "CronDelete",
+      "CronList",
+      "DesignSync",
+      "Edit",
+      "EnterWorktree",
+      "ExitWorktree",
+      "ListAgents",
+      "ListMcpResourcesTool",
+      "LSP",
+      "Monitor",
+      "NotebookEdit",
+      "PushNotification",
+      "Read",
+      "ReadMcpResourceDirTool",
+      "ReadMcpResourceTool",
+      "RemoteTrigger",
+      "ReportFindings",
+      "ScheduleWakeup",
+      "SendMessage",
+      "Skill",
+      "TaskStop",
+      "ToolSearch",
+      "WebFetch",
+      "WebSearch",
+      "Workflow",
+      "Write",
+      "mcp__claude_ai_Claude_Docs__batch",
+      "mcp__claude_ai_Claude_Docs__create",
+      "mcp__claude_ai_Claude_Docs__delete",
+      "mcp__claude_ai_Claude_Docs__export",
+      "mcp__claude_ai_Claude_Docs__guide",
+      "mcp__claude_ai_Claude_Docs__query",
+      "mcp__claude_ai_Claude_Docs__read",
+      "mcp__claude_ai_Claude_Docs__update",
+      "mcp__claude_ai_higgsfield__animation_actions",
+      "mcp__claude_ai_higgsfield__apps_describe",
+      "mcp__claude_ai_higgsfield__apps_invoke",
+      "mcp__claude_ai_higgsfield__apps_search",
+      "mcp__claude_ai_higgsfield__balance",
+      "mcp__claude_ai_higgsfield__cancel_trial_auto_renewal",
+      "mcp__claude_ai_higgsfield__confirm_billing_purchase",
+      "mcp__claude_ai_higgsfield__confirm_trial_cancel",
+      "mcp__claude_ai_higgsfield__create_voice",
+      "mcp__claude_ai_higgsfield__create_voice_from_confirmed_audio",
+      "mcp__claude_ai_higgsfield__create_website",
+      "mcp__claude_ai_higgsfield__deploy_website",
+      "mcp__claude_ai_higgsfield__dubbing",
+      "mcp__claude_ai_higgsfield__generate_3d",
+      "mcp__claude_ai_higgsfield__generate_audio",
+      "mcp__claude_ai_higgsfield__generate_audio_batch",
+      "mcp__claude_ai_higgsfield__generate_image",
+      "mcp__claude_ai_higgsfield__generate_image_batch",
+      "mcp__claude_ai_higgsfield__generate_video",
+      "mcp__claude_ai_higgsfield__generate_video_batch",
+      "mcp__claude_ai_higgsfield__get_explainer_presets",
+      "mcp__claude_ai_higgsfield__get_workflow_bundle_file",
+      "mcp__claude_ai_higgsfield__get_workflow_instructions",
+      "mcp__claude_ai_higgsfield__job_display",
+      "mcp__claude_ai_higgsfield__job_status",
+      "mcp__claude_ai_higgsfield__jobs_wait",
+      "mcp__claude_ai_higgsfield__list_voices",
+      "mcp__claude_ai_higgsfield__list_website_categories",
+      "mcp__claude_ai_higgsfield__list_websites",
+      "mcp__claude_ai_higgsfield__list_workspaces",
+      "mcp__claude_ai_higgsfield__marketing_studio_v2_avatars",
+      "mcp__claude_ai_higgsfield__marketing_studio_v2_costs",
+      "mcp__claude_ai_higgsfield__marketing_studio_v2_create",
+      "mcp__claude_ai_higgsfield__marketing_studio_v2_presets",
+      "mcp__claude_ai_higgsfield__marketing_studio_v2_status",
+      "mcp__claude_ai_higgsfield__media_confirm",
+      "mcp__claude_ai_higgsfield__media_import_url",
+      "mcp__claude_ai_higgsfield__media_upload",
+      "mcp__claude_ai_higgsfield__media_upload_widget",
+      "mcp__claude_ai_higgsfield__models_explore",
+      "mcp__claude_ai_higgsfield__motion_control",
+      "mcp__claude_ai_higgsfield__outpaint_image",
+      "mcp__claude_ai_higgsfield__participate_in_contest",
+      "mcp__claude_ai_higgsfield__presets_show",
+      "mcp__claude_ai_higgsfield__publish_website",
+      "mcp__claude_ai_higgsfield__reframe",
+      "mcp__claude_ai_higgsfield__remove_background",
+      "mcp__claude_ai_higgsfield__rename_website",
+      "mcp__claude_ai_higgsfield__resolve_explainer_preset",
+      "mcp__claude_ai_higgsfield__reveal_generation",
+      "mcp__claude_ai_higgsfield__sandbox_exec",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_create_project",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_get_artifact",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_get_blend",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_get_glb",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_get_operation",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_get_project",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_import_asset",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_list_projects",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_query_python",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_run_python",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_search_assets",
+      "mcp__claude_ai_higgsfield__scene_builder_3d_show_scene",
+      "mcp__claude_ai_higgsfield__select_workspace",
+      "mcp__claude_ai_higgsfield__shorts_studio_create",
+      "mcp__claude_ai_higgsfield__shorts_studio_create_preset",
+      "mcp__claude_ai_higgsfield__shorts_studio_list_presets",
+      "mcp__claude_ai_higgsfield__shorts_studio_list_sessions",
+      "mcp__claude_ai_higgsfield__shorts_studio_status",
+      "mcp__claude_ai_higgsfield__show_characters",
+      "mcp__claude_ai_higgsfield__show_generation_by_ids",
+      "mcp__claude_ai_higgsfield__show_generations",
+      "mcp__claude_ai_higgsfield__show_marketing_studio_generations",
+      "mcp__claude_ai_higgsfield__show_marketing_studio_v2",
+      "mcp__claude_ai_higgsfield__show_medias",
+      "mcp__claude_ai_higgsfield__show_plans_and_credits",
+      "mcp__claude_ai_higgsfield__show_reference_elements",
+      "mcp__claude_ai_higgsfield__tiktok_accounts",
+      "mcp__claude_ai_higgsfield__tiktok_connect",
+      "mcp__claude_ai_higgsfield__tiktok_music_trending",
+      "mcp__claude_ai_higgsfield__tiktok_music_tune",
+      "mcp__claude_ai_higgsfield__tiktok_prepare_publish",
+      "mcp__claude_ai_higgsfield__tiktok_publish",
+      "mcp__claude_ai_higgsfield__tiktok_publish_status",
+      "mcp__claude_ai_higgsfield__tiktok_reconnect",
+      "mcp__claude_ai_higgsfield__transactions",
+      "mcp__claude_ai_higgsfield__upscale_image",
+      "mcp__claude_ai_higgsfield__upscale_video",
+      "mcp__claude_ai_higgsfield__video_analysis_create",
+      "mcp__claude_ai_higgsfield__video_analysis_jobs",
+      "mcp__claude_ai_higgsfield__video_analysis_status",
+      "mcp__claude_ai_higgsfield__virality_predictor",
+      "mcp__claude_ai_higgsfield__voice_change",
+      "mcp__claude_ai_higgsfield__website_db",
+      "mcp__claude_ai_higgsfield__website_repo_access",
+      "mcp__claude_ai_higgsfield__website_secrets",
+      "mcp__claude_ai_higgsfield__website_status",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__click",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__close_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__drag",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__emulate",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__evaluate_script",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__fill",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__fill_form",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__get_console_message",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__get_network_request",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__handle_dialog",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__hover",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__lighthouse_audit",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__list_console_messages",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__list_network_requests",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__list_pages",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__navigate_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__new_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__performance_analyze_insight",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__performance_start_trace",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__performance_stop_trace",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__press_key",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__resize_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__select_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_heapsnapshot",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_screenshot",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_snapshot",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__type_text",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__upload_file",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__wait_for",
+      "mcp__plugin_playwright_playwright__browser_click",
+      "mcp__plugin_playwright_playwright__browser_close",
+      "mcp__plugin_playwright_playwright__browser_console_messages",
+      "mcp__plugin_playwright_playwright__browser_drag",
+      "mcp__plugin_playwright_playwright__browser_drop",
+      "mcp__plugin_playwright_playwright__browser_emulate_media",
+      "mcp__plugin_playwright_playwright__browser_evaluate",
+      "mcp__plugin_playwright_playwright__browser_file_upload",
+      "mcp__plugin_playwright_playwright__browser_fill_form",
+      "mcp__plugin_playwright_playwright__browser_find",
+      "mcp__plugin_playwright_playwright__browser_handle_dialog",
+      "mcp__plugin_playwright_playwright__browser_hover",
+      "mcp__plugin_playwright_playwright__browser_navigate",
+      "mcp__plugin_playwright_playwright__browser_navigate_back",
+      "mcp__plugin_playwright_playwright__browser_network_request",
+      "mcp__plugin_playwright_playwright__browser_network_requests",
+      "mcp__plugin_playwright_playwright__browser_press_key",
+      "mcp__plugin_playwright_playwright__browser_resize",
+      "mcp__plugin_playwright_playwright__browser_run_code_unsafe",
+      "mcp__plugin_playwright_playwright__browser_select_option",
+      "mcp__plugin_playwright_playwright__browser_snapshot",
+      "mcp__plugin_playwright_playwright__browser_tabs",
+      "mcp__plugin_playwright_playwright__browser_take_screenshot",
+      "mcp__plugin_playwright_playwright__browser_type",
+      "mcp__plugin_playwright_playwright__browser_wait_for"
+    ]
+  },
+  "model": {
+    "configured": null,
+    "effective": "claude-opus-5[1m]",
+    "effective_proves_fidelity": false,
+    "requested": null
+  },
+  "permission": {
+    "checked_after_delivery": true,
+    "effective": "acceptEdits",
+    "matched": true,
+    "requested": "acceptEdits"
+  },
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "preflight": {
+    "binary_newer_than_every_source": true,
+    "binary_sha256": "1f1a79357c8b4e0a27d04f47bc0fc1074f0519f8f56186d22f16cbb9fa411ae4",
+    "checked": true,
+    "commit": "ef2e531e0fc4598b032d116742f6c5ff8e53ef02",
+    "dirty": false,
+    "newest_source": "crates/pio-claude/src/lib.rs"
+  },
+  "run": "R1",
+  "runtime": "exited",
+  "started_at": "2026-09-20T11:31:29Z",
+  "stops": [],
+  "tool_uses": {
+    "containment": {
+      "mechanism": "harness_permission_rules_only",
+      "os_sandbox_observed": false
+    },
+    "fixture_sha256": "99004234ca37957bf4d6f57779c72c8fa49043a41c8c4709cf3966f0981d6f10",
+    "format": "pio-claude-tool-uses/2",
+    "liability": "none_observed",
+    "out_of_fixture_count": 0,
+    "out_of_fixture_effect_observed": false,
+    "tool_uses": [],
+    "unclassifiable_target_count": 0
+  },
+  "usage": {
+    "cap": 1000000,
+    "execution_deadline_seconds": 600,
+    "limit_is_next_turn_only": true,
+    "measure": "input+output+cache_creation+cache_read",
+    "observed_total_tokens": 33793,
+    "parts": {
+      "cache_creation_input_tokens": 33787,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 2,
+      "output_tokens": 4
+    },
+    "reported": true,
+    "run_limit": 150000,
+    "stop_at": 800000
+  }
+}

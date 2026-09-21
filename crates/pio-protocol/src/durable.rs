@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 impl Provider {
     pub(crate) fn host_evidence(&self, class: &str) -> Value {
-        if self.codex() {
+        if self.native() {
             return json!({"class":class,"source":format!("{}/host", self.codex_source())});
         }
         let source = if self.durable.is_none() {
@@ -24,8 +24,8 @@ impl Provider {
         json!({"class":class,"source":source})
     }
     pub(crate) fn run_durable(&mut self, e: &mut Value) -> Result<()> {
-        if self.codex() {
-            return self.run_codex(e);
+        if self.native() {
+            return self.run_native(e);
         }
         let command = pio_core::digest(text(&e["view"]["execution"]["id"]).as_bytes());
         let command = command.trim_start_matches("sha256:");

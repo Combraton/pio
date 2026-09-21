@@ -1,0 +1,146 @@
+{
+  "as_configured": {
+    "agent_capabilities": {
+      "_meta": {
+        "opencode/child-session-updates": true
+      },
+      "loadSession": true,
+      "mcpCapabilities": {
+        "http": true,
+        "sse": false
+      },
+      "promptCapabilities": {
+        "embeddedContext": true,
+        "image": true
+      },
+      "sessionCapabilities": {
+        "close": {},
+        "delete": {},
+        "fork": {},
+        "list": {},
+        "resume": {}
+      }
+    },
+    "agent_info": {
+      "name": "OpenCode",
+      "version": "2.0.1"
+    },
+    "auth_methods": [
+      {
+        "description": "Run `opencode auth login` in the terminal",
+        "id": "opencode-login",
+        "name": "Login with opencode"
+      }
+    ],
+    "config_option_ids": [
+      "effort",
+      "mode",
+      "model"
+    ],
+    "configured_model": "juspay-grid/glm-latest",
+    "effort": "default",
+    "initialized": true,
+    "minimax_models": [
+      "minimax-coding-plan/MiniMax-M2",
+      "minimax-coding-plan/MiniMax-M2.1",
+      "minimax-coding-plan/MiniMax-M2.5",
+      "minimax-coding-plan/MiniMax-M2.5-highspeed",
+      "minimax-coding-plan/MiniMax-M2.7",
+      "minimax-coding-plan/MiniMax-M2.7-highspeed",
+      "minimax-coding-plan/MiniMax-M3"
+    ],
+    "mode": "build",
+    "model_count": 68,
+    "modes": [
+      "build",
+      "plan"
+    ],
+    "private_server_children": [
+      "11135 11128 ~/.local/bin/opencode2 acp",
+      "11136 11135 ~/.local/lib/node_modules/@opencode/cli/bin/opencode.exe serve --stdio --port 0"
+    ],
+    "session_created": true,
+    "update_kinds": [
+      "available_commands_update"
+    ]
+  },
+  "configured": {
+    "model": "juspay-grid/glm-latest",
+    "permission_rules_configured": false,
+    "providers": [
+      "juspay-grid"
+    ]
+  },
+  "credential_variables_passed": [],
+  "credentials_read": false,
+  "executable": {
+    "install": "npm",
+    "resolved": "~/.local/lib/node_modules/@opencode/cli/bin/opencode.exe",
+    "selected": "~/.local/bin/opencode2",
+    "version": "opencode v2.0.1"
+  },
+  "format": "pio-opencode-probe/1",
+  "isolated_control": {
+    "agent_capabilities": {
+      "_meta": {
+        "opencode/child-session-updates": true
+      },
+      "loadSession": true,
+      "mcpCapabilities": {
+        "http": true,
+        "sse": false
+      },
+      "promptCapabilities": {
+        "embeddedContext": true,
+        "image": true
+      },
+      "sessionCapabilities": {
+        "close": {},
+        "delete": {},
+        "fork": {},
+        "list": {},
+        "resume": {}
+      }
+    },
+    "agent_info": {
+      "name": "OpenCode",
+      "version": "2.0.1"
+    },
+    "auth_methods": [
+      {
+        "description": "Run `opencode auth login` in the terminal",
+        "id": "opencode-login",
+        "name": "Login with opencode"
+      }
+    ],
+    "config_option_ids": [
+      "mode",
+      "model"
+    ],
+    "configured_model": "opencode/nemotron-3.5-lightning-free",
+    "effort": null,
+    "initialized": true,
+    "minimax_models": [],
+    "mode": "build",
+    "model_count": 9,
+    "modes": [
+      "build",
+      "plan"
+    ],
+    "private_server_children": [],
+    "session_created": true,
+    "update_kinds": [
+      "available_commands_update"
+    ]
+  },
+  "model_calls": 0,
+  "owner_service_after": [
+    "d6028558a7aa4558765a6973c8c4b9296b27e6316f151390426aa9dcc4e1e1cf"
+  ],
+  "owner_service_before": [
+    "d6028558a7aa4558765a6973c8c4b9296b27e6316f151390426aa9dcc4e1e1cf"
+  ],
+  "owner_service_untouched": true,
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "turn_completed": false
+}

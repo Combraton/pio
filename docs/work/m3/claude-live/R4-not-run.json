@@ -1,0 +1,30 @@
+{
+  "alternatives_rejected": {
+    "run_unchanged": "roughly 130,000 tokens to reproduce a negative",
+    "substitute_a_command_that_prompts": "the posted plan forbids re-running with a different command until one prompts; a disclosed substitution was offered and not taken"
+  },
+  "completion_is_acceptance": false,
+  "date": "2026-09-20",
+  "decided_by": "owner, after R3 was posted",
+  "evidence": {
+    "marker_created": true,
+    "note": "no action_requested, no request_declined_by_pio and no control of any kind in the host event stream",
+    "receipt": "docs/work/m3/claude-live/R3.json",
+    "request_count": 0,
+    "requested": false,
+    "run": "R3"
+  },
+  "format": "pio-claude-live-not-run/1",
+  "intended": "the caller's permission **allow**, answered through execution.respond_action",
+  "not_run": true,
+  "reason": "R3 measured that no permission request arrives for this brief. The command ran unprompted and created the marker, so the caller is never asked. R4 carries the same brief and the same configuration, so it could only reproduce that negative.",
+  "run": "R4",
+  "what_is_exercised_elsewhere": [
+    "both decisions through the service against the labeled fake, in the offline matrix and in the R3 and R4 dry runs",
+    "PIO's own decline of an out-of-fixture target, which R6 measures"
+  ],
+  "what_remains_unexercised": [
+    "the caller's allow, end to end against the real harness",
+    "the caller's deny, end to end against the real harness"
+  ]
+}

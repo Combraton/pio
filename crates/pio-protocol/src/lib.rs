@@ -2,7 +2,8 @@ mod encoding;
 mod provider;
 mod schemas;
 mod stream;
-pub use stream::{serve, serve_codex, serve_fake};
+pub use stream::{serve, serve_claude, serve_codex, serve_fake, serve_opencode};
+mod claude;
 mod codex;
 mod durable;
 
