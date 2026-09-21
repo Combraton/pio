@@ -14,8 +14,10 @@
 //!
 //! Scenario (JSON in `PIO_OPENCODE_FAKE_SCENARIO`, all members optional):
 //! `version`, `model` (what the session reports, so a silent downgrade can be
-//! played), `permission_request`, `tool_calls`, `usage_total`, `delay_ms`,
-//! `ignore_cancel`, `markers`.
+//! played), `permission_request` (whose own `omit_option_kinds` plays an agent
+//! that does not offer one), `tool_calls`, `usage_total`, `message_chunks`,
+//! `usage_on_updates` (a harness that reports usage as it goes rather than
+//! once at the end), `delay_ms`, `ignore_cancel`, `markers`.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 use std::io::{BufRead, Write};
@@ -230,15 +232,30 @@ pub fn run() -> Result<()> {
                         )?;
                     }
                 }
-                update(
-                    session,
-                    json!({"sessionUpdate":"agent_message_chunk",
-                           "content":{"type":"text","text":"fake turn complete"}}),
-                )?;
                 let total = scenario["usage_total"].as_u64().unwrap_or(256);
+                // Different work streams a different number of chunks, for the
+                // same reason it costs a different number of tokens: a census
+                // that is identical in every scenario measures nothing.
+                let chunks = scenario["message_chunks"].as_u64().unwrap_or(1).max(1);
+                for index in 0..chunks {
+                    let mut chunk = json!({"sessionUpdate":"agent_message_chunk",
+                           "content":{"type":"text",
+                                      "text":format!("fake turn chunk {index}")}});
+                    // A harness that reports usage as it goes rather than once
+                    // at the end. Which one OpenCode is, R1 measures; this is
+                    // the scenario that proves the census can see either.
+                    if scenario["usage_on_updates"] == true {
+                        chunk["_meta"] = json!({"usage":{
+                            "inputTokens":total / (2 * chunks),
+                            "outputTokens":total / (2 * chunks)}});
+                    }
+                    update(session, chunk)?;
+                }
                 marker(
                     &markers,
-                    json!({"event":"turn_complete","usage_total":total}),
+                    json!({"event":"turn_complete","usage_total":total,
+                           "message_chunks":chunks,
+                           "usage_on_updates":scenario["usage_on_updates"] == true}),
                 )?;
                 reply(
                     &id,
@@ -272,6 +289,29 @@ pub fn run() -> Result<()> {
 
 /// Ask the client for a decision, the way ACP specifies, and record what came
 /// back — including any field that would make the decision outlive the request.
+/// The options the agent offers. **The ids are deliberately not the kinds.**
+///
+/// Ids are the agent's to invent, and a host that hard-codes `allow` or
+/// `reject` has to fail here rather than in front of the owner's harness.
+/// `omit_option_kinds` plays an agent that does not offer one of them.
+fn permission_options(request: &Value) -> Value {
+    let omit: Vec<&str> = request["omit_option_kinds"]
+        .as_array()
+        .map(|kinds| kinds.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    Value::Array(
+        [
+            ("opt_1", "Allow once", "allow_once"),
+            ("opt_2", "Always allow", "allow_always"),
+            ("opt_3", "Reject", "reject_once"),
+        ]
+        .iter()
+        .filter(|(_, _, kind)| !omit.contains(kind))
+        .map(|(id, name, kind)| json!({"optionId":id,"name":name,"kind":kind}))
+        .collect(),
+    )
+}
+
 fn request_permission(
     request: &Value,
     session: &str,
@@ -279,6 +319,7 @@ fn request_permission(
     markers: &Option<PathBuf>,
 ) -> Result<()> {
     let id = json!(9001);
+    let options = permission_options(request);
     // The tool call the request is about, announced the way a real agent
     // announces one. Without it there is no record for a decision to be
     // attributed to, which is how `decided_by` went untested here.
@@ -294,9 +335,7 @@ fn request_permission(
             "toolCall":{"toolCallId":"call_permission","title":&request["title"],
                         "kind":request["kind"].as_str().unwrap_or("execute"),
                         "rawInput":&request["input"]},
-            "options":[{"optionId":"allow","name":"Allow","kind":"allow_once"},
-                       {"optionId":"allow_always","name":"Always allow","kind":"allow_always"},
-                       {"optionId":"reject","name":"Reject","kind":"reject_once"}]}}),
+            "options":&options}}),
     )?;
     for line in lines {
         let line = line?;
@@ -315,15 +354,35 @@ fn request_permission(
             .filter(|field| !outcome[**field].is_null())
             .copied()
             .collect();
+        // Which option was taken is read back from the list this fake
+        // offered, by id, so the kind is measured rather than guessed from a
+        // name. A host that selects by kind and a fake that reports by kind
+        // can disagree; a fake that assumes the id cannot even notice.
+        let chosen = options
+            .as_array()
+            .and_then(|list| {
+                list.iter()
+                    .find(|option| option["optionId"] == outcome["optionId"])
+            })
+            .cloned();
+        let chosen_kind = chosen
+            .as_ref()
+            .map(|option| option["kind"].clone())
+            .unwrap_or(Value::Null);
         marker(
             markers,
             json!({"event":"permission_decision",
                    "outcome":&outcome["outcome"],
                    "option_id":&outcome["optionId"],
-                   // An "always" option was offered; acting on one would
-                   // widen a permission beyond this request.
-                   "always_option_offered":true,
-                   "always_option_taken":outcome["optionId"] == "allow_always",
+                   "option_kind":&chosen_kind,
+                   // An "always" option is offered unless the scenario omits
+                   // it; acting on one would widen a permission beyond this
+                   // request.
+                   "always_option_offered":options.as_array()
+                       .is_some_and(|list| list.iter().any(|o| o["kind"] == "allow_always")),
+                   "options_offered":&options,
+                   "always_option_taken":chosen_kind.as_str()
+                       .is_some_and(|kind| kind.ends_with("_always")),
                    "widening_fields_received":widening}),
         )?;
         return Ok(());

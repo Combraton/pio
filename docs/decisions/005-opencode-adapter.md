@@ -75,6 +75,7 @@ PIO never selects a model outside a dated, owner-authorized exception, as ADR 00
 
 - **`--auto` is never passed**, in any form, at top level or on `run`. It auto-approves everything not explicitly denied, and with no deny rules configured that is every request.
 - Only **single-use** decisions are forwarded, as for Codex and Claude. A rule update, a session-scoped grant and a mode change are all refused.
+- **An option is chosen by its `kind`, never by its id.** ACP lets the agent invent the ids; the meaning is in `kind`. PIO selects the option whose kind is `allow_once` for an allow and `reject_once` for a deny or a default reject, never an `*_always` kind, and when the kind a decision needs is **not offered** it selects nothing, answers `cancelled` and records the refusal — a caller's allow that cannot be expressed single-use is refused rather than approximated with the always option sitting next to it. The ids `allow` and `reject` the host used until 2026-09-21 were the **labeled fake's own invention**; on a harness naming them anything else they would have selected nothing, silently. The fake's ids are now `opt_1`, `opt_2` and `opt_3` precisely so that a hard-coded id fails offline.
 - The out-of-fixture classification built for Claude applies unchanged: a path-bearing request resolving outside the fixture is declined by PIO with a recorded reason; anything PIO cannot classify is surfaced to the caller and never auto-allowed.
 
 ### 6. Outward behaviour observed
@@ -100,7 +101,7 @@ The consequence is stated rather than worked around: on an ambiguous outcome —
 ## Open, to be measured before any live run
 
 1. **The `session/request_permission` request and response shapes on the wire.** ACP specifies them; they are unverified against 2.0.1, and PIO forwards no decision whose single-use form it has not measured.
-2. **Usage reporting granularity**, first, exactly as for Claude. The stops cannot be set before it is known whether usage arrives during a turn or only at its end.
+2. **Usage reporting granularity**, first, exactly as for Claude. The stops cannot be set before it is known whether usage arrives during a turn or only at its end. The host now **searches** each `session/update` and the turn result for any key named `usage` or ending in `tokens`, and records a census — every update kind seen, which of them carried usage, and where — so R1 can report a place PIO did not expect rather than confirm the one it assumed. The Claude adapter summed two of four usage parts for five live runs because it looked only where it expected.
 3. **Cancellation**: `session/cancel` semantics, and whether a cancelled turn still reports usage.
 4. Whether `mode: plan` is a genuinely narrower posture worth requesting for fixture runs.
 5. The **surface and session identity** to pin, and whether npm self-update moves it, as the Homebrew cask does for Claude.
@@ -112,10 +113,10 @@ MiniMax cap **300,000,000 tokens total**, stop and report at **240,000,000**. Ea
 
 ## Out of scope
 
-Hermes, which comes after OpenCode and only under an isolated profile — and which is deferred with that said plainly if isolation turns out not to be possible. The as-configured Juspay Grid run, unless the owner approves it on the issue.
+**Hermes is deferred** (owner decision, 2026-09-21). It is **test scope only and does not gate v0.1**, and no Hermes adapter work happens unless the owner says otherwise; if it is ever picked up it runs only under an isolated profile. The as-configured Juspay Grid run, unless the owner approves it on the issue.
 ## The permission shape is specified, not measured
 
-The labeled fake's `session/request_permission` — its `toolCall`, its three options and the `allow_always` among them — is taken **from the ACP specification and has never been measured against OpenCode 2.0.1**. Every offline case that exercises a permission decision therefore proves what PIO does with the shape it was told to expect, not what the harness sends.
+The labeled fake's `session/request_permission` — its `toolCall`, its three options and the `allow_always` among them — is taken **from the ACP specification and has never been measured against OpenCode 2.0.1**. The option **ids** are the fake's invention outright; the reviewer's own reading suggests a real dialog offers something like "once", "always" and "reject", which is a hint and not a measurement either. The host records the real option list, ids and kinds apart, from the **first live request**, and that recording is the measurement this ADR owes. Every offline case that exercises a permission decision therefore proves what PIO does with the shape it was told to expect, not what the harness sends.
 
 **The first live request is the measurement.** Until MiniMax R2 produces one, no receipt may be read as evidence that this harness asks at all, or that it asks in this shape. The owner's configuration carries no permission rules, so it is possible that it never asks — which is the state the Claude adapter was measured in, for a different reason, across four live runs.
 

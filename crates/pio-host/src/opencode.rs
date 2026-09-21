@@ -29,6 +29,81 @@ pub fn append_control(root: &Path, invocation: &str, control: &Value) -> Result<
     harness::append_control(root, ADAPTER, invocation, control)
 }
 
+/// Every place in a value where the harness reports token usage, by path.
+///
+/// Written as a search rather than a lookup. R1's job is to measure **where**
+/// ACP puts usage and which update kinds carry it, and a lookup can only
+/// confirm the place it already assumed — which is how the Claude adapter
+/// summed two of four parts for five live runs before anything noticed.
+fn usage_sites(value: &Value, prefix: &str, found: &mut Vec<(String, Value)>) {
+    match value {
+        Value::Object(map) => {
+            for (key, inner) in map {
+                let path = if prefix.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{prefix}.{key}")
+                };
+                if key.eq_ignore_ascii_case("usage") || key.to_ascii_lowercase().ends_with("tokens")
+                {
+                    // Recorded whole and not descended into, so one usage
+                    // object counts once rather than once per counter.
+                    found.push((path, inner.clone()));
+                    continue;
+                }
+                usage_sites(inner, &path, found);
+            }
+        }
+        Value::Array(items) => {
+            for (index, inner) in items.iter().enumerate() {
+                usage_sites(inner, &format!("{prefix}[{index}]"), found);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// What to send back for one permission decision, and what to record about it.
+///
+/// **Option ids are the agent's to invent.** `allow` and `reject` were the
+/// labeled fake's own invention, and a host that hard-codes them selects
+/// nothing on a harness that names them anything else. ACP puts the meaning in
+/// `kind`, so that is what PIO matches: `allow_once` for an allow and
+/// `reject_once` for a deny or a default reject. An `*_always` kind is never
+/// selected — every decision PIO encodes is single-use — and when the kind a
+/// decision needs is not offered PIO selects nothing and answers `cancelled`,
+/// which refuses the call rather than permitting it.
+fn permission_answer(request: &Value, decision: &str) -> (Value, Value) {
+    let wanted = if decision == "allow" {
+        "allow_once"
+    } else {
+        "reject_once"
+    };
+    let offered = request["params"]["options"].clone();
+    let chosen = offered
+        .as_array()
+        .and_then(|options| options.iter().find(|option| option["kind"] == wanted))
+        .cloned();
+    let outcome = match &chosen {
+        Some(option) => json!({"outcome":"selected","optionId":&option["optionId"]}),
+        None => json!({"outcome":"cancelled"}),
+    };
+    let record = json!({
+        "option_kind_required":wanted,
+        "option_kind_offered":chosen.is_some(),
+        "option_id":chosen.as_ref().map(|option| option["optionId"].clone()),
+        "option_kind":chosen.as_ref().map(|option| option["kind"].clone()),
+        // Measured from the option actually selected, not asserted: a field
+        // that cannot be false is not a check.
+        "always_option_taken":chosen.as_ref()
+            .and_then(|option| option["kind"].as_str())
+            .is_some_and(|kind| kind.ends_with("_always")),
+        "options_offered":offered,
+        "outcome":&outcome,
+    });
+    (outcome, record)
+}
+
 pub fn source(spec: &Value) -> &'static str {
     if spec["labeled_fake"] == true {
         pio_opencode::fake::SOURCE
@@ -223,6 +298,14 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let mut pending_actions: std::collections::BTreeMap<u64, (Value, std::time::Instant)> =
         std::collections::BTreeMap::new();
     let mut action_seq = 0u64;
+    // Measured rather than assumed: every session update kind seen, and every
+    // place an update or the turn result reported usage. Offline the answer
+    // can only be the fake's; on a live run it is OpenCode's, which is what
+    // R1 exists to find out.
+    let mut update_kinds: std::collections::BTreeMap<String, u64> =
+        std::collections::BTreeMap::new();
+    let mut usage_reports: Vec<Value> = Vec::new();
+    let mut options_recorded = false;
     // Who decided each tool call, by its ACP `toolCallId`, and which ones were
     // refused. Without these every refusal reads as an effect PIO observed.
     let mut decided = json!({});
@@ -245,6 +328,14 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                 life.event(json!({"kind":"turn_completed",
                     "status":if message["error"].is_null() { "completed" } else { "failed" },
                     "stop_reason":stop,"error":message["error"]}))?;
+                let mut sites = Vec::new();
+                usage_sites(&message["result"], "", &mut sites);
+                if !sites.is_empty() {
+                    usage_reports.push(json!({"where":"session/prompt result",
+                        "update_kind":Value::Null,
+                        "paths":sites.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>(),
+                        "values":sites.iter().map(|(_, value)| value.clone()).collect::<Vec<_>>()}));
+                }
                 if let Some(usage) = message["result"]["_meta"]["usage"].as_object() {
                     let total: u64 = ["inputTokens", "outputTokens"]
                         .iter()
@@ -269,6 +360,20 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                             "proof_class":Value::Null}))?;
                     }
                     let update = &message["params"]["update"];
+                    let update_kind = update["sessionUpdate"]
+                        .as_str()
+                        .unwrap_or("(absent)")
+                        .to_owned();
+                    *update_kinds.entry(update_kind.clone()).or_insert(0) += 1;
+                    let mut sites = Vec::new();
+                    usage_sites(update, "", &mut sites);
+                    if !sites.is_empty() {
+                        usage_reports.push(json!({"where":"session/update",
+                            "update_kind":update_kind,
+                            "paths":sites.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>(),
+                            "values":sites.iter().map(|(_, value)| value.clone())
+                                .collect::<Vec<_>>()}));
+                    }
                     if update["sessionUpdate"] == "tool_call" {
                         tool_calls.push(update.clone());
                     }
@@ -285,6 +390,18 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                 }
                 "session/request_permission" => {
                     action_seq += 1;
+                    if !options_recorded {
+                        options_recorded = true;
+                        // The measurement ADR 005 promises: the option list as
+                        // the agent actually offers it, ids and kinds apart.
+                        let options = message["params"]["options"].as_array().cloned();
+                        life.event(json!({"kind":"permission_options_observed",
+                            "options":&message["params"]["options"],
+                            "option_ids":options.as_ref().map(|list| list.iter()
+                                .map(|option| option["optionId"].clone()).collect::<Vec<_>>()),
+                            "option_kinds":options.as_ref().map(|list| list.iter()
+                                .map(|option| option["kind"].clone()).collect::<Vec<_>>())}))?;
+                    }
                     let input = &message["params"]["toolCall"]["rawInput"];
                     let classification = pio_claude::classify_permission_request(
                         &json!({"request":{"input":input,
@@ -294,10 +411,12 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         &cwd,
                     );
                     if classification["disposition"] == "decline" {
-                        // Single-use reject. An always-allow option is offered
-                        // on every request and is never taken.
+                        // Single-use reject, selected by **kind**: the id is
+                        // the agent's to invent. An always-allow option is
+                        // offered on every request and is never taken.
+                        let (outcome, answer) = permission_answer(&message, "deny");
                         child.send(&json!({"jsonrpc":"2.0","id":message["id"],
-                            "result":{"outcome":{"outcome":"selected","optionId":"reject"}}}))?;
+                            "result":{"outcome":outcome}}))?;
                         if let Some(id) = message["params"]["toolCall"]["toolCallId"].as_str() {
                             decided[id] = json!({"by":"pio","decision":"deny",
                                 "reason":classification["reason"]});
@@ -307,6 +426,10 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                             "action_seq":action_seq,"decision":"deny",
                             "decided_by":"pio",
                             "tool_use_id":message["params"]["toolCall"]["toolCallId"],
+                            "option_id":&answer["option_id"],
+                            "option_kind":&answer["option_kind"],
+                            "always_option_taken":&answer["always_option_taken"],
+                            "answer":answer,
                             "classification":classification}))?;
                     } else {
                         pending_actions.insert(
@@ -361,8 +484,9 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
             let Some((request, _)) = pending_actions.remove(&seq) else {
                 continue;
             };
+            let (outcome, answer) = permission_answer(&request, "deny");
             child.send(&json!({"jsonrpc":"2.0","id":request["id"],
-                "result":{"outcome":{"outcome":"selected","optionId":"reject"}}}))?;
+                "result":{"outcome":outcome}}))?;
             if let Some(tool_id) = request["params"]["toolCall"]["toolCallId"].as_str() {
                 decided[tool_id] = json!({"by":"pio","decision":"deny",
                     "reason":"no caller answered within the delivery timeout"});
@@ -374,7 +498,10 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                 "decided_by":"pio",
                 "tool_use_id":request["params"]["toolCall"]["toolCallId"],
                 "after_seconds":answer_timeout.as_secs(),
-                "option_id":"reject","always_option_taken":false,
+                "option_id":&answer["option_id"],
+                "option_kind":&answer["option_kind"],
+                "always_option_taken":&answer["always_option_taken"],
+                "answer":answer,
                 "widening_fields_sent":[]}))?;
         }
 
@@ -389,27 +516,53 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         .map(|(request, _)| request);
                     match (request, decision) {
                         (Some(request), "allow" | "deny") => {
-                            let option = if decision == "allow" {
-                                "allow"
-                            } else {
-                                "reject"
-                            };
+                            let (outcome, answer) = permission_answer(&request, decision);
+                            let encodable = answer["option_kind_offered"] == true;
                             child.send(&json!({"jsonrpc":"2.0","id":request["id"],
-                                "result":{"outcome":{"outcome":"selected","optionId":option}}}))?;
+                                "result":{"outcome":outcome}}))?;
                             if let Some(tool_id) =
                                 request["params"]["toolCall"]["toolCallId"].as_str()
                             {
-                                decided[tool_id] = json!({"by":"caller","decision":decision});
-                                if decision == "deny" {
+                                if encodable {
+                                    decided[tool_id] = json!({"by":"caller","decision":decision});
+                                    if decision == "deny" {
+                                        refused.push(json!({"tool_use_id":tool_id}));
+                                    }
+                                } else {
+                                    // The caller's decision could not be
+                                    // expressed without widening the
+                                    // permission, so PIO selected nothing.
+                                    // The refusal is PIO's, not the caller's.
+                                    decided[tool_id] = json!({"by":"pio","decision":"deny",
+                                        "reason":format!("the harness offered no {} option",
+                                            answer["option_kind_required"].as_str()
+                                                .unwrap_or_default())});
                                     refused.push(json!({"tool_use_id":tool_id}));
                                 }
                             }
                             life.event(json!({"kind":"control_applied","control_id":id,
-                                "action_seq":control["action_seq"],"decision":decision,
-                                "decided_by":"caller",
+                                "action_seq":control["action_seq"],
+                                "decision":if encodable { decision } else { "deny" },
+                                "requested_decision":decision,
+                                "applied":encodable,
+                                "decided_by":if encodable { "caller" } else { "pio" },
                                 "tool_use_id":request["params"]["toolCall"]["toolCallId"],
-                                "option_id":option,"always_option_taken":false,
+                                "option_id":&answer["option_id"],
+                                "option_kind":&answer["option_kind"],
+                                "always_option_taken":&answer["always_option_taken"],
+                                "answer":&answer,
                                 "widening_fields_sent":[]}))?;
+                            if !encodable {
+                                life.event(json!({"kind":"option_kind_not_offered",
+                                    "control_id":id,
+                                    "required_kind":&answer["option_kind_required"],
+                                    "requested_decision":decision,
+                                    "options_offered":&answer["options_offered"],
+                                    "outcome_sent":"cancelled",
+                                    "reason":"PIO answers by option kind and never selects an \
+                                              always kind, so a decision whose kind is not \
+                                              offered is refused rather than approximated"}))?;
+                            }
                         }
                         (Some(request), _) => {
                             pending_actions.insert(
@@ -462,6 +615,28 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     // Ordered deliberately: the exit event is what turns the runtime to
     // `exited`, so everything a caller must see on a finished execution is
     // recorded first. A matrix run caught the other order.
+    // R1's measurement: how often this harness reports usage, and which
+    // session update kinds carry it. The stop rules are next-turn stops until
+    // this says otherwise, and saying so is the whole point of the first run.
+    let mut usage_bearing: std::collections::BTreeMap<String, u64> =
+        std::collections::BTreeMap::new();
+    for report in usage_reports
+        .iter()
+        .filter(|r| r["where"] == "session/update")
+    {
+        if let Some(kind) = report["update_kind"].as_str() {
+            *usage_bearing.entry(kind.to_owned()).or_insert(0) += 1;
+        }
+    }
+    life.event(json!({"kind":"usage_granularity",
+        "session_update_kinds":update_kinds,
+        "usage_bearing_update_kinds":usage_bearing,
+        "report_count":usage_reports.len(),
+        "reported_during_turn":!usage_bearing.is_empty(),
+        "reported_at_turn_end":usage_reports.iter()
+            .any(|report| report["where"] == "session/prompt result"),
+        "reports":usage_reports,
+        "measure":"input+output; ACP reports no cache counters"}))?;
     life.event(json!({"kind":"tool_uses","record":tool_uses}))?;
     life.event(json!({"kind":"config_after",
         "snapshot":{"owner_service":owner_after},

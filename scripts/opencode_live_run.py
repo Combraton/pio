@@ -313,7 +313,11 @@ class Service:
                  # Different work costs different tokens. A fixed number made
                  # every dry-run receipt identical in the one field a budget
                  # is kept in.
-                 'usage_total': 64 + len(BRIEFS[run])})
+                 'usage_total': 64 + len(BRIEFS[run]),
+                 # Likewise for the update census: a fake that streams the
+                 # same number of chunks in every scenario would make the
+                 # granularity block identical in every receipt.
+                 'message_chunks': 1 + len(BRIEFS[run]) // 40})
         else:
             config_dir = HOME / '.config/opencode'
             executable = Path(shutil.which('opencode2') or str(HOME / '.local/bin/opencode2'))
@@ -412,6 +416,7 @@ def build_receipt(service, run, view, started, extra):
     init = first_event(events, 'session_started')
     session = first_event(events, 'session_created')
     usage_event = first_event(events, 'usage')
+    granularity = first_event(events, 'usage_granularity')
     detail = usage_event.get('detail') or {}
     parts, total = token_breakdown(detail)
     head = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'],
@@ -448,10 +453,27 @@ def build_receipt(service, run, view, started, extra):
                    parts=parts, detail=detail,
                    observed_total_tokens=total if usage_event else None,
                    reported=bool(usage_event),
+                   # R1's measurement, and the reason the stops below are
+                   # next-turn stops until it lands: how often this harness
+                   # reports usage, and which session update kinds carry it.
+                   # Searched for rather than looked up, so it can report a
+                   # place PIO did not expect.
+                   granularity=dict(
+                       session_update_kinds=granularity.get('session_update_kinds'),
+                       usage_bearing_update_kinds=granularity.get('usage_bearing_update_kinds'),
+                       report_count=granularity.get('report_count'),
+                       reported_during_turn=granularity.get('reported_during_turn'),
+                       reported_at_turn_end=granularity.get('reported_at_turn_end'),
+                       measure=granularity.get('measure'),
+                       reports=granularity.get('reports')),
                    cap=CAP, stop_at=STOP_AT, run_limit=service.limit,
                    limit_is_next_turn_only=True,
                    execution_deadline_seconds=EXECUTION_DEADLINE),
         containment=view.get('containment'),
+        # The option list as the agent offered it, ids and kinds apart. ADR 005
+        # promised this measurement; until a live request arrives the only list
+        # PIO has seen is the labeled fake's own invention.
+        permission_options=first_event(events, 'permission_options_observed'),
         tool_uses=first_event(events, 'tool_uses').get('record'),
         durable_state=first_event(events, 'config_after').get('diff'),
         runtime=view.get('runtime'), exit=view.get('exit'),
@@ -636,7 +658,13 @@ def receipt_fields_selftest(out):
         'model.requested', 'model.reported', 'model.matched',
         'model.checked_before_delivery', 'usage.measure', 'usage.reported',
         'usage.cap', 'usage.stop_at', 'usage.run_limit', 'usage.limit_is_next_turn_only',
-        'usage.execution_deadline_seconds', 'containment.mechanism',
+        'usage.execution_deadline_seconds',
+        # The fake reports usage exactly once, at turn end, in every scenario
+        # it has. Whether the real harness does is precisely what R1 measures,
+        # so these are constant offline and must not be assumed live.
+        'usage.granularity.report_count', 'usage.granularity.reported_during_turn',
+        'usage.granularity.reported_at_turn_end', 'usage.granularity.measure',
+        'containment.mechanism',
         'containment.os_sandbox_observed', 'cumulative.cap', 'cumulative.stop_at',
     }
     null_fields, constant_fields = [], []
@@ -647,7 +675,11 @@ def receipt_fields_selftest(out):
         # live evidence, which the receipt states in `sessions_before.reason`
         # and `preflight.reason` rather than leaving to the reader.
         dry_run_dependent = ('sessions_before', 'sessions_after', 'preflight',
-                             'delivery', 'pio_deleted_nothing')
+                             'delivery', 'pio_deleted_nothing',
+                             # No permission is requested in either scenario
+                             # the shape check runs, so there is no option list
+                             # to record. R2 is where a live one first arrives.
+                             'permission_options')
         if value is None and root_key not in dry_run_dependent:
             null_fields.append(path)
     flat_second = dict(leaves(second))

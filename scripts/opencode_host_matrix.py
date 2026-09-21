@@ -66,6 +66,9 @@ CASES = [
     'an_unattached_host_never_sees_the_request_the_harness_refuses',
     # Through the service, which is the only place delivery and usage land.
     'service_turn_completes',
+    'service_measures_where_the_harness_reports_usage',
+    'a_decision_is_selected_by_kind_never_by_id',
+    'a_decision_whose_kind_is_not_offered_is_refused',
     'service_refuses_a_downgraded_session_before_any_prompt',
     'service_tells_a_harness_refusal_apart_from_a_pio_decline',
     'service_records_who_decided_and_what',
@@ -437,7 +440,7 @@ def run_case(out, name):
         case = Case(out, name, model=REQUESTED, scenario={
             'permission_request': {'title': 'run a command', 'kind': 'execute',
                                    'input': {'command': 'touch marker.txt'}}})
-        case.decision = {'outcome': 'selected', 'optionId': 'allow'}
+        case.decision = {'outcome': 'selected', 'optionId': 'opt_1'}
         acp, session = new_session(case)
         acp.call('session/prompt', {'sessionId': session['sessionId'],
                                     'prompt': [{'type': 'text', 'text': 'fixture task'}]})
@@ -473,7 +476,7 @@ def run_case(out, name):
         attached = Case(out, name + '-attached', model=REQUESTED, scenario={
             'permission_request': {'title': 'run a command', 'kind': 'execute',
                                    'input': {'command': 'git tag pio-live-marker'}}})
-        attached.decision = {'outcome': 'selected', 'optionId': 'reject'}
+        attached.decision = {'outcome': 'selected', 'optionId': 'opt_3'}
         acp2, session2 = new_session(attached)
         acp2.call('session/prompt', {'sessionId': session2['sessionId'],
                                      'prompt': [{'type': 'text', 'text': 'fixture task'}]})
@@ -551,7 +554,8 @@ def run_case(out, name):
                 assert len(defaulted) == 1, [e['kind'] for e in events]
                 assert defaulted[0]['after_seconds'] == 5, defaulted
                 assert defaulted[0]['decided_by'] == 'pio', defaulted
-                assert defaulted[0]['option_id'] == 'reject', defaulted
+                assert defaulted[0]['option_id'] == 'opt_3', defaulted
+                assert defaulted[0]['option_kind'] == 'reject_once', defaulted
                 assert defaulted[0]['widening_fields_sent'] == [], defaulted
                 expected, decision = 'pio', 'deny'
                 action_id = defaulted[0]['tool_use_id']
@@ -598,6 +602,135 @@ def run_case(out, name):
             ['opencode.tokens.total'], view['usage']
         assert len(case.markers_of('prompt_received')) == 1, case.markers_of('prompt_received')
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_measures_where_the_harness_reports_usage':
+        # R1's question, asked offline of a harness whose answer is already
+        # known. This cannot say what OpenCode does — only a live run can —
+        # but it can show that the census is capable of either answer, which
+        # a lookup at the one place the Claude adapter assumed was not.
+        seen = {}
+        for label, scenario in (('at-turn-end', {'message_chunks': 3}),
+                                ('as-it-goes', {'message_chunks': 3,
+                                                'usage_on_updates': True})):
+            case = ServiceCase(out, f'{name}-{label}', model=REQUESTED,
+                               scenario=dict(scenario, usage_total=480))
+            case.start()
+            case.submit()
+            poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+            census = [e for e in case.host_events() if e['kind'] == 'usage_granularity']
+            assert len(census) == 1, [e['kind'] for e in case.host_events()]
+            seen[label] = census[0]
+            case.finish()
+            case.cleanup()
+        end, going = seen['at-turn-end'], seen['as-it-goes']
+        # Every update is counted by its own kind, whether or not it carries
+        # usage, so the census says what the turn was made of.
+        assert end['session_update_kinds'] == {'agent_message_chunk': 3}, end
+        assert going['session_update_kinds'] == {'agent_message_chunk': 3}, going
+        # The difference the census exists to report.
+        assert end['reported_during_turn'] is False, end
+        assert end['usage_bearing_update_kinds'] == {}, end
+        assert end['report_count'] == 1, end
+        assert going['reported_during_turn'] is True, going
+        assert going['usage_bearing_update_kinds'] == {'agent_message_chunk': 3}, going
+        assert going['report_count'] == 4, going
+        assert end['reported_at_turn_end'] is True, end
+        assert going['reported_at_turn_end'] is True, going
+        # Found by searching the update, so the receipt reports where the
+        # harness put it rather than where PIO expected it.
+        assert [r['paths'] for r in going['reports'] if r['where'] == 'session/update'] == \
+            [['_meta.usage']] * 3, going['reports']
+        case = Case(out, name, model=REQUESTED)
+
+    elif name == 'a_decision_is_selected_by_kind_never_by_id':
+        # Option ids are the agent's to invent; the meaning is in `kind`. The
+        # fake's ids are `opt_1`, `opt_2`, `opt_3`, so a host that hard-codes
+        # `allow` or `reject` selects nothing and fails here rather than in
+        # front of the owner's harness.
+        for decision, kind, option_id in (('deny', 'reject_once', 'opt_3'),
+                                          ('allow', 'allow_once', 'opt_1')):
+            case = ServiceCase(out, f'{name}-{decision}', model=REQUESTED, scenario={
+                'permission_request': {'title': 'run a command', 'kind': 'execute',
+                                       'input': {'command': 'git tag pio-live-marker'}}})
+            case.start()
+            case.submit()
+            view = poll(lambda: case.inspect(),
+                        lambda v: v['runtime'] in ('requires_action', 'exited'), seconds=120)
+            assert view['runtime'] == 'requires_action', view
+            case.respond(view['runtime_detail']['action_id'], decision, view['revision'])
+            poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited', seconds=120)
+            events = case.host_events()
+            applied = [e for e in events if e['kind'] == 'control_applied']
+            assert len(applied) == 1, [e['kind'] for e in events]
+            assert applied[0]['applied'] is True, applied
+            assert applied[0]['option_kind'] == kind, applied
+            assert applied[0]['option_id'] == option_id, applied
+            assert applied[0]['always_option_taken'] is False, applied
+            # The option list as the agent offered it: the measurement ADR 005
+            # promises, and the only one PIO has until a live request arrives.
+            observed = [e for e in events if e['kind'] == 'permission_options_observed']
+            assert len(observed) == 1, [e['kind'] for e in events]
+            assert observed[0]['option_ids'] == ['opt_1', 'opt_2', 'opt_3'], observed
+            assert observed[0]['option_kinds'] == ['allow_once', 'allow_always',
+                                                   'reject_once'], observed
+            # No id is its own kind, so nothing above can pass by hard-coding.
+            assert not set(observed[0]['option_ids']) & set(observed[0]['option_kinds'])
+            # And the harness saw the kind PIO meant.
+            decided = case.markers_of('permission_decision')
+            assert len(decided) == 1, decided
+            assert decided[0]['option_kind'] == kind, decided
+            assert decided[0]['always_option_taken'] is False, decided
+            case.finish()
+            case.cleanup()
+        case = Case(out, name, model=REQUESTED)
+
+    elif name == 'a_decision_whose_kind_is_not_offered_is_refused':
+        # PIO never approximates a decision. An allow it cannot express
+        # single-use is not upgraded to the always option sitting next to it;
+        # it is refused, and the refusal is recorded as PIO's, not the
+        # caller's, because the caller did not ask for a refusal.
+        for decision, omit in (('allow', ['allow_once']), ('deny', ['reject_once'])):
+            case = ServiceCase(out, f'{name}-{decision}', model=REQUESTED, scenario={
+                'permission_request': {'title': 'run a command', 'kind': 'execute',
+                                       'omit_option_kinds': omit,
+                                       'input': {'command': 'git tag pio-live-marker'}}})
+            case.start()
+            case.submit()
+            view = poll(lambda: case.inspect(),
+                        lambda v: v['runtime'] in ('requires_action', 'exited'), seconds=120)
+            assert view['runtime'] == 'requires_action', view
+            case.respond(view['runtime_detail']['action_id'], decision, view['revision'])
+            poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited', seconds=120)
+            events = case.host_events()
+            refused = [e for e in events if e['kind'] == 'option_kind_not_offered']
+            assert len(refused) == 1, [e['kind'] for e in events]
+            assert refused[0]['required_kind'] == omit[0], refused
+            assert refused[0]['requested_decision'] == decision, refused
+            assert refused[0]['outcome_sent'] == 'cancelled', refused
+            applied = [e for e in events if e['kind'] == 'control_applied'][0]
+            assert applied['applied'] is False, applied
+            assert applied['option_id'] is None, applied
+            assert applied['decision'] == 'deny', applied
+            assert applied['decided_by'] == 'pio', applied
+            # The harness took no option at all: nothing was selected, and in
+            # particular not the always option it was still offering.
+            decided = case.markers_of('permission_decision')
+            assert len(decided) == 1, decided
+            assert decided[0]['outcome'] == 'cancelled', decided
+            assert decided[0]['option_kind'] is None, decided
+            assert decided[0]['always_option_taken'] is False, decided
+            # The always option was there the whole time, in both cases, and
+            # was still not taken: that is the point of the refusal.
+            assert decided[0]['always_option_offered'] is True, decided
+            # And the record that reaches the receipt says PIO refused it.
+            record = [e for e in events if e['kind'] == 'tool_uses'][0]['record']
+            use = {u['tool_use_id']: u for u in record['tool_uses']}[applied['tool_use_id']]
+            assert use['decided_by'] == 'pio', use
+            assert use['decision'] == 'deny', use
+            assert use['outcome'] == 'declined_by_pio', use
+            case.finish()
+            case.cleanup()
+        case = Case(out, name, model=REQUESTED)
 
     elif name == 'service_refuses_a_downgraded_session_before_any_prompt':
         # The owner's rule, through the durable host: the session reports a
