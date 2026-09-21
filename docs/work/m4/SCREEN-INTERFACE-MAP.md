@@ -38,12 +38,12 @@ Four of those matter here and were missing from the first draft:
 
 | # | Gap | Route | Screens |
 | --- | --- | --- | --- |
-| **G1** | Draw a board of five or six runs. | **Try the Protocol-native fold first** (below). Only if it fails, propose a list operation under the rule above. | 1, 2, 3, 7 |
+| **G1** | Draw a board of five or six runs. | **Closed.** The Protocol-native fold works; no new operation. Proven in `scripts/board_fold.py`. | 1, 2, 3, 7 |
 | **G2** | The approval walk needs, per pending request: the **deadline**, the **option list the harness offered**, what PIO will send, and the classification. `actions[]` gives identity, owner, state and `requested_at` — and is closed, so the rest cannot go there. | **Event payload**, keyed by `action_id`, read with `core.events.read`. | 1, 4, 7 |
 | **G3** | Transcript blocks **as they happen**, each with where a tool use landed and who decided. | **Event payload** per block, plus incremental per-harness sources. Not promotion, and not end-of-turn. See below. | 1, 5 |
 | **G4** | Mid-turn messages for Claude Code. `execution.steer` exists and Codex takes one; the Claude host has no steer control. The thread shows **queued**, never delivered, until it does. | PIO host work. | 3, 5 |
 | **G5** | Per-message usage for Claude Code. Usage arrives once, at turn end. | PIO host work. | 1, 2, 5 |
-| **G6** | Incremental changed-key commits. | Same fold as **G1**. | 1, 2 |
+| **G6** | Incremental changed-key commits. | **Closed** by the same fold: settled runs are never re-read. | 1, 2 |
 | **G7** | Projects are not modelled anywhere. | Client-side configuration. Belongs nowhere near the Protocol. | 1 |
 | **G8** | **`origin` is defined and PIO does not implement it.** | **PIO gap. No Protocol issue.** | 3 |
 
@@ -60,7 +60,14 @@ Before proposing any new operation:
 3. `core.events.subscribe` delivers the changes.
 4. `execution.inspect` is then called **only for subjects whose revision moved** — which is also **G6**: the board stops re-reading whole state on every refresh, without any new operation.
 
-**What must be proven headlessly before a single line of screen code:** a **second client, attached later, with its own grant**, draws six runs this way and stays current. That is the case, and its mutant is a client that re-inspects every subject every tick and passes only because nothing checks the call count.
+**Proven**, in `scripts/board_fold.py`, run in CI. A second caller attaches after six runs already exist, holding a grant whose rights are `core.events.read` and `execution.read` and nothing else. It discovers all six **without being told a single id**, then inspects **one** subject per changed subject in each later round; the six settled runs are never read again, which is G6. Its `execution.submit` is refused, so the grant is a boundary and not a label. The mutant — a board that re-inspects everything every tick — draws the same screen and fails on `['run-1', …, 'run-7'] != ['run-7']`.
+
+Two things the proof established that the schemas do not say out loud:
+
+- **`core.grants` must be negotiated to *present* a grant**, not only to issue one. A session that has not negotiated it is refused `invalid_envelope` at `/grant`, before authorization is reached.
+- **A retention gap hands back `snapshot.subjects[]`** with `{subject, revision, state}`, exactly as the reviewer said — a roster, not a hole.
+
+**G1 and G6 need no new operation.** That is now a measurement rather than a plan.
 
 ## G2 — where each field travels
 
@@ -157,4 +164,4 @@ Recorded rather than quietly fixed, because the reviewer will want to know which
 
 The reviewer's own correction to the design input, on `origin`, is recorded in [`design-input/CORRECTIONS.md`](design-input/CORRECTIONS.md).
 
-**Step 2 order:** G1 and G6 (the events fold), then G2, then G3. Each with its own headless case and a mutant.
+**Step 2 order:** ~~G1 and G6 (the events fold)~~ **done**, then G2, then G3. Each with its own headless case and a mutant.
