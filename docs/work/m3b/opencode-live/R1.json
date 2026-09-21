@@ -1,0 +1,215 @@
+{
+  "binary_sha256": "4e91b366706dce45b288f06eaa238242f67be74018103668eda36941a2b08228",
+  "commit": "6b02a27a2e4c67177c814fb248b738451cf99a9d",
+  "completion_is_acceptance": false,
+  "configured": {
+    "model": "juspay-grid/glm-latest",
+    "permission_rules_configured": false,
+    "providers": [
+      "juspay-grid"
+    ],
+    "read": true,
+    "source": "/Users/comreton/.config/opencode/opencode.jsonc"
+  },
+  "containment": {
+    "mechanism": "harness_permission_rules_only",
+    "os_sandbox_observed": false
+  },
+  "cumulative": {
+    "cap": 300000000,
+    "observed": 15804,
+    "stop_at": 240000000
+  },
+  "delivery": {
+    "evidence": {
+      "class": "native_session_update",
+      "source": "opencode-acp/host"
+    },
+    "proof_class": null,
+    "state": "acknowledged"
+  },
+  "dirty": false,
+  "dry_run": false,
+  "durable_state": {
+    "owner_service_untouched": true
+  },
+  "exit": {
+    "code": 0
+  },
+  "format": "pio-opencode-live-receipt/1",
+  "harness": {
+    "agent": {
+      "name": "OpenCode",
+      "version": "2.0.11"
+    },
+    "auth_methods": [
+      {
+        "description": "Run `opencode auth login` in the terminal",
+        "id": "opencode-login",
+        "name": "Login with opencode"
+      }
+    ],
+    "capabilities": {
+      "_meta": {
+        "opencode/child-session-updates": true
+      },
+      "loadSession": true,
+      "mcpCapabilities": {
+        "http": true,
+        "sse": false
+      },
+      "promptCapabilities": {
+        "embeddedContext": true,
+        "image": true
+      },
+      "sessionCapabilities": {
+        "close": {},
+        "delete": {},
+        "fork": {},
+        "list": {},
+        "resume": {}
+      }
+    },
+    "session_id": "ses_f3b98fa48ffeRCuCzePRIpMesu",
+    "source": "opencode-acp/host"
+  },
+  "model": {
+    "checked_before_delivery": true,
+    "configured": "juspay-grid/glm-latest",
+    "matched": true,
+    "on_creation": "opencode/deepseek-v4.1-flash",
+    "reported": "minimax-coding-plan/MiniMax-M2.5-highspeed",
+    "requested": "minimax-coding-plan/MiniMax-M2.5-highspeed",
+    "selected_by_pio": true
+  },
+  "owner_service_after": [
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
+  ],
+  "owner_service_before": [
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
+  ],
+  "owner_service_untouched": true,
+  "permission_options": {},
+  "pio_deleted_nothing": true,
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "preflight": {
+    "binary_newer_than_every_source": true,
+    "binary_sha256": "4e91b366706dce45b288f06eaa238242f67be74018103668eda36941a2b08228",
+    "checked": true,
+    "commit": "6b02a27a2e4c67177c814fb248b738451cf99a9d",
+    "dirty": false,
+    "newest_source": "crates/pio-protocol/src/codex.rs"
+  },
+  "rehearsal": {
+    "made_in_dry_run": true,
+    "observation": "a usage report, and a census of where the harness reported it",
+    "ran": true
+  },
+  "run": "R1",
+  "runtime": "exited",
+  "sessions_after": {
+    "digest": "b3931634ae62d1d6bde1bcfc05e48bd443c9e80edb4bf94c23ea538047d2c704",
+    "entry_count": 1,
+    "exit": 0,
+    "observed": true
+  },
+  "sessions_before": {
+    "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "entry_count": 0,
+    "exit": 0,
+    "observed": true
+  },
+  "sessions_created": [
+    "ses_f3b98fa48ffeRCuCzePRIpMesu"
+  ],
+  "started_at": "2026-09-21T14:37:47Z",
+  "stops": [],
+  "tool_uses": {
+    "containment": {
+      "mechanism": "harness_permission_rules_only",
+      "os_sandbox_observed": false
+    },
+    "declined_by_pio_count": 0,
+    "denied_by_caller_count": 0,
+    "denied_by_harness_count": 0,
+    "format": "pio-claude-tool-uses/5",
+    "liability": "none_observed",
+    "out_of_fixture_count": 0,
+    "out_of_fixture_effect_observed": false,
+    "tool_uses": [],
+    "unclassifiable_target_count": 0,
+    "workspace_sha256": "b1ba0463ccbde2433c685313020c08071713a3084f71accfe45238e8dd6c33a4"
+  },
+  "usage": {
+    "cap": 300000000,
+    "detail": {
+      "inputTokens": 7866,
+      "outputTokens": 2,
+      "thoughtTokens": 26,
+      "totalTokens": 7894
+    },
+    "execution_deadline_seconds": 600,
+    "granularity": {
+      "measure": "every token counter the harness reports, summed; its own totalTokens is recorded beside the sum, never added to it",
+      "report_count": 2,
+      "reported_at_turn_end": true,
+      "reported_during_turn": true,
+      "reports": [
+        {
+          "matched_by": "the update kind",
+          "paths": [],
+          "update_kind": "usage_update",
+          "values": [
+            {
+              "cost": {
+                "amount": 0,
+                "currency": "USD"
+              },
+              "sessionUpdate": "usage_update",
+              "size": 204800,
+              "used": 7894
+            }
+          ],
+          "where": "session/update"
+        },
+        {
+          "paths": [
+            "usage"
+          ],
+          "update_kind": null,
+          "values": [
+            {
+              "inputTokens": 7866,
+              "outputTokens": 2,
+              "thoughtTokens": 26,
+              "totalTokens": 7894
+            }
+          ],
+          "where": "session/prompt result"
+        }
+      ],
+      "session_update_kinds": {
+        "agent_message_chunk": 1,
+        "agent_thought_chunk": 2,
+        "usage_update": 1
+      },
+      "usage_bearing_update_kinds": {
+        "usage_update": 1
+      }
+    },
+    "limit_is_next_turn_only": true,
+    "measure": "every token counter the harness reports, summed; its own totalTokens is recorded beside the sum, never added to it",
+    "observed_total_tokens": 7894,
+    "parts": {
+      "inputTokens": 7866,
+      "outputTokens": 2,
+      "thoughtTokens": 26
+    },
+    "parts_sum_matches_reported_total": true,
+    "path": "usage",
+    "reported": true,
+    "reported_total": 7894,
+    "run_limit": 2000000,
+    "stop_at": 240000000
+  }
+}
