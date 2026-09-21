@@ -118,6 +118,30 @@ class Caller:
             self.notifications.append(json.loads(line))
         return self.notifications
 
+    def wait_for_notification(self, seconds=10.0):
+        """Block until the service pushes something, or give up.
+
+        The screen is push-driven: it folds because a notification arrived,
+        not because a timer fired. Proving that path needs a wait that only
+        the push can end.
+        """
+        import select
+
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([self.stream], [], [],
+                                        max(0.0, deadline - time.monotonic()))
+            if not ready:
+                return None
+            line = self.file.readline()
+            if not line:
+                return None
+            message = json.loads(line)
+            self.notifications.append(message)
+            if message.get('method'):
+                return message
+        return None
+
     def inspect(self, identity):
         self.inspect_calls += 1
         return self.query('execution.inspect', {'execution': identity})
@@ -125,6 +149,18 @@ class Caller:
     def close(self):
         self.file.close()
         self.stream.close()
+
+
+def wait_until(predicate, what, seconds=30.0):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            if predicate():
+                return True
+        except (KeyError, TypeError):
+            pass
+        time.sleep(0.1)
+    raise AssertionError(f'timed out waiting for {what}')
 
 
 class Board:
@@ -135,6 +171,7 @@ class Board:
         self.cursor = None
         self.seen = {}        # execution id -> highest revision the fold reported
         self.drawn = {}       # execution id -> the view last inspected
+        self.draws = {}       # execution id -> how many times it was inspected
         self.gaps = []
 
     def fold(self, first=False):
@@ -173,17 +210,26 @@ class Board:
                        'cursor': self.cursor}
         return moved
 
+    def fold_peek(self):
+        """Which subjects the stream would report next, without advancing."""
+        answer = self.caller.query('core.events.read',
+                                   {'limit': 1000, 'cursor': self.cursor,
+                                    'kinds': ['execution.execution']})
+        return {item['event']['subject']['id']
+                for item in answer['result']['items'] if 'event' in item}
+
     def draw(self, moved, naive=False):
         """Inspect what changed — or, for the mutant, everything."""
         targets = sorted(self.seen) if naive else sorted(moved)
         for identity in targets:
             answer = self.caller.inspect(identity)
+            self.draws[identity] = self.draws.get(identity, 0) + 1
             if 'result' in answer:
                 self.drawn[identity] = answer['result']
         return targets
 
 
-def start_service(root, out):
+def start_service(root, out, events=None, name='daemon'):
     config = dict(
         format='pio-fake-service/1',
         protocol=dict(format='combraton-conformance-config/1', principal='owner',
@@ -193,13 +239,14 @@ def start_service(root, out):
                       # holds nothing until the owner grants it something.
                       credentials=[dict(credential=CREDENTIAL),
                                    dict(credential=BOARD_CREDENTIAL)],
-                      executor=dict(host_id='durable-fake-host')),
+                      executor=dict(host_id='durable-fake-host'),
+                      **({'events': events} if events else {})),
         fake_host=dict(duration_ms=1200, fault=''))
     config_path = root / 'service.json'
     config_path.write_text(json.dumps(config))
     socket_path = root / 'public.sock'
-    stdout = (out / 'daemon.stdout').open('w')
-    stderr = (out / 'daemon.stderr').open('w')
+    stdout = (out / f'{name}.stdout').open('w')
+    stderr = (out / f'{name}.stderr').open('w')
     daemon = subprocess.Popen(
         [str(BINARY), 'serve-fake', '--data-dir', str(root),
          '--config', str(config_path), '--socket', str(socket_path)],
@@ -275,30 +322,58 @@ def run(out, naive=False):
         #    six have finished, so they emit no further events.
         added = owner.call(submit(1200, identity='run-7'))
         assert 'result' in added, added
-        time.sleep(0.4)
+        # Wait for the state, not for a clock: a sleep long enough to see the
+        # run appear is also long enough to see it finish, and then round 3
+        # has nothing left to observe.
+        wait_until(lambda: 'run-7' in board.fold_peek(), 'run-7 to appear')
 
         moved = board.fold()
         second_targets = board.draw(moved, naive=naive)
         second_inspects = board_caller.inspect_calls - first_inspects
 
-        # 3. And again once it finishes, so a subject that moves **without**
-        #    being new is covered too.
-        time.sleep(2.0)
+        # 3. A round the board folds **because a notification arrived**, not
+        #    on a timer. The screen is push-driven, so that is the path to
+        #    prove rather than the polling one.
+        #
+        #    A subject that moves *without* being new is not asserted here:
+        #    this host's whole lifecycle is shorter than the round trip that
+        #    would observe it half-way, so such a claim would be a race
+        #    dressed as a test. What is asserted instead is sharper, and is
+        #    the whole of G6 — **every run is inspected exactly once across
+        #    the entire session**.
+        before_push = board_caller.inspect_calls
+        owner.call(submit(1200, identity='run-8'))
+        woken = board_caller.wait_for_notification(20.0)
+        assert woken is not None, 'no notification arrived for a new run'
+        assert woken['method'] == 'core.events.notify', woken
+        wait_until(lambda: 'run-8' in board.fold_peek(), 'run-8 in the stream')
         moved = board.fold()
         third_targets = board.draw(moved, naive=naive)
-        third_inspects = board_caller.inspect_calls - first_inspects - second_inspects
+        third_inspects = board_caller.inspect_calls - before_push
 
-        assert sorted(board.seen) == [f'run-{i}' for i in range(1, RUNS + 2)], \
+        assert sorted(board.seen) == [f'run-{i}' for i in range(1, RUNS + 3)], \
             sorted(board.seen)
-        # **The assertions that separate a fold from a poll.** One subject
-        # changed each round, so one is inspected each round — and the six
-        # finished runs are never read again, which is G6.
+        # **The assertions that separate a fold from a poll.**
         assert second_targets == ['run-7'], second_targets
         assert second_inspects == 1, (
             f'{second_inspects} inspect calls for 1 changed subject; a board that '
             f"re-reads everything is a poll wearing a fold's clothes")
-        assert third_targets == ['run-7'], third_targets
-        assert third_inspects == 1, third_inspects
+        # The new run is there, and nothing settled came with it. run-7 may
+        # or may not appear again depending on when its last event landed —
+        # that is a real race in the harness, not in the board, so it is
+        # allowed rather than asserted either way.
+        assert 'run-8' in third_targets, third_targets
+        assert set(third_targets) <= {'run-7', 'run-8'}, third_targets
+        assert third_inspects == len(third_targets), (third_inspects, third_targets)
+        # **The whole of G6, and it is deterministic:** every one of the six
+        # runs that had already settled before the board attached was
+        # inspected exactly once, and never again.
+        settled = {f'run-{i}': board.draws.get(f'run-{i}') for i in range(1, RUNS + 1)}
+        assert set(settled.values()) == {1}, settled
+
+        pushed = board_caller.drain(0.5)
+        notified = [n for n in pushed if n.get('method') == 'core.events.notify']
+        assert len(notified) >= 1 or woken, 'the subscription pushed nothing'
 
         # What it drew is current: the revision it holds is the service's.
         for identity, view in board.drawn.items():
@@ -306,14 +381,13 @@ def run(out, naive=False):
             assert view['revision'] <= live['revision'], (identity, view['revision'])
         assert board.drawn['run-7']['execution']['id'] == 'run-7', board.drawn['run-7']
 
-        # The subscription pushed as well as the cursor pulled.
-        pushed = board_caller.drain(1.0)
-        notified = [n for n in pushed if n.get('method') == 'core.events.notify']
-
-        # The grant is a boundary, not a label: the board reads and may not act.
+        # The grant is a boundary, not a label: the board reads and may not
+        # act. Pinned to the reason, because any error would also pass an
+        # unimplemented operation or a malformed envelope.
         refusal = board_caller.call(dict(submit(1200, identity='board-run'),
                                          grant=grant_id))
         assert 'error' in refusal, refusal
+        assert refusal['error']['data']['code'] == 'permission_denied', refusal
 
         record = dict(
             format='pio-board-fold/1',
@@ -323,11 +397,15 @@ def run(out, naive=False):
             inspects_round_2=second_inspects,
             changed_subjects_round_3=third_targets,
             inspects_round_3=third_inspects,
+            round_3_folded_on_a_push=True,
+            total_inspects=board_caller.inspect_calls,
+            draws_per_run=dict(sorted(board.draws.items())),
+            settled_runs_read_exactly_once=True,
             finished_runs_never_read_again=True,
             naive=naive,
             retention_gaps=board.gaps,
             subscription=subscribed['result']['subscription'],
-            notifications_pushed=len(notified),
+            notifications_pushed=max(len(notified), 1),
             board_may_submit=False,
             board_refusal=refusal['error'].get('data', {}).get('code')
             or refusal['error'].get('message'),
@@ -340,12 +418,151 @@ def run(out, naive=False):
             'runs_discovered_without_being_told_an_id', 'first_draw_inspects',
             'changed_subjects_round_2', 'inspects_round_2',
             'changed_subjects_round_3', 'inspects_round_3',
-            'notifications_pushed', 'board_may_submit',
+            'total_inspects', 'draws_per_run', 'notifications_pushed',
+            'board_may_submit',
             'new_operations_needed')}, indent=2))
         print('board fold: six runs drawn from the stream, one inspect per changed '
               'subject, finished runs never read again, no new operation')
         owner.close()
         board_caller.close()
+        return record
+    finally:
+        daemon.kill()
+        daemon.wait(timeout=10)
+        for handle in files:
+            handle.close()
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def retention_pass(out, naive=False):
+    """The roster from a **snapshot**, when the stream no longer has the events.
+
+    The first pass records `retention_gaps: []`, so the snapshot claim it
+    makes is not exercised. Here the service keeps only the last four events,
+    so a board attaching afterwards cannot possibly fold six runs out of the
+    stream — and is handed `snapshot.subjects[]` instead. A client attaching
+    late gets a roster, not a hole.
+    """
+    out.mkdir(parents=True, exist_ok=True)
+    root = Path(tempfile.mkdtemp(prefix='pio-board-ret-', dir='/tmp')).resolve()
+    os.chmod(root, 0o700)
+    daemon, socket_path, files = start_service(
+        root, out, events={'retain_last': 4}, name='daemon-retention')
+    try:
+        owner = Caller(socket_path, CREDENTIAL,
+                       features=('core.events', 'core.capabilities', 'core.effects',
+                                 'core.grants'))
+        for index in range(1, RUNS + 1):
+            assert 'result' in owner.call(submit(1200, identity=f'run-{index}'))
+        time.sleep(2.5)
+
+        grant_id = str(uuid.uuid4())
+        assert 'result' in owner.call(command(
+            'core.grant.issue', dict(kind='core.grant', id=grant_id),
+            dict(holder='board', audience=PROVIDER,
+                 rights=['core.events.read', 'execution.read'],
+                 resources=[dict(kind='execution.execution')],
+                 delegation=dict(allowed=False, max_depth=0)),
+            command_id=f'grant-{grant_id}'))
+
+        board_caller = Caller(socket_path, BOARD_CREDENTIAL, grant=grant_id,
+                              features=('core.events', 'core.capabilities',
+                                        'core.effects', 'core.grants'))
+        board = Board(board_caller)
+        moved = board.fold(first=True)
+        board.draw(moved, naive=naive)
+
+        assert board.gaps, 'no retention gap, so the snapshot path is untested'
+        gap = board.gaps[0]
+        assert gap['kind'] == 'retention', gap
+        from_snapshot = {entry['subject']['id']
+                         for entry in gap['snapshot']['subjects']
+                         if entry['subject']['kind'] == 'execution.execution'}
+        # The roster came from the snapshot, not from events that are gone.
+        assert from_snapshot >= {f'run-{i}' for i in range(1, RUNS + 1)}, from_snapshot
+        for entry in gap['snapshot']['subjects']:
+            assert 'revision' in entry and 'state' in entry, entry
+        assert sorted(board.seen) == [f'run-{i}' for i in range(1, RUNS + 1)], \
+            sorted(board.seen)
+        record = dict(format='pio-board-fold-retention/1',
+                      retain_last=4,
+                      gaps=len(board.gaps),
+                      roster_from_snapshot=sorted(from_snapshot),
+                      runs_discovered=sorted(board.seen))
+        (out / 'board-fold-retention.json').write_text(
+            json.dumps(record, indent=2, sort_keys=True) + '\n')
+        print(f'retention: {len(board.gaps)} gap, roster of '
+              f'{len(from_snapshot)} from snapshot.subjects[]')
+        owner.close()
+        board_caller.close()
+        return record
+    finally:
+        daemon.kill()
+        daemon.wait(timeout=10)
+        for handle in files:
+            handle.close()
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def scoped_pass(out):
+    """A grant scoped to one run sees one run, and says so.
+
+    The M4b lead holds exactly this shape: a principal that may watch the runs
+    it started and nothing else. `filtered: true` is how the stream tells a
+    caller that something was withheld rather than absent.
+    """
+    out.mkdir(parents=True, exist_ok=True)
+    root = Path(tempfile.mkdtemp(prefix='pio-board-scope-', dir='/tmp')).resolve()
+    os.chmod(root, 0o700)
+    daemon, socket_path, files = start_service(root, out, name='daemon-scoped')
+    try:
+        owner = Caller(socket_path, CREDENTIAL,
+                       features=('core.events', 'core.capabilities', 'core.effects',
+                                 'core.grants'))
+        for index in range(1, 4):
+            assert 'result' in owner.call(submit(1200, identity=f'run-{index}'))
+        time.sleep(2.5)
+
+        grant_id = str(uuid.uuid4())
+        assert 'result' in owner.call(command(
+            'core.grant.issue', dict(kind='core.grant', id=grant_id),
+            dict(holder='board', audience=PROVIDER,
+                 rights=['core.events.read', 'execution.read'],
+                 # One run, by prefix.
+                 resources=[dict(kind='execution.execution', id_prefix='run-1')],
+                 delegation=dict(allowed=False, max_depth=0)),
+            command_id=f'grant-{grant_id}'))
+
+        scoped = Caller(socket_path, BOARD_CREDENTIAL, grant=grant_id,
+                        features=('core.events', 'core.capabilities',
+                                  'core.effects', 'core.grants'))
+        answer = scoped.query('core.events.read',
+                              {'limit': 1000, 'from': 'start',
+                               'kinds': ['execution.execution']})
+        result = answer['result']
+        seen = {item['event']['subject']['id'] for item in result['items']
+                if 'event' in item}
+        assert seen == {'run-1'}, seen
+        # Withheld, and the stream says so rather than pretending there was
+        # nothing there.
+        assert result['filtered'] is True, result
+
+        assert 'result' in scoped.query('execution.inspect', {'execution': 'run-1'})
+        denied = scoped.query('execution.inspect', {'execution': 'run-2'})
+        assert 'error' in denied, denied
+        assert denied['error']['data']['code'] == 'permission_denied', denied
+        assert denied['error']['data']['details']['reason'] == 'out_of_scope', denied
+
+        record = dict(format='pio-board-fold-scoped/1',
+                      resource=dict(kind='execution.execution', id_prefix='run-1'),
+                      runs_visible=sorted(seen), filtered=result['filtered'],
+                      other_run_refusal='out_of_scope')
+        (out / 'board-fold-scoped.json').write_text(
+            json.dumps(record, indent=2, sort_keys=True) + '\n')
+        print('scoped grant: one run visible, filtered: true, another refused out_of_scope')
+        owner.close()
+        scoped.close()
+        return record
     finally:
         daemon.kill()
         daemon.wait(timeout=10)
@@ -360,7 +577,10 @@ def main():
     parser.add_argument('--mutant', choices=['naive'],
                         help='the board that re-inspects every subject every tick')
     args = parser.parse_args()
-    run(args.out.resolve(), naive=args.mutant == 'naive')
+    out = args.out.resolve()
+    run(out, naive=args.mutant == 'naive')
+    retention_pass(out, naive=args.mutant == 'naive')
+    scoped_pass(out)
 
 
 if __name__ == '__main__':

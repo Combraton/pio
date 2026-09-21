@@ -39,8 +39,8 @@ Four of those matter here and were missing from the first draft:
 | # | Gap | Route | Screens |
 | --- | --- | --- | --- |
 | **G1** | Draw a board of five or six runs. | **Closed.** The Protocol-native fold works; no new operation. Proven in `scripts/board_fold.py`. | 1, 2, 3, 7 |
-| **G2** | The approval walk needs, per pending request: the **deadline**, the **option list the harness offered**, what PIO will send, and the classification. `actions[]` gives identity, owner, state and `requested_at` — and is closed, so the rest cannot go there. | **Event payload**, keyed by `action_id`, read with `core.events.read`. | 1, 4, 7 |
-| **G3** | Transcript blocks **as they happen**, each with where a tool use landed and who decided. | **Event payload** per block, plus incremental per-harness sources. Not promotion, and not end-of-turn. See below. | 1, 5 |
+| **G2** | The approval walk needs, per pending request: the **deadline**, the **option list the harness offered**, what PIO will send, and the classification. `actions[]` gives identity, owner, state and `requested_at` — and is closed, so the rest cannot go there. **And a lapsed deadline reaches the stream nowhere today.** | `execution.runtime.changed` payload, key `pio.combraton.dev/approval`; the answer on `execution.action.answered`, key `pio.combraton.dev/decision`. | 1, 4, 7 |
+| **G3** | Transcript blocks **as they happen**, each with where a tool use landed and who decided. | Blocks from `execution.output.read`, per harness. The audit on `execution.exit.observed`, key `pio.combraton.dev/tool-uses`. Live placement is the *absence* of a record. | 1, 5 |
 | **G4** | Mid-turn messages for Claude Code. `execution.steer` exists and Codex takes one; the Claude host has no steer control. The thread shows **queued**, never delivered, until it does. | PIO host work. | 3, 5 |
 | **G5** | Per-message usage for Claude Code. Usage arrives once, at turn end. | PIO host work. | 1, 2, 5 |
 | **G6** | Incremental changed-key commits. | **Closed** by the same fold: settled runs are never re-read. | 1, 2 |
@@ -69,6 +69,31 @@ Two things the proof established that the schemas do not say out loud:
 
 **G1 and G6 need no new operation.** That is now a measurement rather than a plan.
 
+## The carrier, settled before any G2 or G3 code
+
+Three facts, checked in the source, that decide everything below.
+
+1. **Host `life.event` records go to the private `*.events.jsonl`, not to `core.events.read`.** `permission_options_observed`, `action_requested`, `request_declined_by_pio` and `request_denied_by_default` are host records. No caller can read them.
+2. **On the Protocol stream, a pending action is only `execution.runtime.changed`**, with payload `{runtime: "requires_action", action_id, owner}`. The projection turns `action_requested` into a closed `action_entry` in `view.actions[]` — `action_id`, `owner`, `state`, `requested_at` — and emits that one event. The deadline, the offered options, the classification and the decider reach the stream **nowhere**.
+3. **`request_denied_by_default` is not projected at all.** Zero occurrences in the projection. When nobody answers and PIO denies on the caller's behalf, the Protocol stream learns nothing and `view.actions[]` shows the action **`pending` for ever**. A caller cannot tell a lapsed request from a waiting one. That is a defect, not a gap, and it is named in the obligations below.
+
+### The decisions
+
+**No new event type name is introduced under `execution.*` or `core.*`.** Every field rides in the **payload** of an event that already fires, under a **namespaced key**, because `event.payload` is `{"type": "object"}` with no `unevaluatedProperties` — that is the schema rule that allows it. Keys follow the Protocol's own `extension_key` shape, `<domain>/<name>`, so a future Protocol field cannot collide with one of ours.
+
+| What | Rides on | Key |
+| --- | --- | --- |
+| Deadline, offered options with their kinds, the option kind PIO will send, the classification and where it lands | `execution.runtime.changed`, which already fires at the moment the action becomes pending | `pio.combraton.dev/approval` |
+| Who decided, and the option actually sent | `execution.action.answered`, which already fires when a caller answers | `pio.combraton.dev/decision` |
+| **A lapsed deadline** | `execution.action.answered` **must also fire for PIO's own default deny**, with `decided_by: "pio"`, and set the action to `answered` | `pio.combraton.dev/decision` |
+| The end-of-turn tool-use audit: placement and decider per tool use | `execution.exit.observed`, which already fires at turn end | `pio.combraton.dev/tool-uses` |
+
+**A client that ignores the key still works.** Every existing field of those payloads is unchanged, and a reader that knows only `runtime`, `action_id` and `owner` behaves exactly as it does today. The keys are additive in an already-open object. **Conformance stays at 206.**
+
+### What a caller holding only `core.events.read` on a run may see of another run
+
+**Nothing.** The stream filters by subject against the grant's resources, and the approval fields ride in the payload of an event **on that run's own subject** — so the existing subject filter covers them with no extra rule. Proven, not assumed: a grant scoped with `id_prefix: run-1` sees only `run-1`'s events, the result carries `filtered: true` so the caller knows something was withheld rather than absent, and `execution.inspect` on `run-2` is refused `permission_denied` / `out_of_scope`. That is the exact shape the M4b lead's grant will have.
+
 ## G2 — where each field travels
 
 `actions[]` gives the walk `action_id`, `owner`, `state` and `requested_at`. It is closed, so everything else travels in the **event payload** that already carries it:
@@ -85,6 +110,14 @@ Two things the proof established that the schemas do not say out loud:
 The negative control — an answer aimed at the wrong run or a stale controller — is **already fenced** by `execution.respond_action` on subject and revision.
 
 ## G3 — blocks as they happen, not an end-of-turn audit
+
+**Carrier decision.** The blocks themselves need no new carrier: `execution.output.read` already returns what the host spooled, newline-delimited — one record per `session/update` for OpenCode, per stream message for Claude Code, per item event for Codex. The screen needs a per-harness reader, which the table below names.
+
+Placement and decider are different. **No Protocol event fires per tool use**, and for a tool use nobody was asked about — R2 and R3 of the MiniMax sequence, where the harness simply acted — there is no Protocol event at all. So:
+
+- **Live, before the audit exists**, the screen shows `not yet classified` and `unknown`. That is the *absence* of a record, so nothing has to travel for it.
+- **The end-of-turn audit** rides on `execution.exit.observed`'s open payload under `pio.combraton.dev/tool-uses`. No new event type name, and a client that ignores the key sees today's behaviour.
+
 
 The first draft called this "mostly promotion". It is not, and the reason matters.
 
