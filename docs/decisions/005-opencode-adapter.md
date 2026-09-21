@@ -114,11 +114,21 @@ So the order is now `session/new`, select, read the harness's own report back, g
 
 **Measured: the user's configuration has no `permission` key at all**, so there are no configured rules to compare against and the Claude adapter's equality guard has nothing to guard.
 
-**R2 measured what that means, and the answer is the plainest result of this sequence: the harness ran a shell command with no permission request reaching PIO at all.** One `execute` tool call, recorded `performed`, `decided_by: null`, and the marker file it created was there in the fixture afterwards. The caller's deny was never sent because the caller was never asked.
+**Measured across R2, R3 and R5: this harness asks about some operations and not others.** That is narrower and more useful than either "it always asks" or "it never does", and the first two runs alone would have supported the wrong one of those.
 
-So for this harness as the owner configures it, **PIO observes; it does not contain.** That is the same finding the Claude sequence reached, for the same reason, and it is stated here as a property of the configuration rather than of the adapter. The effect stayed inside the workspace — but because the command was an inside-the-workspace one, not because PIO stopped anything.
+| Run | Posture | Operation | Did it ask? |
+| --- | --- | --- | --- |
+| R2 | `build` | shell command **inside** the workspace | **no** — it ran, and the marker file was there afterwards |
+| R3 | `plan` | the same shell command | **no** — the narrower posture changed nothing |
+| R5 | `plan` | file read **outside** the workspace | **yes** — and PIO declined it |
 
-`permission_default` is therefore no longer `not_evaluated`: **measured, it acts without asking.**
+The honest statement has two halves.
+
+**For an operation it does not ask about, PIO observes; it does not contain.** R2 and R3 ran a shell command with no request reaching PIO at all — `decided_by: null`, `outcome: performed`. The effect stayed inside the workspace because the command was an inside-the-workspace one, not because PIO stopped anything. The narrower posture makes no difference to this.
+
+**For an operation it does ask about, the whole path works.** R5's out-of-fixture read produced a real `session/request_permission`; PIO classified it `outside_fixture`, declined it by selecting the option whose kind is `reject_once`, and the marker's own content never appeared in anything the harness sent.
+
+An earlier draft of this section, written after R2 and R3 and before R5, said `permission_default` was "measured, it acts without asking". That was too broad on two runs, and R5 falsified it. What is measured is the table above.
 
 - **`--auto` is never passed**, in any form, at top level or on `run`. It auto-approves everything not explicitly denied, and with no deny rules configured that is every request.
 - Only **single-use** decisions are forwarded, as for Codex and Claude. A rule update, a session-scoped grant and a mode change are all refused.
@@ -207,11 +217,25 @@ MiniMax cap **300,000,000 tokens total**, stop and report at **240,000,000**. Ea
 ## Out of scope
 
 **Hermes is deferred** (owner decision, 2026-09-21). It is **test scope only and does not gate v0.1**, and no Hermes adapter work happens unless the owner says otherwise; if it is ever picked up it runs only under an isolated profile. The as-configured Juspay Grid run, unless the owner approves it on the issue.
-## The permission shape is specified, not measured
+## The permission shape, now measured
 
-The labeled fake's `session/request_permission` — its `toolCall`, its three options and the `allow_always` among them — is taken **from the ACP specification and has never been measured against OpenCode 2.0.1**. The option **ids** are the fake's invention outright; the reviewer's own reading suggests a real dialog offers something like "once", "always" and "reject", which is a hint and not a measurement either. The host records the real option list, ids and kinds apart, from the **first live request**, and that recording is the measurement this ADR owes. Every offline case that exercises a permission decision therefore proves what PIO does with the shape it was told to expect, not what the harness sends.
+**R5 produced the first real `session/request_permission` from OpenCode**, and it settles what this section used to hold open. The options, exactly as the harness offered them:
 
-**The first live request is the measurement.** Until MiniMax R2 produces one, no receipt may be read as evidence that this harness asks at all, or that it asks in this shape. The owner's configuration carries no permission rules, so it is possible that it never asks — which is the state the Claude adapter was measured in, for a different reason, across four live runs.
+```json
+[{"optionId": "once",   "name": "Allow once",   "kind": "allow_once"},
+ {"optionId": "always", "name": "Always allow", "kind": "allow_always"},
+ {"optionId": "reject", "name": "Reject",       "kind": "reject_once"}]
+```
 
-The fake now asks **only when a client announced itself** with the ACP handshake, and decides for itself otherwise, because a fake that always asks cannot show a harness that does not.
+Three things follow.
+
+**The reviewer's reading was right and the fake's invention was wrong.** The hint was that a real dialog offers "once", "always" and "reject"; it does. The fake's ids were `allow`, `allow_always` and `reject`, so **`allow` was never an id this harness uses.** A host hard-coding it would have selected *nothing* on a caller's allow and silently refused — while a hard-coded `reject` would have worked by coincidence, which is the worst way for a defect to hide. Choosing by `kind` is not a stylistic preference; it is the difference between working and failing silently on the first allow anyone tried.
+
+**The always-allow option is real and is offered on every request.** PIO never selects it, and `always_option_taken` is computed from the option actually chosen rather than asserted.
+
+**The fake keeps its different ids on purpose.** Now that the real ones are known, `opt_1`, `opt_2` and `opt_3` are more useful than before: a host that hard-codes an id — the real one or the old one — fails offline rather than in front of the owner's harness.
+
+What the offline cases still cannot show is *when* this harness asks. That is measured in section 5, and it is not the same for every operation.
+
+The fake asks **only when a client announced itself** with the ACP handshake, and decides for itself otherwise, because a fake that always asks cannot show a harness that does not.
 

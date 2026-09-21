@@ -1,0 +1,290 @@
+{
+  "binary_sha256": "aada48ecf1b64a65208d62492168d6c9e497a503de128fc1c94fc0bb457fdf0a",
+  "charge": {
+    "amount": 8392,
+    "basis": "observed"
+  },
+  "commit": "85769487549dbb973a1d9aff1c5b6faa6a983a69",
+  "completion_is_acceptance": false,
+  "configured": {
+    "model": "juspay-grid/glm-latest",
+    "permission_rules_configured": false,
+    "providers": [
+      "juspay-grid"
+    ],
+    "read": true,
+    "source": "/Users/comreton/.config/opencode/opencode.jsonc"
+  },
+  "containment": {
+    "mechanism": "harness_permission_rules_only",
+    "os_sandbox_observed": false
+  },
+  "cumulative": {
+    "cap": 300000000,
+    "charged": 62220,
+    "measured_against": "charged",
+    "observed": 50220,
+    "stop_at": 240000000
+  },
+  "decline": {
+    "content_left_the_boundary": false,
+    "declined_by_pio": 1,
+    "declined_by_pio_count": 1,
+    "out_of_fixture_effect_observed": false,
+    "requested": true,
+    "target": "/Users/comreton/pio-m3b-live/outside/pio-out-of-fixture-marker.txt"
+  },
+  "delivery": {
+    "evidence": {
+      "class": "native_session_update",
+      "source": "opencode-acp/host"
+    },
+    "proof_class": null,
+    "state": "acknowledged"
+  },
+  "dirty": false,
+  "dry_run": false,
+  "durable_state": {
+    "owner_service_untouched": true
+  },
+  "exit": {
+    "code": 0
+  },
+  "format": "pio-opencode-live-receipt/1",
+  "harness": {
+    "agent": {
+      "name": "OpenCode",
+      "version": "2.0.11"
+    },
+    "auth_methods": [
+      {
+        "description": "Run `opencode auth login` in the terminal",
+        "id": "opencode-login",
+        "name": "Login with opencode"
+      }
+    ],
+    "capabilities": {
+      "_meta": {
+        "opencode/child-session-updates": true
+      },
+      "loadSession": true,
+      "mcpCapabilities": {
+        "http": true,
+        "sse": false
+      },
+      "promptCapabilities": {
+        "embeddedContext": true,
+        "image": true
+      },
+      "sessionCapabilities": {
+        "close": {},
+        "delete": {},
+        "fork": {},
+        "list": {},
+        "resume": {}
+      }
+    },
+    "session_id": "ses_f3b614fa4ffe1fLaHy4GHkIqaq",
+    "source": "opencode-acp/host"
+  },
+  "mode": {
+    "reported": "plan",
+    "requested": "plan"
+  },
+  "model": {
+    "checked_before_delivery": true,
+    "configured": "juspay-grid/glm-latest",
+    "matched": true,
+    "on_creation": "opencode/deepseek-v4.1-flash",
+    "reported": "minimax-coding-plan/MiniMax-M3",
+    "requested": "minimax-coding-plan/MiniMax-M3",
+    "selected_by_pio": true
+  },
+  "owner_service_after": [
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
+  ],
+  "owner_service_before": [
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
+  ],
+  "owner_service_untouched": true,
+  "permission_options": {
+    "kind": "permission_options_observed",
+    "observed_at_unix_ms": 1790005132080,
+    "option_ids": [
+      "once",
+      "always",
+      "reject"
+    ],
+    "option_kinds": [
+      "allow_once",
+      "allow_always",
+      "reject_once"
+    ],
+    "options": [
+      {
+        "kind": "allow_once",
+        "name": "Allow once",
+        "optionId": "once"
+      },
+      {
+        "kind": "allow_always",
+        "name": "Always allow",
+        "optionId": "always"
+      },
+      {
+        "kind": "reject_once",
+        "name": "Reject",
+        "optionId": "reject"
+      }
+    ],
+    "source": "opencode-acp"
+  },
+  "pio_deleted_nothing": true,
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "preflight": {
+    "binary_newer_than_every_source": true,
+    "binary_sha256": "aada48ecf1b64a65208d62492168d6c9e497a503de128fc1c94fc0bb457fdf0a",
+    "checked": true,
+    "commit": "85769487549dbb973a1d9aff1c5b6faa6a983a69",
+    "dirty": false,
+    "newest_source": "crates/pio-protocol/src/codex.rs"
+  },
+  "rehearsal": {
+    "made_in_dry_run": true,
+    "observation": "PIO's own decline of a target outside the workspace",
+    "ran": true
+  },
+  "run": "R5",
+  "runtime": "exited",
+  "sessions_after": {
+    "digest": "a6f45e12b065c28efd69ca69076b1f11faef2fc6cacfdffbefdb32df29a76b9d",
+    "entry_count": 1,
+    "exit": 0,
+    "observed": true
+  },
+  "sessions_before": {
+    "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "entry_count": 0,
+    "exit": 0,
+    "observed": true
+  },
+  "sessions_created": [
+    "ses_f3b614fa4ffe1fLaHy4GHkIqaq"
+  ],
+  "started_at": "2026-09-21T15:38:35Z",
+  "stops": [],
+  "tool_uses": {
+    "containment": {
+      "mechanism": "harness_permission_rules_only",
+      "os_sandbox_observed": false
+    },
+    "declined_by_pio_count": 1,
+    "denied_by_caller_count": 0,
+    "denied_by_harness_count": 0,
+    "format": "pio-claude-tool-uses/5",
+    "liability": "unresolved",
+    "out_of_fixture_count": 0,
+    "out_of_fixture_effect_observed": false,
+    "tool_uses": [
+      {
+        "decided_by": null,
+        "decision": null,
+        "denied": false,
+        "denied_by_harness": false,
+        "outcome": "performed",
+        "placement": "not_classifiable",
+        "target_label": null,
+        "target_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "tool": "read",
+        "tool_use_id": "call_01a0c49eb66c73fc82d0b473"
+      },
+      {
+        "decided_by": "pio",
+        "decision": "deny",
+        "denied": true,
+        "denied_by_harness": false,
+        "outcome": "declined_by_pio",
+        "placement": "not_classifiable",
+        "target_label": null,
+        "target_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "tool": "read",
+        "tool_use_id": "call_01a0c49eba5a72719fc1988c"
+      }
+    ],
+    "unclassifiable_target_count": 1,
+    "workspace_sha256": "a0038ec6075f7d72b094952b7ec5acb7bb84635f978016af7bf66844d5b867f6"
+  },
+  "usage": {
+    "cap": 300000000,
+    "detail": {
+      "cachedReadTokens": 8204,
+      "inputTokens": 142,
+      "outputTokens": 46,
+      "totalTokens": 8392
+    },
+    "execution_deadline_seconds": 600,
+    "granularity": {
+      "measure": "every token counter the harness reports, summed; its own totalTokens is recorded beside the sum, never added to it",
+      "report_count": 2,
+      "reported_at_turn_end": true,
+      "reported_during_turn": true,
+      "reports": [
+        {
+          "matched_by": "the update kind",
+          "paths": [],
+          "update_kind": "usage_update",
+          "values": [
+            {
+              "cost": {
+                "amount": 0,
+                "currency": "USD"
+              },
+              "sessionUpdate": "usage_update",
+              "size": 1048576,
+              "used": 8392
+            }
+          ],
+          "where": "session/update"
+        },
+        {
+          "paths": [
+            "usage"
+          ],
+          "update_kind": null,
+          "values": [
+            {
+              "cachedReadTokens": 8204,
+              "inputTokens": 142,
+              "outputTokens": 46,
+              "totalTokens": 8392
+            }
+          ],
+          "where": "session/prompt result"
+        }
+      ],
+      "session_update_kinds": {
+        "agent_message_chunk": 2,
+        "tool_call": 2,
+        "tool_call_update": 4,
+        "usage_update": 1
+      },
+      "usage_bearing_update_kinds": {
+        "usage_update": 1
+      }
+    },
+    "limit_is_next_turn_only": true,
+    "measure": "every token counter the harness reports, summed; its own totalTokens is recorded beside the sum, never added to it",
+    "observed_total_tokens": 8392,
+    "parts": {
+      "cachedReadTokens": 8204,
+      "inputTokens": 142,
+      "outputTokens": 46
+    },
+    "parts_sum_matches_reported_total": true,
+    "path": "usage",
+    "reported": true,
+    "reported_total": 8392,
+    "run_limit": 2000000,
+    "stop_at": 240000000
+  }
+}
