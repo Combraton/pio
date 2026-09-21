@@ -14,6 +14,7 @@
 | Models offered to a session | 68 | 127 |
 | The seven MiniMax ids | present | **present, unchanged** |
 | The session's own current model, as-configured | `juspay-grid/glm-latest` | **`opencode/deepseek-v4.1-flash`** |
+| How a client sets the model | never measured | **`session/set_config_option`** with `configId`/`value` (§4) |
 | The isolated control's substitute | `opencode/nemotron-3.5-lightning-free` (9 models) | `opencode/jev-1.13-free` (8 models) |
 | Private server child | `acp` spawning `serve --stdio --port 0` | unchanged |
 
@@ -84,6 +85,27 @@ PIO never selects a model outside a dated, owner-authorized exception, as ADR 00
 
 **Owner decision, 2026-09-20: the fixture model is `minimax-coding-plan/MiniMax-M2.7-highspeed`** for every run.
 
+#### Passing a model is not selecting one — measured 2026-09-21, at zero tokens
+
+The first live run refused here, correctly, and the refusal exposed a defect in this adapter. **A new ACP session does not start on the model the client asked for.** `session/new` reports the harness's own default and nothing in its parameters changes that; `opencode acp` has no `--model` flag either. The host had only ever *checked* the model against what the session reported, and never *set* it, so every live run would have refused before delivery for ever.
+
+Measured, by probing the wire at zero tokens:
+
+```
+--> session/set_config_option {"sessionId": …, "configId": "model",
+                               "value": "minimax-coding-plan/MiniMax-M2.7-highspeed"}
+<-- {"configOptions": [{"id": "model", …,
+                        "currentValue": "minimax-coding-plan/MiniMax-M2.7-highspeed"}, …]}
+```
+
+- The parameters are `configId` and `value`. `optionId`, `valueId` and `session/set_model` are all rejected; the first two produce `-32602` naming the missing field, the last `-32601`.
+- The answer carries **the harness's own updated report**, and that report — not the absence of an error — is what the guard is run against. A harness that answers cleanly and changes nothing is refused.
+- The selection is **per session**: a new session reverts to the harness's default.
+
+So the order is now `session/new`, select, read the harness's own report back, guard, and only then the brief. The refusal still precedes delivery, which is the property this adapter was chosen for.
+
+**The labeled fake hid this for the whole of M3b's offline work** by echoing the requested model back on `session/new`. A fake that agrees with PIO cannot test PIO. It now starts every session on `opencode/deepseek-v4.1-flash`, as the real harness does, and only a selection moves it — with scenario knobs for a harness that ignores the selection and one that refuses it.
+
 ### 5. Permissions
 
 **Measured: the user's configuration has no `permission` key at all**, so there are no configured rules to compare against and the Claude adapter's equality guard has nothing to guard. Until the default behaviour is measured on the wire, the adapter carries `permission_default: not_evaluated`.
@@ -112,6 +134,12 @@ So OpenCode gives PIO **no delivery acknowledgment**, and this is a real differe
 The strongest honest statement is that the first `session/update` after a prompt shows the harness acting on it. That is evidence of receipt, but it is **not an identifier the provider returned**, so PIO records delivery as `acknowledged` with evidence class `native_session_update` and **no proof class**, rather than borrowing a proof class it has not earned.
 
 The consequence is stated rather than worked around: on an ambiguous outcome — a host lost after release, say — OpenCode gives less to reconcile with than Codex or Claude Code, so more outcomes stay `ambiguous`. Whether a prompt acknowledgment exists under some other ACP option is an open question below, not an assumption.
+
+### 8. A refusal before delivery is a finished execution
+
+Found by the same live run. PIO refused the session and recorded `delivery: failed_before_delivery` with evidence class `native_turn_never_sent` — and then the execution sat at `runtime: preparing` for ever, because only the harness's exit moves the runtime and there had been no turn to exit from. A caller polling the runtime could not tell a refusal from a slow start; the live runner waited until it was stopped by hand.
+
+A host that failed **before releasing the brief** is finished: the brief never left PIO and the child is stopped. The shared projection now says so — `runtime: exited`, with `exit` left `unavailable` because no exit code was observed and none is claimed. This is in the shared projection, so it is true of all three adapters.
 
 ## Open, to be measured before any live run
 

@@ -253,15 +253,61 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
         .context("session id")?
         .to_owned();
 
+    // **A new session does not start on the model PIO asked for.** Measured
+    // against 2.0.11: `session/new` reports the harness's own default —
+    // `opencode/deepseek-v4.1-flash`, not even the owner's configured model —
+    // and the only way to change it is to select it on this session. The
+    // first live run refused here, correctly, because the host had only ever
+    // *checked* the model and never *set* it; the labeled fake had hidden
+    // that by echoing back whatever was requested.
+    let selected = if requested_model.is_empty() {
+        Value::Null
+    } else {
+        let id = rpc.request(
+            child,
+            "session/set_config_option",
+            json!({"sessionId":session,"configId":"model","value":requested_model}),
+        )?;
+        let answer = rpc.wait(child, id, 120, |_| Ok(()))?;
+        life.event(json!({"kind":"model_selected",
+            "requested_model":requested_model,
+            "method":"session/set_config_option",
+            "config_id":"model",
+            "error":answer["error"],
+            // The harness answers with its own updated report, which is what
+            // the guard below is run against. PIO does not take the absence
+            // of an error as evidence that the selection took.
+            "reported_after":answer["result"]["configOptions"]}))?;
+        ensure!(
+            answer["error"].is_null(),
+            "model_selection_refused: {}",
+            answer["error"]
+        );
+        answer["result"].clone()
+    };
+
     // The owner's rule, and the whole reason this adapter is better placed than
     // the Claude one: the session reports what it will use before any prompt,
-    // so a refusal here happens with the brief still inside PIO.
-    let guard = pio_opencode::session_configuration_guard(&created["result"], &requested_model);
+    // so a refusal here happens with the brief still inside PIO. It is run
+    // against the report the harness gave **after** the selection, so a
+    // selection that silently did not take is a refusal rather than a claim.
+    let reported = if selected.is_null() {
+        created["result"].clone()
+    } else {
+        selected
+    };
+    let guard = pio_opencode::session_configuration_guard(&reported, &requested_model);
     life.event(json!({"kind":"session_created",
         "session_id":created["result"]["sessionId"],
         "requested_model":requested_model,
+        // What the session started on, before PIO selected anything. Recorded
+        // because it is the harness's own default and nobody should have to
+        // rediscover it from a refusal.
+        "model_on_creation":pio_opencode::session_configuration_guard(
+            &created["result"], &requested_model)["reported"],
         "reported_model":guard["reported"],
         "model_matches_requested":guard["allowed"],
+        "model_selected_by_pio":!requested_model.is_empty(),
         // Measured on this transport: the session reports what it will use
         // **before** any prompt, so a refusal here happens with the brief
         // still inside PIO. The Claude adapter cannot do this.

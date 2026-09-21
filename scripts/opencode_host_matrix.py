@@ -62,6 +62,7 @@ CASES = [
     'credential_variable_refused_at_admission',
     'unqualified_executable_refused',
     'forbidden_flags_are_never_passed',
+    'a_new_session_does_not_start_on_the_requested_model',
     'an_always_allow_option_is_offered_and_never_taken',
     'an_unattached_host_never_sees_the_request_the_harness_refuses',
     # Through the service, which is the only place delivery and usage land.
@@ -69,6 +70,8 @@ CASES = [
     'service_measures_where_the_harness_reports_usage',
     'a_decision_is_selected_by_kind_never_by_id',
     'a_decision_whose_kind_is_not_offered_is_refused',
+    'service_refuses_a_selection_that_did_not_take',
+    'service_stops_when_the_model_selection_is_refused',
     'service_refuses_a_downgraded_session_before_any_prompt',
     'service_tells_a_harness_refusal_apart_from_a_pio_decline',
     'service_records_who_decided_and_what',
@@ -331,12 +334,26 @@ class ServiceCase(Case):
         super().cleanup()
 
 
-def new_session(case, extra_args=()):
-    """Everything up to, and not including, a prompt."""
+def new_session(case, extra_args=(), select=None):
+    """Everything up to, and not including, a prompt.
+
+    Including the model selection, because **a new session does not start on
+    the client's model**. Measured against 2.0.11: `session/new` reports the
+    harness's own default and only `session/set_config_option` moves it. The
+    host does the same, and what comes back here is the harness's own report
+    **after** the selection — which is what the guard is run against.
+    """
     acp = Acp(case, extra_args)
     acp.call('initialize', {'protocolVersion': 1, 'clientCapabilities': {}})
     created = acp.call('session/new', {'cwd': str(case.fixtures), 'mcpServers': []})
-    return acp, created['result']
+    session = created['result']
+    if select is not False:
+        answer = acp.call('session/set_config_option',
+                          {'sessionId': session['sessionId'], 'configId': 'model',
+                           'value': select or REQUESTED})
+        if answer.get('result'):
+            session = dict(session, configOptions=answer['result']['configOptions'])
+    return acp, session
 
 
 def run_case(out, name):
@@ -435,6 +452,32 @@ def run_case(out, name):
         detector.close()
         control.finish()
         control.cleanup()
+
+    elif name == 'a_new_session_does_not_start_on_the_requested_model':
+        # The case that would have caught the first live refusal. The host had
+        # only ever *checked* the model and never *set* it, and the fake hid
+        # that by echoing back whatever was requested.
+        case = Case(out, name, model=REQUESTED)
+        acp, unselected = new_session(case, select=False)
+        current = {o['id']: o['currentValue'] for o in unselected['configOptions']}
+        assert current['model'] == 'opencode/deepseek-v4.1-flash', current
+        assert current['model'] != REQUESTED, current
+        # A client that only looks is refused, which is what happened live.
+        looked = case.guard(unselected)
+        assert looked['allowed'] is False, looked
+        # Selecting it, the way the harness actually allows, and the answer is
+        # the harness's own updated report rather than a bare acknowledgement.
+        answer = acp.call('session/set_config_option',
+                          {'sessionId': unselected['sessionId'], 'configId': 'model',
+                           'value': REQUESTED})
+        assert answer.get('error') is None, answer
+        selected = dict(unselected, configOptions=answer['result']['configOptions'])
+        assert case.guard(selected)['allowed'] is True, selected
+        set_markers = case.markers_of('config_option_set')
+        assert len(set_markers) == 1, set_markers
+        assert set_markers[0]['config_id'] == 'model', set_markers
+        assert set_markers[0]['requested_value'] == REQUESTED, set_markers
+        acp.close()
 
     elif name == 'an_always_allow_option_is_offered_and_never_taken':
         case = Case(out, name, model=REQUESTED, scenario={
@@ -732,6 +775,60 @@ def run_case(out, name):
             case.cleanup()
         case = Case(out, name, model=REQUESTED)
 
+    elif name == 'service_refuses_a_selection_that_did_not_take':
+        # A harness that answers the selection without an error and changes
+        # nothing. PIO must not read a clean response as evidence that the
+        # selection took: the guard runs on the harness's own report, not on
+        # the absence of an error.
+        case = ServiceCase(out, name, model=REQUESTED,
+                           scenario={'ignore_model_selection': True})
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(),
+                    lambda v: v['delivery'] in ('failed_before_delivery', 'not_delivered'))
+        assert view['delivery'] == 'failed_before_delivery', view
+        # A refusal is a finished execution. Before this the runtime sat at
+        # `preparing` for ever and a caller could not tell it from a slow
+        # start; the first live run hung there.
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        assert view['exit'] == 'unavailable', view
+        events = case.host_events()
+        selected = [e for e in events if e['kind'] == 'model_selected']
+        assert len(selected) == 1, [e['kind'] for e in events]
+        assert selected[0]['error'] is None, selected
+        created = [e for e in events if e['kind'] == 'session_created'][0]
+        assert created['model_selected_by_pio'] is True, created
+        assert created['model_on_creation'] == 'opencode/deepseek-v4.1-flash', created
+        assert created['reported_model'] == 'opencode/deepseek-v4.1-flash', created
+        assert created['model_matches_requested'] is False, created
+        assert case.markers_of('prompt_received') == [], 'a prompt was sent after a refusal'
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_stops_when_the_model_selection_is_refused':
+        # The harness refuses the selection outright. PIO stops with the brief
+        # still inside it rather than running on whatever model it got.
+        case = ServiceCase(out, name, model=REQUESTED,
+                           scenario={'refuse_model_selection': True})
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(),
+                    lambda v: v['delivery'] in ('failed_before_delivery', 'not_delivered'))
+        assert view['delivery'] == 'failed_before_delivery', view
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        assert view['exit'] == 'unavailable', view
+        events = case.host_events()
+        selected = [e for e in events if e['kind'] == 'model_selected']
+        assert len(selected) == 1, [e['kind'] for e in events]
+        assert selected[0]['error'] is not None, selected
+        error = [e for e in events if e['kind'] == 'host_error']
+        assert error and 'model_selection_refused' in error[0]['error'], error
+        # Nothing reached the guard, and nothing reached the harness.
+        assert [e for e in events if e['kind'] == 'session_created'] == []
+        assert case.markers_of('prompt_received') == [], 'a prompt was sent after a refusal'
+        assert len(case.markers_of('model_selection_refused')) == 1, \
+            case.markers_of('model_selection_refused')
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
     elif name == 'service_refuses_a_downgraded_session_before_any_prompt':
         # The owner's rule, through the durable host: the session reports a
         # different provider, so the host refuses and the brief never leaves.
@@ -743,6 +840,8 @@ def run_case(out, name):
         assert view['delivery'] == 'failed_before_delivery', view
         assert case.markers_of('prompt_received') == [], 'a prompt was sent after a refusal'
         assert len(case.markers_of('session_created')) == 1, case.markers_of('session_created')
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        assert view['exit'] == 'unavailable', view
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     else:

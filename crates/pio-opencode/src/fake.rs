@@ -21,7 +21,8 @@
 //! played), `permission_request` (whose own `omit_option_kinds` plays an agent
 //! that does not offer one), `tool_calls`, `usage_total`, `message_chunks`,
 //! `usage_on_updates` (a harness that reports usage as it goes rather than
-//! once at the end), `delay_ms`, `ignore_cancel`, `markers`.
+//! once at the end), `model_on_creation`, `ignore_model_selection`,
+//! `refuse_model_selection`, `delay_ms`, `ignore_cancel`, `markers`.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 use std::io::{BufRead, Write};
@@ -29,6 +30,14 @@ use std::path::PathBuf;
 
 pub const SOURCE: &str = "pio-fake-opencode-acp";
 pub const DEFAULT_MODEL: &str = "minimax-coding-plan/MiniMax-M2.7-highspeed";
+
+/// What a **new** session starts on, before a client selects anything.
+///
+/// Measured from OpenCode 2.0.11: a new ACP session reports this, not the
+/// owner's configured model and certainly not the one PIO asked for. This
+/// fake used to echo the requested model back, which is exactly why nobody
+/// noticed the host never selected one until the first live run refused.
+pub const MODEL_ON_CREATION: &str = "opencode/deepseek-v4.1-flash";
 
 /// Fields a permission response may never carry: anything that would make a
 /// decision outlive the request it answered.
@@ -70,6 +79,8 @@ fn config_options(model: &str) -> Value {
         {"id":"model","name":"Model","category":"model","type":"select",
          "currentValue":model,
          "options":[{"value":model,"name":model},
+                    {"value":DEFAULT_MODEL,"name":DEFAULT_MODEL},
+                    {"value":MODEL_ON_CREATION,"name":MODEL_ON_CREATION},
                     {"value":"opencode/nemotron-3.5-lightning-free",
                      "name":"opencode/nemotron-3.5-lightning-free"}]},
         {"id":"effort","name":"Effort","type":"select","currentValue":"default",
@@ -120,10 +131,6 @@ pub fn run() -> Result<()> {
         return Ok(());
     }
 
-    let model = scenario["model"]
-        .as_str()
-        .unwrap_or(DEFAULT_MODEL)
-        .to_owned();
     // A new session each time, as a real agent returns. A fixed id made two
     // runs look identical, and a receipt field that cannot vary cannot be
     // checked.
@@ -141,6 +148,12 @@ pub fn run() -> Result<()> {
     let mut lines = stdin.lock().lines();
     // Whether a client announced itself. ACP has no permission capability to
     // declare, so this is the handshake and nothing else.
+    // What this session currently reports. A new session does not start on
+    // the client's model; only a selection moves it.
+    let mut current = scenario["model_on_creation"]
+        .as_str()
+        .unwrap_or(MODEL_ON_CREATION)
+        .to_owned();
     let mut handshook = false;
     let mut cancelled = false;
 
@@ -171,20 +184,62 @@ pub fn run() -> Result<()> {
                        "_meta":{"source":SOURCE}}),
             )?,
 
-            // The session reports what it will actually use, before any prompt.
+            // The session reports what it will actually use, before any
+            // prompt — and it does **not** start on the model the client
+            // wants. Measured from 2.0.11.
             "session/new" => {
-                marker(&markers, json!({"event":"session_created","model":&model}))?;
+                marker(
+                    &markers,
+                    json!({"event":"session_created","model":&current,
+                           "model_on_creation":&current}),
+                )?;
                 reply(
                     &id,
-                    json!({"sessionId":session,"configOptions":config_options(&model)}),
+                    json!({"sessionId":session,"configOptions":config_options(&current)}),
                 )?;
+            }
+
+            // Measured against 2.0.11: this is how a client selects a model,
+            // and the answer carries the harness's own updated report.
+            // `optionId` and `valueId` are rejected; the fields are
+            // `configId` and `value`.
+            "session/set_config_option" => {
+                let config_id = message["params"]["configId"].as_str().unwrap_or_default();
+                let value = message["params"]["value"].as_str().unwrap_or_default();
+                if scenario["refuse_model_selection"] == true {
+                    marker(
+                        &markers,
+                        json!({"event":"model_selection_refused","config_id":config_id}),
+                    )?;
+                    emit(&json!({"jsonrpc":"2.0","id":&id,
+                        "error":{"code":-32602,"message":"Invalid params",
+                                 "data":{"configId":{"_errors":["unknown option"]}}}}))?;
+                    continue;
+                }
+                // A harness that answers without error and changes nothing.
+                // PIO must not read the absence of an error as evidence the
+                // selection took.
+                let ignored = scenario["ignore_model_selection"] == true;
+                if config_id == "model" && !ignored {
+                    // `model` in the scenario overrides, so a silent
+                    // downgrade can still be played against a client that
+                    // did everything right.
+                    current = scenario["model"].as_str().unwrap_or(value).to_owned();
+                }
+                marker(
+                    &markers,
+                    json!({"event":"config_option_set","config_id":config_id,
+                           "requested_value":value,"ignored":ignored,
+                           "current_model":&current}),
+                )?;
+                reply(&id, json!({"configOptions":config_options(&current)}))?;
             }
 
             "session/prompt" => {
                 marker(
                     &markers,
                     json!({"event":"prompt_received",
-                           "model":&model,
+                           "model":&current,
                            "prompt_blocks":message["params"]["prompt"].as_array().map(Vec::len)}),
                 )?;
                 if let Some(delay) = scenario["delay_ms"].as_u64() {
