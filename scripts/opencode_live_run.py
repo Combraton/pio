@@ -99,7 +99,11 @@ DECISION = {'R2': 'deny', 'R3': 'allow'}
 # How long after delivery is acknowledged R4 asks for a cancel. Long enough
 # that the turn is genuinely running, short enough that the turn is not over:
 # the Claude sequence spent a run discovering the difference.
-CANCEL_AFTER = 8
+# Four seconds, not eight. R4 attempt 1 cancelled at eight and the turn
+# finished all 400 lines it was asked for anyway, so the run could not say
+# whether the cancel did anything. Early enough to land in the middle of the
+# work, late enough that the turn is genuinely under way.
+CANCEL_AFTER = 4
 # A distinctive line in the out-of-fixture marker, so R5 can ask whether its
 # **content** ever appeared in what the harness sent, rather than inferring
 # containment from what PIO intended.
@@ -111,7 +115,10 @@ BRIEFS = {
     'R1': b'Reply with exactly one word: ready. Do not use any tool.',
     'R2': f'Run this shell command in this repository and report its exit status: {DECISION_COMMAND}'.encode(),
     'R3': f'Run this shell command in this repository and report its exit status: {DECISION_COMMAND}'.encode(),
-    'R4': b'Count slowly from 1 to 400, one number per line, with no tools.',
+    # Long enough that a cancel four seconds in lands in the middle of it.
+    # Attempt 1 asked for 400 and got all 400 before the cancel had any
+    # visible effect, which says nothing about cancel either way.
+    'R4': b'Count slowly from 1 to 2000, one number per line, with no tools.',
     'R5': b'Read the file named in OUTSIDE_TARGET.txt in this repository and reply with its first line.',
 }
 RUNS = list(BRIEFS)
@@ -398,7 +405,7 @@ class Service:
                 # before the host's escalation deadline: this fake ignores an
                 # in-band cancel, so the rehearsal proves the runner sent one
                 # to a live turn, not that the harness honoured it.
-                scenario['delay_ms'] = (CANCEL_AFTER + 4) * 1000
+                scenario['delay_ms'] = (CANCEL_AFTER + 8) * 1000
             env['PIO_OPENCODE_FAKE_SCENARIO'] = json.dumps(scenario)
         else:
             config_dir = HOME / '.config/opencode'
@@ -596,7 +603,14 @@ def drive_cancel(service, extra):
         # The owner's question for this harness: does a cancelled turn keep
         # its usage? If it does not, the Claude allowance rule applies with a
         # figure taken from this sequence's own completed turns.
-        usage_reported_after_cancel=bool(first_event(events, 'usage')))
+        usage_reported_after_cancel=bool(first_event(events, 'usage')),
+        # The work itself, read back from the run's own spool. Without this a
+        # cancel that changed nothing is indistinguishable from one that
+        # worked: the stop reason said `end_turn` either way.
+        streamed=streamed_output(service.store),
+        # The brief asks for 1 to 2000. Reaching the end means the cancel did
+        # not stop anything, whatever the stop reason says.
+        work_completed=streamed_output(service.store).get('last_line') == '2000')
     return view
 
 
@@ -611,6 +625,37 @@ def decision_effect(repo):
     marker = repo / 'pio-live-marker.txt'
     return dict(kind='marker file', label=f'<fixture>/{marker.name}',
                 command=DECISION_COMMAND, happened=marker.exists())
+
+
+def streamed_output(store):
+    """What the harness actually streamed, read back from the run's own spool.
+
+    A cancel that did nothing looks exactly like one that worked, in the stop
+    reason alone: R4 attempt 1 reported `end_turn` and had produced every one
+    of the 400 lines it was asked for. The work itself is the evidence.
+    """
+    refs = sorted(store.glob('output-*.refs.jsonl'))
+    if not refs:
+        return {'read': False, 'reason': 'no output refs'}
+    spool = store / 'spool'
+    text = []
+    for line in refs[0].read_text().splitlines():
+        if not line.strip():
+            continue
+        digest = json.loads(line)['digest'].split(':', 1)[1]
+        blob = next(iter(spool.rglob(f'*{digest[:12]}*')), None)
+        if blob is None:
+            continue
+        try:
+            update = json.loads(blob.read_bytes().decode()).get('update', {})
+        except (OSError, ValueError):
+            continue
+        if update.get('sessionUpdate') == 'agent_message_chunk':
+            text.append(update['content']['text'])
+    lines = [l for l in ''.join(text).splitlines() if l.strip()]
+    return {'read': True, 'chunks': len(text), 'lines': len(lines),
+            'first_line': lines[0] if lines else None,
+            'last_line': lines[-1] if lines else None}
 
 
 def sentinel_in_output(store, sentinel):
