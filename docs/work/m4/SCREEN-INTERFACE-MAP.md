@@ -74,11 +74,21 @@ Blocked before any code by the two items the design input names: a Protocol prop
 | Element | Fed by | Status |
 | --- | --- | --- |
 | Lead card, goal, what it waits for | `execution.inspect` on the lead | have |
-| The runs the lead started, as a team | `core.events.read` filtered by `origin` | have in the schema — `origin` carries initiator, depth and call budget — **to confirm PIO populates it** |
+| The runs the lead started, as a team | — | **not implemented.** See below: PIO's `origin` is not the Protocol's |
 | MESSAGES thread: from → to, kind, time | — | **G4** for author identity; the Protocol proposal the design input requires |
 | Delivery ticks `✓` / `✓✓` / violet `◇` | `execution.inspect` → `deliveries[].delivery` and `.proof_class` | have. **An unproven message never shows two ticks** follows directly from `proof_class: null`, which is exactly OpenCode's case |
-| The lead's budget meter | budget pools with a hard or soft ceiling, in the pinned schemas | **to confirm** what PIO implements |
+| The lead's budget meter | `execution.submit` → `payload.budget` with `pool`, `amount` and `ceiling` | **implemented.** See below |
 | A run may never answer another run's permission request | `core.grant.issue` with rights that exclude `execution.respond_action` | have — this is a grant, not new code |
+
+### What PIO implements today, of the three things step 3 names
+
+Checked in the source rather than assumed, because step 3 says to implement the Protocol's features and not new ones.
+
+**Budget pools: implemented.** `execution.submit` accepts `payload.budget` with a `pool`, an `amount` and a `ceiling` of `hard` or `soft`. The pool's measure comes from `executor.budget_pools`; usage is summed across every execution holding a `reserved` or `settled` reservation in that pool. A pool that does not exist is refused `budget_unavailable`, and — the part that matters for a lead — **a `hard` ceiling is refused `enforcement_unavailable` unless the adapter's `enforced_bounds` contains that measure.** PIO will not promise a hard ceiling it cannot enforce. A lead's budget meter is therefore a feature that exists, not one to build.
+
+**Grants with rights and resources: implemented.** `core.grant.issue` and `core.grant.revoke`, with narrowing enforced: a child grant may not hold a right its parent lacks. So "a lead is a principal with a scoped grant to submit, steer and inspect, with **no** right to respond to an action" is expressible today, by omitting `execution.respond_action` from its rights — a grant, not new code. The rule *a run can never answer another run's permission request* needs no new mechanism, only a case proving the grant refuses it.
+
+**Origin with initiator, depth and call budget: not implemented.** PIO has an `origin` field on every event, but it takes two values — `provider` or `command` — and says whether the service or a caller produced the event. It carries no initiator, no depth and no call budget. Nothing in the codebase mentions those. This is the same hole the design input names first: *a message can record which run wrote it* is exactly what is missing, and it is a **Protocol** gap rather than a PIO one. A Protocol issue is warranted here; the other two need none.
 
 ## Screen 4 — the approval walk
 
