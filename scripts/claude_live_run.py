@@ -32,6 +32,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import case_cleanup
+from check_private_paths import redact
 from public_api import Client, command
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -873,7 +874,11 @@ def run_one(run, args):
 
     out = args.out / f'{run}.json'
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+    # The recording boundary, on the runner's side of it. The host redacts
+    # its own events and receipt; this covers what the runner adds. Every
+    # receipt from R2 onward had carried the full path of each installed
+    # plugin until 2026-09-21.
+    out.write_text(json.dumps(redact(receipt), indent=2, sort_keys=True) + '\n')
     print(json.dumps({k: receipt[k] for k in
                       ('run', 'dry_run', 'delivery', 'usage', 'runtime', 'stops')},
                      indent=2))

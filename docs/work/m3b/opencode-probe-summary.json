@@ -23,7 +23,7 @@
     },
     "agent_info": {
       "name": "OpenCode",
-      "version": "2.0.1"
+      "version": "2.0.11"
     },
     "auth_methods": [
       {
@@ -37,7 +37,7 @@
       "mode",
       "model"
     ],
-    "configured_model": "juspay-grid/glm-latest",
+    "configured_model": "opencode/deepseek-v4.1-flash",
     "effort": "default",
     "initialized": true,
     "minimax_models": [
@@ -50,14 +50,14 @@
       "minimax-coding-plan/MiniMax-M3"
     ],
     "mode": "build",
-    "model_count": 68,
+    "model_count": 127,
     "modes": [
       "build",
       "plan"
     ],
     "private_server_children": [
-      "11135 11128 ~/.local/bin/opencode2 acp",
-      "11136 11135 ~/.local/lib/node_modules/@opencode/cli/bin/opencode.exe serve --stdio --port 0"
+      "14106 14098 ~/.local/bin/opencode2 acp",
+      "14107 14106 ~/.local/lib/node_modules/@opencode/cli/bin/opencode.exe serve --stdio --port 0"
     ],
     "session_created": true,
     "update_kinds": [
@@ -77,7 +77,7 @@
     "install": "npm",
     "resolved": "~/.local/lib/node_modules/@opencode/cli/bin/opencode.exe",
     "selected": "~/.local/bin/opencode2",
-    "version": "opencode v2.0.1"
+    "version": "opencode v2.0.11"
   },
   "format": "pio-opencode-probe/1",
   "isolated_control": {
@@ -104,7 +104,7 @@
     },
     "agent_info": {
       "name": "OpenCode",
-      "version": "2.0.1"
+      "version": "2.0.11"
     },
     "auth_methods": [
       {
@@ -117,12 +117,12 @@
       "mode",
       "model"
     ],
-    "configured_model": "opencode/nemotron-3.5-lightning-free",
+    "configured_model": "opencode/jev-1.13-free",
     "effort": null,
     "initialized": true,
     "minimax_models": [],
     "mode": "build",
-    "model_count": 9,
+    "model_count": 8,
     "modes": [
       "build",
       "plan"
@@ -135,10 +135,10 @@
   },
   "model_calls": 0,
   "owner_service_after": [
-    "d6028558a7aa4558765a6973c8c4b9296b27e6316f151390426aa9dcc4e1e1cf"
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
   ],
   "owner_service_before": [
-    "d6028558a7aa4558765a6973c8c4b9296b27e6316f151390426aa9dcc4e1e1cf"
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
   ],
   "owner_service_untouched": true,
   "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",

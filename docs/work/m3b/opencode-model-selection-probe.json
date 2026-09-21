@@ -1,0 +1,718 @@
+{
+  "answer": {
+    "a_new_session_starts_on": "opencode/deepseek-v4.1-flash",
+    "answer_carries": "the harness own updated configOptions",
+    "method": "session/set_config_option",
+    "params": [
+      "sessionId",
+      "configId",
+      "value"
+    ],
+    "per_session": true
+  },
+  "config_options_summary": [
+    {
+      "category": "model",
+      "currentValue": "opencode/deepseek-v4.1-flash",
+      "id": "model",
+      "name": "Model",
+      "options": "<127 options>",
+      "type": "select"
+    },
+    {
+      "category": "thought_level",
+      "currentValue": "default",
+      "description": "Available effort levels for this model",
+      "id": "effort",
+      "name": "Effort",
+      "options": "<4 options>",
+      "type": "select"
+    },
+    {
+      "category": "mode",
+      "currentValue": "build",
+      "id": "mode",
+      "name": "Session Mode",
+      "options": "<2 options>",
+      "type": "select"
+    }
+  ],
+  "format": "pio-opencode-model-selection-probe/1",
+  "measured_on": "2026-09-21",
+  "method_probe": {
+    "session/select_config_option": {
+      "error": {
+        "code": -32601,
+        "data": {
+          "method": "session/select_config_option"
+        },
+        "message": "\"Method not found\": session/select_config_option"
+      },
+      "result": null
+    },
+    "session/select_model": {
+      "error": {
+        "code": -32601,
+        "data": {
+          "method": "session/select_model"
+        },
+        "message": "\"Method not found\": session/select_model"
+      },
+      "result": null
+    },
+    "session/setConfigOption": {
+      "error": {
+        "code": -32601,
+        "data": {
+          "method": "session/setConfigOption"
+        },
+        "message": "\"Method not found\": session/setConfigOption"
+      },
+      "result": null
+    },
+    "session/set_config_option": {
+      "error": {
+        "code": -32602,
+        "data": {
+          "_errors": [],
+          "configId": {
+            "_errors": [
+              "Invalid input: expected string, received undefined"
+            ]
+          }
+        },
+        "message": "Invalid params"
+      },
+      "result": null
+    },
+    "session/set_mode": {
+      "error": null,
+      "result": {}
+    },
+    "session/set_model": {
+      "error": {
+        "code": -32601,
+        "data": {
+          "method": "session/set_model"
+        },
+        "message": "\"Method not found\": session/set_model"
+      },
+      "result": null
+    }
+  },
+  "model_calls": 0,
+  "question": "How does an ACP client select a model on OpenCode, and does session/new ever start on it?",
+  "session_new_result_keys": [
+    "configOptions",
+    "sessionId"
+  ],
+  "set_config_option_param_probe": {
+    "configId only": {
+      "error": {
+        "code": -32602,
+        "data": {
+          "_errors": [],
+          "type": {
+            "_errors": [
+              "Invalid input: expected \"boolean\""
+            ]
+          },
+          "value": {
+            "_errors": [
+              "Invalid input: expected boolean, received undefined",
+              "Invalid input: expected string, received undefined"
+            ]
+          }
+        },
+        "message": "Invalid params"
+      },
+      "result": null
+    },
+    "configId+optionId": {
+      "error": {
+        "code": -32602,
+        "data": {
+          "_errors": [],
+          "type": {
+            "_errors": [
+              "Invalid input: expected \"boolean\""
+            ]
+          },
+          "value": {
+            "_errors": [
+              "Invalid input: expected boolean, received undefined",
+              "Invalid input: expected string, received undefined"
+            ]
+          }
+        },
+        "message": "Invalid params"
+      },
+      "result": null
+    },
+    "configId+value": {
+      "error": null,
+      "result": {
+        "configOptions": [
+          {
+            "category": "model",
+            "currentValue": "minimax-coding-plan/MiniMax-M2.7-highspeed",
+            "id": "model",
+            "name": "Model",
+            "options": [
+              {
+                "name": "minimax-coding-plan/MiniMax-M2",
+                "value": "minimax-coding-plan/MiniMax-M2"
+              },
+              {
+                "name": "minimax-coding-plan/MiniMax-M2.1",
+                "value": "minimax-coding-plan/MiniMax-M2.1"
+              },
+              {
+                "name": "minimax-coding-plan/MiniMax-M2.5",
+                "value": "minimax-coding-plan/MiniMax-M2.5"
+              },
+              {
+                "name": "minimax-coding-plan/MiniMax-M2.5-highspeed",
+                "value": "minimax-coding-plan/MiniMax-M2.5-highspeed"
+              },
+              {
+                "name": "minimax-coding-plan/MiniMax-M2.7",
+                "value": "minimax-coding-plan/MiniMax-M2.7"
+              },
+              {
+                "name": "minimax-coding-plan/MiniMax-M2.7-highspeed",
+                "value": "minimax-coding-plan/MiniMax-M2.7-highspeed"
+              },
+              {
+                "name": "minimax-coding-plan/MiniMax-M3",
+                "value": "minimax-coding-plan/MiniMax-M3"
+              },
+              {
+                "name": "openai/chatgpt-image-latest",
+                "value": "openai/chatgpt-image-latest"
+              },
+              {
+                "name": "openai/GPT-4.1",
+                "value": "openai/gpt-4.1"
+              },
+              {
+                "name": "openai/GPT-4.1 mini",
+                "value": "openai/gpt-4.1-mini"
+              },
+              {
+                "name": "openai/GPT-4o",
+                "value": "openai/gpt-4o"
+              },
+              {
+                "name": "openai/GPT-4o (2024-08-06)",
+                "value": "openai/gpt-4o-2024-08-06"
+              },
+              {
+                "name": "openai/GPT-4o (2024-11-20)",
+                "value": "openai/gpt-4o-2024-11-20"
+              },
+              {
+                "name": "openai/GPT-4o mini",
+                "value": "openai/gpt-4o-mini"
+              },
+              {
+                "name": "openai/GPT-5",
+                "value": "openai/gpt-5"
+              },
+              {
+                "name": "openai/GPT-5 Mini",
+                "value": "openai/gpt-5-mini"
+              },
+              {
+                "name": "openai/GPT-5 Nano",
+                "value": "openai/gpt-5-nano"
+              },
+              {
+                "name": "openai/GPT-5 Pro",
+                "value": "openai/gpt-5-pro"
+              },
+              {
+                "name": "openai/GPT-5.1",
+                "value": "openai/gpt-5.1"
+              },
+              {
+                "name": "openai/GPT-5.2",
+                "value": "openai/gpt-5.2"
+              },
+              {
+                "name": "openai/GPT-5.2 Pro",
+                "value": "openai/gpt-5.2-pro"
+              },
+              {
+                "name": "openai/GPT-5.3 Codex",
+                "value": "openai/gpt-5.3-codex"
+              },
+              {
+                "name": "openai/GPT-5.3 Codex Spark",
+                "value": "openai/gpt-5.3-codex-spark"
+              },
+              {
+                "name": "openai/GPT-5.4",
+                "value": "openai/gpt-5.4"
+              },
+              {
+                "name": "openai/GPT-5.4 Fast",
+                "value": "openai/gpt-5.4-fast"
+              },
+              {
+                "name": "openai/GPT-5.4 mini",
+                "value": "openai/gpt-5.4-mini"
+              },
+              {
+                "name": "openai/GPT-5.4 mini Fast",
+                "value": "openai/gpt-5.4-mini-fast"
+              },
+              {
+                "name": "openai/GPT-5.4 nano",
+                "value": "openai/gpt-5.4-nano"
+              },
+              {
+                "name": "openai/GPT-5.4 Pro",
+                "value": "openai/gpt-5.4-pro"
+              },
+              {
+                "name": "openai/GPT-5.5",
+                "value": "openai/gpt-5.5"
+              },
+              {
+                "name": "openai/GPT-5.5 Fast",
+                "value": "openai/gpt-5.5-fast"
+              },
+              {
+                "name": "openai/GPT-5.5 Pro",
+                "value": "openai/gpt-5.5-pro"
+              },
+              {
+                "name": "openai/GPT-5.6",
+                "value": "openai/gpt-5.6"
+              },
+              {
+                "name": "openai/GPT-5.6 Fast",
+                "value": "openai/gpt-5.6-fast"
+              },
+              {
+                "name": "openai/GPT-5.6 Luna",
+                "value": "openai/gpt-5.6-luna"
+              },
+              {
+                "name": "openai/GPT-5.6 Luna Fast",
+                "value": "openai/gpt-5.6-luna-fast"
+              },
+              {
+                "name": "openai/GPT-5.6 Luna Pro",
+                "value": "openai/gpt-5.6-luna-pro"
+              },
+              {
+                "name": "openai/GPT-5.6 Pro",
+                "value": "openai/gpt-5.6-pro"
+              },
+              {
+                "name": "openai/GPT-5.6 Sol",
+                "value": "openai/gpt-5.6-sol"
+              },
+              {
+                "name": "openai/GPT-5.6 Sol Fast",
+                "value": "openai/gpt-5.6-sol-fast"
+              },
+              {
+                "name": "openai/GPT-5.6 Sol Pro",
+                "value": "openai/gpt-5.6-sol-pro"
+              },
+              {
+                "name": "openai/GPT-5.6 Terra",
+                "value": "openai/gpt-5.6-terra"
+              },
+              {
+                "name": "openai/GPT-5.6 Terra Fast",
+                "value": "openai/gpt-5.6-terra-fast"
+              },
+              {
+                "name": "openai/GPT-5.6 Terra Pro",
+                "value": "openai/gpt-5.6-terra-pro"
+              },
+              {
+                "name": "openai/GPT-6 Astra",
+                "value": "openai/gpt-6-astra"
+              },
+              {
+                "name": "openai/GPT-6 Astra Fast",
+                "value": "openai/gpt-6-astra-fast"
+              },
+              {
+                "name": "openai/GPT-6 Astra Pro",
+                "value": "openai/gpt-6-astra-pro"
+              },
+              {
+                "name": "openai/gpt-image-1-mini",
+                "value": "openai/gpt-image-1-mini"
+              },
+              {
+                "name": "openai/gpt-image-1.5",
+                "value": "openai/gpt-image-1.5"
+              },
+              {
+                "name": "openai/gpt-image-2",
+                "value": "openai/gpt-image-2"
+              },
+              {
+                "name": "openai/GPT-Realtime-2.1",
+                "value": "openai/gpt-realtime-2.1"
+              },
+              {
+                "name": "openai/o3",
+                "value": "openai/o3"
+              },
+              {
+                "name": "openai/o3-pro",
+                "value": "openai/o3-pro"
+              },
+              {
+                "name": "openai/text-embedding-3-large",
+                "value": "openai/text-embedding-3-large"
+              },
+              {
+                "name": "openai/text-embedding-3-small",
+                "value": "openai/text-embedding-3-small"
+              },
+              {
+                "name": "openai/text-embedding-ada-002",
+                "value": "openai/text-embedding-ada-002"
+              },
+              {
+                "name": "opencode/Big Pickle",
+                "value": "opencode/big-pickle"
+              },
+              {
+                "name": "opencode/Claude Fable 5",
+                "value": "opencode/claude-fable-5"
+              },
+              {
+                "name": "opencode/Claude Fable 5.1",
+                "value": "opencode/claude-fable-5-1"
+              },
+              {
+                "name": "opencode/Claude Haiku 4.5",
+                "value": "opencode/claude-haiku-4-5"
+              },
+              {
+                "name": "opencode/Claude Opus 4.5",
+                "value": "opencode/claude-opus-4-5"
+              },
+              {
+                "name": "opencode/Claude Opus 4.6",
+                "value": "opencode/claude-opus-4-6"
+              },
+              {
+                "name": "opencode/Claude Opus 4.7",
+                "value": "opencode/claude-opus-4-7"
+              },
+              {
+                "name": "opencode/Claude Opus 4.8",
+                "value": "opencode/claude-opus-4-8"
+              },
+              {
+                "name": "opencode/Claude Opus 5",
+                "value": "opencode/claude-opus-5"
+              },
+              {
+                "name": "opencode/Claude Sonnet 4",
+                "value": "opencode/claude-sonnet-4"
+              },
+              {
+                "name": "opencode/Claude Sonnet 4.5",
+                "value": "opencode/claude-sonnet-4-5"
+              },
+              {
+                "name": "opencode/Claude Sonnet 4.6",
+                "value": "opencode/claude-sonnet-4-6"
+              },
+              {
+                "name": "opencode/Claude Sonnet 5",
+                "value": "opencode/claude-sonnet-5"
+              },
+              {
+                "name": "opencode/DeepSeek V4 Flash",
+                "value": "opencode/deepseek-v4-flash"
+              },
+              {
+                "name": "opencode/DeepSeek V4 Flash Vision Exp",
+                "value": "opencode/deepseek-v4-flash-vision-exp"
+              },
+              {
+                "name": "opencode/DeepSeek V4 Pro",
+                "value": "opencode/deepseek-v4-pro"
+              },
+              {
+                "name": "opencode/DeepSeek V4.1 Flash",
+                "value": "opencode/deepseek-v4.1-flash"
+              },
+              {
+                "name": "opencode/Gemini 3 Flash",
+                "value": "opencode/gemini-3-flash"
+              },
+              {
+                "name": "opencode/Gemini 3.1 Pro Preview",
+                "value": "opencode/gemini-3.1-pro"
+              },
+              {
+                "name": "opencode/Gemini 3.5 Flash",
+                "value": "opencode/gemini-3.5-flash"
+              },
+              {
+                "name": "opencode/Gemini 3.5 Flash Lite",
+                "value": "opencode/gemini-3.5-flash-lite"
+              },
+              {
+                "name": "opencode/Gemini 3.6 Flash",
+                "value": "opencode/gemini-3.6-flash"
+              },
+              {
+                "name": "opencode/Gemini 3.7 Flash",
+                "value": "opencode/gemini-3.7-flash"
+              },
+              {
+                "name": "opencode/Gemini 3.8 Flash",
+                "value": "opencode/gemini-3.8-flash"
+              },
+              {
+                "name": "opencode/GLM-5",
+                "value": "opencode/glm-5"
+              },
+              {
+                "name": "opencode/GLM-5.1",
+                "value": "opencode/glm-5.1"
+              },
+              {
+                "name": "opencode/GLM-5.2",
+                "value": "opencode/glm-5.2"
+              },
+              {
+                "name": "opencode/GLM-5.3",
+                "value": "opencode/glm-5.3"
+              },
+              {
+                "name": "opencode/GLM-5.3-Flash",
+                "value": "opencode/glm-5.3-flash"
+              },
+              {
+                "name": "opencode/GPT-5",
+                "value": "opencode/gpt-5"
+              },
+              {
+                "name": "opencode/GPT-5 Codex",
+                "value": "opencode/gpt-5-codex"
+              },
+              {
+                "name": "opencode/GPT-5 Nano",
+                "value": "opencode/gpt-5-nano"
+              },
+              {
+                "name": "opencode/GPT-5.1",
+                "value": "opencode/gpt-5.1"
+              },
+              {
+                "name": "opencode/GPT-5.1 Codex",
+                "value": "opencode/gpt-5.1-codex"
+              },
+              {
+                "name": "opencode/GPT-5.1 Codex Max",
+                "value": "opencode/gpt-5.1-codex-max"
+              },
+              {
+                "name": "opencode/GPT-5.1 Codex Mini",
+                "value": "opencode/gpt-5.1-codex-mini"
+              },
+              {
+                "name": "opencode/GPT-5.2",
+                "value": "opencode/gpt-5.2"
+              },
+              {
+                "name": "opencode/GPT-5.2 Codex",
+                "value": "opencode/gpt-5.2-codex"
+              },
+              {
+                "name": "opencode/GPT-5.3 Codex",
+                "value": "opencode/gpt-5.3-codex"
+              },
+              {
+                "name": "opencode/GPT-5.3 Codex Spark",
+                "value": "opencode/gpt-5.3-codex-spark"
+              },
+              {
+                "name": "opencode/GPT-5.4",
+                "value": "opencode/gpt-5.4"
+              },
+              {
+                "name": "opencode/GPT-5.4 Mini",
+                "value": "opencode/gpt-5.4-mini"
+              },
+              {
+                "name": "opencode/GPT-5.4 Nano",
+                "value": "opencode/gpt-5.4-nano"
+              },
+              {
+                "name": "opencode/GPT-5.4 Pro",
+                "value": "opencode/gpt-5.4-pro"
+              },
+              {
+                "name": "opencode/GPT-5.5",
+                "value": "opencode/gpt-5.5"
+              },
+              {
+                "name": "opencode/GPT-5.5 Pro",
+                "value": "opencode/gpt-5.5-pro"
+              },
+              {
+                "name": "opencode/GPT-5.6 Luna",
+                "value": "opencode/gpt-5.6-luna"
+              },
+              {
+                "name": "opencode/GPT-5.6 Sol",
+                "value": "opencode/gpt-5.6-sol"
+              },
+              {
+                "name": "opencode/GPT-5.6 Terra",
+                "value": "opencode/gpt-5.6-terra"
+              },
+              {
+                "name": "opencode/GPT-6 Astra",
+                "value": "opencode/gpt-6-astra"
+              },
+              {
+                "name": "opencode/Grok 4.5",
+                "value": "opencode/grok-4.5"
+              },
+              {
+                "name": "opencode/Grok 4.6",
+                "value": "opencode/grok-4.6"
+              },
+              {
+                "name": "opencode/Grok Build 0.1",
+                "value": "opencode/grok-build-0.1"
+              },
+              {
+                "name": "opencode/Kimi K2.5",
+                "value": "opencode/kimi-k2.5"
+              },
+              {
+                "name": "opencode/Kimi K2.6",
+                "value": "opencode/kimi-k2.6"
+              },
+              {
+                "name": "opencode/Kimi K2.7 Code",
+                "value": "opencode/kimi-k2.7-code"
+              },
+              {
+                "name": "opencode/Kimi K3",
+                "value": "opencode/kimi-k3"
+              },
+              {
+                "name": "opencode/Ling 3.0 Flash Fin Free",
+                "value": "opencode/ling-3.0-flash-fin-free"
+              },
+              {
+                "name": "opencode/MiMo V2.5 Free",
+                "value": "opencode/mimo-v2.5-free"
+              },
+              {
+                "name": "opencode/MiniMax-M2.5",
+                "value": "opencode/minimax-m2.5"
+              },
+              {
+                "name": "opencode/MiniMax-M2.7",
+                "value": "opencode/minimax-m2.7"
+              },
+              {
+                "name": "opencode/MiniMax-M3",
+                "value": "opencode/minimax-m3"
+              },
+              {
+                "name": "opencode/Muse Spark 1.2",
+                "value": "opencode/muse-spark-1.2"
+              },
+              {
+                "name": "opencode/Muse Spark 1.2 Free",
+                "value": "opencode/muse-spark-1.2-contributor-free"
+              },
+              {
+                "name": "opencode/Muse Spark 1.3",
+                "value": "opencode/muse-spark-1.3"
+              },
+              {
+                "name": "opencode/Muse Spark 1.3 Free",
+                "value": "opencode/muse-spark-1.3-contributor-free"
+              },
+              {
+                "name": "opencode/Nemotron 3 Ultra Free",
+                "value": "opencode/nemotron-3-ultra-free"
+              },
+              {
+                "name": "opencode/Nemotron 3.5 Lightning Free",
+                "value": "opencode/nemotron-3.5-lightning-free"
+              },
+              {
+                "name": "opencode/Qwen3.5 Plus",
+                "value": "opencode/qwen3.5-plus"
+              },
+              {
+                "name": "opencode/Qwen3.6 Plus",
+                "value": "opencode/qwen3.6-plus"
+              },
+              {
+                "name": "opencode/Qwen3.8 Flash",
+                "value": "opencode/qwen3.8-flash"
+              }
+            ],
+            "type": "select"
+          },
+          {
+            "category": "mode",
+            "currentValue": "build",
+            "id": "mode",
+            "name": "Session Mode",
+            "options": [
+              {
+                "description": "The default agent. Executes tools based on configured permissions.",
+                "name": "Build",
+                "value": "build"
+              },
+              {
+                "description": "Read-only agent for exploring the codebase and planning work before implementation.",
+                "name": "Plan",
+                "value": "plan"
+              }
+            ],
+            "type": "select"
+          }
+        ]
+      }
+    },
+    "configId+valueId": {
+      "error": {
+        "code": -32602,
+        "data": {
+          "_errors": [],
+          "type": {
+            "_errors": [
+              "Invalid input: expected \"boolean\""
+            ]
+          },
+          "value": {
+            "_errors": [
+              "Invalid input: expected boolean, received undefined",
+              "Invalid input: expected string, received undefined"
+            ]
+          }
+        },
+        "message": "Invalid params"
+      },
+      "result": null
+    }
+  },
+  "version": "2.0.11"
+}

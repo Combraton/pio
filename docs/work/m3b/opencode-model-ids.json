@@ -1,0 +1,31 @@
+{
+  "format": "pio-opencode-model-ids/1",
+  "measured_on": "2026-09-21",
+  "model_calls": 0,
+  "agent": {
+    "name": "OpenCode",
+    "version": "2.0.11"
+  },
+  "model_option_count": 127,
+  "minimax_coding_plan": [
+    "minimax-coding-plan/MiniMax-M2",
+    "minimax-coding-plan/MiniMax-M2.1",
+    "minimax-coding-plan/MiniMax-M2.5",
+    "minimax-coding-plan/MiniMax-M2.5-highspeed",
+    "minimax-coding-plan/MiniMax-M2.7",
+    "minimax-coding-plan/MiniMax-M2.7-highspeed",
+    "minimax-coding-plan/MiniMax-M3"
+  ],
+  "effort_options": [
+    "low",
+    "high",
+    "max",
+    "default"
+  ],
+  "mode_options": [
+    "build",
+    "plan"
+  ],
+  "session_current_model_on_creation": "opencode/deepseek-v4.1-flash",
+  "owner_service_untouched": true
+}

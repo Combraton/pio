@@ -18,6 +18,16 @@
         "usage": 12.841
       },
       "what_was_missing": "the receipt recorded one spawn, one brief release and an unchanged host identity, but not whether the restart landed while the turn was still running. A restart after the turn had finished would show the same three facts and prove nothing."
+    },
+    {
+      "cause": "the host wrote events, and the runners wrote receipts, with paths exactly as the harness reported them. For the Claude runs that meant the full filesystem path of every installed plugin, from `system/init`, in every receipt from R2 onward \u2014 which discloses the owner home directory and the plugins installed in it. This repository is public.",
+      "date": "2026-09-21",
+      "fixed_in": "redaction at the recording boundary: `pio_core::redact_home` is applied in `Lifecycle::event` and `Lifecycle::complete`, and in the live runners before a receipt is written, so no absolute home path reaches an event, a receipt or a log. `scripts/check_private_paths.py` gates every committed file in CI and has a self-test that plants a path and proves the check fails.",
+      "history_note": "the earlier commits still carry the unredacted paths. Rewriting published history is the owner's call and has not been asked for.",
+      "history_rewritten": false,
+      "reason": "absolute_home_paths_in_a_public_receipt",
+      "receipt_rewritten": true,
+      "what_changed": "every absolute home path in this file was replaced with `~`. Nothing else was touched: no digest, count, token figure or verdict was recomputed, and the paths still identify the same locations relative to the home they were under."
     }
   ],
   "binary_sha256": "a489de5d16303e8290e6ad8c9c9dbfc2983389785fc4000a8d170033488615c9",
@@ -124,64 +134,64 @@
     "plugins": [
       {
         "name": "clangd-lsp",
-        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0",
         "source": "clangd-lsp@claude-plugins-official",
         "version": "1.0.0"
       },
       {
         "name": "planning-with-files",
-        "path": "/Users/comreton/.claude/plugins/cache/planning-with-files/planning-with-files/2.34.0",
+        "path": "~/.claude/plugins/cache/planning-with-files/planning-with-files/2.34.0",
         "source": "planning-with-files@planning-with-files",
         "version": "2.34.0"
       },
       {
         "name": "superpowers",
-        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0",
         "source": "superpowers@claude-plugins-official",
         "version": "6.3.0"
       },
       {
         "name": "ralph-loop",
-        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/ralph-loop/1.0.0",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/ralph-loop/1.0.0",
         "source": "ralph-loop@claude-plugins-official",
         "version": "1.0.0"
       },
       {
         "name": "frontend-design",
-        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/frontend-design/c447c3207a42",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/frontend-design/c447c3207a42",
         "source": "frontend-design@claude-plugins-official"
       },
       {
         "name": "rust-analyzer-lsp",
-        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0",
         "source": "rust-analyzer-lsp@claude-plugins-official",
         "version": "1.0.0"
       },
       {
         "name": "vercel",
-        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/vercel/0.49.2",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/vercel/0.49.2",
         "source": "vercel@claude-plugins-official",
         "version": "0.49.2"
       },
       {
         "name": "php-lsp",
-        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/php-lsp/1.0.0",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/php-lsp/1.0.0",
         "source": "php-lsp@claude-plugins-official",
         "version": "1.0.0"
       },
       {
         "name": "github",
-        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/github/c447c3207a42",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/github/c447c3207a42",
         "source": "github@claude-plugins-official"
       },
       {
         "name": "playwright",
-        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/playwright/c447c3207a42",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/playwright/c447c3207a42",
         "source": "playwright@claude-plugins-official"
       },
       {
         "name": "chrome-devtools-mcp",
-        "path": "/Users/comreton/.claude/plugins/cache/claude-plugins-official/chrome-devtools-mcp/1.9.0",
+        "path": "~/.claude/plugins/cache/claude-plugins-official/chrome-devtools-mcp/1.9.0",
         "source": "chrome-devtools-mcp@claude-plugins-official",
         "version": "1.9.0"
       },

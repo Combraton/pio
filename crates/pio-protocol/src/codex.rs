@@ -256,6 +256,9 @@ impl Provider {
                 // Every run passes an explicit model, under the dated
                 // exception the admission already checked.
                 spec["model"] = host["model"].clone();
+                // The narrower session posture, when one was asked for. Only
+                // narrowing values reach here: admission refuses the rest.
+                spec["mode"] = host["mode"].clone();
             }
             _ => {
                 spec["codex_home"] = host["codex_home"].clone();
@@ -920,6 +923,27 @@ impl Provider {
 
             "host_error" => {
                 e[&ns]["host_error"] = event["error"].clone();
+                // A host that failed **before releasing the brief** is
+                // finished: the brief never left PIO and the child is
+                // stopped. Without this the execution sat in `preparing` for
+                // ever, so a caller polling the runtime could not tell a
+                // refusal from a slow start. The first live OpenCode run sat
+                // there until it was stopped by hand, with
+                // `delivery: failed_before_delivery` already recorded beside
+                // it. `exit` stays `unavailable`: no exit code was observed
+                // and none is claimed.
+                if event["released"] == false
+                    && !matches!(text(&e["view"]["runtime"]), "exited" | "unknown")
+                {
+                    e["view"]["runtime"] = "exited".into();
+                    e["view"].as_object_mut().unwrap().remove("runtime_detail");
+                    self.execution_event(
+                        e,
+                        "execution.runtime.changed",
+                        json!({"runtime":"exited","reason":"refused_before_delivery"}),
+                        None,
+                    );
+                }
             }
             _ => {}
         }

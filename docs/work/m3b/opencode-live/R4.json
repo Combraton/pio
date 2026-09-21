@@ -1,0 +1,232 @@
+{
+  "addenda": [
+    {
+      "cause": "the host wrote events, and the runners wrote receipts, with paths exactly as the harness reported them. For the Claude runs that meant the full filesystem path of every installed plugin, from `system/init`, in every receipt from R2 onward \u2014 which discloses the owner home directory and the plugins installed in it. This repository is public.",
+      "date": "2026-09-21",
+      "fixed_in": "redaction at the recording boundary: `pio_core::redact_home` is applied in `Lifecycle::event` and `Lifecycle::complete`, and in the live runners before a receipt is written, so no absolute home path reaches an event, a receipt or a log. `scripts/check_private_paths.py` gates every committed file in CI and has a self-test that plants a path and proves the check fails.",
+      "history_note": "the earlier commits still carry the unredacted paths. Rewriting published history is the owner's call and has not been asked for.",
+      "history_rewritten": false,
+      "reason": "absolute_home_paths_in_a_public_receipt",
+      "receipt_rewritten": true,
+      "what_changed": "every absolute home path in this file was replaced with `~`. Nothing else was touched: no digest, count, token figure or verdict was recomputed, and the paths still identify the same locations relative to the home they were under."
+    }
+  ],
+  "binary_sha256": "aada48ecf1b64a65208d62492168d6c9e497a503de128fc1c94fc0bb457fdf0a",
+  "cancel": {
+    "accepted": true,
+    "cancel_sent": true,
+    "control_sent": [
+      {
+        "escalates_after_ms": 10000,
+        "in_band": true,
+        "method": "session/cancel"
+      }
+    ],
+    "error": null,
+    "escalated_to_kill": true,
+    "requested_after_seconds": 4,
+    "runtime_at_cancel": "active",
+    "seconds_to_exit": 10.165,
+    "stop_reason": null,
+    "streamed": {
+      "chunks": 23,
+      "first_line": "1",
+      "last_line": "656",
+      "lines": 656,
+      "read": true
+    },
+    "tested_cancel": true,
+    "turn_completed": false,
+    "usage_reported_after_cancel": false,
+    "work_completed": false
+  },
+  "charge": {
+    "amount": 12000,
+    "applied": "after the run, under the owner rule of 2026-09-21; the runner applies it automatically from now on",
+    "basis": "allowance",
+    "planned": true,
+    "why": "A cancelled turn on this harness reports no usage at all, so it is charged an allowance rather than recorded as zero. The figure is built from this sequence's own completed turns: every one of them reported 7,866 to 7,874 input tokens in this fixture, and R4 attempt 1 produced 400 lines for 800 output and 854 thought tokens. Attempt 2 streamed 656 lines before the kill, so 7,874 input + 656 lines at the measured 2.0 output tokens a line + 854 thought is about 10,040. Rounded up to 12,000, the same margin the Claude rule took when it rounded 33,793 and 32,957 up to 40,000."
+  },
+  "commit": "a063f0886104c58e92cd5a7df54f3536b542e8de",
+  "completion_is_acceptance": false,
+  "configured": {
+    "model": "juspay-grid/glm-latest",
+    "permission_rules_configured": false,
+    "providers": [
+      "juspay-grid"
+    ],
+    "read": true,
+    "source": "~/.config/opencode/opencode.jsonc"
+  },
+  "containment": {
+    "mechanism": "harness_permission_rules_only",
+    "os_sandbox_observed": false
+  },
+  "cumulative": {
+    "cap": 300000000,
+    "charged": 53828,
+    "measured_against": "charged",
+    "observed": 41828,
+    "stop_at": 240000000
+  },
+  "delivery": {
+    "evidence": {
+      "class": "native_session_update",
+      "source": "opencode-acp/host"
+    },
+    "proof_class": null,
+    "state": "acknowledged"
+  },
+  "dirty": false,
+  "dry_run": false,
+  "durable_state": {
+    "owner_service_untouched": true
+  },
+  "exit": "unavailable",
+  "finding": {
+    "cancel_sent_to_an_active_turn": true,
+    "consequence": "PIO's only effective interrupt for this harness is killing the process. The in-band cancel ACP offers was sent, accepted at the transport, and changed nothing. A turn ended that way reports no usage at all \u2014 not even the `usage_update` that arrives at the end of a turn that finishes \u2014 so its cost is charged as an allowance and never as zero.\"",
+    "escalated_to_sigkill_after_seconds": 10,
+    "headline": "an in-band session/cancel did not stop the turn; PIO had to kill the child",
+    "turn_stopped_by_the_cancel": false,
+    "usage_reported": false,
+    "usage_reports_of_any_kind": 0,
+    "work_streamed_before_the_kill": "656 of 2000 lines"
+  },
+  "format": "pio-opencode-live-receipt/1",
+  "harness": {
+    "agent": {
+      "name": "OpenCode",
+      "version": "2.0.11"
+    },
+    "auth_methods": [
+      {
+        "description": "Run `opencode auth login` in the terminal",
+        "id": "opencode-login",
+        "name": "Login with opencode"
+      }
+    ],
+    "capabilities": {
+      "_meta": {
+        "opencode/child-session-updates": true
+      },
+      "loadSession": true,
+      "mcpCapabilities": {
+        "http": true,
+        "sse": false
+      },
+      "promptCapabilities": {
+        "embeddedContext": true,
+        "image": true
+      },
+      "sessionCapabilities": {
+        "close": {},
+        "delete": {},
+        "fork": {},
+        "list": {},
+        "resume": {}
+      }
+    },
+    "session_id": "ses_f3b71afc1ffePYl9p894HQsHEE",
+    "source": "opencode-acp/host"
+  },
+  "mode": {
+    "reported": null,
+    "requested": null
+  },
+  "model": {
+    "checked_before_delivery": true,
+    "configured": "juspay-grid/glm-latest",
+    "matched": true,
+    "on_creation": "opencode/deepseek-v4.1-flash",
+    "reported": "minimax-coding-plan/MiniMax-M2.7-highspeed",
+    "requested": "minimax-coding-plan/MiniMax-M2.7-highspeed",
+    "selected_by_pio": true
+  },
+  "owner_service_after": [
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
+  ],
+  "owner_service_before": [
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
+  ],
+  "owner_service_untouched": true,
+  "permission_options": {},
+  "pio_deleted_nothing": true,
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "preflight": {
+    "binary_newer_than_every_source": true,
+    "binary_sha256": "aada48ecf1b64a65208d62492168d6c9e497a503de128fc1c94fc0bb457fdf0a",
+    "checked": true,
+    "commit": "a063f0886104c58e92cd5a7df54f3536b542e8de",
+    "dirty": false,
+    "newest_source": "crates/pio-protocol/src/codex.rs"
+  },
+  "rehearsal": {
+    "made_in_dry_run": true,
+    "observation": "a cancel actually sent to a turn that had not finished",
+    "ran": true
+  },
+  "run": "R4",
+  "runtime": "exited",
+  "sessions_after": {
+    "digest": "b1970264d8e66ee9467a55926296c75ff78ce1bdfd555bfcc98858317f7a2833",
+    "entry_count": 1,
+    "exit": 0,
+    "observed": true
+  },
+  "sessions_before": {
+    "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "entry_count": 0,
+    "exit": 0,
+    "observed": true
+  },
+  "sessions_created": [
+    "ses_f3b71afc1ffePYl9p894HQsHEE"
+  ],
+  "started_at": "2026-09-21T15:20:42Z",
+  "stop_note": "the run stopped the sequence when it was made, because the runner had no notion of a planned cancel. Under the owner rule of 2026-09-21 a cancel run's missing usage report is the expected outcome, charged rather than halting; an unplanned one still halts.",
+  "stops": [],
+  "tool_uses": {
+    "containment": {
+      "mechanism": "harness_permission_rules_only",
+      "os_sandbox_observed": false
+    },
+    "declined_by_pio_count": 0,
+    "denied_by_caller_count": 0,
+    "denied_by_harness_count": 0,
+    "format": "pio-claude-tool-uses/5",
+    "liability": "none_observed",
+    "out_of_fixture_count": 0,
+    "out_of_fixture_effect_observed": false,
+    "tool_uses": [],
+    "unclassifiable_target_count": 0,
+    "workspace_sha256": "631012e2ab19e3b55210ad0c606999e3e18973a0e79422da5c7994ca65ac4310"
+  },
+  "usage": {
+    "cap": 300000000,
+    "detail": {},
+    "execution_deadline_seconds": 600,
+    "granularity": {
+      "measure": "every token counter the harness reports, summed; its own totalTokens is recorded beside the sum, never added to it",
+      "report_count": 0,
+      "reported_at_turn_end": false,
+      "reported_during_turn": false,
+      "reports": [],
+      "session_update_kinds": {
+        "agent_message_chunk": 23,
+        "agent_thought_chunk": 3
+      },
+      "usage_bearing_update_kinds": {}
+    },
+    "limit_is_next_turn_only": true,
+    "measure": "every token counter the harness reports, summed; its own totalTokens is recorded beside the sum, never added to it",
+    "observed_total_tokens": null,
+    "parts": {},
+    "parts_sum_matches_reported_total": null,
+    "path": null,
+    "reported": false,
+    "reported_total": null,
+    "run_limit": 2000000,
+    "stop_at": 240000000
+  }
+}

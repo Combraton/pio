@@ -1,0 +1,429 @@
+<title>PIO Terminal Mockups</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..1000,0..1,0..1,0..1&display=swap">
+<style>
+:root{
+  --ground:#EDF1F2; --panel:#F8FAFA; --ink:#15212A; --muted:#566570; --rule:#C9D3D7;
+  --accent:#0C6B75; --accent-soft:#D5E9EB;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --ground:#0F1619; --panel:#151E22; --ink:#DCE6EA; --muted:#93A4AD; --rule:#2A383F; --accent:#5CC8D6; --accent-soft:#16333A; }
+}
+:root[data-theme="dark"]{ --ground:#0F1619; --panel:#151E22; --ink:#DCE6EA; --muted:#93A4AD; --rule:#2A383F; --accent:#5CC8D6; --accent-soft:#16333A; }
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"Recursive",system-ui,-apple-system,"Segoe UI",sans-serif;font-variation-settings:"MONO" 0,"CASL" .2;font-size:16px;line-height:1.6;padding-inline:20px;padding-block:40px 80px}
+.wrap{max-width:1100px;margin-inline:auto;display:flex;flex-direction:column;gap:56px}
+.prose{max-width:68ch}
+h1,h2,h3{font-variation-settings:"MONO" 0,"CASL" 1;font-weight:700;line-height:1.15;text-wrap:balance;margin:0}
+h1{font-size:clamp(2rem,5vw,2.8rem)} h2{font-size:1.6rem;margin-bottom:12px} h3{font-size:1.08rem;margin-bottom:6px}
+p{margin:0 0 12px} a{color:var(--accent);text-underline-offset:3px}
+.mono,code,.eyebrow,.lab,.switch button,.step,.n,th,.notes h4,.dec dt{font-family:"Recursive",ui-monospace,Menlo,monospace;font-variation-settings:"MONO" 1,"CASL" .5}
+code{font-size:.9em}
+.eyebrow{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.muted{color:var(--muted)} .lede{font-size:1.1rem}
+.dec{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));border-top:1px solid var(--rule);margin-top:20px}
+.dec div{padding:12px 18px 12px 0;border-bottom:1px solid var(--rule)}
+.dec dt{font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)} .dec dd{margin:2px 0 0}
+
+.switch{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--ground);padding-block:12px;border-bottom:1px solid var(--rule);display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
+.switch .lab{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.switch .gap{width:18px}
+.switch button{font-size:.82rem;padding:6px 12px;border:1px solid var(--rule);background:var(--panel);color:var(--ink);border-radius:4px;cursor:pointer}
+.switch button:hover{border-color:var(--accent)}
+.switch button[aria-pressed="true"]{background:var(--accent);color:var(--ground);border-color:var(--accent)}
+.switch button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.screen{display:flex;flex-direction:column;gap:14px}
+.screen-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px}
+.screen-head .n{font-weight:600;color:var(--accent)} .screen-head .step{font-size:.8rem;color:var(--muted)}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 32px}
+.notes h4{font-size:.75rem;letter-spacing:.07em;text-transform:uppercase;margin:0 0 6px;color:var(--muted)}
+.notes ul{margin:0;padding-left:18px}.notes li{margin-bottom:4px;font-size:.95rem}
+
+/* ---------- the terminal canvas ---------- */
+.term{--bg:#0B1115;--card:#0F171C;--fg:#C9D6DB;--dim:#6F8088;--head:#8FA3AD;--r:#6CCB8B;--w:#F0B354;--u:#B79CF0;--b:#F07C6E;--a:#5CC8D6;--sel:#182A33;--edge:#1E2A31;--edge2:#41545F;--barbg:#111B21;--grid:rgba(255,255,255,.085);--c1:#6FA8FF;--c2:#F08FB4;--c3:#7FD6C2;
+  position:relative;background-color:var(--bg);border:1px solid var(--edge);border-radius:10px;overflow:hidden;color:var(--fg);
+  font-family:"Recursive",ui-monospace,Menlo,Consolas,monospace;font-variation-settings:"MONO" 1,"CASL" 1;font-size:13px;line-height:1.6}
+.term[data-t="light"]{--bg:#F7F9F9;--card:#FFFFFF;--fg:#1B2730;--dim:#7A8892;--head:#4C5C66;--r:#1F7A45;--w:#9A5B00;--u:#6B45B8;--b:#B23A2E;--a:#0C6B75;--sel:#E1EBEE;--edge:#CBD6DA;--edge2:#8FA0A8;--barbg:#EEF3F4;--grid:rgba(0,0,0,.10);--c1:#2C5FC9;--c2:#B8336A;--c3:#0F7D6B}
+.term[data-t="mocha"]{--bg:#1E1E2E;--card:#24243A;--fg:#CDD6F4;--dim:#7F849C;--head:#A6ADC8;--r:#A6E3A1;--w:#F9E2AF;--u:#CBA6F7;--b:#F38BA8;--a:#74C7EC;--sel:#34344C;--edge:#313244;--edge2:#585B70;--barbg:#181825;--grid:rgba(255,255,255,.085);--c1:#89B4FA;--c2:#F5C2E7;--c3:#94E2D5}
+.term[data-t="gruvbox"]{--bg:#282828;--card:#2E2C2B;--fg:#EBDBB2;--dim:#928374;--head:#BDAE93;--r:#B8BB26;--w:#FABD2F;--u:#D3869B;--b:#FB4934;--a:#8EC07C;--sel:#3C3836;--edge:#3C3836;--edge2:#665C54;--barbg:#1D2021;--grid:rgba(255,255,255,.085);--c1:#83A598;--c2:#FE8019;--c3:#8EC07C}
+.term[data-t="contrast"]{--bg:#000;--card:#0A0A0A;--fg:#FFF;--dim:#B4B4B4;--head:#E0E0E0;--r:#3DFF9A;--w:#FFD83D;--u:#E0B0FF;--b:#FF7A7A;--a:#3DE8FF;--sel:#2B2B2B;--edge:#555;--edge2:#9A9A9A;--barbg:#161616;--grid:rgba(255,255,255,.10);--c1:#7FB0FF;--c2:#FF9AD0;--c3:#7FFFE0}
+html[data-feel="canvas"] .term{background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:22px 22px;background-position:-1px -1px}
+html[data-feel="plain"] .term{font-variation-settings:"MONO" 1,"CASL" 0}
+.tb{display:flex;gap:6px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--edge);font-size:11px;color:var(--dim);background:var(--bg)}
+.tb i{width:9px;height:9px;border-radius:50%;background:var(--edge2);opacity:.6;display:block} .tb span{margin-left:8px}
+.stage{position:relative;padding:16px;display:flex;flex-direction:column;gap:14px}
+.topline,.hints{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;padding-inline:4px}
+.hints{color:var(--dim)}
+.statusbar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;background:var(--barbg);color:var(--head);padding:5px 10px;border-radius:6px}
+
+.card{--stroke:var(--edge2);position:relative;background:var(--card);border:1.5px solid var(--stroke);border-radius:10px;padding:12px 14px;min-width:0}
+html.rough-ok[data-feel="canvas"] .card{border-color:transparent}
+.card > svg.rough{position:absolute;left:-5px;top:-5px;pointer-events:none;overflow:visible}
+.card.k1{--stroke:var(--c1)} .card.k2{--stroke:var(--c2)} .card.k3{--stroke:var(--c3)}
+.card.note-w{--stroke:var(--w);background:color-mix(in srgb,var(--w) 13%,var(--card))}
+.card.note-u{--stroke:var(--u);background:color-mix(in srgb,var(--u) 13%,var(--card))}
+html[data-feel="canvas"] .card.note-w{transform:rotate(-.5deg)} html[data-feel="canvas"] .card.note-u{transform:rotate(.45deg)}
+.ct{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px;color:var(--head);font-weight:600;letter-spacing:.04em;padding-bottom:6px;margin-bottom:8px;border-bottom:1px solid var(--edge)}
+.ct .sub{color:var(--dim);font-weight:400;letter-spacing:0}
+.scroll{overflow-x:auto}
+.row{display:flex;gap:0;white-space:nowrap;padding-inline:4px;border-radius:4px}
+.row.sel{background:var(--sel)}
+.row .g{width:2.4ch;flex:none} .row .nm{width:14ch;flex:none} .row .hn{width:8ch;flex:none} .row .wt{width:7ch;flex:none;color:var(--dim)} .row .ag{margin-left:auto;color:var(--dim);padding-left:2ch}
+.proj{display:flex;justify-content:space-between;gap:12px;white-space:nowrap;padding-inline:4px;margin-top:6px;color:var(--head);font-weight:600}
+.proj .loc{color:var(--dim);font-weight:400}
+.blk{white-space:pre-wrap;word-break:break-word}
+.blk .res{color:var(--dim)}
+.l{display:block;white-space:pre-wrap;word-break:break-word}
+.r{color:var(--r)} .w{color:var(--w);font-weight:600} .u{color:var(--u)} .b{color:var(--b)} .d{color:var(--dim)} .h{color:var(--head);font-weight:600} .a{color:var(--a)}
+.c1{color:var(--c1)} .c2{color:var(--c2)} .c3{color:var(--c3)}
+.chip{display:inline-block;padding:0 .7ch;border-radius:4px;color:var(--bg);font-weight:600}
+.chip.k1{background:var(--c1)} .chip.k2{background:var(--c2)} .chip.k3{background:var(--c3)}
+.prompt{display:flex;align-items:center;gap:1ch;margin-top:10px;padding-top:8px;border-top:1.5px solid var(--stroke)}
+.prompt .who{margin-left:auto}
+.grip{align-self:center;color:var(--dim);letter-spacing:-2px;cursor:col-resize;user-select:none;padding-inline:2px}
+
+.board{display:grid;grid-template-columns:minmax(0,5fr) auto minmax(0,7fr);gap:10px;align-items:stretch}
+.notesrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px}
+.split{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px}
+.orch{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,3fr);gap:18px 26px;align-items:start}
+.team{display:flex;flex-direction:column;gap:46px}
+.workers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:110px}
+.meter{display:inline-block;width:16ch;height:.7em;border:1.5px solid var(--edge2);border-radius:4px;vertical-align:middle;overflow:hidden}
+.meter i{display:block;height:100%;width:35%;background:var(--c3)}
+.msg{padding:8px 0;border-bottom:1px dashed var(--edge)} .msg:last-child{border-bottom:none}
+.msg .top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 10px}
+.msg .txt{color:var(--fg);white-space:pre-wrap}
+.ticks{color:var(--r);font-weight:600}
+svg.links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.linklabel{position:absolute;transform:translate(-50%,-50%);background:var(--bg);border:1px solid var(--edge2);border-radius:999px;padding:0 1ch;font-size:12px;white-space:nowrap}
+@media (max-width:780px){
+  .board,.split{grid-template-columns:minmax(0,1fr)} .grip{display:none}
+  .orch{grid-template-columns:minmax(0,1fr)} .workers{grid-template-columns:minmax(0,1fr);gap:40px}
+}
+pre.kept{margin:0;white-space:pre;min-width:max-content;font:inherit}
+pre.kept .ln{display:block;padding-inline:4px} pre.kept .ln.sel{background:var(--sel)} pre.kept .ln.bar{background:var(--barbg);color:var(--head)}
+pre.kept .ln.attn{color:var(--w)} pre.kept .ln.attu{color:var(--u)}
+
+.tbl{overflow-x:auto} table{border-collapse:collapse;width:100%;font-size:.95rem;min-width:520px}
+th,td{text-align:left;padding:9px 14px 9px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.take-box{background:var(--accent-soft);border-left:3px solid var(--accent);padding:18px 20px;border-radius:0 6px 6px 0}
+.take-box p:last-child,.take-box ul:last-child{margin-bottom:0}
+ol.qs{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:12px;max-width:72ch}
+ol.qs span{display:block;color:var(--muted);font-size:.94rem}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">PIO · M4 design · accepted by the owner, 2026-09-21</div>
+  <h1>Cards on a canvas</h1>
+  <div class="prose" style="margin-top:16px">
+    <p class="lede">This is the accepted design for PIO's terminal screen. Panes are cards on a grid canvas, so there are no divider lines to get wrong. Attention lives on two sticky notes. Orchestrate is a team diagram with a message thread. The builder implements against these screens and records every deviation with its reason.</p>
+  </div>
+  <dl class="dec">
+    <div><dt>Orchestrate in v0.1</dt><dd>Medium: a harness can lead</dd></div>
+    <div><dt>Feel</dt><dd>Sketch, rethought as a canvas</dd></div>
+    <div><dt>Folders</dt><dd>Projects you name, with the working location shown</dd></div>
+    <div><dt>While busy</dt><dd>Playful</dd></div>
+    <div><dt>First skin</dt><dd>PIO Dark</dd></div>
+    <div><dt>Notifications</dt><dd>Only when the terminal is not focused. You can change it.</dd></div>
+    <div><dt>Uncertain run</dt><dd>One action: open the diff</dd></div>
+    <div><dt>Approved as drawn</dt><dd>Approval walk, run view, uncertain run, leaving and returning</dd></div>
+  </dl>
+</header>
+
+<div class="switch" role="group" aria-label="Skin and feel for the mockups">
+  <span class="lab">Skin</span>
+  <button type="button" id="t-dark" data-t="dark" aria-pressed="true">PIO Dark</button>
+  <button type="button" id="t-light" data-t="light" aria-pressed="false">PIO Light</button>
+  <button type="button" id="t-mocha" data-t="mocha" aria-pressed="false">Catppuccin Mocha</button>
+  <button type="button" id="t-gruvbox" data-t="gruvbox" aria-pressed="false">Gruvbox Dark</button>
+  <button type="button" id="t-contrast" data-t="contrast" aria-pressed="false">High Contrast</button>
+  <span class="gap"></span><span class="lab">Feel</span>
+  <button type="button" id="f-canvas" data-f="canvas" aria-pressed="true">Canvas</button>
+  <button type="button" id="f-plain" data-f="plain" aria-pressed="false">Plain</button>
+</div>
+
+<!-- ======================= 1. BOARD ======================= -->
+<section class="screen">
+  <div class="screen-head"><span class="n">1</span><h2 style="margin:0">The board</h2><span class="step">opens first</span></div>
+  <div class="prose"><p>Two cards: your projects on the left, the selected run's live session on the right. What needs you sits underneath as two sticky notes, amber and violet. There are no divider lines. The gap between cards is the divider, and the grip in the middle is what you drag.</p></div>
+  <div class="term" data-t="dark">
+    <div class="tb"><i></i><i></i><i></i><span>pio</span></div>
+    <div class="stage">
+      <div class="topline"><span><span class="a">pio</span> · local service · 6 runs in 4 projects</span><span>codex 0.155.1 <span class="r">✓</span> &nbsp; claude 2.1.278 <span class="r">✓</span></span></div>
+      <div class="board">
+        <div class="card"><div class="ct"><span>PROJECTS</span><span class="sub">all · <span class="r">●2</span> <span class="w">◐2</span> <span class="u">◇1</span> ○1</span></div>
+          <div class="scroll">
+            <div class="proj"><span>▾ Billing revamp</span><span class="loc">~/src/api</span></div>
+            <div class="row sel"><span class="g w">◐</span><span class="nm">auth-fix</span><span class="hn c1">claude</span><span class="wt">wt-2</span><span class="ag">2m</span></div>
+            <div class="row"><span class="g d">○</span><span class="nm">lint</span><span class="hn c3">codex</span><span class="wt">wt-5</span><span class="ag">3h</span></div>
+            <div class="proj"><span>▾ Data migration</span><span class="loc">~/src/db</span></div>
+            <div class="row"><span class="g w">◐</span><span class="nm">seed-data</span><span class="hn c3">codex</span><span class="wt">wt-6</span><span class="ag">40s</span></div>
+            <div class="row"><span class="g u">◇</span><span class="nm">migrate</span><span class="hn c3">codex</span><span class="wt">wt-4</span><span class="ag">1h</span></div>
+            <div class="proj"><span>▾ Calculator</span><span class="loc">~/src/calc</span></div>
+            <div class="row"><span class="g r">●</span><span class="nm">calc-add</span><span class="hn c3">codex</span><span class="wt">wt-1</span><span class="ag">5m</span></div>
+            <div class="proj"><span>▸ Docs pass <span class="r">●1</span></span><span class="loc">~/src/docs</span></div>
+          </div>
+        </div>
+        <div class="grip" title="drag to resize">⋮⋮</div>
+        <div class="card k1"><div class="ct"><span><span class="chip k1">auth-fix</span> &nbsp;<span class="w">◐ needs approval</span></span><span class="sub">claude 2.1.278 · ~/src/api · wt-2 · 64.3k tokens</span></div>
+          <div class="l"><span class="h">truth</span>   <span class="r">delivered ✓ · acknowledged ✓</span> · <span class="u">no sandbox</span></div>
+          <div class="l d">⋮ 4 more blocks above</div>
+          <div class="blk">⏺ Edit   auth/session.rs
+<span class="res">  ⎿ +14 −3 · inside workspace</span></div>
+          <div class="blk">⏺ Bash   cargo test -p auth
+<span class="res">  ⎿ 23 passed · pre-approved by your rules</span></div>
+          <div class="blk"><span class="c1">⏺ claude</span>
+  The race is fixed. Tagging the release.</div>
+          <div class="blk">⏺ Bash   git tag v1.2
+  ⎿ <span class="w">◐ WAITING FOR YOU · 01:18 left</span></div>
+        </div>
+      </div>
+      <div class="notesrow">
+        <div class="card note-w"><span class="w">◐ 2 need you</span> <span class="d">· press</span> <span class="a">a</span><div class="l">auth-fix    git tag v1.2        01:18 left</div><div class="l">seed-data   psql -f seed.sql    01:52 left</div></div>
+        <div class="card note-u"><span class="u">◇ 1 uncertain</span> <span class="d">· press</span> <span class="a">u</span><div class="l">migrate     host lost 1h ago</div><div class="l">            delivery ambiguous</div></div>
+      </div>
+      <div class="statusbar"><span><span class="r">●</span> 2 running · <span class="w">◐</span> 2 waiting · <span class="u">◇</span> 1 uncertain · ○ 1 done &nbsp; <span class="d">(•‿•) calc-add is untangling things…</span></span><span>137k today · <span class="skinname">PIO Dark</span></span></div>
+      <div class="hints"><span>↵ open · space fold · v split · o orchestrate · a approvals · u uncertain · n new · / filter · q detach</span></div>
+    </div>
+  </div>
+  <div class="notes">
+    <div><h4>What changed</h4><ul><li>Projects are names you choose, with the working location beside them</li><li>The preview has a proper title: the run's colored name, its state, where it works</li><li>Attention moved from two text lines to two sticky notes</li></ul></div>
+    <div><h4>Resizing</h4><ul><li>Drag the grip between the cards</li><li><code>ctrl-←</code> and <code>ctrl-→</code> do the same from the keyboard</li><li><code>p</code> moves the preview underneath on a narrow terminal</li></ul></div>
+  </div>
+</section>
+
+<!-- ======================= 2. SPLIT ======================= -->
+<section class="screen">
+  <div class="screen-head"><span class="n">2</span><h2 style="margin:0">Split view</h2><span class="step">press v</span></div>
+  <div class="prose"><p>Each run is its own card, outlined in its identity color. The same color is on the name chip and on the rule above the prompt, so you always know which run you are typing into.</p></div>
+  <div class="term" data-t="dark">
+    <div class="tb"><i></i><i></i><i></i><span>pio — split view</span></div>
+    <div class="stage">
+      <div class="topline"><span><span class="a">pio</span> · split view · 2 of 6 runs</span><span><span class="w">◐ 2 need you</span> · <span class="u">◇ 1 uncertain</span></span></div>
+      <div class="split">
+        <div class="card k1"><div class="ct"><span><span class="chip k1">auth-fix</span></span><span class="sub">claude · ~/src/api · wt-2</span></div>
+          <div class="blk">⏺ Edit   auth/session.rs
+<span class="res">  ⎿ +14 −3 · inside workspace</span></div>
+          <div class="blk"><span class="c1">⏺ claude</span>
+  The race is fixed. Tagging the release.</div>
+          <div class="blk">⏺ Bash   git tag v1.2
+  ⎿ <span class="w">◐ WAITING FOR YOU · 01:18 left</span></div>
+          <div class="prompt"><span class="c1">›</span><span class="d">type to auth-fix…</span><span class="who w">◐ needs approval</span></div>
+        </div>
+        <div class="grip" title="drag to resize">⋮⋮</div>
+        <div class="card k2"><div class="ct"><span><span class="chip k2">calc-add</span></span><span class="sub">codex · ~/src/calc · wt-1</span></div>
+          <div class="blk">⏺ Read   calc.py
+<span class="res">  ⎿ 48 lines · inside workspace</span></div>
+          <div class="blk">⏺ Edit   calc.py
+<span class="res">  ⎿ +6 −0 · inside workspace</span></div>
+          <div class="blk">⏺ Bash   python3 -m unittest -q
+  ⎿ <span class="r">running · 3s</span></div>
+          <div class="prompt"><span class="c2">›</span><span class="d">type to calc-add…</span><span class="who r">● running</span></div>
+        </div>
+      </div>
+      <div class="statusbar"><span>focus: <span class="c1">auth-fix</span> · ⏱ 2m 04s · 64.3k tokens</span><span class="skinname">PIO Dark</span></div>
+      <div class="hints"><span>ctrl-arrows resize · tab next card · z zoom · = equal sizes · + add a card · x close card · esc board</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= 3. ORCHESTRATE ======================= -->
+<section class="screen">
+  <div class="screen-head"><span class="n">3</span><h2 style="margin:0">Orchestrate, rethought</h2><span class="step">press o · now in v0.1 by your decision</span></div>
+  <div class="prose"><p>Two ideas replace the wall of text. On the left, the team as a diagram: the lead on top, the runs it started below, arrows for who talks to whom. On the right, the messages as a thread, with delivery ticks like a chat app. Select any card or message and <code>↵</code> opens that run.</p></div>
+  <div class="term" data-t="dark" id="orch-term">
+    <div class="tb"><i></i><i></i><i></i><span>pio — orchestrate</span></div>
+    <div class="stage" id="orch-stage">
+      <div class="topline"><span><span class="a">pio</span> · orchestrate · <span class="c3">release-lead</span> leads 2 runs</span><span>budget <span class="meter"><i></i></span> 212k of 600k · <span class="d">◐ 0 need you</span></span></div>
+      <div class="orch">
+        <div class="team">
+          <div class="card k3" id="n-lead"><div class="ct"><span><span class="chip k3">release-lead</span> &nbsp;<span class="r">● running</span></span><span class="sub">claude · lead · edits nothing itself</span></div>
+            <div class="blk"><span class="h">goal</span>  Rename users.name to display_name, then make the weekly digest use it.</div>
+            <div class="l d">now   waiting for weekly-digest to finish</div>
+          </div>
+          <div class="workers">
+            <div class="card k1" id="n-w1"><div class="ct"><span><span class="chip k1">user-profiles</span></span><span class="sub"><span class="r">● running</span></span></div>
+              <div class="l d">claude · ~/src/api · wt-2</div>
+              <div class="blk">⏺ Update  031_display_name.sql
+<span class="res">  ⎿ +9 −2</span></div>
+              <div class="l d">48.1k tokens</div>
+            </div>
+            <div class="card k2" id="n-w2"><div class="ct"><span><span class="chip k2">weekly-digest</span></span><span class="sub"><span class="r">● running</span></span></div>
+              <div class="l d">codex · ~/src/jobs · wt-3</div>
+              <div class="blk">⏺ Edit    weeklyDigest.ts
+<span class="res">  ⎿ +2 −2 · reads display_name</span></div>
+              <div class="l d">39.7k tokens</div>
+            </div>
+          </div>
+        </div>
+        <div class="card" id="thread"><div class="ct"><span>MESSAGES</span><span class="sub">3 sent · 0 uncertain</span></div>
+          <div class="msg"><div class="top"><span><span class="c3">release-lead</span> → <span class="c1">user-profiles</span> <span class="d">· brief</span></span><span><span class="d">12:01</span> <span class="ticks">✓✓</span></span></div><div class="txt">Rename users.name to display_name. Add the migration.</div></div>
+          <div class="msg"><div class="top"><span><span class="c3">release-lead</span> → <span class="c2">weekly-digest</span> <span class="d">· brief</span></span><span><span class="d">12:01</span> <span class="ticks">✓✓</span></span></div><div class="txt">Build the Monday digest job from each user's top posts.</div></div>
+          <div class="msg"><div class="top"><span><span class="c1">user-profiles</span> → <span class="c2">weekly-digest</span> <span class="d">· note</span></span><span><span class="d">12:04</span> <span class="ticks">✓✓</span></span></div><div class="txt">users.name → users.display_name</div></div>
+          <div class="l d" style="margin-top:8px">✓ released &nbsp; ✓✓ delivered and acknowledged &nbsp; <span class="u">◇ uncertain</span></div>
+        </div>
+      </div>
+      <div class="statusbar"><span><span class="r">●</span> 3 running · approvals always come to you, never to another run &nbsp; <span class="d">(ง •̀_•́)ง release-lead is herding…</span></span><span class="skinname">PIO Dark</span></div>
+      <div class="hints"><span>↑↓←→ move between cards · ↵ open run · m send a message yourself · t thread only · o leave orchestrate</span></div>
+    </div>
+  </div>
+  <div class="notes">
+    <div><h4>Why this is clearer</h4><ul><li>The diagram answers "who is on the team and who leads"</li><li>The thread answers "who told whom what, and did it arrive"</li><li>Each card shows only its latest step. The full session is one key away.</li></ul></div>
+    <div><h4>Rules that stay</h4><ul><li>Every message has delivery proof. An unproven one shows violet, never two ticks.</li><li>A run can never answer another run's permission request</li><li>The lead has a budget, and everything it starts counts against it</li></ul></div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Choosing Medium</div>
+  <h2>What "a harness can lead" adds to the plan</h2>
+  <div class="take-box prose">
+    <p>You chose Medium for v0.1. That is a real scope change, so here is its honest cost before the builder hears about it.</p>
+    <ul style="padding-left:18px;margin:0 0 12px">
+      <li><strong>A Protocol proposal.</strong> A message must record which run wrote it. Today only a person can author one. This goes to the Protocol repository first, not into PIO quietly.</li>
+      <li><strong>A small tool for the lead.</strong> The leading harness needs a way to start runs and send messages through PIO. For Claude Code that means passing it a tool for that one session, which bends "exactly as you configured it". It needs your explicit approval, the way the test-only model exception did.</li>
+      <li><strong>Steering for Claude Code.</strong> Codex can take a message mid-turn. The Claude host cannot yet, so a message to a Claude run waits for its next turn and the thread must say "queued".</li>
+      <li><strong>A new milestone.</strong> I suggest M4b, after the board and split view work, so the core screens are not held up.</li>
+    </ul>
+    <p>I will write this up for the builder only after you are happy with the screen.</p>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Can a terminal really look like this</div>
+  <h2>Two tiers of the canvas skin</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Tier</th><th>Where</th><th>What you get</th></tr></thead>
+    <tbody>
+      <tr><td>Drawn</td><td>Ghostty, Kitty, WezTerm</td><td>A real image sits underneath the text: grid lines, hand-drawn card outlines and arrows. These terminals support pictures behind text, and that is the out-of-the-box part of this idea.</td></tr>
+      <tr><td>Character</td><td>Every other terminal</td><td>The same layout with a dotted grid, round corners and arrows made of characters. Clean and readable, less hand-drawn.</td></tr>
+    </tbody></table></div>
+  <div class="prose" style="margin-top:14px"><p class="muted">The Drawn tier is new ground. I would ask the builder for a one-day experiment in Ghostty before committing to it. If it fails, the Character tier still delivers the cards, the grid and the colors. Your font stays your choice in Ghostty. This page uses Recursive Mono Casual.</p></div>
+</section>
+
+<section>
+  <div class="eyebrow">Approved in round two</div>
+  <h2>Same screens, now as cards</h2>
+  <div class="prose"><p class="muted">Content unchanged, apart from the uncertain run, which now offers only the action you asked for.</p></div>
+</section>
+
+<section class="screen">
+  <div class="screen-head"><span class="n">4</span><h2 style="margin:0">The approval walk</h2><span class="step">press a</span></div>
+  <div class="term" data-t="dark"><div class="tb"><i></i><i></i><i></i><span>card over the board</span></div><div class="stage"><div class="card note-w"><div class="scroll"><pre class="kept"><span class="ln "> ╭─ <span class="w">approvals · 1 of 2</span> ──────────────────────────────────────────────────────────────</span><span class="ln "> </span><span class="ln ">   <span class="h">run     </span>     auth-fix · claude 2.1.278 · api · wt-2</span><span class="ln ">   <span class="h">action  </span>     work.action-1 · asked 42s ago</span><span class="ln ">   <span class="h">wants to</span>     Bash   git tag v1.2</span><span class="ln ">   <span class="h">lands   </span>     <span class="u">not classifiable.</span> PIO cannot tell where a shell command writes.</span><span class="ln ">   <span class="h">said    </span>     &quot;The race is fixed and the new test passes. Tagging the release.&quot;</span><span class="ln "> </span><span class="ln ">   <span class="h">harness offers</span>     allow once · always allow · reject</span><span class="ln ">   <span class="h">PIO will send </span>     allow once · reject            <span class="d">always allow is never sent</span></span><span class="ln "> </span><span class="ln sel">   <span class="a">› 1. Allow once</span></span><span class="ln ">     2. Deny</span><span class="ln ">     3. Show the full request</span><span class="ln ">     4. Decide later</span><span class="ln "> </span><span class="ln ">   <span class="w">No answer by 14:32:10 means PIO denies it, and the record says PIO did.</span></span><span class="ln "> </span><span class="ln ">   <span class="d">↑↓ or 1–4 · ↵ choose · tab next approval · esc back to the board</span></span><span class="ln "> ╰───────────────────────────────────────────────────────────────────────────────────</span></pre></div></div></div></div>
+</section>
+<section class="screen">
+  <div class="screen-head"><span class="n">5</span><h2 style="margin:0">The run view</h2><span class="step">press ↵ on a run</span></div>
+  <div class="term" data-t="dark"><div class="tb"><i></i><i></i><i></i><span>pio — auth-fix</span></div><div class="stage"><div class="card k1"><div class="scroll"><pre class="kept"><span class="ln "> <span class="a">← board</span>    auth-fix · claude 2.1.278 · api · wt-2                      <span class="w">◐</span> <span class="w">needs approval</span> · 64.3k tokens</span><span class="ln "> <span class="h">▾ truth</span>    journaled · released 2m ago · <span class="r">delivered ✓ · acknowledged ✓ by replay echo</span> · gen 1 · <span class="u">no sandbox</span></span><span class="ln "> </span><span class="ln "> <span class="h">⏺ brief</span></span><span class="ln ">   Fix the token refresh race in auth/session.rs and add a test. Tag v1.2 when green.</span><span class="ln "> </span><span class="ln "> <span class="a">⏺ claude</span></span><span class="ln ">   I&#x27;ll read the session module first.</span><span class="ln "> </span><span class="ln "> ⏺ Read   auth/session.rs                                                  <span class="d">inside workspace · performed</span></span><span class="ln "><span class="d">   ⎿ 212 lines</span></span><span class="ln "> ⏺ Edit   auth/session.rs                                                  <span class="d">inside workspace · performed</span></span><span class="ln ">   ⎿ +14 −3    <span class="a">▸ show diff</span></span><span class="ln "> ⏺ Bash   cargo test -p auth                                             <span class="d">pre-approved by your own rules</span></span><span class="ln ">   ⎿ 23 passed in 4.1s    <span class="a">▸ show output</span></span><span class="ln "> </span><span class="ln "> <span class="a">⏺ claude</span></span><span class="ln ">   The race is fixed and the new test passes. Tagging the release.</span><span class="ln "> </span><span class="ln sel"> <span class="a">▌</span> ⏺ Bash   git tag v1.2                                                 <span class="w">◐</span> <span class="w">WAITING FOR YOU · 01:18 left</span></span><span class="ln sel"> <span class="a">▌</span>   ⎿ press ↵ to decide. This request keeps waiting if you leave the screen.</span><span class="ln "> </span><span class="ln bar"> <span class="w">◐</span> <span class="w">needs approval</span>     ⏱ 2m 04s this run     64.3k tokens     block 7 of 7</span><span class="ln "><span class="d"> ↑↓ blocks · ↵ open block · y copy · d diff · [ ] previous or next run · c cancel run · esc board</span></span></pre></div></div></div></div>
+</section>
+<section class="screen">
+  <div class="screen-head"><span class="n">6</span><h2 style="margin:0">An uncertain run</h2><span class="step">press u</span></div>
+  <div class="term" data-t="dark"><div class="tb"><i></i><i></i><i></i><span>pio — migrate</span></div><div class="stage"><div class="card note-u"><div class="scroll"><pre class="kept"><span class="ln "> <span class="a">← board</span>    migrate · codex 0.155.1 · db · wt-4                             <span class="u">◇</span> <span class="u">uncertain · usage unknown</span></span><span class="ln "> <span class="h">▾ truth</span>    intent journaled · released 12:58:14 · <span class="u">delivery AMBIGUOUS</span> · <span class="u">host LOST 13:02</span> · controller gen 2</span><span class="ln "> </span><span class="ln "> <span class="u">◇</span> <span class="u">What PIO knows</span></span><span class="ln ">   The brief was released to Codex at 12:58:14.</span><span class="ln ">   The service restarted at 13:02. The host process was gone when it came back.</span><span class="ln ">   No acknowledgment had been journaled before that.</span><span class="ln "> </span><span class="ln "> <span class="u">◇</span> <span class="u">What PIO does not know</span></span><span class="ln ">   Whether Codex received the brief. Whether it changed files. What it spent.</span><span class="ln "> </span><span class="ln "> <span class="u">◇</span> <span class="u">What PIO will not do</span></span><span class="ln ">   It will not start this work again on its own. A second launch could duplicate the work.</span><span class="ln "> </span><span class="ln "> <span class="h">⏺ workspace check</span>                                                         <span class="d">you can verify this yourself</span></span><span class="ln ">   ⎿ db · wt-4 has 3 changed files since the base commit    <span class="a">▸ show git status</span></span><span class="ln "> </span><span class="ln sel">   <span class="a">› 1. Open the workspace diff</span></span><span class="ln "> </span><span class="ln bar"> <span class="u">◇</span> <span class="u">uncertain     released</span> 1h 04m ago     <span class="u">usage unknown, never counted as zero</span></span><span class="ln "><span class="d"> ↵ open the diff · e evidence · esc board</span></span></pre></div></div></div></div>
+</section>
+<section class="screen">
+  <div class="screen-head"><span class="n">7</span><h2 style="margin:0">Leaving and coming back</h2><span class="step">press q, then reopen</span></div>
+  <div class="term" data-t="dark"><div class="tb"><i></i><i></i><i></i><span>pio</span></div><div class="stage"><div class="notesrow"><div class="card"><div class="scroll"><pre class="kept"><span class="ln "> ╭─ <span class="a">detach</span> ──────────────────────────────────────────────────────────────────────────</span><span class="ln "> </span><span class="ln ">   5 runs keep working without this screen.</span><span class="ln ">   2 approvals keep waiting. If nobody answers, <span class="w">PIO denies them at 14:32 and 14:33.</span></span><span class="ln "> </span><span class="ln sel">   <span class="a">› 1. Detach</span></span><span class="ln ">     2. Stay</span><span class="ln "> </span><span class="ln ">   <span class="d">reopen any time with: pio</span></span><span class="ln "> ╰───────────────────────────────────────────────────────────────────────────────────</span></pre></div></div><div class="card"><div class="scroll"><pre class="kept"><span class="ln "> <span class="h">while you were away · 23m</span></span><span class="ln "> </span><span class="ln "> <span class="b">✕</span> auth-fix     approval expired · <span class="w">denied by PIO at 14:32</span> · run finished without the tag</span><span class="ln "> <span class="b">✕</span> seed-data    approval expired · <span class="w">denied by PIO at 14:33</span> · run is still working</span><span class="ln "> <span class="d">○</span> calc-add     finished · exit 0 · 58.2k tokens</span><span class="ln "> <span class="u">◇</span> migrate      <span class="u">still uncertain</span></span><span class="ln "> </span><span class="ln "><span class="d"> ↵ go to the board · any row opens that run</span></span></pre></div></div></div></div></div>
+</section>
+
+<section>
+  <div class="eyebrow">What happens next</div>
+  <h2>From mockups to a working screen</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Step</th><th>What gets built</th><th>Proves</th></tr></thead>
+    <tbody>
+      <tr><td>M4a</td><td>The board, the run view, the approval walk, the uncertain run, leaving and returning</td><td>The terminal journey: two live runs, deny then allow, detach during an approval, reopen</td></tr>
+      <tr><td>M4a</td><td>Split view, skins, mouse, notifications, the playful busy line</td><td>Resizing, zoom, and that every click also has a key</td></tr>
+      <tr><td>One day, optional</td><td>The hand-drawn tier in Ghostty</td><td>Whether a picture behind the text is smooth enough to ship. If not, the character tier ships alone.</td></tr>
+      <tr><td>M4b</td><td>Orchestrate, where a harness can lead</td><td>Needs a Protocol proposal and your approval of the lead's tool first</td></tr>
+    </tbody></table></div>
+</section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script>
+(function(){
+  var NS = 'http://www.w3.org/2000/svg';
+  var names = {dark:'PIO Dark',light:'PIO Light',mocha:'Catppuccin Mocha',gruvbox:'Gruvbox Dark',contrast:'High Contrast'};
+  var hasRough = typeof rough !== 'undefined';
+  if (hasRough) document.documentElement.classList.add('rough-ok');
+  function feelNow(){ return document.documentElement.getAttribute('data-feel') || 'canvas'; }
+  function roundedPath(w,h,r){ return 'M'+r+',0 H'+(w-r)+' Q'+w+',0 '+w+','+r+' V'+(h-r)+' Q'+w+','+h+' '+(w-r)+','+h+' H'+r+' Q0,'+h+' 0,'+(h-r)+' V'+r+' Q0,0 '+r+',0 Z'; }
+  function drawCards(){
+    document.querySelectorAll('.card > svg.rough').forEach(function(s){ s.remove(); });
+    if (!hasRough || feelNow() !== 'canvas') return;
+    document.querySelectorAll('.card').forEach(function(card, i){
+      var w = card.offsetWidth, h = card.offsetHeight; if (!w || !h) return;
+      var svg = document.createElementNS(NS,'svg'); svg.setAttribute('class','rough');
+      svg.setAttribute('width', w+10); svg.setAttribute('height', h+10);
+      var g = document.createElementNS(NS,'g'); g.setAttribute('transform','translate(5,5)'); svg.appendChild(g);
+      var stroke = getComputedStyle(card).getPropertyValue('--stroke').trim() || '#888';
+      var rc = rough.svg(svg);
+      g.appendChild(rc.path(roundedPath(w,h,10), {stroke:stroke, strokeWidth:1.5, roughness:1.3, bowing:1.1, seed:i+3, fill:'none'}));
+      card.insertBefore(svg, card.firstChild);
+    });
+  }
+  function anchor(el, stage, side){
+    var a = el.getBoundingClientRect(), s = stage.getBoundingClientRect();
+    var x = a.left - s.left, y = a.top - s.top;
+    if (side === 'bottom') return [x + a.width/2, y + a.height + 4];
+    if (side === 'top') return [x + a.width/2, y - 4];
+    if (side === 'right') return [x + a.width + 4, y + a.height/2];
+    return [x - 4, y + a.height/2];
+  }
+  function drawLinks(){
+    var stage = document.getElementById('orch-stage'); if (!stage) return;
+    stage.querySelectorAll('svg.links, .linklabel').forEach(function(n){ n.remove(); });
+    var lead = document.getElementById('n-lead'), w1 = document.getElementById('n-w1'), w2 = document.getElementById('n-w2');
+    if (!lead || !w1 || !w2) return;
+    var svg = document.createElementNS(NS,'svg'); svg.setAttribute('class','links'); stage.appendChild(svg);
+    var cs = getComputedStyle(stage.parentNode);
+    var col = { lead: cs.getPropertyValue('--c3').trim(), w1: cs.getPropertyValue('--c1').trim() };
+    var stacked = w2.getBoundingClientRect().top > w1.getBoundingClientRect().bottom;
+    var links = [
+      {from: anchor(lead,stage,'bottom'), to: anchor(w1,stage,'top'), color: col.lead, label: '✉ brief ✓✓', shift:[-40,0]},
+      {from: stacked ? anchor(lead,stage,'left') : anchor(lead,stage,'bottom'), to: stacked ? anchor(w2,stage,'left') : anchor(w2,stage,'top'), color: col.lead, label: '✉ brief ✓✓', shift:[40,0]},
+      {from: stacked ? anchor(w1,stage,'bottom') : anchor(w1,stage,'right'), to: stacked ? anchor(w2,stage,'top') : anchor(w2,stage,'left'), color: col.w1, label: '✉ note ✓✓', shift:[0,0]}
+    ];
+    if (!stacked) { links[0].from[0] -= 40; links[1].from[0] += 40; }
+    if (stacked) { links[1].from[0] -= 2; links[1].to[0] -= 2; links[1].bend = -18; }
+    var rc = hasRough && feelNow() === 'canvas' ? rough.svg(svg) : null;
+    links.forEach(function(L, i){
+      var x1=L.from[0], y1=L.from[1], x2=L.to[0], y2=L.to[1];
+      var d = L.bend ? 'M'+x1+','+y1+' C'+(x1+L.bend)+','+y1+' '+(x2+L.bend)+','+y2+' '+x2+','+y2 : 'M'+x1+','+y1+' L'+x2+','+y2;
+      var ang = L.bend ? 0 : Math.atan2(y2-y1, x2-x1), ah = 9;
+      var hx1 = x2 - ah*Math.cos(ang-0.45), hy1 = y2 - ah*Math.sin(ang-0.45), hx2 = x2 - ah*Math.cos(ang+0.45), hy2 = y2 - ah*Math.sin(ang+0.45);
+      var head = 'M'+hx1+','+hy1+' L'+x2+','+y2+' L'+hx2+','+hy2;
+      if (rc) { svg.appendChild(rc.path(d,{stroke:L.color,strokeWidth:1.5,roughness:1.2,seed:20+i,fill:'none'})); svg.appendChild(rc.path(head,{stroke:L.color,strokeWidth:1.5,roughness:.8,seed:40+i,fill:'none'})); }
+      else { [d,head].forEach(function(p){ var el=document.createElementNS(NS,'path'); el.setAttribute('d',p); el.setAttribute('fill','none'); el.setAttribute('stroke',L.color); el.setAttribute('stroke-width','1.5'); svg.appendChild(el); }); }
+      if (!L.bend) { var lab=document.createElement('div'); lab.className='linklabel'; lab.textContent=L.label; lab.style.left=((x1+x2)/2+L.shift[0]*0)+'px'; lab.style.top=((y1+y2)/2)+'px'; lab.style.color=L.color; stage.appendChild(lab); }
+    });
+  }
+  function redraw(){ drawCards(); drawLinks(); }
+  var timer; function later(){ clearTimeout(timer); timer = setTimeout(redraw, 80); }
+
+  var tbtn = document.querySelectorAll('.switch button[data-t]'), fbtn = document.querySelectorAll('.switch button[data-f]');
+  function skin(t){
+    document.querySelectorAll('.term').forEach(function(el){ el.setAttribute('data-t', t); });
+    document.querySelectorAll('.skinname').forEach(function(el){ el.textContent = names[t]; });
+    tbtn.forEach(function(b){ b.setAttribute('aria-pressed', b.getAttribute('data-t')===t ? 'true':'false'); });
+    try{ localStorage.setItem('pio-mock-skin', t); }catch(e){}
+    later();
+  }
+  function feel(f){
+    document.documentElement.setAttribute('data-feel', f);
+    fbtn.forEach(function(b){ b.setAttribute('aria-pressed', b.getAttribute('data-f')===f ? 'true':'false'); });
+    try{ localStorage.setItem('pio-mock-feel3', f); }catch(e){}
+    later();
+  }
+  tbtn.forEach(function(b){ b.addEventListener('click', function(){ skin(b.getAttribute('data-t')); }); });
+  fbtn.forEach(function(b){ b.addEventListener('click', function(){ feel(b.getAttribute('data-f')); }); });
+  var s=null,f=null; try{ s=localStorage.getItem('pio-mock-skin'); f=localStorage.getItem('pio-mock-feel3'); }catch(e){}
+  feel(f==='plain' ? 'plain' : 'canvas'); if (s && names[s]) skin(s);
+  window.addEventListener('resize', later);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(later);
+  window.addEventListener('load', later);
+  redraw();
+})();
+</script>

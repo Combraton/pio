@@ -1,0 +1,24 @@
+{
+  "format": "pio-opencode-qualification/1",
+  "isolated_config_dir": true,
+  "pinned": {
+    "version": "2.0.1"
+  },
+  "qualified": true,
+  "refusals": [],
+  "resolution": {
+    "binary_sha256": "ecd111efdbea132f7a33d0ce51041665a93d4e382232bf014a5072b73fcb2b6a",
+    "install": "npm",
+    "resolved": "~/.local/lib/node_modules/@opencode/cli/bin/opencode.exe",
+    "selected": "~/.local/bin/opencode2"
+  },
+  "selected": "~/.local/bin/opencode2",
+  "surface": {
+    "command_count": 7,
+    "drift": [],
+    "drift_count": 0,
+    "expected_surface_listing_sha256": "9bca2df15e1955ce05c64d29128fd0ec6cad147df892abb0d30f7d252383fbc0",
+    "surface_listing_sha256": "9bca2df15e1955ce05c64d29128fd0ec6cad147df892abb0d30f7d252383fbc0"
+  },
+  "version": "2.0.1"
+}

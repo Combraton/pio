@@ -1,0 +1,233 @@
+{
+  "addenda": [
+    {
+      "date": "2026-09-21",
+      "fixed_in": "the usage object is now found wherever it is, and every counter the harness reports is summed; `totalTokens` is recorded beside PIO's sum and never added to it. ADR 005 section 9.",
+      "how_the_ledger_came_to_count_it": "the census in this same receipt \u2014 `usage.granularity` \u2014 recorded every place the harness reported usage, because it searches rather than looks up. Both reports are in this file, and the 7,910 charged to the ledger under this run name is read from them. It is the harness own figure, not an estimate and not an allowance: `totalTokens` and the `usage_update` running total agree, and the three counters sum to it.",
+      "reason": "the_receipt_says_unknown_and_the_ledger_charges_7910",
+      "receipt_rewritten": false,
+      "what_the_harness_reported": {
+        "and_during_the_turn": {
+          "cost": {
+            "amount": 0,
+            "currency": "USD"
+          },
+          "sessionUpdate": "usage_update",
+          "size": 204800,
+          "used": 7910
+        },
+        "at": "the session/prompt result, under the key `usage`",
+        "value": {
+          "inputTokens": 7870,
+          "outputTokens": 2,
+          "thoughtTokens": 38,
+          "totalTokens": 7910
+        }
+      },
+      "why_the_receipt_still_says_unknown": "because that is what PIO recorded at the time. Rewriting it would erase the evidence that the adapter could not read a figure the harness had stated plainly. The ledger is where the spend is accounted; the receipt is where what PIO observed is accounted, and the two differ here for a reason this addendum states.",
+      "why_the_runner_could_not_read_it_then": "the host looked for the usage object at `result._meta.usage`, which is where the Claude adapter puts it, and summed two counters \u2014 input and output. OpenCode 2.0.11 puts it at `result.usage` and reports four, including `thoughtTokens`. So no `usage` event was emitted at all, the receipt recorded `reported: false` and `observed_total_tokens: null`, and the stop rule fired. The stop was correct: unknown is never zero."
+    }
+  ],
+  "binary_sha256": "97fdb43df22c317e9077c9fe77b0c439cffe89004438103e5b8373ce2d930b9f",
+  "commit": "dc785afc6c0f32aa8fc235761dceb631f7c9ce15",
+  "completion_is_acceptance": false,
+  "containment": {
+    "mechanism": "harness_permission_rules_only",
+    "os_sandbox_observed": false
+  },
+  "cumulative": {
+    "cap": 300000000,
+    "observed": 0,
+    "stop_at": 240000000
+  },
+  "delivery": {
+    "evidence": {
+      "class": "native_session_update",
+      "source": "opencode-acp/host"
+    },
+    "proof_class": null,
+    "state": "acknowledged"
+  },
+  "dirty": false,
+  "dry_run": false,
+  "durable_state": {
+    "owner_service_untouched": true
+  },
+  "exit": {
+    "code": 0
+  },
+  "fixed_in": "the commit that follows this receipt",
+  "format": "pio-opencode-live-receipt/1",
+  "harness": {
+    "agent": {
+      "name": "OpenCode",
+      "version": "2.0.11"
+    },
+    "auth_methods": [
+      {
+        "description": "Run `opencode auth login` in the terminal",
+        "id": "opencode-login",
+        "name": "Login with opencode"
+      }
+    ],
+    "capabilities": {
+      "_meta": {
+        "opencode/child-session-updates": true
+      },
+      "loadSession": true,
+      "mcpCapabilities": {
+        "http": true,
+        "sse": false
+      },
+      "promptCapabilities": {
+        "embeddedContext": true,
+        "image": true
+      },
+      "sessionCapabilities": {
+        "close": {},
+        "delete": {},
+        "fork": {},
+        "list": {},
+        "resume": {}
+      }
+    },
+    "session_id": "ses_f3bbc00e6ffen6r8b7pmCboxCY",
+    "source": "opencode-acp/host"
+  },
+  "model": {
+    "checked_before_delivery": true,
+    "matched": true,
+    "reported": "minimax-coding-plan/MiniMax-M2.7-highspeed",
+    "requested": "minimax-coding-plan/MiniMax-M2.7-highspeed"
+  },
+  "owner_service_after": [
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
+  ],
+  "owner_service_before": [
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
+  ],
+  "owner_service_untouched": true,
+  "permission_options": {},
+  "pio_deleted_nothing": true,
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "preflight": {
+    "binary_newer_than_every_source": true,
+    "binary_sha256": "97fdb43df22c317e9077c9fe77b0c439cffe89004438103e5b8373ce2d930b9f",
+    "checked": true,
+    "commit": "dc785afc6c0f32aa8fc235761dceb631f7c9ce15",
+    "dirty": false,
+    "newest_source": "crates/pio-protocol/src/codex.rs"
+  },
+  "rehearsal": {
+    "made_in_dry_run": true,
+    "observation": "a usage report, and a census of where the harness reported it",
+    "ran": true
+  },
+  "run": "R1-attempt-2",
+  "runtime": "exited",
+  "sessions_after": {
+    "digest": "bd4180570910d3d9f68ae2b932ad7a88eee4a6e3ce4f738a5906909f5504793a",
+    "entry_count": 1,
+    "exit": 0,
+    "observed": true
+  },
+  "sessions_before": {
+    "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "entry_count": 0,
+    "exit": 0,
+    "observed": true
+  },
+  "sessions_created": [
+    "ses_f3bbc00e6ffen6r8b7pmCboxCY"
+  ],
+  "started_at": "2026-09-21T13:59:31Z",
+  "stops": [
+    "no usage report: usage is unknown, never zero"
+  ],
+  "tool_uses": {
+    "containment": {
+      "mechanism": "harness_permission_rules_only",
+      "os_sandbox_observed": false
+    },
+    "declined_by_pio_count": 0,
+    "denied_by_caller_count": 0,
+    "denied_by_harness_count": 0,
+    "format": "pio-claude-tool-uses/5",
+    "liability": "none_observed",
+    "out_of_fixture_count": 0,
+    "out_of_fixture_effect_observed": false,
+    "tool_uses": [],
+    "unclassifiable_target_count": 0,
+    "workspace_sha256": "938e5f037c9d4685ff6e775bb9f286abf2cba0861e9d38eb5d598e4405e405fe"
+  },
+  "usage": {
+    "cap": 300000000,
+    "detail": {},
+    "execution_deadline_seconds": 600,
+    "granularity": {
+      "measure": "input+output; ACP reports no cache counters",
+      "report_count": 1,
+      "reported_at_turn_end": true,
+      "reported_during_turn": false,
+      "reports": [
+        {
+          "paths": [
+            "usage"
+          ],
+          "update_kind": null,
+          "values": [
+            {
+              "inputTokens": 7870,
+              "outputTokens": 2,
+              "thoughtTokens": 38,
+              "totalTokens": 7910
+            }
+          ],
+          "where": "session/prompt result"
+        }
+      ],
+      "session_update_kinds": {
+        "agent_message_chunk": 1,
+        "agent_thought_chunk": 3,
+        "usage_update": 1
+      },
+      "usage_bearing_update_kinds": {}
+    },
+    "limit_is_next_turn_only": true,
+    "measure": "input+output+cache_creation+cache_read (ACP reports input and output only)",
+    "observed_total_tokens": null,
+    "parts": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    "reported": false,
+    "run_limit": 2000000,
+    "stop_at": 240000000
+  },
+  "what_the_census_found": {
+    "actual_cost_tokens": 7910,
+    "counters": [
+      "inputTokens",
+      "outputTokens",
+      "thoughtTokens",
+      "totalTokens"
+    ],
+    "its_fields": [
+      "cost",
+      "size",
+      "used"
+    ],
+    "session_update_kinds": {
+      "agent_message_chunk": 1,
+      "agent_thought_chunk": 3,
+      "usage_update": 1
+    },
+    "the_turn_result_path": "usage, not _meta.usage",
+    "the_update_kind_that_carries_usage": "usage_update",
+    "what_pio_recorded_at_the_time": "unknown",
+    "why_a_field_search_missed_it": "none of `used`, `size` or `cost` is named `usage` or ends in `tokens`; the census caught it by the update's own kind"
+  },
+  "why_it_is_kept": "The first completed live MiniMax turn. The model selection worked, the guard passed on the harness's own post-selection report, the brief was delivered and the turn ended `end_turn`. The receipt still says the usage is unknown, and it is kept saying so: PIO read `result._meta.usage` where 2.0.11 sends `result.usage`, so the host recorded no usage and the stop rule fired \u2014 correctly, because unknown is never zero. The census in this same receipt is what found the real shape, and the 7,910 tokens this turn actually cost are charged to the ledger under this name."
+}
