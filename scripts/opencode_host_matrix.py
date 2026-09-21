@@ -643,6 +643,19 @@ def run_case(out, name):
         assert view['usage']['liability'] == 'resolved', view['usage']
         assert [o['measure'] for o in view['usage']['observations']] == \
             ['opencode.tokens.total'], view['usage']
+        # The measure itself, on the host's own record. Found where the
+        # harness put it — `usage`, not `_meta.usage` — and summed from
+        # whatever counters are there rather than from a list written in
+        # advance. Both of those were wrong until a live turn said so: one
+        # read a path that was never there, the other dropped `thoughtTokens`.
+        usage = [e for e in case.host_events() if e['kind'] == 'usage']
+        assert len(usage) == 1, [e['kind'] for e in case.host_events()]
+        assert usage[0]['path'] == 'usage', usage
+        assert sorted(usage[0]['parts']) == ['inputTokens', 'outputTokens',
+                                             'thoughtTokens'], usage
+        # The harness's own total is kept beside PIO's sum, never added to it.
+        assert usage[0]['parts_sum_matches_reported_total'] is True, usage
+        assert usage[0]['total']['totalTokens'] == usage[0]['reported_total'], usage
         assert len(case.markers_of('prompt_received')) == 1, case.markers_of('prompt_received')
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
@@ -668,21 +681,37 @@ def run_case(out, name):
         end, going = seen['at-turn-end'], seen['as-it-goes']
         # Every update is counted by its own kind, whether or not it carries
         # usage, so the census says what the turn was made of.
-        assert end['session_update_kinds'] == {'agent_message_chunk': 3}, end
-        assert going['session_update_kinds'] == {'agent_message_chunk': 3}, going
-        # The difference the census exists to report.
-        assert end['reported_during_turn'] is False, end
-        assert end['usage_bearing_update_kinds'] == {}, end
-        assert end['report_count'] == 1, end
-        assert going['reported_during_turn'] is True, going
-        assert going['usage_bearing_update_kinds'] == {'agent_message_chunk': 3}, going
+        assert end['session_update_kinds']['agent_message_chunk'] == 3, end
+        assert going['session_update_kinds']['agent_message_chunk'] == 3, going
+        # The difference the census exists to report. Both report at the end;
+        # one also reports on the way, and the count is what says so.
+        assert end['session_update_kinds'].get('usage_update') == 1, end
+        assert end['usage_bearing_update_kinds'] == {'usage_update': 1}, end
+        assert end['report_count'] == 2, end
+        assert going['session_update_kinds'].get('usage_update') == 3, going
+        assert going['usage_bearing_update_kinds'] == {'usage_update': 3}, going
         assert going['report_count'] == 4, going
+        assert end['reported_during_turn'] is True, end
+        assert going['reported_during_turn'] is True, going
         assert end['reported_at_turn_end'] is True, end
         assert going['reported_at_turn_end'] is True, going
-        # Found by searching the update, so the receipt reports where the
-        # harness put it rather than where PIO expected it.
-        assert [r['paths'] for r in going['reports'] if r['where'] == 'session/update'] == \
-            [['_meta.usage']] * 3, going['reports']
+        # **The property R1 bought.** `usage_update` names none of its fields
+        # `usage` or `*tokens` — it sends `used`, `size` and `cost` — so a
+        # census searching field names alone misses the one update kind that
+        # actually carries usage. It is found by its own kind, and the whole
+        # update is recorded.
+        updates = [r for r in end['reports'] if r['where'] == 'session/update']
+        assert [r['matched_by'] for r in updates] == ['the update kind'], updates
+        assert updates[0]['paths'] == [], updates
+        assert updates[0]['values'][0]['used'] == 480, updates
+        assert updates[0]['values'][0]['cost'] == {'amount': 0, 'currency': 'USD'}, updates
+        # And the turn result's own usage, found where the harness put it —
+        # `usage`, not `_meta.usage` — with every counter summed. Reading one
+        # expected path and two expected counters recorded a live turn that
+        # cost 7,910 tokens as unknown.
+        result = [r for r in end['reports'] if r['where'] == 'session/prompt result']
+        assert [r['paths'] for r in result] == [['usage']], result
+        assert 'thoughtTokens' in result[0]['values'][0], result
         case = Case(out, name, model=REQUESTED)
 
     elif name == 'a_decision_is_selected_by_kind_never_by_id':

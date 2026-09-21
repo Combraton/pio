@@ -63,6 +63,48 @@ fn usage_sites(value: &Value, prefix: &str, found: &mut Vec<(String, Value)>) {
     }
 }
 
+/// The usage object a turn result carries, wherever the harness puts it.
+///
+/// Measured against 2.0.11: it is `result.usage`, **not** `result._meta.usage`.
+/// Reading the one expected path summed nothing on the first completed live
+/// turn, and a turn that really cost 7,910 tokens was recorded as unknown.
+fn result_usage(result: &Value) -> Option<(String, Value)> {
+    let mut found = Vec::new();
+    usage_sites(result, "", &mut found);
+    found.into_iter().find(|(_, value)| value.is_object())
+}
+
+/// Every token counter the harness reported, and their sum.
+///
+/// Counted from whatever counters are actually there rather than from a list
+/// PIO wrote in advance: 2.0.11 reports `thoughtTokens` beside input and
+/// output, and a fixed two-part measure silently dropped it. `totalTokens` is
+/// the harness's own total and is kept separately — adding it would double
+/// every turn — so that a disagreement between the sum and the harness's
+/// total is something PIO reports rather than something it resolves.
+fn token_parts(usage: &Value) -> (Value, u64, Option<u64>) {
+    let mut parts = serde_json::Map::new();
+    let mut total = 0u64;
+    let mut reported = None;
+    if let Some(map) = usage.as_object() {
+        for (key, value) in map {
+            let Some(count) = value.as_u64() else {
+                continue;
+            };
+            let lower = key.to_ascii_lowercase();
+            if lower == "totaltokens" || lower == "total_tokens" {
+                reported = Some(count);
+                continue;
+            }
+            if lower.ends_with("tokens") {
+                parts.insert(key.clone(), json!(count));
+                total += count;
+            }
+        }
+    }
+    (Value::Object(parts), total, reported)
+}
+
 /// What to send back for one permission decision, and what to record about it.
 ///
 /// **Option ids are the agent's to invent.** `allow` and `reject` were the
@@ -382,13 +424,14 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         "paths":sites.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>(),
                         "values":sites.iter().map(|(_, value)| value.clone()).collect::<Vec<_>>()}));
                 }
-                if let Some(usage) = message["result"]["_meta"]["usage"].as_object() {
-                    let total: u64 = ["inputTokens", "outputTokens"]
-                        .iter()
-                        .filter_map(|k| usage.get(*k).and_then(Value::as_u64))
-                        .sum();
+                if let Some((path, usage)) = result_usage(&message["result"]) {
+                    let (parts, total, reported_total) = token_parts(&usage);
                     life.event(json!({"kind":"usage","total":{"totalTokens":total},
-                        "detail":message["result"]["_meta"]["usage"]}))?;
+                        "path":path,"parts":parts,
+                        "reported_total":reported_total,
+                        "parts_sum_matches_reported_total":
+                            reported_total.map(|value| value == total),
+                        "detail":usage}))?;
                 }
                 result = Some(message);
                 continue;
@@ -413,12 +456,26 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                     *update_kinds.entry(update_kind.clone()).or_insert(0) += 1;
                     let mut sites = Vec::new();
                     usage_sites(update, "", &mut sites);
-                    if !sites.is_empty() {
+                    // Measured: OpenCode's `usage_update` names none of its
+                    // fields `usage` or `*tokens` — it sends `used`, `size`
+                    // and `cost`. A field search alone would have missed the
+                    // one update kind that actually carries usage, so an
+                    // update whose own kind says usage is recorded whole.
+                    let kind_says_usage = update_kind.to_ascii_lowercase().contains("usage");
+                    if !sites.is_empty() || kind_says_usage {
                         usage_reports.push(json!({"where":"session/update",
-                            "update_kind":update_kind,
-                            "paths":sites.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>(),
-                            "values":sites.iter().map(|(_, value)| value.clone())
-                                .collect::<Vec<_>>()}));
+                        "update_kind":update_kind,
+                        "matched_by":if sites.is_empty() {
+                            "the update kind"
+                        } else {
+                            "a field name"
+                        },
+                        "paths":sites.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>(),
+                        "values":if sites.is_empty() {
+                            vec![update.clone()]
+                        } else {
+                            sites.iter().map(|(_, value)| value.clone()).collect::<Vec<_>>()
+                        }}));
                     }
                     if update["sessionUpdate"] == "tool_call" {
                         tool_calls.push(update.clone());
@@ -682,7 +739,8 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
         "reported_at_turn_end":usage_reports.iter()
             .any(|report| report["where"] == "session/prompt result"),
         "reports":usage_reports,
-        "measure":"input+output; ACP reports no cache counters"}))?;
+        "measure":"every token counter the harness reports, summed; its own \
+                   totalTokens is recorded beside the sum, never added to it"}))?;
     life.event(json!({"kind":"tool_uses","record":tool_uses}))?;
     life.event(json!({"kind":"config_after",
         "snapshot":{"owner_service":owner_after},

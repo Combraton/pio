@@ -177,7 +177,8 @@ def ledger():
     path = ledger_path()
     if path.exists():
         return json.loads(path.read_text())
-    return {'cap': CAP, 'stop_at': STOP_AT, 'measure': 'input+output+cache_creation+cache_read',
+    return {'cap': CAP, 'stop_at': STOP_AT,
+            'measure': 'every token counter the harness reports, summed',
             'runs': {}}
 
 
@@ -185,23 +186,17 @@ def cumulative(book):
     return sum(entry.get('observed_total_tokens') or 0 for entry in book['runs'].values())
 
 
-# ACP reports usage in camelCase and has no cache counters. Reading only the
-# Claude spellings produced a receipt claiming a reported usage of zero, which
-# is indistinguishable from unknown and worse than either.
-USAGE_KEYS = {'input_tokens': ('input_tokens', 'inputTokens'),
-              'output_tokens': ('output_tokens', 'outputTokens'),
-              'cache_creation_input_tokens': ('cache_creation_input_tokens',
-                                              'cacheCreationInputTokens'),
-              'cache_read_input_tokens': ('cache_read_input_tokens',
-                                          'cacheReadInputTokens')}
-
-
-def token_breakdown(usage):
-    """The cap's measure, and its parts, reported separately."""
-    parts = {}
-    for name, spellings in USAGE_KEYS.items():
-        parts[name] = next((usage[s] for s in spellings if usage.get(s) is not None), 0)
-    return parts, sum(parts.values())
+# The measure is the host's, not the runner's. It sums **whatever counters the
+# harness actually reported** and keeps the harness's own `totalTokens` beside
+# the sum rather than adding it.
+#
+# Two earlier versions of this were wrong in the same way, and both were caught
+# by a live turn rather than by a test. The first read only the Claude
+# spellings and produced a receipt claiming a reported usage of zero — which is
+# indistinguishable from unknown and worse than either. The second read
+# `_meta.usage` and summed input and output only; R1 attempt 2 completed a turn
+# that cost 7,910 tokens, reported at `usage` with a `thoughtTokens` counter,
+# and PIO recorded it as unknown.
 
 
 class LiveClient(Client):
@@ -632,7 +627,8 @@ def build_receipt(service, run, view, started, extra):
     usage_event = first_event(events, 'usage')
     granularity = first_event(events, 'usage_granularity')
     detail = usage_event.get('detail') or {}
-    parts, total = token_breakdown(detail)
+    parts = usage_event.get('parts') or {}
+    total = (usage_event.get('total') or {}).get('totalTokens')
     head = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'],
                           capture_output=True, text=True).stdout.strip()
     dirty = bool(subprocess.run(['git', '-C', str(ROOT), 'status', '--porcelain'],
@@ -662,9 +658,15 @@ def build_receipt(service, run, view, started, extra):
         delivery=dict(state=view.get('delivery'),
                       evidence=view.get('deliveries', [{}])[0].get('evidence'),
                       proof_class=view.get('deliveries', [{}])[0].get('proof_class')),
-        usage=dict(measure='input+output+cache_creation+cache_read '
-                           '(ACP reports input and output only)',
+        usage=dict(measure=granularity.get('measure'),
                    parts=parts, detail=detail,
+                   # Where the harness put it, recorded rather than assumed.
+                   path=usage_event.get('path'),
+                   # The harness's own total, beside PIO's sum and never
+                   # instead of it. A disagreement is reported, not resolved.
+                   reported_total=usage_event.get('reported_total'),
+                   parts_sum_matches_reported_total=usage_event.get(
+                       'parts_sum_matches_reported_total'),
                    observed_total_tokens=total if usage_event else None,
                    reported=bool(usage_event),
                    # R1's measurement, and the reason the stops below are
@@ -779,9 +781,18 @@ def run_one(run, args):
     finally:
         service.release()
 
+    # Tokens that were spent are never dropped. A re-run under a name the
+    # ledger already holds would silently replace a real spend with a new one,
+    # so it is refused and the earlier attempt is kept under its own name.
+    if run in book['runs'] and not args.dry_run:
+        raise SystemExit(
+            f'{run}: the ledger already holds an entry for this run '
+            f'({json.dumps(book["runs"][run])}). Those tokens were spent. '
+            f'Re-run it under an attempt name instead of overwriting it.')
     if receipt['usage']['reported']:
         book['runs'][run] = dict(observed_total_tokens=receipt['usage']['observed_total_tokens'],
-                                 parts=receipt['usage']['parts'], at=started)
+                                 parts=receipt['usage']['parts'],
+                                 reported_total=receipt['usage']['reported_total'], at=started)
     else:
         book['runs'][run] = dict(observed_total_tokens=None, usage='unknown', at=started)
     if not args.dry_run:
@@ -894,12 +905,18 @@ def receipt_fields_selftest(out):
         'model.requested', 'model.reported', 'model.matched',
         'model.checked_before_delivery', 'usage.measure', 'usage.reported',
         'usage.cap', 'usage.stop_at', 'usage.run_limit', 'usage.limit_is_next_turn_only',
-        'usage.execution_deadline_seconds',
+        'usage.execution_deadline_seconds', 'usage.path',
+        'usage.parts_sum_matches_reported_total',
         # The fake reports usage exactly once, at turn end, in every scenario
         # it has. Whether the real harness does is precisely what R1 measures,
         # so these are constant offline and must not be assumed live.
         'usage.granularity.report_count', 'usage.granularity.reported_during_turn',
         'usage.granularity.reported_at_turn_end', 'usage.granularity.measure',
+        # R1 measured that exactly one `usage_update` arrives on a short turn.
+        # Whether more arrive on a long one is R4's question, not something
+        # two short dry runs can answer, so one each is the design here.
+        'usage.granularity.session_update_kinds.usage_update',
+        'usage.granularity.usage_bearing_update_kinds.usage_update',
         'containment.mechanism',
         'containment.os_sandbox_observed', 'cumulative.cap', 'cumulative.stop_at',
     }

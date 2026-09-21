@@ -141,10 +141,29 @@ Found by the same live run. PIO refused the session and recorded `delivery: fail
 
 A host that failed **before releasing the brief** is finished: the brief never left PIO and the child is stopped. The shared projection now says so — `runtime: exited`, with `exit` left `unavailable` because no exit code was observed and none is claimed. This is in the shared projection, so it is true of all three adapters.
 
+### 9. Where OpenCode reports usage — measured by R1, not assumed
+
+The first completed live turn answered the question this adapter's stops were waiting on, and found the host reading the wrong place while doing it.
+
+**During the turn**, a `session/update` of kind **`usage_update`**:
+
+```json
+{"sessionUpdate": "usage_update", "used": 7910, "size": 204800,
+ "cost": {"amount": 0, "currency": "USD"}}
+```
+
+`used` is a running total, `size` the context window, `cost` a money amount that is zero on a subscription plan. **None of those field names contains `usage` or ends in `tokens`.** A census searching field names alone would have missed the one update kind that carries usage; it was found by the update's own kind, and the whole update is recorded. Exactly one arrived on this short turn. Whether more arrive on a long one is R4's question.
+
+**At the end of the turn**, the `session/prompt` result carries `usage` — **at the top level, not under `_meta`** — with `inputTokens`, `outputTokens`, **`thoughtTokens`** and its own `totalTokens`.
+
+The host was reading `result._meta.usage` and summing input and output only. So a turn that really cost **7,910 tokens** produced no usage event at all, the receipt recorded `unknown`, and the stop rule fired — correctly, because unknown is never zero, but on a turn whose cost the harness had reported plainly. The two-part measure would also have dropped 38 `thoughtTokens` had the path been right.
+
+Both are now searched for rather than looked up: the usage object is found wherever it is, and **every** counter the harness reports is summed. `totalTokens` is the harness's own total and is kept beside PIO's sum rather than added to it, so a disagreement between them is something PIO reports and not something it resolves. The 7,910 tokens are charged to the ledger under `R1-attempt-2`.
+
 ## Open, to be measured before any live run
 
 1. **The `session/request_permission` request and response shapes on the wire.** ACP specifies them; they are unverified against 2.0.1, and PIO forwards no decision whose single-use form it has not measured.
-2. **Usage reporting granularity**, first, exactly as for Claude. The stops cannot be set before it is known whether usage arrives during a turn or only at its end. The host now **searches** each `session/update` and the turn result for any key named `usage` or ending in `tokens`, and records a census — every update kind seen, which of them carried usage, and where — so R1 can report a place PIO did not expect rather than confirm the one it assumed. The Claude adapter summed two of four usage parts for five live runs because it looked only where it expected.
+2. ~~**Usage reporting granularity**, first, exactly as for Claude.~~ **Answered by R1, §9.** Usage arrives **both** during the turn, as a `usage_update` session update carrying a running `used` total, and at the end, in the `session/prompt` result. The census that answered it is kept, because it is what found the host reading the wrong place, and because R4 still has to say whether a longer turn reports more than once.
 3. **Cancellation**: `session/cancel` semantics, and whether a cancelled turn still reports usage.
 4. Whether `mode: plan` is a genuinely narrower posture worth requesting for fixture runs.
 5. ~~The **surface and session identity** to pin, and whether npm self-update moves it, as the Homebrew cask does for Claude.~~ **Answered 2026-09-21: it moves.** npm took the install from 2.0.1 to 2.0.11 between the plan and the first live run; qualification refused, the pin was moved and the surface recaptured (§0). Expect it to move again, and expect a refusal rather than a silent run on a version nobody measured.

@@ -68,6 +68,18 @@ fn reply(id: &Value, result: Value) -> Result<()> {
     emit(&json!({"jsonrpc":"2.0","id":id,"result":result}))
 }
 
+/// The `usage_update` session update, in the shape measured from 2.0.11.
+///
+/// `used` is a running total, `size` the context window, `cost` a money
+/// amount that is zero on a subscription plan. None of those names contains
+/// `usage` or ends in `tokens`, which is the whole point of it being here.
+fn usage_update(used: u64) -> Value {
+    json!({"sessionUpdate":"usage_update",
+           "cost":{"amount":0,"currency":"USD"},
+           "size":204800,
+           "used":used})
+}
+
 fn update(session: &str, update: Value) -> Result<()> {
     emit(&json!({"jsonrpc":"2.0","method":"session/update",
                  "params":{"sessionId":session,"update":update}}))
@@ -307,18 +319,25 @@ pub fn run() -> Result<()> {
                 // that is identical in every scenario measures nothing.
                 let chunks = scenario["message_chunks"].as_u64().unwrap_or(1).max(1);
                 for index in 0..chunks {
-                    let mut chunk = json!({"sessionUpdate":"agent_message_chunk",
-                           "content":{"type":"text",
-                                      "text":format!("fake turn chunk {index}")}});
-                    // A harness that reports usage as it goes rather than once
-                    // at the end. Which one OpenCode is, R1 measures; this is
-                    // the scenario that proves the census can see either.
+                    update(
+                        session,
+                        json!({"sessionUpdate":"agent_message_chunk",
+                               "content":{"type":"text",
+                                          "text":format!("fake turn chunk {index}")}}),
+                    )?;
+                    // A harness that reports as it goes rather than once at
+                    // the end. R1 measured which one OpenCode is; this is the
+                    // scenario that proves the census can see either.
                     if scenario["usage_on_updates"] == true {
-                        chunk["_meta"] = json!({"usage":{
-                            "inputTokens":total / (2 * chunks),
-                            "outputTokens":total / (2 * chunks)}});
+                        update(session, usage_update(total * (index + 1) / chunks))?;
                     }
-                    update(session, chunk)?;
+                }
+                // **Measured from 2.0.11**, R1: exactly one of these arrives
+                // on a short turn, and it names none of its fields `usage` or
+                // `*tokens` — a client searching field names alone would miss
+                // the one update kind that carries usage.
+                if scenario["usage_on_updates"] != true {
+                    update(session, usage_update(total))?;
                 }
                 marker(
                     &markers,
@@ -326,11 +345,22 @@ pub fn run() -> Result<()> {
                            "message_chunks":chunks,
                            "usage_on_updates":scenario["usage_on_updates"] == true}),
                 )?;
+                // **Measured from 2.0.11**, R1: the turn result carries
+                // `usage` at the top level — not under `_meta` — and it counts
+                // `thoughtTokens` beside input and output, with its own
+                // `totalTokens`. The host read `_meta.usage` and a two-part
+                // measure, so a live turn that cost 7,910 tokens was recorded
+                // as unknown.
+                let thought = total / 8;
+                let input = (total - thought) * 3 / 4;
                 reply(
                     &id,
                     json!({"stopReason":if cancelled { "cancelled" } else { "end_turn" },
-                           "_meta":{"source":SOURCE,
-                                    "usage":{"inputTokens":total / 2,"outputTokens":total / 2}}}),
+                           "usage":{"inputTokens":input,
+                                    "outputTokens":total - thought - input,
+                                    "thoughtTokens":thought,
+                                    "totalTokens":total},
+                           "_meta":{"source":SOURCE}}),
                 )?;
             }
 
