@@ -1,0 +1,170 @@
+[
+  {
+    "variant": "none",
+    "args": [
+      "--tier",
+      "none",
+      "--retransmit",
+      "never"
+    ],
+    "window_rect_points": [
+      30,
+      93,
+      880,
+      610
+    ],
+    "seconds_sampled": 21.01,
+    "cpu_seconds_total": 0.15,
+    "cpu_seconds_python": 0.0,
+    "cell_h_device_px": 34,
+    "titlebar_device_px": 64,
+    "cpu_seconds_ghostty": 0.15,
+    "cpu_percent_of_one_core_total": 0.7,
+    "cpu_percent_of_one_core_ghostty": 0.7,
+    "cpu_percent_of_one_core_python": 0.0,
+    "spike": {
+      "ev": "summary",
+      "tier": "none",
+      "retransmit": "never",
+      "medium": "direct",
+      "z": -1073741825,
+      "sync": false,
+      "passthrough": false,
+      "tmux": false,
+      "seconds": 25.097,
+      "frames": 25,
+      "fps_actual": 1.0,
+      "bytes_to_tty": 52235,
+      "bytes_per_second": 2081,
+      "image_transmits": 0,
+      "image_bytes_total": 0,
+      "resizes": 0,
+      "frame_ms_p50": 0.406,
+      "frame_ms_p99": 0.699,
+      "cols": 110,
+      "rows": 34,
+      "cell": [
+        16.0,
+        34.0
+      ],
+      "text_area_px": [
+        1760,
+        1156
+      ],
+      "t": 1790011252.385293
+    },
+    "shot": "<scratch>/shot_none.png"
+  },
+  {
+    "variant": "char",
+    "args": [
+      "--tier",
+      "char",
+      "--retransmit",
+      "never"
+    ],
+    "window_rect_points": [
+      30,
+      93,
+      880,
+      610
+    ],
+    "seconds_sampled": 21.01,
+    "cpu_seconds_total": 0.23,
+    "cpu_seconds_python": 0.01,
+    "cell_h_device_px": 34,
+    "titlebar_device_px": 64,
+    "cpu_seconds_ghostty": 0.22,
+    "cpu_percent_of_one_core_total": 1.1,
+    "cpu_percent_of_one_core_ghostty": 1.0,
+    "cpu_percent_of_one_core_python": 0.0,
+    "spike": {
+      "ev": "summary",
+      "tier": "char",
+      "retransmit": "never",
+      "medium": "direct",
+      "z": -1073741825,
+      "sync": false,
+      "passthrough": false,
+      "tmux": false,
+      "seconds": 25.105,
+      "frames": 25,
+      "fps_actual": 1.0,
+      "bytes_to_tty": 185310,
+      "bytes_per_second": 7381,
+      "image_transmits": 0,
+      "image_bytes_total": 0,
+      "resizes": 0,
+      "frame_ms_p50": 0.777,
+      "frame_ms_p99": 1.05,
+      "cols": 110,
+      "rows": 34,
+      "cell": [
+        16.0,
+        34.0
+      ],
+      "text_area_px": [
+        1760,
+        1156
+      ],
+      "t": 1790011278.818753
+    },
+    "shot": "<scratch>/shot_char.png"
+  },
+  {
+    "variant": "drawn-once",
+    "args": [
+      "--tier",
+      "drawn",
+      "--retransmit",
+      "resize"
+    ],
+    "window_rect_points": [
+      30,
+      93,
+      880,
+      610
+    ],
+    "seconds_sampled": 21.01,
+    "cpu_seconds_total": 0.22,
+    "cpu_seconds_python": 0.01,
+    "cell_h_device_px": 34,
+    "titlebar_device_px": 64,
+    "cpu_seconds_ghostty": 0.21,
+    "cpu_percent_of_one_core_total": 1.0,
+    "cpu_percent_of_one_core_ghostty": 1.0,
+    "cpu_percent_of_one_core_python": 0.0,
+    "spike": {
+      "ev": "summary",
+      "tier": "drawn",
+      "retransmit": "resize",
+      "medium": "direct",
+      "z": -1073741825,
+      "sync": false,
+      "passthrough": false,
+      "tmux": false,
+      "seconds": 25.075,
+      "frames": 25,
+      "fps_actual": 1.0,
+      "bytes_to_tty": 194285,
+      "bytes_per_second": 7748,
+      "image_transmits": 1,
+      "image_bytes_total": 106224,
+      "resizes": 0,
+      "frame_ms_p50": 0.348,
+      "frame_ms_p99": 105.365,
+      "cols": 110,
+      "rows": 34,
+      "cell": [
+        16.0,
+        34.0
+      ],
+      "text_area_px": [
+        1760,
+        1156
+      ],
+      "t": 1790011305.248644
+    },
+    "shot": null
+  }
+]

@@ -1,0 +1,80 @@
+[
+  {
+    "case": "bare",
+    "flags": [],
+    "shot": "<scratch>/tmux_bare.png",
+    "ink": {
+      "id1": 5649,
+      "id2": 1424,
+      "id3": 2194,
+      "total": 9267
+    },
+    "pane_text_lines": 19,
+    "pane_head": [
+      " pio \u00b7 local service \u00b7 6 runs in 4 projects                                codex 0.155.1 \u2713 \u00b7 claude 2.1.278 \u2713",
+      "",
+      ""
+    ],
+    "tmux_allow_passthrough": "allow-passthrough off"
+  },
+  {
+    "case": "passthrough",
+    "flags": [
+      "--passthrough"
+    ],
+    "shot": "<scratch>/tmux_passthrough.png",
+    "ink": {
+      "id1": 6967,
+      "id2": 1934,
+      "id3": 4307,
+      "total": 13208
+    },
+    "pane_text_lines": 19,
+    "pane_head": [
+      " pio \u00b7 local service \u00b7 6 runs in 4 projects                                codex 0.155.1 \u2713 \u00b7 claude 2.1.278 \u2713",
+      "",
+      ""
+    ],
+    "tmux_allow_passthrough": "allow-passthrough on"
+  },
+  {
+    "case": "passthrough-redraw",
+    "flags": [
+      "--passthrough"
+    ],
+    "shot": "<scratch>/tmux_passthrough-redraw.png",
+    "ink": {
+      "id1": 6967,
+      "id2": 1934,
+      "id3": 4307,
+      "total": 13208
+    },
+    "pane_text_lines": 19,
+    "pane_head": [
+      " pio \u00b7 local service \u00b7 6 runs in 4 projects                                codex 0.155.1 \u2713 \u00b7 claude 2.1.278 \u2713",
+      "",
+      ""
+    ],
+    "tmux_allow_passthrough": "allow-passthrough on"
+  },
+  {
+    "case": "passthrough-split",
+    "flags": [
+      "--passthrough"
+    ],
+    "shot": "<scratch>/tmux_passthrough-split.png",
+    "ink": {
+      "id1": 6968,
+      "id2": 713,
+      "id3": 2592,
+      "total": 10273
+    },
+    "pane_text_lines": 19,
+    "pane_head": [
+      " pio \u00b7 local servicecodex 0.155.1 \u2713 \u00b7 claude 2.1.278 \u2713",
+      "",
+      ""
+    ],
+    "tmux_allow_passthrough": "allow-passthrough on"
+  }
+]

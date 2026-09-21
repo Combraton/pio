@@ -1,0 +1,25 @@
+{
+  "term": "xterm-ghostty",
+  "term_program": "ghostty",
+  "tmux": "",
+  "winsize": {
+    "rows": 15,
+    "cols": 44,
+    "xpixel": 760,
+    "ypixel": 560
+  },
+  "da1": "'\\x1b[?62;22;52c'",
+  "xtversion": "'\\x1bP>|ghostty 1.3.1\\x1b\\\\'",
+  "csi16t_cellsize": "'\\x1b[6;37;17t'",
+  "csi14t_textarea": "'\\x1b[4;1147;782t'",
+  "graphics_query": "'\\x1b_Gi=31;OK\\x1b\\\\'",
+  "z_negative": "'\\x1b_Gi=32;OK\\x1b\\\\'",
+  "z_below_bg": "'\\x1b_Gi=33;OK\\x1b\\\\'",
+  "unicode_placeholder": "'\\x1b_Gi=34;OK\\x1b\\\\'",
+  "png_f100": "'\\x1b_Gi=35;OK\\x1b\\\\'",
+  "medium_file": "'\\x1b_Gi=36;OK\\x1b\\\\'",
+  "animation_a_f": "'\\x1b_Gi=37;OK\\x1b\\\\'",
+  "kitty_keyboard": "'\\x1b[?0u'",
+  "sync_output_2026": "'\\x1b[?2026;2$y'",
+  "altscreen_1049": "'\\x1b[?1049;2$y'"
+}

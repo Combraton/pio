@@ -1,0 +1,505 @@
+[
+  {
+    "variant": "none",
+    "args": [
+      "--tier",
+      "none",
+      "--retransmit",
+      "never"
+    ],
+    "window_rect_points": [
+      30,
+      93,
+      880,
+      610
+    ],
+    "seconds_sampled": 16.0,
+    "cpu_seconds_total": 0.35,
+    "cpu_seconds_python": 0.04,
+    "cell_h_device_px": 34,
+    "titlebar_device_px": 64,
+    "cpu_seconds_ghostty": 0.31,
+    "cpu_percent_of_one_core_total": 2.2,
+    "cpu_percent_of_one_core_ghostty": 1.9,
+    "cpu_percent_of_one_core_python": 0.2,
+    "spike": {
+      "ev": "summary",
+      "tier": "none",
+      "retransmit": "never",
+      "medium": "direct",
+      "z": -1073741825,
+      "sync": false,
+      "seconds": 20.044,
+      "frames": 373,
+      "fps_actual": 18.61,
+      "bytes_to_tty": 778636,
+      "bytes_per_second": 38846,
+      "image_transmits": 0,
+      "image_bytes_total": 0,
+      "resizes": 0,
+      "frame_ms_p50": 0.16,
+      "frame_ms_p99": 2.779,
+      "cols": 110,
+      "rows": 34,
+      "cell": [
+        16,
+        34
+      ],
+      "t": 1790010196.87135
+    },
+    "flicker": {
+      "quiet": {
+        "frames": 900,
+        "band": [
+          8,
+          982,
+          1744,
+          170
+        ],
+        "frames_differing_from_median": 0,
+        "fraction_differing": 0.0,
+        "max_abs_pixel_delta": 0,
+        "mean_abs_delta_p99": 0.0,
+        "identical_frame_pairs": 899,
+        "consecutive_pairs": 899
+      },
+      "busy": {
+        "frames": 900,
+        "band": [
+          8,
+          1152,
+          1744,
+          68
+        ],
+        "frames_differing_from_median": 900,
+        "fraction_differing": 1.0,
+        "max_abs_pixel_delta": 110,
+        "mean_abs_delta_p99": 1.083,
+        "identical_frame_pairs": 617,
+        "consecutive_pairs": 899
+      }
+    },
+    "video_bytes": 171306105,
+    "shot": "<scratch>/shot_none.png"
+  },
+  {
+    "variant": "char",
+    "args": [
+      "--tier",
+      "char",
+      "--retransmit",
+      "never"
+    ],
+    "window_rect_points": [
+      30,
+      93,
+      880,
+      610
+    ],
+    "seconds_sampled": 16.01,
+    "cpu_seconds_total": 0.44,
+    "cpu_seconds_python": 0.05,
+    "cell_h_device_px": 34,
+    "titlebar_device_px": 64,
+    "cpu_seconds_ghostty": 0.39,
+    "cpu_percent_of_one_core_total": 2.7,
+    "cpu_percent_of_one_core_ghostty": 2.4,
+    "cpu_percent_of_one_core_python": 0.3,
+    "spike": {
+      "ev": "summary",
+      "tier": "char",
+      "retransmit": "never",
+      "medium": "direct",
+      "z": -1073741825,
+      "sync": false,
+      "seconds": 20.044,
+      "frames": 372,
+      "fps_actual": 18.56,
+      "bytes_to_tty": 2756702,
+      "bytes_per_second": 137530,
+      "image_transmits": 0,
+      "image_bytes_total": 0,
+      "resizes": 0,
+      "frame_ms_p50": 0.26,
+      "frame_ms_p99": 3.086,
+      "cols": 110,
+      "rows": 34,
+      "cell": [
+        16,
+        34
+      ],
+      "t": 1790010238.3627741
+    },
+    "flicker": {
+      "quiet": {
+        "frames": 900,
+        "band": [
+          8,
+          982,
+          1744,
+          170
+        ],
+        "frames_differing_from_median": 0,
+        "fraction_differing": 0.0,
+        "max_abs_pixel_delta": 0,
+        "mean_abs_delta_p99": 0.0,
+        "identical_frame_pairs": 899,
+        "consecutive_pairs": 899
+      },
+      "busy": {
+        "frames": 900,
+        "band": [
+          8,
+          1152,
+          1744,
+          68
+        ],
+        "frames_differing_from_median": 900,
+        "fraction_differing": 1.0,
+        "max_abs_pixel_delta": 110,
+        "mean_abs_delta_p99": 1.08,
+        "identical_frame_pairs": 620,
+        "consecutive_pairs": 899
+      }
+    },
+    "video_bytes": 197137663,
+    "shot": "<scratch>/shot_char.png"
+  },
+  {
+    "variant": "drawn-once",
+    "args": [
+      "--tier",
+      "drawn",
+      "--retransmit",
+      "resize"
+    ],
+    "window_rect_points": [
+      30,
+      93,
+      880,
+      610
+    ],
+    "seconds_sampled": 16.01,
+    "cpu_seconds_total": 0.36,
+    "cpu_seconds_python": 0.05,
+    "cell_h_device_px": 34,
+    "titlebar_device_px": 64,
+    "cpu_seconds_ghostty": 0.31,
+    "cpu_percent_of_one_core_total": 2.2,
+    "cpu_percent_of_one_core_ghostty": 1.9,
+    "cpu_percent_of_one_core_python": 0.3,
+    "spike": {
+      "ev": "summary",
+      "tier": "drawn",
+      "retransmit": "resize",
+      "medium": "direct",
+      "z": -1073741825,
+      "sync": false,
+      "seconds": 20.021,
+      "frames": 372,
+      "fps_actual": 18.58,
+      "bytes_to_tty": 918596,
+      "bytes_per_second": 45882,
+      "image_transmits": 1,
+      "image_bytes_total": 106224,
+      "resizes": 0,
+      "frame_ms_p50": 0.17,
+      "frame_ms_p99": 2.044,
+      "cols": 110,
+      "rows": 34,
+      "cell": [
+        16,
+        34
+      ],
+      "t": 1790010277.91054
+    },
+    "flicker": {
+      "quiet": {
+        "frames": 900,
+        "band": [
+          8,
+          982,
+          1744,
+          170
+        ],
+        "frames_differing_from_median": 0,
+        "fraction_differing": 0.0,
+        "max_abs_pixel_delta": 0,
+        "mean_abs_delta_p99": 0.0,
+        "identical_frame_pairs": 899,
+        "consecutive_pairs": 899
+      },
+      "busy": {
+        "frames": 900,
+        "band": [
+          8,
+          1152,
+          1744,
+          68
+        ],
+        "frames_differing_from_median": 900,
+        "fraction_differing": 1.0,
+        "max_abs_pixel_delta": 110,
+        "mean_abs_delta_p99": 1.082,
+        "identical_frame_pairs": 618,
+        "consecutive_pairs": 899
+      }
+    },
+    "video_bytes": 234299882,
+    "shot": "<scratch>/shot_drawn-once.png"
+  },
+  {
+    "variant": "drawn-once-sync",
+    "args": [
+      "--tier",
+      "drawn",
+      "--retransmit",
+      "resize",
+      "--sync"
+    ],
+    "window_rect_points": [
+      30,
+      93,
+      880,
+      610
+    ],
+    "seconds_sampled": 16.0,
+    "cpu_seconds_total": 0.4,
+    "cpu_seconds_python": 0.04,
+    "cell_h_device_px": 34,
+    "titlebar_device_px": 64,
+    "cpu_seconds_ghostty": 0.36,
+    "cpu_percent_of_one_core_total": 2.5,
+    "cpu_percent_of_one_core_ghostty": 2.2,
+    "cpu_percent_of_one_core_python": 0.2,
+    "spike": {
+      "ev": "summary",
+      "tier": "drawn",
+      "retransmit": "resize",
+      "medium": "direct",
+      "z": -1073741825,
+      "sync": true,
+      "seconds": 20.017,
+      "frames": 371,
+      "fps_actual": 18.53,
+      "bytes_to_tty": 922442,
+      "bytes_per_second": 46082,
+      "image_transmits": 1,
+      "image_bytes_total": 106224,
+      "resizes": 0,
+      "frame_ms_p50": 0.163,
+      "frame_ms_p99": 3.427,
+      "cols": 110,
+      "rows": 34,
+      "cell": [
+        16,
+        34
+      ],
+      "t": 1790010319.628511
+    },
+    "flicker": {
+      "quiet": {
+        "frames": 900,
+        "band": [
+          8,
+          982,
+          1744,
+          170
+        ],
+        "frames_differing_from_median": 0,
+        "fraction_differing": 0.0,
+        "max_abs_pixel_delta": 0,
+        "mean_abs_delta_p99": 0.0,
+        "identical_frame_pairs": 899,
+        "consecutive_pairs": 899
+      },
+      "busy": {
+        "frames": 900,
+        "band": [
+          8,
+          1152,
+          1744,
+          68
+        ],
+        "frames_differing_from_median": 900,
+        "fraction_differing": 1.0,
+        "max_abs_pixel_delta": 110,
+        "mean_abs_delta_p99": 1.136,
+        "identical_frame_pairs": 619,
+        "consecutive_pairs": 899
+      }
+    },
+    "video_bytes": 235068662,
+    "shot": "<scratch>/shot_drawn-once-sync.png"
+  },
+  {
+    "variant": "drawn-every-frame",
+    "args": [
+      "--tier",
+      "drawn",
+      "--retransmit",
+      "frame"
+    ],
+    "window_rect_points": [
+      30,
+      93,
+      880,
+      610
+    ],
+    "seconds_sampled": 16.01,
+    "cpu_seconds_total": 2.63,
+    "cpu_seconds_python": 0.25,
+    "cell_h_device_px": 34,
+    "titlebar_device_px": 64,
+    "cpu_seconds_ghostty": 2.38,
+    "cpu_percent_of_one_core_total": 16.4,
+    "cpu_percent_of_one_core_ghostty": 14.9,
+    "cpu_percent_of_one_core_python": 1.6,
+    "spike": {
+      "ev": "summary",
+      "tier": "drawn",
+      "retransmit": "frame",
+      "medium": "direct",
+      "z": -1073741825,
+      "sync": false,
+      "seconds": 20.028,
+      "frames": 371,
+      "fps_actual": 18.52,
+      "bytes_to_tty": 53466496,
+      "bytes_per_second": 2669606,
+      "image_transmits": 371,
+      "image_bytes_total": 39409104,
+      "resizes": 0,
+      "frame_ms_p50": 4.583,
+      "frame_ms_p99": 28.168,
+      "cols": 110,
+      "rows": 34,
+      "cell": [
+        16,
+        34
+      ],
+      "t": 1790010361.239717
+    },
+    "flicker": {
+      "quiet": {
+        "frames": 900,
+        "band": [
+          8,
+          982,
+          1744,
+          170
+        ],
+        "frames_differing_from_median": 123,
+        "fraction_differing": 0.1367,
+        "max_abs_pixel_delta": 238,
+        "mean_abs_delta_p99": 0.838,
+        "identical_frame_pairs": 690,
+        "consecutive_pairs": 899
+      },
+      "busy": {
+        "frames": 900,
+        "band": [
+          8,
+          1152,
+          1744,
+          68
+        ],
+        "frames_differing_from_median": 900,
+        "fraction_differing": 1.0,
+        "max_abs_pixel_delta": 110,
+        "mean_abs_delta_p99": 1.082,
+        "identical_frame_pairs": 478,
+        "consecutive_pairs": 899
+      }
+    },
+    "video_bytes": 226396359,
+    "shot": "<scratch>/shot_drawn-every-frame.png"
+  },
+  {
+    "variant": "drawn-every-frame-file",
+    "args": [
+      "--tier",
+      "drawn",
+      "--retransmit",
+      "frame",
+      "--medium",
+      "file"
+    ],
+    "window_rect_points": [
+      30,
+      93,
+      880,
+      610
+    ],
+    "seconds_sampled": 16.01,
+    "cpu_seconds_total": 1.72,
+    "cpu_seconds_python": 0.14,
+    "cell_h_device_px": 34,
+    "titlebar_device_px": 64,
+    "cpu_seconds_ghostty": 1.58,
+    "cpu_percent_of_one_core_total": 10.7,
+    "cpu_percent_of_one_core_ghostty": 9.9,
+    "cpu_percent_of_one_core_python": 0.9,
+    "spike": {
+      "ev": "summary",
+      "tier": "drawn",
+      "retransmit": "frame",
+      "medium": "file",
+      "z": -1073741825,
+      "sync": false,
+      "passthrough": false,
+      "tmux": false,
+      "seconds": 20.01,
+      "frames": 371,
+      "fps_actual": 18.54,
+      "bytes_to_tty": 819370,
+      "bytes_per_second": 40947,
+      "image_transmits": 371,
+      "image_bytes_total": 39409104,
+      "resizes": 0,
+      "frame_ms_p50": 2.384,
+      "frame_ms_p99": 10.359,
+      "cols": 110,
+      "rows": 34,
+      "cell": [
+        16,
+        34
+      ],
+      "t": 1790010402.55245
+    },
+    "flicker": {
+      "quiet": {
+        "frames": 900,
+        "band": [
+          8,
+          982,
+          1744,
+          170
+        ],
+        "frames_differing_from_median": 58,
+        "fraction_differing": 0.0644,
+        "max_abs_pixel_delta": 238,
+        "mean_abs_delta_p99": 0.838,
+        "identical_frame_pairs": 783,
+        "consecutive_pairs": 899
+      },
+      "busy": {
+        "frames": 900,
+        "band": [
+          8,
+          1152,
+          1744,
+          68
+        ],
+        "frames_differing_from_median": 900,
+        "fraction_differing": 1.0,
+        "max_abs_pixel_delta": 110,
+        "mean_abs_delta_p99": 1.209,
+        "identical_frame_pairs": 550,
+        "consecutive_pairs": 899
+      }
+    },
+    "video_bytes": 231374465,
+    "shot": "<scratch>/shot_drawn-every-frame-file.png"
+  }
+]
