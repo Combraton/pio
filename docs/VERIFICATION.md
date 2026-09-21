@@ -219,6 +219,8 @@ A dry run uses **its own stand-in settings directory**, never the owner's. On a 
 
 Stop rules are applied to every finished run and abort the sequence: no usage report (recorded as **unknown, never zero**), a usage report that parses to zero while the harness sent something, an effective permission mode that did not match the requested one, a change to the owner's settings, the owner's OpenCode service moving, or cumulative usage reaching 80 per cent of the cap.
 
+For OpenCode the first of those has one exception, measured rather than assumed. R4 established that a cancelled turn reports **no usage at all**, so a run whose brief exists to be cancelled is charged an allowance of 12,000 tokens instead of halting the sequence; the figure's basis is in ADR 005 §10 and in the ledger itself. **An unplanned missing usage report still halts.** The ledger carries `observed` and `charged`, and **every stop rule uses `charged`**.
+
 The zero-parse stop exists because the first OpenCode dry run produced a receipt claiming a *reported* usage of zero: ACP spells its counters in camelCase and the measure read the Claude spellings. A reported zero is indistinguishable from unknown and worse than either.
 
 ## The shared host lifecycle

@@ -104,6 +104,25 @@ DECISION = {'R2': 'deny', 'R3': 'allow'}
 # whether the cancel did anything. Early enough to land in the middle of the
 # work, late enough that the turn is genuinely under way.
 CANCEL_AFTER = 4
+# Runs whose brief exists to be cancelled. A missing usage report is the
+# **expected** outcome for one of these, so it is charged and the sequence
+# continues; for any other run it is a stop.
+PLANNED_CANCEL = {'R4'}
+# Owner decision, 2026-09-21: if a cancelled turn does not keep its usage,
+# apply the Claude allowance rule with a figure of this sequence's own.
+#
+# R4 measured that it does not. A turn PIO had to kill reported **nothing** —
+# not even the `usage_update` that arrives at the end of a turn that finishes.
+CANCEL_ALLOWANCE = 12_000
+CHARGE_BASIS = (
+    'A cancelled turn on this harness reports no usage at all, so it is charged '
+    'an allowance rather than recorded as zero. The figure is built from this '
+    "sequence's own completed turns: every one of them reported 7,866 to 7,874 "
+    'input tokens in this fixture, and R4 attempt 1 produced 400 lines for 800 '
+    'output and 854 thought tokens. Attempt 2 streamed 656 lines before the kill, '
+    'so 7,874 input + 656 lines at the measured 2.0 output tokens a line + 854 '
+    'thought is about 10,040. Rounded up to 12,000, the same margin the Claude '
+    'rule took when it rounded 33,793 and 32,957 up to 40,000.')
 # A distinctive line in the out-of-fixture marker, so R5 can ask whether its
 # **content** ever appeared in what the harness sent, rather than inferring
 # containment from what PIO intended.
@@ -221,7 +240,27 @@ def ledger():
 
 
 def cumulative(book):
+    """What the cap is measured against. **Every stop rule uses this.**
+
+    `charged`, not `observed`: a cancelled turn reports nothing, and recording
+    nothing as zero is how a budget quietly stops being a budget.
+    """
+    return sum(entry.get('charged') or entry.get('observed_total_tokens') or 0
+               for entry in book['runs'].values())
+
+
+def observed_total(book):
+    """What the harness actually reported, which is smaller and is not the cap."""
     return sum(entry.get('observed_total_tokens') or 0 for entry in book['runs'].values())
+
+
+def charge_policy(run, receipt):
+    """What this run costs the cap, and on what basis."""
+    if receipt['usage']['reported']:
+        return dict(basis='observed',
+                    amount=receipt['usage']['observed_total_tokens'])
+    return dict(basis='allowance', amount=CANCEL_ALLOWANCE, why=CHARGE_BASIS,
+                planned=run in PLANNED_CANCEL)
 
 
 # The measure is the host's, not the runner's. It sums **whatever counters the
@@ -831,7 +870,7 @@ def build_receipt(service, run, view, started, extra):
 def check_stops(book, run, receipt):
     """The owner's stop rules, applied to a finished run."""
     stops = []
-    if not receipt['usage']['reported']:
+    if not receipt['usage']['reported'] and run not in PLANNED_CANCEL:
         stops.append('no usage report: usage is unknown, never zero')
     elif receipt['usage']['observed_total_tokens'] == 0 and receipt['usage'].get('detail'):
         stops.append('a usage report parsed to zero: the measure did not match '
@@ -843,7 +882,7 @@ def check_stops(book, run, receipt):
         stops.append("the owner's OpenCode service moved")
     after = cumulative(book)
     if after >= STOP_AT:
-        stops.append(f'cumulative observed usage {after} reached the {STOP_AT} stop')
+        stops.append(f'cumulative charged usage {after} reached the {STOP_AT} stop')
     return stops
 
 
@@ -853,7 +892,7 @@ def run_one(run, args):
                  else dry_run_check(run))
     book = ledger()
     if cumulative(book) >= STOP_AT and not args.dry_run:
-        raise SystemExit(f'stop: cumulative observed usage {cumulative(book)} '
+        raise SystemExit(f'stop: cumulative charged usage {cumulative(book)} '
                          f'reached {STOP_AT}')
     limit = RUN_LIMIT
     # Every run passes an explicit MiniMax model. There is no as-configured
@@ -926,8 +965,11 @@ def run_one(run, args):
             f'{run}: the ledger already holds an entry for this run '
             f'({json.dumps(book["runs"][run])}). Those tokens were spent. '
             f'Re-run it under an attempt name instead of overwriting it.')
+    charge = charge_policy(run, receipt)
+    receipt['charge'] = charge
     if receipt['usage']['reported']:
         book['runs'][run] = dict(observed_total_tokens=receipt['usage']['observed_total_tokens'],
+                                 charged=charge['amount'], charge_basis=charge['basis'],
                                  parts=receipt['usage']['parts'],
                                  reported_total=receipt['usage']['reported_total'],
                                  # So cost can be reported per model, which is
@@ -936,10 +978,13 @@ def run_one(run, args):
                                  model=model, at=started)
     else:
         book['runs'][run] = dict(observed_total_tokens=None, usage='unknown',
+                                 charged=charge['amount'], charge_basis=charge['basis'],
                                  model=model, at=started)
     if not args.dry_run:
         ledger_path().write_text(json.dumps(book, indent=2) + '\n')
-    receipt['cumulative'] = dict(observed=cumulative(book), cap=CAP, stop_at=STOP_AT)
+    receipt['cumulative'] = dict(charged=cumulative(book), observed=observed_total(book),
+                                 cap=CAP, stop_at=STOP_AT,
+                                 measured_against='charged')
     receipt['stops'] = check_stops(book, run, receipt)
 
     out = args.out / f'{run}.json'
@@ -1055,6 +1100,7 @@ def receipt_fields_selftest(out):
         # so these are constant offline and must not be assumed live.
         'usage.granularity.report_count', 'usage.granularity.reported_during_turn',
         'usage.granularity.reported_at_turn_end', 'usage.granularity.measure',
+        'charge.basis', 'cumulative.measured_against',
         # R1 measured that exactly one `usage_update` arrives on a short turn.
         # Whether more arrive on a long one is R4's question, not something
         # two short dry runs can answer, so one each is the design here.

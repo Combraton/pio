@@ -170,11 +170,32 @@ The host was reading `result._meta.usage` and summing input and output only. So 
 
 Both are now searched for rather than looked up: the usage object is found wherever it is, and **every** counter the harness reports is summed. `totalTokens` is the harness's own total and is kept beside PIO's sum rather than added to it, so a disagreement between them is something PIO reports and not something it resolves. The 7,910 tokens are charged to the ledger under `R1-attempt-2`.
 
+### 10. Cancel: in band, and ineffective — measured by R4
+
+The reason this transport was described as cancelling *in band*, unlike the Claude adapter's signal, is that ACP has a `session/cancel` request. R4 measured what it does.
+
+**Attempt 1** cancelled eight seconds into a count to 400. The turn produced every one of the 400 lines and finished with `stop_reason: end_turn`. That says nothing either way: a cancel that did nothing and one that worked look identical in the stop reason, which is why the receipt now reads the streamed work back from the run's own spool.
+
+**Attempt 2** cancelled four seconds into a count to 2000, with the turn plainly mid-work.
+
+- The cancel was sent in band to an active turn and was accepted at the transport.
+- **The turn did not stop.** After the ten-second escalation window PIO killed the child. 656 of 2000 lines had been streamed.
+- No result ever arrived: `stop_reason` null, `turn_completed: false`.
+- **No usage of any kind was reported** — not even the `usage_update` that arrives at the end of a turn that finishes. `report_count: 0`.
+
+Two things follow, and both are narrower claims than this adapter began with.
+
+**PIO's only effective interrupt for this harness is killing the process.** The in-band cancel is sent, is accepted, and changes nothing. The escalation is not a fallback for an unusual case; on this evidence it is the mechanism.
+
+**A cancelled turn costs an unknown amount, and unknown is never zero.** Owner decision of 2026-09-21: the Claude allowance rule applies with a figure of this sequence's own. It is **12,000 tokens**, built from this sequence's own completed turns — every one reported 7,866 to 7,874 input tokens in this fixture, and attempt 1 produced 400 lines for 800 output and 854 thought tokens, so 656 lines works out at about 10,040 — rounded up by the same margin the Claude rule took when it rounded 33,793 and 32,957 up to 40,000. The ledger carries **`observed` and `charged`**, and **every stop rule uses `charged`**.
+
+A cancel run's missing usage report is now the expected outcome rather than a halt. **An unplanned one still halts the sequence.**
+
 ## Open, to be measured before any live run
 
 1. **The `session/request_permission` request and response shapes on the wire.** ACP specifies them; they are unverified against 2.0.1, and PIO forwards no decision whose single-use form it has not measured.
 2. ~~**Usage reporting granularity**, first, exactly as for Claude.~~ **Answered by R1, §9.** Usage arrives **both** during the turn, as a `usage_update` session update carrying a running `used` total, and at the end, in the `session/prompt` result. The census that answered it is kept, because it is what found the host reading the wrong place, and because R4 still has to say whether a longer turn reports more than once.
-3. **Cancellation**: `session/cancel` semantics, and whether a cancelled turn still reports usage.
+3. ~~**Cancellation**: `session/cancel` semantics, and whether a cancelled turn still reports usage.~~ **Answered by R4, §10.** The in-band cancel did not stop the turn, and a turn PIO had to kill reports no usage at all.
 4. Whether `mode: plan` is a genuinely narrower posture worth requesting for fixture runs. **Implemented 2026-09-21 after R2**, because it is the only per-session lever that does not edit the owner's configuration. PIO selects it with `session/set_config_option` and **refuses unless the session reports the mode back**, exactly as for the model. Only narrowing values are requestable: `build` is the harness's own default, so asking for it could only ever loosen a session that was already narrower, and admission refuses it as `mode_is_not_a_narrowing_one`. Whether it actually changes what prompts is R3's question.
 5. ~~The **surface and session identity** to pin, and whether npm self-update moves it, as the Homebrew cask does for Claude.~~ **Answered 2026-09-21: it moves.** npm took the install from 2.0.1 to 2.0.11 between the plan and the first live run; qualification refused, the pin was moved and the surface recaptured (§0). Expect it to move again, and expect a refusal rather than a silent run on a version nobody measured.
 6. Whether any ACP option yields a **prompt acknowledgment** (§7). Until one is measured, delivery carries no proof class for this harness.
