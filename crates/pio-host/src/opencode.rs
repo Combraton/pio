@@ -218,13 +218,22 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let mut all_output = Vec::new();
     let mut acknowledged = false;
     let mut tool_calls: Vec<Value> = Vec::new();
-    let mut pending_actions: std::collections::BTreeMap<u64, Value> =
+    // Each surfaced request, with the moment PIO will answer it itself if no
+    // caller has.
+    let mut pending_actions: std::collections::BTreeMap<u64, (Value, std::time::Instant)> =
         std::collections::BTreeMap::new();
     let mut action_seq = 0u64;
     // Who decided each tool call, by its ACP `toolCallId`, and which ones were
     // refused. Without these every refusal reads as an effect PIO observed.
     let mut decided = json!({});
     let mut refused: Vec<Value> = Vec::new();
+    // The caller's own delivery timeout is how long their decision may take.
+    // A request nobody answers holds the harness open forever, so the default
+    // is a **single-use reject**, recorded as PIO's.
+    let answer_timeout = life.spec["action_answer_timeout_seconds"]
+        .as_u64()
+        .map(Duration::from_secs)
+        .unwrap_or(Duration::from_secs(120));
     let mut cancel_deadline: Option<(std::time::Instant, String)> = None;
     let mut escalation: Option<Value> = None;
     let mut result: Option<Value> = None;
@@ -300,7 +309,10 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                             "tool_use_id":message["params"]["toolCall"]["toolCallId"],
                             "classification":classification}))?;
                     } else {
-                        pending_actions.insert(action_seq, message.clone());
+                        pending_actions.insert(
+                            action_seq,
+                            (message.clone(), std::time::Instant::now() + answer_timeout),
+                        );
                         life.event(json!({"kind":"action_requested",
                             "action_seq":action_seq,"request_id":message["id"],
                             "classification":classification}))?;
@@ -336,6 +348,36 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
             break;
         }
 
+        // A request nobody answered. PIO decides nothing on the user's behalf
+        // except this: the default is a **single-use reject**, recorded as
+        // PIO's own, because leaving it unanswered leaves the harness waiting
+        // and the execution open.
+        let overdue: Vec<u64> = pending_actions
+            .iter()
+            .filter(|(_, (_, deadline))| std::time::Instant::now() >= *deadline)
+            .map(|(seq, _)| *seq)
+            .collect();
+        for seq in overdue {
+            let Some((request, _)) = pending_actions.remove(&seq) else {
+                continue;
+            };
+            child.send(&json!({"jsonrpc":"2.0","id":request["id"],
+                "result":{"outcome":{"outcome":"selected","optionId":"reject"}}}))?;
+            if let Some(tool_id) = request["params"]["toolCall"]["toolCallId"].as_str() {
+                decided[tool_id] = json!({"by":"pio","decision":"deny",
+                    "reason":"no caller answered within the delivery timeout"});
+                refused.push(json!({"tool_use_id":tool_id}));
+            }
+            life.event(json!({"kind":"request_denied_by_default",
+                "action_seq":seq,
+                "decision":"deny",
+                "decided_by":"pio",
+                "tool_use_id":request["params"]["toolCall"]["toolCallId"],
+                "after_seconds":answer_timeout.as_secs(),
+                "option_id":"reject","always_option_taken":false,
+                "widening_fields_sent":[]}))?;
+        }
+
         for control in life.controls()? {
             let id = control["id"].as_str().unwrap_or_default().to_owned();
             match control["kind"].as_str() {
@@ -343,7 +385,8 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                     let decision = control["decision"].as_str().unwrap_or_default();
                     let request = control["action_seq"]
                         .as_u64()
-                        .and_then(|seq| pending_actions.remove(&seq));
+                        .and_then(|seq| pending_actions.remove(&seq))
+                        .map(|(request, _)| request);
                     match (request, decision) {
                         (Some(request), "allow" | "deny") => {
                             let option = if decision == "allow" {
@@ -369,8 +412,10 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                                 "widening_fields_sent":[]}))?;
                         }
                         (Some(request), _) => {
-                            pending_actions
-                                .insert(control["action_seq"].as_u64().unwrap_or(0), request);
+                            pending_actions.insert(
+                                control["action_seq"].as_u64().unwrap_or(0),
+                                (request, std::time::Instant::now() + answer_timeout),
+                            );
                             life.event(json!({"kind":"control_rejected","control_id":id,
                                 "reason":"decision not in the single-use allowlist"}))?;
                         }

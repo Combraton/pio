@@ -68,6 +68,7 @@ CASES = [
     'service_turn_completes',
     'service_refuses_a_downgraded_session_before_any_prompt',
     'service_tells_a_harness_refusal_apart_from_a_pio_decline',
+    'service_records_who_decided_and_what',
 ]
 
 
@@ -269,7 +270,23 @@ class ServiceCase(Case):
             poll(lambda: self.client().query('core.describe', {}), lambda r: 'result' in r)
         return daemon
 
-    def submit(self, identity='work', brief=b'Fixture task: reply with one line.'):
+    def respond(self, action_id, decision, revision, identity='work'):
+        """Answer one surfaced permission request as the caller would."""
+        from public_api import command
+        body = json.dumps({'decision': decision}).encode()
+        envelope = command('execution.respond_action',
+                           dict(kind='execution.execution', id=identity),
+                           dict(action_id=action_id,
+                                response=dict(digest=digest(body),
+                                              media_type='application/json')),
+                           command_id=f'{identity}.answer', revision=revision)
+        envelope['extensions'] = {CONTENT: dict(media_type='application/json',
+                                                text=body.decode())}
+        with self.client() as c:
+            return c.call(envelope)
+
+    def submit(self, identity='work', brief=b'Fixture task: reply with one line.',
+               delivery_timeout=120):
         from public_api import command
         repo = self.fixtures / identity
         repo.mkdir(exist_ok=True)
@@ -283,7 +300,7 @@ class ServiceCase(Case):
         base = git('rev-parse', 'HEAD').stdout.strip()
         payload = dict(brief=dict(digest=digest(brief), media_type='text/plain'),
                        workspace=dict(repository=str(repo), base=base, cleanup='retain'),
-                       timeouts=dict(delivery=120, execution_deadline=600))
+                       timeouts=dict(delivery=delivery_timeout, execution_deadline=600))
         envelope = command('execution.submit', dict(kind='execution.execution', id=identity),
                            payload, command_id=identity)
         envelope['extensions'] = {CONTENT: dict(media_type='text/plain', text=brief.decode())}
@@ -482,6 +499,88 @@ def run_case(out, name):
         assert [e for e in events if e['kind'] == 'request_declined_by_pio'] == []
         assert [e for e in events if e['kind'] == 'action_requested'] == []
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_records_who_decided_and_what':
+        # The same four situations the Claude matrix covers, asserted on the
+        # record that reaches the receipt rather than on the events. Fix 2 of
+        # the field audit had no test until this one.
+        requests = {
+            'deny': {'title': 'run a command', 'kind': 'execute',
+                     'input': {'command': 'git tag pio-live-marker'}},
+            'allow': {'title': 'run a command', 'kind': 'execute',
+                      'input': {'command': 'git tag pio-live-marker'}},
+            'nobody-answers': {'title': 'run a command', 'kind': 'execute',
+                               'input': {'command': 'git tag pio-live-marker'}},
+            # Outside the workspace, so PIO declines it before any caller is
+            # asked and the classifier's decision is the one recorded.
+            'pio-declines': {'title': 'read a file', 'kind': 'read',
+                             'input': {'file_path': '/etc/hosts'}},
+        }
+        for situation, request in requests.items():
+            case = ServiceCase(out, f'{name}-{situation}', model=REQUESTED,
+                               scenario={'permission_request': request})
+            case.start()
+            # Five seconds for the unanswered one, so the case does not sit for
+            # the default two minutes.
+            case.submit(delivery_timeout=5 if situation == 'nobody-answers' else 120)
+            if situation == 'pio-declines':
+                view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited',
+                            seconds=120)
+                events = case.host_events()
+                declined = [e for e in events if e['kind'] == 'request_declined_by_pio']
+                assert len(declined) == 1, [e['kind'] for e in events]
+                assert declined[0]['decided_by'] == 'pio', declined
+                assert declined[0]['decision'] == 'deny', declined
+                record = [e for e in events if e['kind'] == 'tool_uses'][0]['record']
+                use = {u['tool_use_id']: u for u in record['tool_uses']}[
+                    declined[0]['tool_use_id']]
+                assert use['decided_by'] == 'pio', use
+                assert use['decision'] == 'deny', use
+                assert use['outcome'] == 'declined_by_pio', use
+                assert use['placement'] == 'outside_fixture', use
+                # PIO declined it, so nothing happened outside the workspace.
+                assert record['out_of_fixture_effect_observed'] is False, record
+                assert record['declined_by_pio_count'] == 1, record
+                assert record['denied_by_harness_count'] == 0, record
+                continue
+            if situation == 'nobody-answers':
+                view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited',
+                            seconds=120)
+                events = case.host_events()
+                defaulted = [e for e in events if e['kind'] == 'request_denied_by_default']
+                assert len(defaulted) == 1, [e['kind'] for e in events]
+                assert defaulted[0]['after_seconds'] == 5, defaulted
+                assert defaulted[0]['decided_by'] == 'pio', defaulted
+                assert defaulted[0]['option_id'] == 'reject', defaulted
+                assert defaulted[0]['widening_fields_sent'] == [], defaulted
+                expected, decision = 'pio', 'deny'
+                action_id = defaulted[0]['tool_use_id']
+            else:
+                view = poll(lambda: case.inspect(),
+                            lambda v: v['runtime'] in ('requires_action', 'exited'),
+                            seconds=120)
+                assert view['runtime'] == 'requires_action', view
+                answered = case.respond(view['runtime_detail']['action_id'],
+                                        situation, view['revision'])
+                assert answered.get('result', {}).get('outcome', {}).get(
+                    'state') == 'answered', answered
+                view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited',
+                            seconds=120)
+                events = case.host_events()
+                applied = [e for e in events if e['kind'] == 'control_applied']
+                assert len(applied) == 1, [e['kind'] for e in events]
+                assert applied[0]['decided_by'] == 'caller', applied
+                assert applied[0]['always_option_taken'] is False, applied
+                expected, decision = 'caller', situation
+                action_id = applied[0]['tool_use_id']
+            record = [e for e in events if e['kind'] == 'tool_uses'][0]['record']
+            use = {u['tool_use_id']: u for u in record['tool_uses']}[action_id]
+            assert use['decided_by'] == expected, (situation, use)
+            assert use['decision'] == decision, (situation, use)
+            assert use['outcome'] == ('performed' if decision == 'allow'
+                                      else f'denied_by_{expected}'.replace(
+                                          'denied_by_pio', 'declined_by_pio')), (situation, use)
+            assert record['denied_by_harness_count'] == 0, (situation, record)
 
     elif name == 'service_turn_completes':
         case = ServiceCase(out, name, model=REQUESTED)

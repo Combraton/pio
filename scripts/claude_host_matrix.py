@@ -437,7 +437,11 @@ def run_case(out, name):
         # liability, not a containment claim. ADR 004 §5.
         uses = [b for m in messages if m.get('type') == 'assistant'
                 for b in m['message']['content'] if b.get('type') == 'tool_use']
-        assert len(uses) == 1, uses
+        # Two: the use the harness asked about, and the one it reported having
+        # made. The first was refused after the decision was transported; the
+        # second was not, so it is the observed effect.
+        assert len(uses) == 2, uses
+        assert {u['id'] for u in uses} == {'toolu_fake_0', 'toolu_fake_1'}, uses
         record = json.loads(subprocess.run(
             [str(BINARY), 'claude', 'tool-uses', '--workspace', str(case.workspace),
              '--cwd', str(case.workspace)],
@@ -445,7 +449,12 @@ def run_case(out, name):
             capture_output=True, text=True, check=True).stdout)
         assert record['out_of_fixture_effect_observed'] is True, record
         assert record['liability'] == 'unresolved', record
-        assert record['tool_uses'][0]['target_label'] == '<outside>', record
+        assert all(u['target_label'] == '<outside>' for u in record['tool_uses']), record
+        by_id = {u['tool_use_id']: u for u in record['tool_uses']}
+        # Refused, so not an effect. Driven directly, so nothing can say who
+        # decided; the service cases cover attribution.
+        assert by_id['toolu_fake_1']['outcome'] == 'attempted_and_denied', by_id
+        assert by_id['toolu_fake_0']['outcome'] == 'performed', by_id
         # A receipt carries labels and digests, never raw paths.
         assert str(case.fixtures) not in json.dumps(record), record
         # A sibling fixture is outside too. It sits under the area fixtures are
@@ -751,7 +760,15 @@ def run_case(out, name):
         # both, and `a_refusal_is_attributed_to_whoever_decided_it` covers the
         # PIO-decided case directly.
         record = [e for e in events if e['kind'] == 'tool_uses'][0]['record']
-        assert record['tool_uses'] == [], record
+        use = {u['tool_use_id']: u for u in record['tool_uses']}[
+            defaulted[0]['tool_use_id']]
+        assert use['decided_by'] == 'pio', use
+        assert use['decision'] == 'deny', use
+        assert use['outcome'] == 'declined_by_pio', use
+        assert use['denied_by_harness'] is False, use
+        assert record['declined_by_pio_count'] == 1, record
+        assert record['denied_by_caller_count'] == 0, record
+        assert record['denied_by_harness_count'] == 0, record
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     elif name == 'service_records_who_decided_and_what':
@@ -759,12 +776,40 @@ def run_case(out, name):
         # and allow. Until R3c and R4c this path existed only in the live
         # runner, so a recorded decision that disagreed with the sent one
         # would have shown up first in a live receipt.
-        for decision in ('deny', 'allow'):
-            case = ServiceCase(out, f'{name}-{decision}', scenario={
-                'permission_request': {'tool_name': 'Bash',
-                                       'input': {'command': 'git tag pio-live-marker'}}})
+        for decision in ('deny', 'allow', 'pio-declines'):
+            # The last one targets a path outside the workspace, which PIO
+            # declines itself before any caller is asked.
+            outside = str(Path(tempfile.mkdtemp(prefix='pio-outside-')) / 'marker.txt')
+            case_cleanup.permit_prefix(Path(outside).parent)
+            Path(outside).write_text('outside the workspace\n')
+            request = ({'tool_name': 'Read', 'input': {'file_path': outside}}
+                       if decision == 'pio-declines'
+                       else {'tool_name': 'Bash',
+                             'input': {'command': 'git tag pio-live-marker'}})
+            case = ServiceCase(out, f'{name}-{decision}',
+                               scenario={'permission_request': request})
             case.start()
             case.submit()
+            if decision == 'pio-declines':
+                view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+                events = case.host_events()
+                declined = [e for e in events if e['kind'] == 'request_declined_by_pio']
+                assert len(declined) == 1, [e['kind'] for e in events]
+                assert declined[0]['decided_by'] == 'pio', declined
+                assert declined[0]['decision'] == 'deny', declined
+                record = [e for e in events if e['kind'] == 'tool_uses'][0]['record']
+                use = {u['tool_use_id']: u for u in record['tool_uses']}[
+                    declined[0]['tool_use_id']]
+                assert use['decided_by'] == 'pio', use
+                assert use['decision'] == 'deny', use
+                assert use['outcome'] == 'declined_by_pio', use
+                assert use['placement'] == 'outside_fixture', use
+                # PIO declined it, so nothing happened outside the workspace.
+                assert record['out_of_fixture_effect_observed'] is False, record
+                assert record['declined_by_pio_count'] == 1, record
+                assert record['denied_by_caller_count'] == 0, record
+                assert record['denied_by_harness_count'] == 0, record
+                continue
             view = poll(lambda: case.inspect(),
                         lambda v: v['runtime'] in ('requires_action', 'exited'), seconds=120)
             assert view['runtime'] == 'requires_action', view
@@ -787,6 +832,17 @@ def run_case(out, name):
                 # An allow echoes the original input; rewriting it would change
                 # the tool call the harness decided to make.
                 assert received[0]['input_echoed_unchanged'] is True, received
+            # And the record that reaches the receipt says the same, by id.
+            record = [e for e in events if e['kind'] == 'tool_uses'][0]['record']
+            use = {u['tool_use_id']: u for u in record['tool_uses']}[
+                applied[0]['tool_use_id']]
+            assert use['decided_by'] == 'caller', use
+            assert use['decision'] == decision, use
+            assert use['outcome'] == (
+                'denied_by_caller' if decision == 'deny' else 'performed'), use
+            assert record['denied_by_caller_count'] == (1 if decision == 'deny' else 0), record
+            assert record['declined_by_pio_count'] == 0, record
+            assert record['denied_by_harness_count'] == 0, record
             # PIO decided nothing here, and nothing defaulted.
             assert [e for e in events if e['kind'] == 'request_declined_by_pio'] == []
             assert [e for e in events if e['kind'] == 'request_denied_by_default'] == []

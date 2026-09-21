@@ -162,6 +162,9 @@ fn request_permission(
     markers: &Option<PathBuf>,
 ) -> Result<Option<String>> {
     let request_id = "req_1_fake";
+    emit(&assistant(json!([{
+        "type":"tool_use","name":request["tool_name"].as_str().unwrap_or("Bash"),
+        "id":"toolu_fake_1","input":&request["input"]}])))?;
     emit(&json!({
         "type":"control_request","request_id":request_id,
         "request":{
@@ -406,10 +409,16 @@ pub fn run() -> Result<()> {
                    "tool_name":&request["tool_name"]}),
         )?;
     } else if !scenario["permission_request"].is_null() {
-        match request_permission(&scenario["permission_request"], &mut lines, &markers)? {
+        let request = &scenario["permission_request"];
+        match request_permission(request, &mut lines, &markers)? {
             Some(behavior) => {
                 decision = json!(behavior);
                 if behavior == "deny" {
+                    // The real harness names every refusal in `result`,
+                    // whoever decided it. Listing only the ones it decided
+                    // itself left the attribution path untested.
+                    denied_by_harness.push(json!({"tool_name":&request["tool_name"],
+                        "tool_use_id":"toolu_fake_1","tool_input":&request["input"]}));
                     denials += 1;
                 }
             }

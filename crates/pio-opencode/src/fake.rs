@@ -279,6 +279,15 @@ fn request_permission(
     markers: &Option<PathBuf>,
 ) -> Result<()> {
     let id = json!(9001);
+    // The tool call the request is about, announced the way a real agent
+    // announces one. Without it there is no record for a decision to be
+    // attributed to, which is how `decided_by` went untested here.
+    emit(&json!({"jsonrpc":"2.0","method":"session/update",
+        "params":{"sessionId":session,"update":{
+            "sessionUpdate":"tool_call","toolCallId":"call_permission",
+            "title":&request["title"],
+            "kind":request["kind"].as_str().unwrap_or("execute"),
+            "rawInput":&request["input"],"status":"pending"}}}))?;
     emit(
         &json!({"jsonrpc":"2.0","id":id,"method":"session/request_permission",
         "params":{"sessionId":session,

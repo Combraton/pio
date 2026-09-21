@@ -939,6 +939,10 @@ pub fn tool_use_records(
                 "denied": refused,
                 "denied_by_harness": refused && decision["by"].is_null(),
                 "decided_by": decision["by"].clone(),
+                // What was decided, not only by whom. Recorded because a
+                // receipt that names a decider and not a decision leaves the
+                // reader to infer the one thing that mattered.
+                "decision": decision["decision"].clone(),
                 "outcome": outcome,
             }));
         }
