@@ -39,6 +39,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import case_cleanup
+from check_private_paths import redact
 from public_api import Client, command
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -989,7 +990,10 @@ def run_one(run, args):
 
     out = args.out / f'{run}.json'
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+    # The recording boundary, on the runner's side of it. The host redacts its
+    # own events and receipt; this covers the fields the runner adds, such as
+    # the configuration file it read and the out-of-fixture target.
+    out.write_text(json.dumps(redact(receipt), indent=2, sort_keys=True) + '\n')
     print(json.dumps({k: receipt[k] for k in
                       ('run', 'dry_run', 'delivery', 'usage', 'runtime', 'stops')},
                      indent=2))

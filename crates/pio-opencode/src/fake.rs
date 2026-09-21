@@ -24,6 +24,8 @@
 //! once at the end), `model_on_creation`, `ignore_model_selection`,
 //! `refuse_model_selection`, `mode_on_creation`, `mode`,
 //! `ignore_mode_selection`, `delay_ms`, `ignore_cancel`, `markers`.
+//! A `tool_calls` entry takes `title`, `kind`, `input` and an optional
+//! `status` for the state the call ends in.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 use std::io::{BufRead, Write};
@@ -321,11 +323,36 @@ pub fn run() -> Result<()> {
                 }
                 if let Some(calls) = scenario["tool_calls"].as_array() {
                     for (index, call) in calls.iter().enumerate() {
+                        // **Measured from 2.0.11.** A call is announced with
+                        // an **empty** `rawInput` and no `locations`; the
+                        // target arrives in a later `tool_call_update` keyed
+                        // by the same id, and the final status after that.
+                        // The fake used to put the input in the announcement,
+                        // which is precisely why nothing caught the host
+                        // reading only announcements.
+                        let id = format!("call_{index}");
                         update(
                             session,
-                            json!({"sessionUpdate":"tool_call","toolCallId":format!("call_{index}"),
+                            json!({"sessionUpdate":"tool_call","toolCallId":&id,
                                    "title":&call["title"],"kind":&call["kind"],
-                                   "rawInput":&call["input"],"status":"completed"}),
+                                   "rawInput":{},"locations":[],"status":"pending"}),
+                        )?;
+                        let path = call["input"]["path"]
+                            .as_str()
+                            .or_else(|| call["input"]["file_path"].as_str());
+                        update(
+                            session,
+                            json!({"sessionUpdate":"tool_call_update","toolCallId":&id,
+                                   "title":&call["title"],"kind":&call["kind"],
+                                   "rawInput":&call["input"],
+                                   "locations":path.map(|p| json!([{"path":p}]))
+                                       .unwrap_or_else(|| json!([])),
+                                   "status":"in_progress"}),
+                        )?;
+                        update(
+                            session,
+                            json!({"sessionUpdate":"tool_call_update","toolCallId":&id,
+                                   "status":call["status"].as_str().unwrap_or("completed")}),
                         )?;
                     }
                 }
@@ -438,12 +465,26 @@ fn request_permission(
     // The tool call the request is about, announced the way a real agent
     // announces one. Without it there is no record for a decision to be
     // attributed to, which is how `decided_by` went untested here.
+    // Announced the way 2.0.11 announces one: empty `rawInput`, no
+    // `locations`, `status: pending`. What the call touches arrives next.
     emit(&json!({"jsonrpc":"2.0","method":"session/update",
         "params":{"sessionId":session,"update":{
             "sessionUpdate":"tool_call","toolCallId":"call_permission",
             "title":&request["title"],
             "kind":request["kind"].as_str().unwrap_or("execute"),
-            "rawInput":&request["input"],"status":"pending"}}}))?;
+            "rawInput":{},"locations":[],"status":"pending"}}}))?;
+    let target = request["input"]["path"]
+        .as_str()
+        .or_else(|| request["input"]["file_path"].as_str());
+    emit(&json!({"jsonrpc":"2.0","method":"session/update",
+        "params":{"sessionId":session,"update":{
+            "sessionUpdate":"tool_call_update","toolCallId":"call_permission",
+            "title":&request["title"],
+            "kind":request["kind"].as_str().unwrap_or("execute"),
+            "rawInput":&request["input"],
+            "locations":target.map(|p| json!([{"path":p}]))
+                .unwrap_or_else(|| json!([])),
+            "status":"in_progress"}}}))?;
     emit(
         &json!({"jsonrpc":"2.0","id":id,"method":"session/request_permission",
         "params":{"sessionId":session,

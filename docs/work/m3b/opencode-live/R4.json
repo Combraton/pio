@@ -1,4 +1,16 @@
 {
+  "addenda": [
+    {
+      "cause": "the host wrote events, and the runners wrote receipts, with paths exactly as the harness reported them. For the Claude runs that meant the full filesystem path of every installed plugin, from `system/init`, in every receipt from R2 onward \u2014 which discloses the owner home directory and the plugins installed in it. This repository is public.",
+      "date": "2026-09-21",
+      "fixed_in": "redaction at the recording boundary: `pio_core::redact_home` is applied in `Lifecycle::event` and `Lifecycle::complete`, and in the live runners before a receipt is written, so no absolute home path reaches an event, a receipt or a log. `scripts/check_private_paths.py` gates every committed file in CI and has a self-test that plants a path and proves the check fails.",
+      "history_note": "the earlier commits still carry the unredacted paths. Rewriting published history is the owner's call and has not been asked for.",
+      "history_rewritten": false,
+      "reason": "absolute_home_paths_in_a_public_receipt",
+      "receipt_rewritten": true,
+      "what_changed": "every absolute home path in this file was replaced with `~`. Nothing else was touched: no digest, count, token figure or verdict was recomputed, and the paths still identify the same locations relative to the home they were under."
+    }
+  ],
   "binary_sha256": "aada48ecf1b64a65208d62492168d6c9e497a503de128fc1c94fc0bb457fdf0a",
   "cancel": {
     "accepted": true,
@@ -44,7 +56,7 @@
       "juspay-grid"
     ],
     "read": true,
-    "source": "/Users/comreton/.config/opencode/opencode.jsonc"
+    "source": "~/.config/opencode/opencode.jsonc"
   },
   "containment": {
     "mechanism": "harness_permission_rules_only",

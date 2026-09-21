@@ -1,4 +1,33 @@
 {
+  "addenda": [
+    {
+      "date": "2026-09-21",
+      "fixed_in": "the usage object is now found wherever it is, and every counter the harness reports is summed; `totalTokens` is recorded beside PIO's sum and never added to it. ADR 005 section 9.",
+      "how_the_ledger_came_to_count_it": "the census in this same receipt \u2014 `usage.granularity` \u2014 recorded every place the harness reported usage, because it searches rather than looks up. Both reports are in this file, and the 7,910 charged to the ledger under this run name is read from them. It is the harness own figure, not an estimate and not an allowance: `totalTokens` and the `usage_update` running total agree, and the three counters sum to it.",
+      "reason": "the_receipt_says_unknown_and_the_ledger_charges_7910",
+      "receipt_rewritten": false,
+      "what_the_harness_reported": {
+        "and_during_the_turn": {
+          "cost": {
+            "amount": 0,
+            "currency": "USD"
+          },
+          "sessionUpdate": "usage_update",
+          "size": 204800,
+          "used": 7910
+        },
+        "at": "the session/prompt result, under the key `usage`",
+        "value": {
+          "inputTokens": 7870,
+          "outputTokens": 2,
+          "thoughtTokens": 38,
+          "totalTokens": 7910
+        }
+      },
+      "why_the_receipt_still_says_unknown": "because that is what PIO recorded at the time. Rewriting it would erase the evidence that the adapter could not read a figure the harness had stated plainly. The ledger is where the spend is accounted; the receipt is where what PIO observed is accounted, and the two differ here for a reason this addendum states.",
+      "why_the_runner_could_not_read_it_then": "the host looked for the usage object at `result._meta.usage`, which is where the Claude adapter puts it, and summed two counters \u2014 input and output. OpenCode 2.0.11 puts it at `result.usage` and reports four, including `thoughtTokens`. So no `usage` event was emitted at all, the receipt recorded `reported: false` and `observed_total_tokens: null`, and the stop rule fired. The stop was correct: unknown is never zero."
+    }
+  ],
   "binary_sha256": "97fdb43df22c317e9077c9fe77b0c439cffe89004438103e5b8373ce2d930b9f",
   "commit": "dc785afc6c0f32aa8fc235761dceb631f7c9ce15",
   "completion_is_acceptance": false,

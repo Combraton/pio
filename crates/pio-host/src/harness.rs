@@ -151,10 +151,21 @@ impl Lifecycle {
             .duration_since(std::time::UNIX_EPOCH)?
             .as_millis() as u64)
             .into();
+        // **The recording boundary.** Events reach receipts, which are
+        // committed to a public repository. The owner's home path is not ours
+        // to publish, and nor is what it discloses — the Claude receipts had
+        // been carrying the full path of every installed plugin since R2.
+        let record = pio_core::redact_home(&record, self.home());
         append_json(
             &events_path(&self.root, self.adapter, &self.invocation),
             &record,
         )
+    }
+
+    /// The home this invocation runs against, for redaction. Absent for the
+    /// fake-process adapter, which has none.
+    fn home(&self) -> &str {
+        self.spec["home"].as_str().unwrap_or_default()
     }
 
     /// Record a guard's verdict and refuse if it did not allow the request.
@@ -226,6 +237,8 @@ impl Lifecycle {
     }
 
     pub fn complete(&mut self, receipt: Value) -> Result<()> {
+        // The same boundary: a receipt is published too.
+        let receipt = pio_core::redact_home(&receipt, self.home());
         self.store
             .transition(&self.state, "completed", None, None, Some(receipt))?;
         Ok(())

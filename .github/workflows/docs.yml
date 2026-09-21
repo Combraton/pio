@@ -13,3 +13,7 @@ jobs:
           persist-credentials: false
       - name: Check documentation
         run: python3 scripts/check_docs.py
+      - name: No private paths in any committed file
+        run: |
+          python3 scripts/check_private_paths.py --selftest
+          python3 scripts/check_private_paths.py

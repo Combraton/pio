@@ -105,6 +105,56 @@ fn token_parts(usage: &Value) -> (Value, u64, Option<u64>) {
     (Value::Object(parts), total, reported)
 }
 
+/// Fold a later `tool_call_update` onto the announcement it updates.
+///
+/// **Measured against 2.0.11:** ACP announces a tool call at `status:
+/// pending` with an **empty** `rawInput` and no `locations`, and fills both
+/// in later `tool_call_update` messages keyed by the same `toolCallId`.
+/// Reading only the announcement made every live tool use `not_classifiable`,
+/// with a target digest that was the digest of `{}` — while the
+/// permission-time classifier, which sees the request rather than the update,
+/// had the path all along. R5 recorded two reads that way, one of them the
+/// out-of-fixture read it had just declined.
+///
+/// Only a more informative value overwrites: the first message's empty
+/// `rawInput` must not win, and a later content-only update must not erase
+/// the `kind` the first one carried.
+fn merge_tool_call(into: &mut Value, update: &Value) {
+    let Some(fields) = update.as_object() else {
+        return;
+    };
+    for (key, value) in fields {
+        let informative = match value {
+            Value::Null => false,
+            Value::Array(items) => !items.is_empty(),
+            Value::Object(map) => !map.is_empty(),
+            _ => true,
+        };
+        if informative || into.get(key).is_none() {
+            into[key] = value.clone();
+        }
+    }
+}
+
+/// The target of a tool call, from wherever ACP put it.
+///
+/// `rawInput` once an update fills it, and `locations[].path` — ACP's own way
+/// of saying what a call touches — when it does not. The same resolver then
+/// classifies it as the permission-time path does, so an audit and a decision
+/// cannot disagree about where something landed.
+fn tool_call_input(call: &Value) -> Value {
+    let mut input = call["rawInput"].clone();
+    if !input.is_object() {
+        input = json!({});
+    }
+    if input["path"].is_null()
+        && let Some(path) = call["locations"][0]["path"].as_str()
+    {
+        input["path"] = json!(path);
+    }
+    input
+}
+
 /// What to send back for one permission decision, and what to record about it.
 ///
 /// **Option ids are the agent's to invent.** `allow` and `reject` were the
@@ -424,7 +474,11 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let mut output_offset = 0u64;
     let mut all_output = Vec::new();
     let mut acknowledged = false;
-    let mut tool_calls: Vec<Value> = Vec::new();
+    // Announcements and their updates, folded together by `toolCallId`, in
+    // the order the calls were first announced.
+    let mut tool_call_order: Vec<String> = Vec::new();
+    let mut tool_calls: std::collections::BTreeMap<String, Value> =
+        std::collections::BTreeMap::new();
     // Each surfaced request, with the moment PIO will answer it itself if no
     // caller has.
     let mut pending_actions: std::collections::BTreeMap<u64, (Value, std::time::Instant)> =
@@ -521,8 +575,16 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                             sites.iter().map(|(_, value)| value.clone()).collect::<Vec<_>>()
                         }}));
                     }
-                    if update["sessionUpdate"] == "tool_call" {
-                        tool_calls.push(update.clone());
+                    if matches!(
+                        update["sessionUpdate"].as_str(),
+                        Some("tool_call" | "tool_call_update")
+                    ) && let Some(id) = update["toolCallId"].as_str()
+                    {
+                        let entry = tool_calls.entry(id.to_owned()).or_insert_with(|| {
+                            tool_call_order.push(id.to_owned());
+                            json!({})
+                        });
+                        merge_tool_call(entry, update);
                     }
                     let mut line = serde_json::to_vec(&json!({"type":"session_update",
                         "update":update}))?;
@@ -741,11 +803,16 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     child.close_stdin();
     let exit = life.stop(&mut child.child)?;
     let owner_after = pio_opencode::owner_service();
-    let tool_use_messages: Vec<Value> = tool_calls
+    let ordered: Vec<&Value> = tool_call_order
+        .iter()
+        .filter_map(|id| tool_calls.get(id))
+        .collect();
+    let tool_use_messages: Vec<Value> = ordered
         .iter()
         .map(|call| {
             json!({"message":{"content":[{"type":"tool_use",
-            "name":&call["kind"],"id":&call["toolCallId"],"input":&call["rawInput"]}]}})
+            "name":&call["kind"],"id":&call["toolCallId"],
+            "input":tool_call_input(call)}]}})
         })
         .collect();
     // ACP sends no denial list of its own, so the refusals PIO knows about are
@@ -785,7 +852,20 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
         "reports":usage_reports,
         "measure":"every token counter the harness reports, summed; its own \
                    totalTokens is recorded beside the sum, never added to it"}))?;
-    life.event(json!({"kind":"tool_uses","record":tool_uses}))?;
+    // The harness's own verdict on each call, beside PIO's. ACP ends a
+    // declined call at `failed` and a performed one at `completed`, which is
+    // evidence independent of anything PIO decided — and a disagreement
+    // between the two is something a reader should be able to see.
+    let harness_status: Vec<Value> = ordered
+        .iter()
+        .map(|call| {
+            json!({"tool_use_id":&call["toolCallId"],"kind":&call["kind"],
+                   "status":&call["status"],
+                   "locations":&call["locations"]})
+        })
+        .collect();
+    life.event(json!({"kind":"tool_uses","record":tool_uses,
+        "harness_status":harness_status}))?;
     life.event(json!({"kind":"config_after",
         "snapshot":{"owner_service":owner_after},
         "diff":{"owner_service_untouched":owner_before == owner_after}}))?;

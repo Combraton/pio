@@ -12,6 +12,53 @@ pub fn participant() -> Value {
         .expect("checked-in participant descriptor")
 }
 
+/// Rewrite absolute home paths out of a value before it is recorded.
+///
+/// **The recording boundary.** A receipt, an event and a log are all published
+/// artefacts of a public repository, and the owner's home directory is not
+/// ours to publish — nor is the list of plugins that a home path discloses.
+/// Every string is rewritten: the invocation's own home becomes `~`, and any
+/// other `/Users/<name>` or `/home/<name>` prefix becomes `~` too, so a path
+/// belonging to some other account cannot leak either.
+///
+/// Object keys are rewritten as well, because a settings map can key on a path.
+pub fn redact_home(value: &serde_json::Value, home: &str) -> serde_json::Value {
+    use serde_json::Value;
+    fn scrub(text: &str, home: &str) -> String {
+        let mut out = if !home.is_empty() && text.starts_with(home) {
+            format!("~{}", &text[home.len()..])
+        } else {
+            text.to_owned()
+        };
+        // Any other account's home, by shape. Two path roots cover macOS and
+        // Linux; a third component is required so `/Users` alone is left be.
+        for root in ["/Users/", "/home/"] {
+            while let Some(start) = out.find(root) {
+                let rest = &out[start + root.len()..];
+                let Some(end) = rest.find('/') else { break };
+                let name = &rest[..end];
+                if name.is_empty() || name.contains(' ') {
+                    break;
+                }
+                out = format!("{}~{}", &out[..start], &rest[end..]);
+            }
+        }
+        out
+    }
+    match value {
+        Value::String(text) => Value::String(scrub(text, home)),
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|item| redact_home(item, home)).collect())
+        }
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, inner)| (scrub(key, home), redact_home(inner, home)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
 pub fn digest(bytes: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
@@ -315,3 +362,49 @@ pub fn require_payload(payload: &Value) -> Result<u64> {
 mod tests;
 
 pub mod spool;
+
+#[cfg(test)]
+mod redaction_tests {
+    use super::redact_home;
+    use serde_json::json;
+
+    // Every path here uses a fictional account name. The private-path gate
+    // scans this file too, and a test about not publishing a home path should
+    // be the last place one is published.
+    const HOME: &str = "/Users/someone";
+
+    #[test]
+    fn the_invocation_home_and_any_other_home_become_a_tilde() {
+        let value = json!({
+            "/Users/someone/.config/x": "/Users/someone/pio-live/outside/marker.txt",
+            "plugins": [{"path": "/Users/someone/.claude/plugins/cache/a-plugin/6.3.0"}],
+            "other_account": "/home/example/secret/file",
+            "left_alone": "a sentence mentioning /Users and nothing more",
+            "not_a_path": 7,
+        });
+        let redacted = redact_home(&value, HOME);
+        let text = serde_json::to_string(&redacted).unwrap();
+        assert!(!text.contains("/Users/"), "{text}");
+        assert!(!text.contains("/home/"), "{text}");
+        assert_eq!(
+            redacted["~/.config/x"],
+            json!("~/pio-live/outside/marker.txt")
+        );
+        assert_eq!(
+            redacted["plugins"][0]["path"],
+            json!("~/.claude/plugins/cache/a-plugin/6.3.0")
+        );
+        assert_eq!(redacted["other_account"], json!("~/secret/file"));
+        // A bare mention is not a path and is left exactly as it was.
+        assert_eq!(redacted["left_alone"], value["left_alone"]);
+        assert_eq!(redacted["not_a_path"], json!(7));
+    }
+
+    #[test]
+    fn a_home_that_is_not_the_invocation_own_is_still_removed() {
+        // The host passes its own home; a path under a different account must
+        // not survive just because it did not match that prefix.
+        let value = json!({"path": "/Users/example/.ssh/config"});
+        assert_eq!(redact_home(&value, HOME)["path"], json!("~/.ssh/config"));
+    }
+}

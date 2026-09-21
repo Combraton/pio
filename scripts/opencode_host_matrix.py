@@ -73,6 +73,7 @@ CASES = [
     'a_decision_whose_kind_is_not_offered_is_refused',
     'service_refuses_a_selection_that_did_not_take',
     'service_asks_for_the_narrower_mode_and_checks_it_took',
+    'service_audits_a_tool_use_by_its_real_target',
     'service_stops_when_the_model_selection_is_refused',
     'service_refuses_a_downgraded_session_before_any_prompt',
     'service_tells_a_harness_refusal_apart_from_a_pio_decline',
@@ -923,6 +924,47 @@ def run_case(out, name):
             wide.finish()
             wide.cleanup()
         case = Case(out, name, model=REQUESTED)
+
+    elif name == 'service_audits_a_tool_use_by_its_real_target':
+        # ACP announces a tool call with an **empty** `rawInput` and no
+        # `locations`, and fills both in later `tool_call_update` messages
+        # keyed by the same id. Reading only the announcement made every live
+        # tool use `not_classifiable`, with a target digest that was the digest
+        # of `{}` — including, in R5, the out-of-fixture read PIO had just
+        # declined. The audit and the decision must not disagree about where
+        # something landed.
+        outside = case_outside = None
+        case = ServiceCase(out, name, model=REQUESTED, scenario={'tool_calls': [
+            {'title': 'read', 'kind': 'read',
+             'input': {'path': 'README.md'}, 'status': 'completed'},
+            {'title': 'read', 'kind': 'read',
+             'input': {'path': '/etc/hosts'}, 'status': 'failed'},
+        ]})
+        case.start()
+        case.submit()
+        poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        events = case.host_events()
+        record = [e for e in events if e['kind'] == 'tool_uses'][0]
+        uses = {u['tool_use_id']: u for u in record['record']['tool_uses']}
+        assert len(uses) == 2, uses
+        inside = uses['call_0']
+        outside = uses['call_1']
+        # The target is read from the update, not from the empty announcement.
+        assert inside['placement'] == 'inside_fixture', inside
+        assert inside['target_label'] == '<fixture>/README.md', inside
+        assert outside['placement'] == 'outside_fixture', outside
+        assert outside['target_label'] == '<outside>', outside
+        # And no two calls share the digest of `{}`, which is what the old
+        # audit produced for every use it could not see.
+        empty = hashlib.sha256(b'{}').hexdigest()
+        assert all(u['target_sha256'] != empty for u in uses.values()), uses
+        assert inside['target_sha256'] != outside['target_sha256'], uses
+        assert record['record']['out_of_fixture_count'] == 1, record['record']
+        assert record['record']['unclassifiable_target_count'] == 0, record['record']
+        # The harness's own verdict, recorded beside PIO's.
+        status = {s['tool_use_id']: s['status'] for s in record['harness_status']}
+        assert status == {'call_0': 'completed', 'call_1': 'failed'}, status
+        (case.out / 'record.json').write_text(json.dumps(record, indent=2))
 
     elif name == 'service_stops_when_the_model_selection_is_refused':
         # The harness refuses the selection outright. PIO stops with the brief
