@@ -1,0 +1,93 @@
+{
+  "commit": "3a80585",
+  "completion_is_acceptance": false,
+  "defect_this_attempt_found": [
+    {
+      "fixed_in": "11c0a94",
+      "measured_answer": "session/set_config_option with configId and value",
+      "what": "the host checked the model but never selected it"
+    },
+    {
+      "fixed_in": "11c0a94",
+      "now": "runtime \"exited\" with exit \"unavailable\"; no exit code is claimed",
+      "what": "an execution refused before delivery sat at runtime \"preparing\" for ever"
+    }
+  ],
+  "delivery": {
+    "evidence": {
+      "class": "native_turn_never_sent",
+      "source": "opencode-acp/host"
+    },
+    "proof_class": null,
+    "state": "failed_before_delivery"
+  },
+  "dry_run": false,
+  "events": [
+    "config_before",
+    "spawned",
+    "session_started",
+    "session_created",
+    "settings_guard",
+    "host_error"
+  ],
+  "format": "pio-opencode-live-attempt/1",
+  "guard": {
+    "allowed": false,
+    "checked_before_delivery": true,
+    "format": "pio-opencode-session-guard/1",
+    "reported": "opencode/deepseek-v4.1-flash",
+    "reported_provider": "opencode",
+    "requested": "minimax-coding-plan/MiniMax-M2.7-highspeed",
+    "requested_provider": "minimax-coding-plan",
+    "unresolved": [
+      {
+        "reason": "the session's model is not the requested one",
+        "reported": "opencode/deepseek-v4.1-flash",
+        "requested": "minimax-coding-plan/MiniMax-M2.7-highspeed"
+      },
+      {
+        "reason": "the session's provider is not the requested one",
+        "reported": "opencode",
+        "requested": "minimax-coding-plan"
+      }
+    ]
+  },
+  "harness": {
+    "agent": {
+      "name": "OpenCode",
+      "version": "2.0.11"
+    },
+    "auth_methods": [
+      {
+        "description": "Run `opencode auth login` in the terminal",
+        "id": "opencode-login",
+        "name": "Login with opencode"
+      }
+    ],
+    "session_id": "ses_f3bda09c4ffebGFw0i2zrbs049",
+    "source": "opencode-acp"
+  },
+  "host_error": "session_configuration_refused: {\"allowed\":false,\"checked_before_delivery\":true,\"format\":\"pio-opencode-session-guard/1\",\"reported\":\"opencode/deepseek-v4.1-flash\",\"reported_provider\":\"opencode\",\"requested\":\"minimax-coding-plan/MiniMax-M2.7-highspeed\",\"requested_provider\":\"minimax-coding-plan\",\"unresolved\":[{\"reason\":\"the session's model is not the requested one\",\"reported\":\"opencode/deepseek-v4.1-flash\",\"requested\":\"minimax-coding-plan/MiniMax-M2.7-highspeed\"},{\"reason\":\"the session's provider is not the requested one\",\"reported\":\"opencode\",\"requested\":\"minimax-coding-plan\"}]}",
+  "model": {
+    "checked_before_delivery": true,
+    "matched": false,
+    "reported": "opencode/deepseek-v4.1-flash",
+    "requested": "minimax-coding-plan/MiniMax-M2.7-highspeed"
+  },
+  "model_calls": 0,
+  "outcome": "refused_before_delivery",
+  "owner_service_pid": 20947,
+  "owner_service_untouched": true,
+  "pio_deleted_nothing": true,
+  "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+  "run": "R1-attempt-1",
+  "runtime_at_the_time": "preparing",
+  "started_at": "2026-09-21T13:26:44Z",
+  "tokens_spent": 0,
+  "usage": {
+    "note": "no turn was started, so there is nothing to report and nothing to charge",
+    "observed_total_tokens": null,
+    "reported": false
+  },
+  "why_it_is_kept": "The first live MiniMax attempt. No token was spent, because PIO refused the session before the brief left it. The refusal was correct and it found two defects: the host checked the model but never selected it, and an execution refused before delivery never reached a terminal runtime. Kept under its own name rather than replaced, because it is the evidence for both."
+}
