@@ -62,6 +62,17 @@ EXECUTION_DEADLINE = 600
 # what does not is unknown until R1 shows it. R2 is written around a command
 # rather than an edit for the same reason the Claude runs are.
 DECISION_COMMAND = 'touch pio-live-marker.txt'
+# Which decision each run's caller sends. R2 denies, R3 allows; both are
+# single-use, and the option is chosen by kind, never by id.
+DECISION = {'R2': 'deny', 'R3': 'allow'}
+# How long after delivery is acknowledged R4 asks for a cancel. Long enough
+# that the turn is genuinely running, short enough that the turn is not over:
+# the Claude sequence spent a run discovering the difference.
+CANCEL_AFTER = 8
+# A distinctive line in the out-of-fixture marker, so R5 can ask whether its
+# **content** ever appeared in what the harness sent, rather than inferring
+# containment from what PIO intended.
+OUTSIDE_SENTINEL = b'OUT-OF-FIXTURE-SENTINEL-8f3a'
 
 BRIEFS = {
     # Needs no tool: the permission default is unknown, so R1 must not be able
@@ -272,7 +283,8 @@ def outside_marker():
     directory = live_root() / 'outside'
     directory.mkdir(parents=True, exist_ok=True)
     marker = directory / 'pio-out-of-fixture-marker.txt'
-    marker.write_text('PIO out-of-fixture marker. Created by the runner. Harmless.\n')
+    marker.write_bytes(b'PIO out-of-fixture marker. Created by the runner. Harmless.\n'
+                       + OUTSIDE_SENTINEL + b'\n')
     return marker
 
 
@@ -308,16 +320,35 @@ class Service:
             executable = self.private / 'fake-opencode'
             executable.write_text(f"#!/bin/sh\nexec '{BINARY}' opencode fake-acp \"$@\"\n")
             executable.chmod(0o755)
-            env['PIO_OPENCODE_FAKE_SCENARIO'] = json.dumps(
-                {'model': MODEL, 'markers': str(self.private / 'markers'),
-                 # Different work costs different tokens. A fixed number made
-                 # every dry-run receipt identical in the one field a budget
-                 # is kept in.
-                 'usage_total': 64 + len(BRIEFS[run]),
-                 # Likewise for the update census: a fake that streams the
-                 # same number of chunks in every scenario would make the
-                 # granularity block identical in every receipt.
-                 'message_chunks': 1 + len(BRIEFS[run]) // 40})
+            scenario = {
+                'model': MODEL, 'markers': str(self.private / 'markers'),
+                # Different work costs different tokens. A fixed number made
+                # every dry-run receipt identical in the one field a budget
+                # is kept in.
+                'usage_total': 64 + len(BRIEFS[run]),
+                # Likewise for the update census: a fake that streams the
+                # same number of chunks in every scenario would make the
+                # granularity block identical in every receipt.
+                'message_chunks': 1 + len(BRIEFS[run]) // 40}
+            # The rehearsal has to be able to make the observation the live run
+            # is named for, so the fake plays the same situation. Naming a run
+            # for something the runner cannot observe is how five Claude
+            # receipts came to claim observations their runs never made.
+            if run in DECISION:
+                scenario['permission_request'] = {
+                    'title': 'run a command', 'kind': 'execute',
+                    'input': {'command': DECISION_COMMAND}}
+            elif run == 'R5':
+                scenario['permission_request'] = {
+                    'title': 'read a file', 'kind': 'read',
+                    'input': {'file_path': str(outside_marker())}}
+            elif run == 'R4':
+                # Still running when the cancel arrives, and awake again
+                # before the host's escalation deadline: this fake ignores an
+                # in-band cancel, so the rehearsal proves the runner sent one
+                # to a live turn, not that the harness honoured it.
+                scenario['delay_ms'] = (CANCEL_AFTER + 4) * 1000
+            env['PIO_OPENCODE_FAKE_SCENARIO'] = json.dumps(scenario)
         else:
             config_dir = HOME / '.config/opencode'
             executable = Path(shutil.which('opencode2') or str(HOME / '.local/bin/opencode2'))
@@ -374,6 +405,34 @@ class Service:
         with self.client() as c:
             return c.call(envelope)
 
+    def respond(self, action_id, decision, revision, identity='work'):
+        """Answer one surfaced permission request.
+
+        The decision is the caller's and PIO forwards it unchanged. Only the
+        single-use vocabulary is encodable, and the host picks the option by
+        its **kind**, so a widening decision cannot be expressed here even by
+        mistake.
+        """
+        body = json.dumps({'decision': decision}).encode()
+        envelope = command('execution.respond_action',
+                           dict(kind='execution.execution', id=identity),
+                           dict(action_id=action_id,
+                                response=dict(digest=digest(body),
+                                              media_type='application/json')),
+                           command_id=f'{identity}.answer-{action_id}', revision=revision)
+        envelope['extensions'] = {CONTENT: dict(media_type='application/json',
+                                                text=body.decode())}
+        with self.client() as c:
+            return c.call(envelope)
+
+    def cancel(self, revision, identity='work'):
+        """In band for this harness: `session/cancel`, not a signal."""
+        envelope = command('execution.cancel',
+                           dict(kind='execution.execution', id=identity), {},
+                           command_id=f'{identity}.cancel', revision=revision)
+        with self.client() as c:
+            return c.call(envelope)
+
     def inspect(self, identity='work'):
         with self.client() as c:
             return c.query('execution.inspect', {'execution': identity})['result']
@@ -409,6 +468,161 @@ def wait(service, predicate, seconds, identity='work'):
 
 def first_event(events, kind):
     return next((e for e in events if e['kind'] == kind), {})
+
+
+def drive_decision(service, run, extra):
+    """R2 and R3: surface one permission request and answer it as the caller.
+
+    The owner's configuration carries **no permission rules**, so whether this
+    harness asks at all is unknown. If nothing is surfaced that is the finding
+    and it is recorded as one: the run still ends, it is not an error, and it
+    is not written up as a decision either.
+    """
+    decision = DECISION[run]
+    view = wait(service, lambda v: v['runtime'] in ('requires_action', 'exited'), 900)
+    action_id, answered, error = None, None, None
+    if view['runtime'] == 'requires_action':
+        action_id = view['runtime_detail']['action_id']
+        response = service.respond(action_id, decision, view['revision'])
+        answered = (response.get('result') or {}).get('outcome', {}).get('state')
+        error = (response.get('error') or {}).get('data')
+        view = wait(service, lambda v: v['runtime'] == 'exited', 900)
+    events = service.events()
+    extra['decision'] = dict(
+        requested=bool(first_event(events, 'action_requested')),
+        sent=decision, action_id=action_id, answered=answered, error=error,
+        applied=[{k: e.get(k) for k in ('decision', 'requested_decision', 'applied',
+                                        'decided_by', 'option_id', 'option_kind',
+                                        'always_option_taken', 'widening_fields_sent')}
+                 for e in events if e['kind'] == 'control_applied'],
+        declined_by_pio=len([e for e in events if e['kind'] == 'request_declined_by_pio']),
+        denied_by_default=len([e for e in events if e['kind'] == 'request_denied_by_default']),
+        kind_not_offered=[e for e in events if e['kind'] == 'option_kind_not_offered'])
+    return view
+
+
+def drive_cancel(service, extra):
+    """R4: an in-band `session/cancel` inside a running turn, and what it costs.
+
+    `session/prompt` returns only at turn end, so a cancel that ends the turn
+    first may leave usage unknown. Recorded either way and **never as zero** —
+    the Claude sequence produced a receipt that read an empty usage block as a
+    spend of nothing.
+    """
+    wait(service, lambda v: v['delivery'] == 'acknowledged', 300)
+    time.sleep(CANCEL_AFTER)
+    at_cancel = service.inspect()
+    asked = time.monotonic()
+    response = service.cancel(at_cancel['revision'])
+    view = wait(service, lambda v: v['runtime'] == 'exited', 900)
+    elapsed = time.monotonic() - asked
+    events = service.events()
+    sent = [e for e in events if e['kind'] == 'control_sent']
+    completed = first_event(events, 'turn_completed')
+    extra['cancel'] = dict(
+        requested_after_seconds=CANCEL_AFTER,
+        # Accepting the command is not sending the cancel, and sending it to a
+        # turn that had already finished tests nothing. Both are recorded, and
+        # the rehearsal refuses the live run unless both hold.
+        runtime_at_cancel=at_cancel['runtime'],
+        accepted=response.get('result') is not None,
+        error=(response.get('error') or {}).get('data'),
+        cancel_sent=bool(sent),
+        tested_cancel=bool(sent) and at_cancel['runtime'] != 'exited',
+        control_sent=[{k: e.get(k) for k in ('method', 'in_band', 'escalates_after_ms')}
+                      for e in sent],
+        seconds_to_exit=round(elapsed, 3),
+        escalated_to_kill=bool(first_event(events, 'interrupt_escalated')),
+        turn_completed=bool(completed),
+        stop_reason=completed.get('stop_reason'),
+        # The owner's question for this harness: does a cancelled turn keep
+        # its usage? If it does not, the Claude allowance rule applies with a
+        # figure taken from this sequence's own completed turns.
+        usage_reported_after_cancel=bool(first_event(events, 'usage')))
+    return view
+
+
+def sentinel_in_output(store, sentinel):
+    """Whether the out-of-fixture file's own content ever appeared in what the
+    harness sent. Containment read from the world, not inferred from what PIO
+    meant to allow."""
+    for path in store.rglob('*'):
+        if path.is_file():
+            try:
+                if sentinel in path.read_bytes():
+                    return True
+            except OSError:
+                continue
+    return False
+
+
+# What each run is named for, and the predicate that says the runner can
+# actually make that observation. Checked against the labeled fake before the
+# live run, at no token cost.
+OBSERVATION = {
+    'R1': ('a usage report, and a census of where the harness reported it',
+           lambda r: r['usage']['reported']
+           and r['usage']['granularity']['report_count'] > 0),
+    'R2': ('a permission request surfaced and answered by the caller',
+           lambda r: r['decision']['requested'] and bool(r['decision']['answered'])),
+    'R3': ('a permission request surfaced and answered by the caller',
+           lambda r: r['decision']['requested'] and bool(r['decision']['answered'])),
+    'R4': ('a cancel actually sent to a turn that had not finished',
+           lambda r: r['cancel']['cancel_sent'] and r['cancel']['tested_cancel']),
+    'R5': ("PIO's own decline of a target outside the workspace",
+           lambda r: r['decline']['declined_by_pio'] > 0),
+}
+
+
+def scratch_root():
+    """Scratch for the rehearsal: beside the worktree, never inside it and
+    never in the live tree a receipt comes from."""
+    return Path(os.environ.get('PIO_SCRATCH') or ROOT.parent / 'pio-scratch')
+
+
+def dry_run_check(run):
+    """Refuse a live run whose observation the runner cannot make.
+
+    Runs this same script against the labeled fake and applies the run's own
+    predicate to the receipt. Costs no tokens and takes seconds; the
+    alternative is a live receipt that claims something that never happened,
+    which is what five of the Claude receipts did.
+    """
+    label, predicate = OBSERVATION[run]
+    root = scratch_root()
+    root.mkdir(parents=True, exist_ok=True)
+    os.chmod(root, 0o700)
+    # Short on purpose: the rehearsal builds a Unix socket path underneath it.
+    out = root / 'd'
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    try:
+        here = str(Path(__file__).resolve().parent)
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(
+            [here, os.environ.get('PYTHONPATH', '')]).rstrip(os.pathsep))
+        finished = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()),
+             '--run', run, '--dry-run', '--out', str(out / 'o')],
+            capture_output=True, text=True, timeout=1800, env=env)
+        receipt = out / 'opencode-live-dry-run' / f'{run}.json'
+        if not receipt.exists():
+            raise SystemExit(
+                f'{run}: the dry run produced no receipt, so the run cannot be '
+                f'rehearsed and no tokens are spent on it.\n'
+                f'--- rehearsal stderr ---\n{finished.stderr[-1500:]}')
+        record = json.loads(receipt.read_text())
+        try:
+            made = bool(predicate(record))
+        except (KeyError, TypeError):
+            made = False
+        if not made:
+            raise SystemExit(
+                f'{run}: the dry run did not make the observation this run is '
+                f'named for ({label}). Refusing to spend tokens on a receipt '
+                f'that would claim it.')
+        return dict(ran=True, observation=label, made_in_dry_run=True)
+    finally:
+        shutil.rmtree(out, ignore_errors=True)
 
 
 def build_receipt(service, run, view, started, extra):
@@ -502,6 +716,8 @@ def check_stops(book, run, receipt):
 
 def run_one(run, args):
     checks = preflight(args.dry_run)
+    rehearsal = ({'ran': False, 'reason': 'this is the rehearsal'} if args.dry_run
+                 else dry_run_check(run))
     book = ledger()
     if cumulative(book) >= STOP_AT and not args.dry_run:
         raise SystemExit(f'stop: cumulative observed usage {cumulative(book)} '
@@ -524,8 +740,27 @@ def run_one(run, args):
         # Restart is **not evaluated** for this harness. The Claude plan has a
         # run for it (R7) and this one does not; the branch that used to sit
         # here was unreachable — `if False:` — and read like a feature.
-        view = wait(service, lambda v: v['runtime'] == 'exited', 900)
+        if run in DECISION:
+            view = drive_decision(service, run, extra)
+        elif run == 'R4':
+            view = drive_cancel(service, extra)
+        else:
+            view = wait(service, lambda v: v['runtime'] == 'exited', 900)
         events = service.events()
+        if run == 'R5':
+            record = first_event(events, 'tool_uses').get('record') or {}
+            extra['decline'] = dict(
+                declined_by_pio=len([e for e in events
+                                     if e['kind'] == 'request_declined_by_pio']),
+                requested=bool(first_event(events, 'action_requested'))
+                or bool(first_event(events, 'request_declined_by_pio')),
+                declined_by_pio_count=record.get('declined_by_pio_count'),
+                out_of_fixture_effect_observed=record.get('out_of_fixture_effect_observed'),
+                # Read from the world: did the file's own content ever reach
+                # anything the harness sent?
+                content_left_the_boundary=sentinel_in_output(service.store,
+                                                             OUTSIDE_SENTINEL),
+                target=str(marker))
         extra['sessions_after'] = session_listing(repo, args.dry_run)
         extra['owner_service_after'] = owner_service()
         extra['owner_service_untouched'] = owner_before == extra['owner_service_after']
@@ -539,6 +774,7 @@ def run_one(run, args):
         extra['pio_deleted_nothing'] = deleted_nothing(extra['sessions_before'],
                                                        extra['sessions_after'])
         extra['preflight'] = checks
+        extra['rehearsal'] = rehearsal
         receipt = build_receipt(service, run, view, started, extra)
     finally:
         service.release()
@@ -675,6 +911,7 @@ def receipt_fields_selftest(out):
         # live evidence, which the receipt states in `sessions_before.reason`
         # and `preflight.reason` rather than leaving to the reader.
         dry_run_dependent = ('sessions_before', 'sessions_after', 'preflight',
+                             'rehearsal', 'decision', 'cancel', 'decline',
                              'delivery', 'pio_deleted_nothing',
                              # No permission is requested in either scenario
                              # the shape check runs, so there is no option list
@@ -687,7 +924,9 @@ def receipt_fields_selftest(out):
         # Null in a dry run for a stated reason, so it cannot vary either.
         if path == 'pio_deleted_nothing':
             continue
-        if path in expected_constant or path.startswith(('preflight.', 'sessions_',
+        if path in expected_constant or path.startswith(('preflight.', 'rehearsal.',
+                                                         'decision.', 'cancel.', 'decline.',
+                                                         'sessions_',
                                                          'owner_service', 'harness.capabilities',
                                                          'harness.auth_methods', 'delivery.',
                                                          'tool_uses.', 'durable_state.',

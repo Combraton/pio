@@ -184,6 +184,16 @@ pub fn run() -> Result<()> {
                            "prompt_blocks":message["params"]["prompt"].as_array().map(Vec::len)}),
                 )?;
                 if let Some(delay) = scenario["delay_ms"].as_u64() {
+                    // A harness that works for a while starts streaming
+                    // first. Sleeping before the first update instead made a
+                    // cancel rehearsal wait out the whole delay and then
+                    // cancel a turn that had already ended — the exact defect
+                    // the Claude R5 attempts were spent on.
+                    update(
+                        session,
+                        json!({"sessionUpdate":"agent_message_chunk",
+                               "content":{"type":"text","text":"fake turn started"}}),
+                    )?;
                     std::thread::sleep(std::time::Duration::from_millis(delay));
                 }
                 // An agent asks a client that is there to be asked, and
