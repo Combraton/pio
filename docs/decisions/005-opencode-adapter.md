@@ -112,7 +112,13 @@ So the order is now `session/new`, select, read the harness's own report back, g
 
 ### 5. Permissions
 
-**Measured: the user's configuration has no `permission` key at all**, so there are no configured rules to compare against and the Claude adapter's equality guard has nothing to guard. Until the default behaviour is measured on the wire, the adapter carries `permission_default: not_evaluated`.
+**Measured: the user's configuration has no `permission` key at all**, so there are no configured rules to compare against and the Claude adapter's equality guard has nothing to guard.
+
+**R2 measured what that means, and the answer is the plainest result of this sequence: the harness ran a shell command with no permission request reaching PIO at all.** One `execute` tool call, recorded `performed`, `decided_by: null`, and the marker file it created was there in the fixture afterwards. The caller's deny was never sent because the caller was never asked.
+
+So for this harness as the owner configures it, **PIO observes; it does not contain.** That is the same finding the Claude sequence reached, for the same reason, and it is stated here as a property of the configuration rather than of the adapter. The effect stayed inside the workspace — but because the command was an inside-the-workspace one, not because PIO stopped anything.
+
+`permission_default` is therefore no longer `not_evaluated`: **measured, it acts without asking.**
 
 - **`--auto` is never passed**, in any form, at top level or on `run`. It auto-approves everything not explicitly denied, and with no deny rules configured that is every request.
 - Only **single-use** decisions are forwarded, as for Codex and Claude. A rule update, a session-scoped grant and a mode change are all refused.
@@ -169,7 +175,7 @@ Both are now searched for rather than looked up: the usage object is found where
 1. **The `session/request_permission` request and response shapes on the wire.** ACP specifies them; they are unverified against 2.0.1, and PIO forwards no decision whose single-use form it has not measured.
 2. ~~**Usage reporting granularity**, first, exactly as for Claude.~~ **Answered by R1, §9.** Usage arrives **both** during the turn, as a `usage_update` session update carrying a running `used` total, and at the end, in the `session/prompt` result. The census that answered it is kept, because it is what found the host reading the wrong place, and because R4 still has to say whether a longer turn reports more than once.
 3. **Cancellation**: `session/cancel` semantics, and whether a cancelled turn still reports usage.
-4. Whether `mode: plan` is a genuinely narrower posture worth requesting for fixture runs.
+4. Whether `mode: plan` is a genuinely narrower posture worth requesting for fixture runs. **Implemented 2026-09-21 after R2**, because it is the only per-session lever that does not edit the owner's configuration. PIO selects it with `session/set_config_option` and **refuses unless the session reports the mode back**, exactly as for the model. Only narrowing values are requestable: `build` is the harness's own default, so asking for it could only ever loosen a session that was already narrower, and admission refuses it as `mode_is_not_a_narrowing_one`. Whether it actually changes what prompts is R3's question.
 5. ~~The **surface and session identity** to pin, and whether npm self-update moves it, as the Homebrew cask does for Claude.~~ **Answered 2026-09-21: it moves.** npm took the install from 2.0.1 to 2.0.11 between the plan and the first live run; qualification refused, the pin was moved and the surface recaptured (§0). Expect it to move again, and expect a refusal rather than a silent run on a version nobody measured.
 6. Whether any ACP option yields a **prompt acknowledgment** (§7). Until one is measured, delivery carries no proof class for this harness.
 

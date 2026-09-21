@@ -328,6 +328,44 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
         answer["result"].clone()
     };
 
+    // The narrower posture, when one was asked for. Same mechanism as the
+    // model and the same discipline: the harness's own report back is what
+    // is recorded, not the absence of an error. R2 measured this harness
+    // running a shell command with no request reaching PIO at all, and this
+    // is the only per-session lever that does not edit the owner's
+    // configuration.
+    let requested_mode = life.spec["mode"].as_str().unwrap_or_default().to_owned();
+    let mode_report = if requested_mode.is_empty() {
+        Value::Null
+    } else {
+        let id = rpc.request(
+            child,
+            "session/set_config_option",
+            json!({"sessionId":session,"configId":"mode","value":requested_mode}),
+        )?;
+        let answer = rpc.wait(child, id, 120, |_| Ok(()))?;
+        let reported = answer["result"]["configOptions"]
+            .as_array()
+            .and_then(|options| options.iter().find(|option| option["id"] == "mode"))
+            .map(|option| option["currentValue"].clone())
+            .unwrap_or(Value::Null);
+        life.event(json!({"kind":"mode_selected",
+            "requested_mode":requested_mode,
+            "reported_mode":reported,
+            "mode_matches_requested":reported == json!(requested_mode),
+            "error":answer["error"]}))?;
+        ensure!(
+            answer["error"].is_null(),
+            "mode_selection_refused: {}",
+            answer["error"]
+        );
+        ensure!(
+            reported == json!(requested_mode),
+            "mode_not_applied: asked for {requested_mode}, the session reports {reported}"
+        );
+        reported
+    };
+
     // The owner's rule, and the whole reason this adapter is better placed than
     // the Claude one: the session reports what it will use before any prompt,
     // so a refusal here happens with the brief still inside PIO. It is run
@@ -350,6 +388,12 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
         "reported_model":guard["reported"],
         "model_matches_requested":guard["allowed"],
         "model_selected_by_pio":!requested_model.is_empty(),
+        "requested_mode":if requested_mode.is_empty() {
+            Value::Null
+        } else {
+            json!(requested_mode)
+        },
+        "reported_mode":mode_report,
         // Measured on this transport: the session reports what it will use
         // **before** any prompt, so a refusal here happens with the brief
         // still inside PIO. The Claude adapter cannot do this.

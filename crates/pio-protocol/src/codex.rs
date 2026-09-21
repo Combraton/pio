@@ -256,6 +256,9 @@ impl Provider {
                 // Every run passes an explicit model, under the dated
                 // exception the admission already checked.
                 spec["model"] = host["model"].clone();
+                // The narrower session posture, when one was asked for. Only
+                // narrowing values reach here: admission refuses the rest.
+                spec["mode"] = host["mode"].clone();
             }
             _ => {
                 spec["codex_home"] = host["codex_home"].clone();

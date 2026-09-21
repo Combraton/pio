@@ -72,6 +72,7 @@ CASES = [
     'a_decision_is_selected_by_kind_never_by_id',
     'a_decision_whose_kind_is_not_offered_is_refused',
     'service_refuses_a_selection_that_did_not_take',
+    'service_asks_for_the_narrower_mode_and_checks_it_took',
     'service_stops_when_the_model_selection_is_refused',
     'service_refuses_a_downgraded_session_before_any_prompt',
     'service_tells_a_harness_refusal_apart_from_a_pio_decline',
@@ -147,7 +148,7 @@ def release_live_cases():
 
 class Case:
     def __init__(self, out, name, scenario=None, model=None, exception=True,
-                 labeled_fake=True, env_extra=None, executable=None):
+                 labeled_fake=True, env_extra=None, executable=None, mode=None):
         self.name = name
         self.out = out / name
         self.out.mkdir(parents=True, exist_ok=True)
@@ -177,6 +178,8 @@ class Case:
             'fixture_root': str(self.fixtures), 'labeled_fake': labeled_fake}}
         if model is not None:
             config['opencode']['model'] = model
+        if mode is not None:
+            config['opencode']['mode'] = mode
         if exception:
             config['opencode']['test_only_model_exception'] = \
                 'owner-2026-09-20-m3b-opencode-fixture-runs'
@@ -864,6 +867,62 @@ def run_case(out, name):
         assert created['model_matches_requested'] is False, created
         assert case.markers_of('prompt_received') == [], 'a prompt was sent after a refusal'
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_asks_for_the_narrower_mode_and_checks_it_took':
+        # R2 measured this harness executing a shell command with no request
+        # reaching PIO at all. `mode` is the only per-session lever that does
+        # not edit the owner's configuration, and `plan` is the narrower of
+        # the two. Narrowing is allowed; widening is refused at admission.
+        case = ServiceCase(out, name, model=REQUESTED, mode='plan')
+        case.start()
+        case.submit()
+        poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        events = case.host_events()
+        selected = [e for e in events if e['kind'] == 'mode_selected']
+        assert len(selected) == 1, [e['kind'] for e in events]
+        assert selected[0]['requested_mode'] == 'plan', selected
+        assert selected[0]['reported_mode'] == 'plan', selected
+        assert selected[0]['mode_matches_requested'] is True, selected
+        created = [e for e in events if e['kind'] == 'session_created'][0]
+        assert created['requested_mode'] == 'plan', created
+        assert created['reported_mode'] == 'plan', created
+        assert case.markers_of('config_option_set')[-1]['current_mode'] == 'plan', \
+            case.markers_of('config_option_set')
+        case.finish()
+        case.cleanup()
+
+        # A harness that accepts the narrower posture and stays on the one it
+        # had. PIO reads the report back, not the absence of an error, so this
+        # is a refusal with the brief still inside it.
+        ignored = ServiceCase(out, f'{name}-ignored', model=REQUESTED, mode='plan',
+                              scenario={'ignore_mode_selection': True})
+        ignored.start()
+        ignored.submit()
+        view = poll(lambda: ignored.inspect(),
+                    lambda v: v['delivery'] in ('failed_before_delivery', 'not_delivered'))
+        assert view['delivery'] == 'failed_before_delivery', view
+        events = ignored.host_events()
+        assert [e for e in events if e['kind'] == 'mode_selected'][0][
+            'mode_matches_requested'] is False, events
+        error = [e for e in events if e['kind'] == 'host_error']
+        assert error and 'mode_not_applied' in error[0]['error'], error
+        assert ignored.markers_of('prompt_received') == [], 'a prompt was sent after a refusal'
+        view = poll(lambda: ignored.inspect(), lambda v: v['runtime'] == 'exited')
+        assert view['exit'] == 'unavailable', view
+        ignored.finish()
+        ignored.cleanup()
+
+        # And widening is refused before anything starts: `build` is the
+        # harness's own default, so asking for it could only ever loosen a
+        # session that was already narrower.
+        for mode in ('build', 'bypass'):
+            wide = Case(out, f'{name}-{mode}-refused', model=REQUESTED, mode=mode)
+            status, record = wide.admit()
+            assert status == 3, (mode, record)
+            assert 'mode_is_not_a_narrowing_one' in [r['reason'] for r in record['refusals']], record
+            wide.finish()
+            wide.cleanup()
+        case = Case(out, name, model=REQUESTED)
 
     elif name == 'service_stops_when_the_model_selection_is_refused':
         # The harness refuses the selection outright. PIO stops with the brief

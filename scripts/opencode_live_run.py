@@ -79,6 +79,13 @@ MODELS = {
     'R5': MODEL_STRONGEST,
 }
 MODEL_EXCEPTION = 'owner-2026-09-20-m3b-opencode-fixture-runs'
+# The narrower session posture, where one is asked for. R2 measured this
+# harness executing a shell command with **no permission request reaching PIO
+# at all**, so repeating R2's brief on the same posture would buy nothing.
+# `mode` is the only per-session lever that does not edit the owner's
+# configuration, the plan posted on issue #10 already committed to trying it,
+# and narrowing is allowed where widening is not.
+MODES = {'R3': 'plan', 'R5': 'plan'}
 DELIVERY_TIMEOUT = 120
 EXECUTION_DEADLINE = 600
 
@@ -402,6 +409,8 @@ class Service:
         # Every run passes an explicit MiniMax model: the configured default is
         # a provider the owner has excluded from PIO entirely.
         opencode['model'] = model
+        if MODES.get(run):
+            opencode['mode'] = MODES[run]
         opencode['test_only_model_exception'] = MODEL_EXCEPTION
         protocol = dict(format='combraton-conformance-config/1', principal='owner',
                         credentials=[dict(credential=self.credential)],
@@ -534,6 +543,11 @@ def drive_decision(service, run, extra):
     events = service.events()
     extra['decision'] = dict(
         requested=bool(first_event(events, 'action_requested')),
+        # Whether the harness ever asked, and what it did anyway. These two
+        # together are the finding when a harness with no permission rules
+        # simply acts.
+        asked_nobody_and_acted=not first_event(events, 'action_requested')
+        and bool(first_event(events, 'tool_uses').get('record', {}).get('tool_uses')),
         sent=decision, action_id=action_id, answered=answered, error=error,
         applied=[{k: e.get(k) for k in ('decision', 'requested_decision', 'applied',
                                         'decided_by', 'option_id', 'option_kind',
@@ -584,6 +598,19 @@ def drive_cancel(service, extra):
         # figure taken from this sequence's own completed turns.
         usage_reported_after_cancel=bool(first_event(events, 'usage')))
     return view
+
+
+def decision_effect(repo):
+    """What the turn actually did, read from the world.
+
+    Not inferred from what PIO sent, and not taken from the harness's own
+    account of itself. R6 of the Claude sequence recorded an effect for a read
+    the harness had refused; R2 here recorded a tool use as `performed`
+    without anything checking whether it had been.
+    """
+    marker = repo / 'pio-live-marker.txt'
+    return dict(kind='marker file', label=f'<fixture>/{marker.name}',
+                command=DECISION_COMMAND, happened=marker.exists())
 
 
 def sentinel_in_output(store, sentinel):
@@ -703,6 +730,8 @@ def build_receipt(service, run, view, started, extra):
         # what a new session actually starts on, which 2.0.11 does not take
         # from that file.
         configured=extra.pop('configured_block'),
+        mode=dict(requested=session.get('requested_mode'),
+                  reported=session.get('reported_mode')),
         model=dict(configured=extra.pop('configured_model'),
                    on_creation=session.get('model_on_creation'),
                    selected_by_pio=session.get('model_selected_by_pio'),
@@ -810,6 +839,8 @@ def run_one(run, args):
         else:
             view = wait(service, lambda v: v['runtime'] == 'exited', 900)
         events = service.events()
+        if run in DECISION:
+            extra['effect'] = decision_effect(repo)
         if run == 'R5':
             record = first_event(events, 'tool_uses').get('record') or {}
             extra['decline'] = dict(
@@ -997,6 +1028,9 @@ def receipt_fields_selftest(out):
         dry_run_dependent = ('sessions_before', 'sessions_after', 'preflight',
                              'rehearsal', 'decision', 'cancel', 'decline',
                              'delivery', 'pio_deleted_nothing', 'configured',
+                             # Only R3 and R5 ask for a narrower posture, and
+                             # the shape check runs R1 and R5.
+                             'mode', 'effect',
                              # Null only in a dry run, which never reads the
                              # owner's configuration, and the receipt says so
                              # in `configured.reason` rather than leaving the
@@ -1018,7 +1052,7 @@ def receipt_fields_selftest(out):
                                                          # Never read in a dry
                                                          # run, so it cannot
                                                          # vary between two.
-                                                         'configured.',
+                                                         'configured.', 'mode.', 'effect.',
                                                          'decision.', 'cancel.', 'decline.',
                                                          'sessions_',
                                                          'owner_service', 'harness.capabilities',

@@ -59,6 +59,7 @@ pub const SERVICE_SETTINGS: &[&str] = &[
     "fixture_root",
     "provider",
     "model",
+    "mode",
     "labeled_fake",
     "test_only_model_exception",
     "expected_surface",
@@ -78,6 +79,17 @@ pub const MODEL_EXCEPTION: &str = "owner-2026-09-20-m3b-opencode-fixture-runs";
 /// own free models — which is what a silently downgraded session would land
 /// on — and the Juspay Grid gateway the owner excluded outright.
 pub const ALLOWED_PROVIDER: &str = "minimax-coding-plan";
+
+/// Session modes PIO may request, narrowest first.
+///
+/// The owner's configuration has **no permission rules**, so nothing PIO can
+/// pass makes the harness ask before it acts — R2 measured a shell command
+/// executed with no request reaching PIO at all. `mode` is the only
+/// per-session lever that does not edit the owner's configuration, and `plan`
+/// is the narrower of the two. **Narrowing is allowed; widening is not**, so
+/// `build` is refused: it is the harness's own default and asking for it
+/// could only ever loosen a session that was already narrower.
+pub const REQUESTABLE_MODES: &[&str] = &["plan"];
 
 /// The owner's own background service, which PIO must never touch.
 pub const OWNER_SERVICE_PATTERN: &str = "serve --service";
@@ -432,6 +444,18 @@ pub fn service_admission(work: &Path, opencode: &Value) -> Result<Value> {
                     json!({"model":model,"allowed_provider":ALLOWED_PROVIDER}),
                 ));
             }
+        }
+    }
+    // A mode is optional. When one is named it may only be a narrowing one:
+    // PIO never asks a harness to be less careful than it already is.
+    if let Some(mode) = opencode.get("mode") {
+        match mode.as_str() {
+            Some(mode) if REQUESTABLE_MODES.contains(&mode) => {}
+            Some(mode) => refusals.push(refusal(
+                "mode_is_not_a_narrowing_one",
+                json!({"mode":mode,"requestable":REQUESTABLE_MODES}),
+            )),
+            None => refusals.push(refusal("mode_must_be_a_plain_name", mode.clone())),
         }
     }
     // Qualification is computed *and acted on*. Computing a verdict and then

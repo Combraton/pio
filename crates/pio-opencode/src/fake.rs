@@ -22,7 +22,8 @@
 //! that does not offer one), `tool_calls`, `usage_total`, `message_chunks`,
 //! `usage_on_updates` (a harness that reports usage as it goes rather than
 //! once at the end), `model_on_creation`, `ignore_model_selection`,
-//! `refuse_model_selection`, `delay_ms`, `ignore_cancel`, `markers`.
+//! `refuse_model_selection`, `mode_on_creation`, `mode`,
+//! `ignore_mode_selection`, `delay_ms`, `ignore_cancel`, `markers`.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 use std::io::{BufRead, Write};
@@ -86,7 +87,7 @@ fn update(session: &str, update: Value) -> Result<()> {
 }
 
 /// The session's own report of what it will use. Measured shape.
-fn config_options(model: &str) -> Value {
+fn config_options(model: &str, mode: &str) -> Value {
     json!([
         {"id":"model","name":"Model","category":"model","type":"select",
          "currentValue":model,
@@ -97,7 +98,7 @@ fn config_options(model: &str) -> Value {
                      "name":"opencode/nemotron-3.5-lightning-free"}]},
         {"id":"effort","name":"Effort","type":"select","currentValue":"default",
          "options":[{"value":"default","name":"default"}]},
-        {"id":"mode","name":"Mode","type":"select","currentValue":"build",
+        {"id":"mode","name":"Mode","type":"select","currentValue":mode,
          "options":[{"value":"build","name":"build"},{"value":"plan","name":"plan"}]}
     ])
 }
@@ -166,6 +167,11 @@ pub fn run() -> Result<()> {
         .as_str()
         .unwrap_or(MODEL_ON_CREATION)
         .to_owned();
+    // The session's posture. `build` is what a real session starts on.
+    let mut mode = scenario["mode_on_creation"]
+        .as_str()
+        .unwrap_or("build")
+        .to_owned();
     let mut handshook = false;
     let mut cancelled = false;
 
@@ -207,7 +213,8 @@ pub fn run() -> Result<()> {
                 )?;
                 reply(
                     &id,
-                    json!({"sessionId":session,"configOptions":config_options(&current)}),
+                    json!({"sessionId":session,
+                           "configOptions":config_options(&current, &mode)}),
                 )?;
             }
 
@@ -232,6 +239,12 @@ pub fn run() -> Result<()> {
                 // PIO must not read the absence of an error as evidence the
                 // selection took.
                 let ignored = scenario["ignore_model_selection"] == true;
+                // A harness that accepts the narrower posture and stays on
+                // the one it had. PIO must read the report back, not the
+                // absence of an error.
+                if config_id == "mode" && scenario["ignore_mode_selection"] != true {
+                    mode = scenario["mode"].as_str().unwrap_or(value).to_owned();
+                }
                 if config_id == "model" && !ignored {
                     // `model` in the scenario overrides, so a silent
                     // downgrade can still be played against a client that
@@ -242,9 +255,12 @@ pub fn run() -> Result<()> {
                     &markers,
                     json!({"event":"config_option_set","config_id":config_id,
                            "requested_value":value,"ignored":ignored,
-                           "current_model":&current}),
+                           "current_model":&current,"current_mode":&mode}),
                 )?;
-                reply(&id, json!({"configOptions":config_options(&current)}))?;
+                reply(
+                    &id,
+                    json!({"configOptions":config_options(&current, &mode)}),
+                )?;
             }
 
             "session/prompt" => {
