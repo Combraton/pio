@@ -23,7 +23,8 @@
 //! `usage_on_updates` (a harness that reports usage as it goes rather than
 //! once at the end), `model_on_creation`, `ignore_model_selection`,
 //! `refuse_model_selection`, `mode_on_creation`, `mode`,
-//! `ignore_mode_selection`, `delay_ms`, `ignore_cancel`, `markers`.
+//! `ignore_mode_selection`, `session_error`, `delay_ms`, `ignore_cancel`,
+//! `markers`.
 //! A `tool_calls` entry takes `title`, `kind`, `input` and an optional
 //! `status` for the state the call ends in.
 use anyhow::{Context, Result};
@@ -207,6 +208,14 @@ pub fn run() -> Result<()> {
             // The session reports what it will actually use, before any
             // prompt — and it does **not** start on the model the client
             // wants. Measured from 2.0.11.
+            "session/new" if !scenario["session_error"].is_null() => {
+                // A harness refusing with a message of its own. Real harness
+                // errors routinely name a file, which is why this exists.
+                marker(&markers, json!({"event":"session_refused"}))?;
+                emit(&json!({"jsonrpc":"2.0","id":&id,
+                    "error":{"code":-32603,"message":&scenario["session_error"]}}))?;
+            }
+
             "session/new" => {
                 marker(
                     &markers,
