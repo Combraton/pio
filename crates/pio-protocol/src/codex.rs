@@ -289,6 +289,7 @@ impl Provider {
         let id = text(&e["view"]["execution"]["id"]).to_owned();
         match method {
             "execution.steer" => {
+                let under = self.under_grant(p);
                 let n = num(&e["steer_count"]) + 1;
                 e["steer_count"] = n.into();
                 let steer_id = format!("{id}.steer-{n}");
@@ -304,12 +305,11 @@ impl Provider {
                         &mut e["view"]["steering"],
                         json!({"steer_id":steer_id,"request":"not_supported","recorded_at":self.now,"alternative":alternative}),
                     );
-                    self.execution_event(
-                        e,
-                        "execution.steer.requested",
-                        json!({"steer_id":steer_id,"request":"not_supported"}),
-                        Some((p, op)),
-                    );
+                    let mut payload = json!({"steer_id":steer_id,"request":"not_supported"});
+                    if let Some(under) = &under {
+                        payload["pio.combraton.dev/under-grant"] = under.clone();
+                    }
+                    self.execution_event(e, "execution.steer.requested", payload, Some((p, op)));
                     return Ok(
                         json!({"steer_id":steer_id,"request":"not_supported","alternative":alternative}),
                     );
@@ -334,7 +334,13 @@ impl Provider {
                 self.execution_event(
                     e,
                     "execution.steer.requested",
-                    json!({"steer_id":steer_id,"request":"recorded"}),
+                    {
+                        let mut payload = json!({"steer_id":steer_id,"request":"recorded"});
+                        if let Some(under) = &under {
+                            payload["pio.combraton.dev/under-grant"] = under.clone();
+                        }
+                        payload
+                    },
                     Some((p, op)),
                 );
                 Ok(json!({"steer_id":steer_id,"request":"recorded","delivery_id":delivery}))
@@ -405,6 +411,23 @@ impl Provider {
         }
     }
 
+    /// Who presented a grant with this command, when one was presented.
+    ///
+    /// **PIO's record, not the Protocol's.** `steering_entry` is closed, so
+    /// nothing can go in the view, and the event record has no authorship
+    /// field at all: on the stream today a steer from a lead and a steer
+    /// from the owner are indistinguishable. This says who held the grant,
+    /// which is the most PIO can say without inventing a Protocol field —
+    /// and it says it in the payload, under a namespaced key, so a client
+    /// that ignores it sees exactly what it saw before. The proposal that
+    /// the Protocol carry authorship is filed separately; nothing here
+    /// widens anything locally.
+    pub(crate) fn under_grant(&self, p: &Value) -> Option<Value> {
+        let id = p.get("grant")?.as_str()?;
+        Some(json!({"grant":id,
+                    "holder":self.grant(id).map(|g| g["holder"].clone()),
+                    "recorded_by":"pio"}))
+    }
     fn codex_effect(
         &mut self,
         e: &mut Value,

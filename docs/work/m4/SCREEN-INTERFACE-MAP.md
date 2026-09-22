@@ -303,4 +303,34 @@ Recorded rather than quietly fixed, because the reviewer will want to know which
 
 The reviewer's own correction to the design input, on `origin`, is recorded in [`design-input/CORRECTIONS.md`](design-input/CORRECTIONS.md).
 
+## Step 3 — orchestrate, on what the Protocol already has
+
+`scripts/lead_runs.py`. Items 1 and 2 are done; item 3 is filed; item 4 is posted on #12 and waits on the owner.
+
+### `origin` on `execution.submit`
+
+`{initiator, depth, call_budget}`, a field of the submit params and of the inspect result, under the same closed shape. **PIO refused it outright**: the gate required `execution.context_revalidation`, a feature that appears nowhere in the pinned schemas and that nothing advertises — while the three conformance fixtures about revalidation key off `execution.context`, the gate for `context_bindings`, a different field. The requirement was PIO's own and wrong, and nothing could say a run had a lead.
+
+| | Rule | Mutant |
+| --- | --- | --- |
+| Depth | A call sits exactly one level below the run that started it; a top-level run is its own initiator at depth 0. **Derived, not configured** — the launch config is validated against the pinned `launch-config.schema.json`, whose `executor` is closed, so a limit could not have gone there, and a constant would be a number with no reason behind it. An initiator PIO has never seen constrains nothing. | `deeper` names a run already at depth 1, so the same depth 2 is one level down and admitted |
+| Budget | Belongs to the run spending it, **counted from the runs that name it** rather than kept in a field PIO must hold in step — the journal is the counter, so it survives a restart. A refused run never started and spends nothing. | `richer` gives a second call, so the refused start is admitted |
+| Echo | The view carries what the caller sent, never more | `no-origin` submits without it, so the view has none |
+
+**A surviving mutant found a real bug.** `richer` passed at first, because a run that had been *refused* was still counted against the budget — a budget of two admitted only one.
+
+### The lead's grant
+
+A lead may submit, steer, read and follow the stream. It may **not** answer an approval.
+
+Before this, `execution.steer` and `execution.respond_action` both fell to the default arm of the authorizer and were refused **whatever the grant said** — so a grant could not express steer at all, and refusing an answer proved nothing. Both are grantable now, which is what makes the refusal attributable: `permission_denied` / `right_missing`, with the owner answering the same action to show the refusal is about the right and not the action.
+
+The negative runs through **`serve-opencode`**, not `serve-fake`: the fake advertises no `execution.actions`, so an answer there is refused `unsupported_required_feature` before authorization is reached — a refusal that says nothing about scope. Steer needed the same treatment, and the session has to negotiate the feature as well as hold the right.
+
+### Steer authorship — filed, not widened
+
+`steering_entry` is closed and the event record has no authorship field, so **a steer from a lead and a steer from the owner are indistinguishable on the stream**. PIO records the grant in the payload of `execution.steer.requested` under `pio.combraton.dev/under-grant` — `{grant, holder, recorded_by: "pio"}` — which says plainly that this is the implementation's record and not the Protocol's. Nothing closed gained a field and no new event type name was introduced.
+
+The proposal is [Combraton/protocol#17](https://github.com/Combraton/protocol/issues/17), filed with the evidence: two places that could carry authorship and why neither can, what PIO did locally, and two shapes the Protocol could take. `--mutant owner-steers` sends the same steer with no grant and the key is absent, which is what shows it means *who held a grant* rather than *a steer happened*.
+
 **Step 2 order:** ~~G1 and G6 (the events fold)~~ **done**, ~~G2 (the approval walk)~~ **done**, ~~G3 (blocks and the audit)~~ **done**. Each with its own headless case and a mutant. Next: step 3, orchestrate.

@@ -38,6 +38,9 @@ it dies on the claim it undermines:
 - `--mutant may-answer` puts `execution.respond_action` in the lead's grant,
   so the answer is not refused for scope. The refusal is about the right
   being withheld, not about leads.
+- `--mutant owner-steers` sends the same steer as the owner, with no grant,
+  so no grant is recorded against it. The key says who held a grant, not
+  that a steer happened.
 """
 import argparse
 import hashlib
@@ -297,12 +300,32 @@ def pass_lead_cannot_answer(out, mutant=None):
                         command_id='lead-steer', revision=case.inspect('work')['revision'])
         steer['extensions'] = {'pio.combraton.dev/content':
                                dict(media_type='text/plain', text=note.decode())}
-        steered = lead.call(steer)
+        steered = (owner if mutant == 'owner-steers' else lead).call(steer)
         steer_code = steered.get('error', {}).get('data', {}).get('code')
         assert steer_code != 'permission_denied', (
             'the grant carries execution.steer and the steer was refused for '
             f'scope: {steered}')
         facts['steer'] = steer_code or 'allowed'
+
+        # Who the steer came from, as far as PIO can say it. The Protocol
+        # has no authorship field: `steering_entry` is closed, and the event
+        # record names a command and a principal but never who held the
+        # grant. So the grant rides in the payload under a namespaced key,
+        # labelled as PIO's own record. `--mutant owner-steers` has the
+        # owner send the same steer with no grant, and the key is absent.
+        under = None
+        for item in owner.query('core.events.read',
+                                {'limit': 200, 'from': 'start',
+                                 'kinds': ['execution.execution']})['result']['items']:
+            event = item.get('event')
+            if event and event['type'] == 'execution.steer.requested':
+                under = event['payload'].get('pio.combraton.dev/under-grant')
+        assert under is not None, (
+            'the steer came under a grant and the stream does not say whose')
+        assert under['grant'] == grant_id, under
+        assert under['holder'] == 'lead', under
+        assert under['recorded_by'] == 'pio', under
+        facts['under_grant'] = under
 
         body = json.dumps({'decision': 'allow'}).encode()
         attempt = command('execution.respond_action', subject('work'),
@@ -338,7 +361,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, default=ROOT / 'target/lead-runs')
     parser.add_argument('--mutant', choices=['deeper', 'richer', 'no-origin',
-                                             'may-answer'])
+                                             'may-answer', 'owner-steers'])
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     roots = []
