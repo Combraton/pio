@@ -53,7 +53,9 @@ class Caller:
     dropping them, so a subscription can be observed rather than assumed."""
 
     def __init__(self, path, credential, features=('core.events', 'core.capabilities',
-                                                   'core.effects'), timeout=10, grant=None):
+                                                   'core.effects'), timeout=10, grant=None,
+                 execution_features=('execution.controller', 'execution.output',
+                                     'execution.discovery')):
         self.stream = socket.socket(socket.AF_UNIX)
         self.stream.settimeout(timeout)
         self.stream.connect(str(path))
@@ -69,13 +71,22 @@ class Caller:
             profiles=[dict(name='core', majors=[1], required=True,
                            required_features=list(features), optional_features=[]),
                       dict(name='execution', majors=[1], required=True,
-                           required_features=['execution.controller', 'execution.output',
-                                              'execution.discovery'],
+                           required_features=list(execution_features),
                            optional_features=[])],
             caller=dict(name='pio-board', version='1'),
             receive_limits=dict(max_frame_bytes=1048576)))
 
     def call(self, envelope):
+        # The grant rides on **every** request, query or command. It used to
+        # be attached in `query` alone, which was enough for a board that
+        # only reads and silently wrong for a lead that submits: the command
+        # went out with no grant and came back `grant_required`. The digest
+        # covers the intent, and `grant` sits outside it, so attaching it
+        # here changes nothing a signature would notice.
+        operation = envelope.get('operation', '')
+        if self.grant and not operation.startswith(('core.authenticate',
+                                                    'core.negotiate')):
+            envelope = dict(envelope, grant=self.grant)
         frame = dict(jsonrpc='2.0', id=str(uuid.uuid4()),
                      method=envelope['operation'], params=envelope)
         self.stream.sendall(json.dumps(frame).encode() + b'\n')
@@ -90,12 +101,8 @@ class Caller:
             self.notifications.append(message)
 
     def query(self, operation, payload):
-        envelope = dict(operation=operation, message_id=str(uuid.uuid4()),
-                        payload=payload)
-        if self.grant and not operation.startswith('core.authenticate') \
-                and not operation.startswith('core.negotiate'):
-            envelope['grant'] = self.grant
-        return self.call(envelope)
+        return self.call(dict(operation=operation, message_id=str(uuid.uuid4()),
+                              payload=payload))
 
     def drain(self, seconds=1.0):
         """Anything the service pushed without being asked.
@@ -229,17 +236,20 @@ class Board:
         return targets
 
 
-def start_service(root, out, events=None, name='daemon'):
+def start_service(root, out, events=None, name='daemon', executor=None,
+                  credentials=()):
     config = dict(
         format='pio-fake-service/1',
         protocol=dict(format='combraton-conformance-config/1', principal='owner',
                       provider_id=PROVIDER,
-                      # Two callers. The principal is the middle field of the
-                      # credential, so the board authenticates as `board` and
-                      # holds nothing until the owner grants it something.
+                      # Two callers, or more. The principal is the middle
+                      # field of the credential, so the board authenticates
+                      # as `board` and holds nothing until the owner grants
+                      # it something.
                       credentials=[dict(credential=CREDENTIAL),
-                                   dict(credential=BOARD_CREDENTIAL)],
-                      executor=dict(host_id='durable-fake-host'),
+                                   dict(credential=BOARD_CREDENTIAL)]
+                      + [dict(credential=c) for c in credentials],
+                      executor=dict(host_id='durable-fake-host', **(executor or {})),
                       **({'events': events} if events else {})),
         fake_host=dict(duration_ms=1200, fault=''))
     config_path = root / 'service.json'

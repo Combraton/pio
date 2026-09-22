@@ -139,8 +139,19 @@ impl Provider {
         let grant = self.usable_grant(session, text(&p["grant"]))?;
         let mut needed = vec![];
         match method {
+            // The right is the operation's own name, as for submit and
+            // cancel. Before this, `execution.steer` and
+            // `execution.respond_action` fell to the default arm and were
+            // refused `right_missing` **whatever the grant said** — so a
+            // grant could not express either, and a lead could not steer the
+            // run it had started. Naming them here is what makes the M4b
+            // lead grant a scope rather than a wish: it can carry steer, and
+            // the refusal of an answer is then attributable to the right
+            // being withheld rather than to the operation being ungrantable.
             "execution.submit"
             | "execution.cancel"
+            | "execution.steer"
+            | "execution.respond_action"
             | "execution.controller.claim"
             | "execution.workspace.checkpoint" => needed.push((method, p["subject"].clone())),
             "execution.inspect" | "execution.output.read" => needed.push((

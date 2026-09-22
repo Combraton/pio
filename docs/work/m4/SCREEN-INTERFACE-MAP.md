@@ -204,6 +204,20 @@ Placement and decider are different. **No Protocol event fires per tool use**, a
 
 **Codex produces no audit at all.** Its host emits no `tool_uses` record, so `execution.exit.observed` carries no `pio.combraton.dev/tool-uses` and a Codex run's placements are **never** classified. The screen has to say that. Showing an absent audit as "nothing happened outside" would be a containment claim PIO never made, so the pass asserts the key is absent and that every placement stays `not yet classified`.
 
+### Gap R1 — the Codex tool-use audit
+
+**Owner decision, 2026-09-22: in v0.1, built in M4a.** Numbered here so the screens are designed against a release harness that will have it, and so the shape is settled before anything is written. **Not built now, and not a step-3 blocker.**
+
+| | |
+| --- | --- |
+| **What is missing** | The Codex host emits no `tool_uses` record, so a Codex run has no end-of-turn audit and no containment record. The other two release harnesses have both. |
+| **Source that fills it** | `item/completed` items of type `command_execution` and `file_change`. A command execution carries its command and `cwd`; a file change carries its paths. The **existing resolver** classifies them — the same one the Claude and OpenCode audits use, so placement means the same thing on all three. |
+| **Record shape** | Identical to the other two audits: per use, the placement, the target digest, who decided, and the harness's own status beside it. |
+| **Carrier** | `execution.exit.observed` under `pio.combraton.dev/tool-uses`, exactly as for Claude Code and OpenCode. No new event type name. |
+| **Proof** | `transcript_blocks.py --harness codex` flips from *key absent, everything unclassified* to *key present, every placement classified*. Its mutant drops a target. Plus a Codex case whose command runs with a `cwd` **outside** the fixture, where the audit says `outside_fixture`. |
+
+Until it lands, the screen shows a Codex run's placements as `not yet classified` for the whole run and says why — which is what `transcript_blocks.py --harness codex` asserts today.
+
 Three placements come back from one turn — `inside_fixture`, and `not_classifiable` twice — which is why the screen cannot collapse them into "inside or outside".
 
 **The first draft of this proof passed while proving nothing.** It read the transcript forty times, got **zero bytes every time**, then everything at once after the run had exited — and still asserted that the audit filled in the blanks. A turn from this fake is over in about a second, which is not long enough to watch. The live window now is a **pending approval**: a real pause with real blocks spooled behind it.

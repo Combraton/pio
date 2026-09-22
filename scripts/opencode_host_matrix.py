@@ -233,7 +233,8 @@ class Case:
 class ServiceCase(Case):
     """Driven through `pio serve-opencode` over the public Unix API."""
 
-    def __init__(self, out, name, **kw):
+    def __init__(self, out, name, extra_credentials=(), **kw):
+        self.extra_credentials = tuple(extra_credentials)
         super().__init__(out, name, **kw)
         from public_api import Client, CREDENTIAL
 
@@ -261,8 +262,18 @@ class ServiceCase(Case):
         config['format'] = 'pio-opencode-service/1'
         config['protocol'] = dict(
             format='combraton-conformance-config/1', principal='owner',
-            credentials=[dict(credential=CREDENTIAL)],
+            # A second principal, when a case needs one. The principal is the
+            # middle field of the credential, so a `ccred1.lead.…` holder
+            # authenticates as `lead` and holds nothing until the owner
+            # grants it something.
+            credentials=[dict(credential=c) for c in
+                         (CREDENTIAL, *getattr(self, 'extra_credentials', ()))],
             executor=dict(host_id='opencode-host'))
+        if self.extra_credentials:
+            # A grant names its audience, and the audience is this provider.
+            # Only set where a second principal needs one, so no existing
+            # case's manifest moves.
+            config['protocol']['provider_id'] = 'conformance-provider'
         self.config_path.write_text(json.dumps(config))
 
     def client(self):

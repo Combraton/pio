@@ -52,7 +52,6 @@ impl Provider {
                 ("budget", "execution.usage"),
                 ("continuation", "execution.continuation"),
                 ("context_bindings", "execution.context"),
-                ("origin", "execution.context_revalidation"),
             ] {
                 if p["payload"].get(field).is_some() && !session.feature(feature) {
                     return Err(invalid(&format!("/payload/{field}")));
@@ -320,7 +319,7 @@ impl Provider {
         let mut effects = vec![];
         let outcome = match method {
             "execution.submit" => {
-                for field in ["predecessor", "correlation"] {
+                for field in ["predecessor", "correlation", "origin"] {
                     if let Some(value) = p["payload"].get(field) {
                         e["view"][field] = value.clone();
                     }
@@ -350,6 +349,9 @@ impl Provider {
                             break;
                         }
                     }
+                }
+                if refusal.is_none() {
+                    refusal = self.origin_refusal(p);
                 }
                 self.execution_budget(&mut e, p, &mut refusal);
                 if refusal.is_none() && self.native() {
@@ -470,6 +472,74 @@ impl Provider {
         view["next_cursor"] = self.cursor(self.head()).into();
         view["obligations"] = open_obligations(&self.data, e).into();
         Ok(view)
+    }
+    /// Who started this run, how deep it sits, and whether the run that
+    /// started it has any calls left.
+    ///
+    /// `origin` is an ordinary optional field of `execution.submit.params`,
+    /// and the view carries it back under the same closed shape. PIO refused
+    /// it outright before this: the gate required a feature,
+    /// `execution.context_revalidation`, that appears nowhere in the pinned
+    /// schemas and that nothing advertises — and the three conformance
+    /// fixtures about revalidation key off `execution.context`, which is the
+    /// gate for `context_bindings`, a different field. So the requirement
+    /// was PIO's own, and wrong: nothing could say a run had a lead.
+    fn origin_refusal(&self, p: &Value) -> Option<&'static str> {
+        let origin = p["payload"].get("origin")?;
+        let initiator = &origin["initiator"];
+        let started_by = self
+            .data
+            .executions
+            .values()
+            .find(|other| other["view"]["execution"] == *initiator);
+        // **Depth is derived, not configured.** A call sits exactly one
+        // level below the run that started it, and a top-level run is its
+        // own initiator at depth 0. That needs no setting, which matters:
+        // the launch configuration is validated against the pinned
+        // `launch-config.schema.json`, whose `executor` object is closed, so
+        // a limit could not have gone there — and a constant would have been
+        // a number with no reason behind it.
+        //
+        // An initiator PIO has never seen constrains nothing: PIO enforces
+        // what it can read from its own journal and says so rather than
+        // guessing.
+        let permitted = match started_by {
+            Some(other) => Some(num(&other["view"]["origin"]["depth"]) + 1),
+            None if *initiator == p["subject"] => Some(0),
+            None => None,
+        };
+        if permitted.is_some_and(|permitted| num(&origin["depth"]) > permitted) {
+            return Some("call_depth_exceeded");
+        }
+        // The budget belongs to the run that is spending it, and spend is
+        // **counted from the runs that name it** rather than kept in a
+        // field PIO would have to hold in step. The journal is the counter,
+        // so it survives a restart and cannot drift from what happened.
+        let budget = started_by
+            .filter(|other| other["view"]["origin"].is_object())
+            .map(|other| num(&other["view"]["origin"]["call_budget"]))?;
+        let started = self
+            .data
+            .executions
+            .values()
+            .filter(|other| {
+                other["view"]["origin"]["initiator"] == *initiator
+                    // A top-level run names itself as its own initiator,
+                    // which is how "started by nobody, at depth 0" is said
+                    // in a shape whose `initiator` is required. It does not
+                    // spend its own budget by existing.
+                    && other["view"]["execution"] != *initiator
+                    // **A run that was refused never started.** Counting it
+                    // charged the lead for a call it did not make, so a
+                    // budget of two admitted only one — which is how the
+                    // `richer` mutant survived, and the only reason this
+                    // line is here.
+                    && other["view"]["admission"] != "refused"
+            })
+            .count() as u64;
+        // A run whose initiator declared no budget is not constrained here:
+        // PIO enforces a budget only where one was declared.
+        (started >= budget).then_some("call_budget_spent")
     }
     fn execution_budget(&self, e: &mut Value, p: &Value, refusal: &mut Option<&str>) {
         let Some(request) = p["payload"].get("budget") else {

@@ -70,6 +70,8 @@ jobs:
           PYTHONPATH=scripts python3 scripts/approval_desk.py --out target/desk-codex --harness codex
           PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-claude --harness claude
           PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-codex --harness codex
+      - name: A lead that starts runs, and the scope it holds (M4b step 3)
+        run: PYTHONPATH=scripts python3 scripts/lead_runs.py --out target/lead-runs
       - name: No private paths in any committed file
         run: |
           python3 scripts/check_private_paths.py --selftest
