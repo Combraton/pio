@@ -23,6 +23,7 @@ started and immediately closed.
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -115,6 +116,25 @@ class Probe:
 
     def release(self):
         case_cleanup.release(self.root)
+        #  removes with `ignore_errors`, which is right for a
+        # store a failing test may have left half-written and wrong as the
+        # last word: a directory that survives is a leak, and the gate will
+        # find it later with no clue why. Say so here instead.
+        assert not self.root.exists(), (
+            f'the probe root survived cleanup: {self.root} still holds '
+            f'{sorted(p.name for p in self.root.iterdir())}')
+
+
+def end(child):
+    """Take down the harness and everything it started."""
+    try:
+        os.killpg(os.getpgid(child.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        child.kill()
+    child.wait(timeout=10)
+    # Anything the group spawned needs a moment to be reaped before the
+    # store is removed, or it writes the directory back.
+    time.sleep(0.5)
 
 
 def speak(child, message, seconds=30):
@@ -143,7 +163,13 @@ def probe_opencode(out, executable):
         child = subprocess.Popen(
             [executable, 'acp'], cwd=str(probe.cwd), env=probe.env(),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=(probe.out / 'stderr.log').open('w'), text=True, bufsize=1)
+            stderr=(probe.out / 'stderr.log').open('w'), text=True, bufsize=1,
+            # Its own session, so the **group** can be taken down. Killing
+            # only the child left a grandchild alive for a moment, and a
+            # grandchild that still had HOME set recreated the directory
+            # after cleanup had removed it — a leak that no assertion caught
+            # because the directory was gone when it was checked.
+            start_new_session=True)
         try:
             record['initialize'] = bool(speak(child, {
                 'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
@@ -167,8 +193,7 @@ def probe_opencode(out, executable):
                     break
                 time.sleep(0.25)
         finally:
-            child.kill()
-            child.wait(timeout=10)
+            end(child)
         record['witness'] = probe.witnessed()
         record['honoured'] = any(w.get('method') == 'initialize'
                                  for w in record['witness'])
@@ -188,7 +213,13 @@ def probe_codex(out, executable):
             [executable, 'app-server'], cwd=str(probe.cwd),
             env=probe.env(CODEX_HOME=str(probe.root / 'codex-home')),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=(probe.out / 'stderr.log').open('w'), text=True, bufsize=1)
+            stderr=(probe.out / 'stderr.log').open('w'), text=True, bufsize=1,
+            # Its own session, so the **group** can be taken down. Killing
+            # only the child left a grandchild alive for a moment, and a
+            # grandchild that still had HOME set recreated the directory
+            # after cleanup had removed it — a leak that no assertion caught
+            # because the directory was gone when it was checked.
+            start_new_session=True)
         try:
             record['initialize'] = bool(speak(child, {
                 'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
@@ -218,8 +249,7 @@ def probe_codex(out, executable):
                     break
                 time.sleep(0.25)
         finally:
-            child.kill()
-            child.wait(timeout=10)
+            end(child)
         record['witness'] = probe.witnessed()
         record['honoured'] = any(w.get('method') == 'initialize'
                                  for w in record['witness'])
