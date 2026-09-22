@@ -508,8 +508,21 @@ impl Provider {
             None if *initiator == p["subject"] => Some(0),
             None => None,
         };
-        if permitted.is_some_and(|permitted| num(&origin["depth"]) > permitted) {
-            return Some("call_depth_exceeded");
+        // **Equal to, not at most.** Accepting any depth up to the
+        // permitted one let a child of the depth-0 lead record `depth: 0`
+        // and its grandchild `depth: 1`, so the tree's shape was whatever
+        // the caller said rather than where the run actually sits. The
+        // depth is derived; a claim that disagrees with it is refused, and
+        // the two directions are named apart because "exceeded" is not true
+        // of a depth that is too shallow.
+        if let Some(permitted) = permitted {
+            let claimed = num(&origin["depth"]);
+            if claimed > permitted {
+                return Some("call_depth_exceeded");
+            }
+            if claimed < permitted {
+                return Some("call_depth_understated");
+            }
         }
         // The budget belongs to the run that is spending it, and spend is
         // **counted from the runs that name it** rather than kept in a

@@ -240,6 +240,18 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         params = json!({});
     }
     params["cwd"] = life.spec["cwd"].clone();
+    // Owner decision, 2026-09-22: **`approvalsReviewer` is never set.** The
+    // app-server's own schema describes it as "override where approval
+    // requests are routed for review on this thread and subsequent turns",
+    // with `user | auto_review | guardian_subagent`. Two of those three send
+    // approvals somewhere other than the person, which is the one thing a
+    // lead must never arrange. The whole `thread` object is operator
+    // configuration that reaches `thread/start` unchanged, so the refusal is
+    // here, at the wire, rather than a promise made elsewhere.
+    ensure!(
+        params.get("approvalsReviewer").is_none(),
+        "approvals_reviewer_never_set: PIO does not route approvals away from the user"
+    );
     let thread = app.request("thread/start", params)?;
     let thread = app.wait_response(thread, Duration::from_secs(120), |_| Ok(()))?;
     if let Some(error) = response_error(&thread) {
@@ -251,8 +263,16 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         .context("thread id")?
         .to_owned();
     let sandbox = &result["sandbox"];
-    life.event(json!({"kind":"thread_started","thread_id":thread_id,"configured_model":before["settings"]["keys"]["model"],"requested_model":life.spec["thread"]["model"],"model":result["model"],"model_provider":result["modelProvider"],"sandbox":sandbox,"approval_policy":result["approvalPolicy"],"instruction_sources":result["instructionSources"].as_array().map(|a|a.len())}),
+    life.event(json!({"kind":"thread_started","thread_id":thread_id,"configured_model":before["settings"]["keys"]["model"],"requested_model":life.spec["thread"]["model"],"model":result["model"],"model_provider":result["modelProvider"],"sandbox":sandbox,"approval_policy":result["approvalPolicy"],"approvals_reviewer":result["approvalsReviewer"],"instruction_sources":result["instructionSources"].as_array().map(|a|a.len())}),
         )?;
+    // And the harness's own answer, on every run: approvals come to the
+    // person. Recorded in the event above and asserted here, because a
+    // field that is never read is not a check.
+    ensure!(
+        matches!(result["approvalsReviewer"].as_str(), None | Some("user")),
+        "approvals_reviewer_not_user: {}",
+        result["approvalsReviewer"]
+    );
     ensure!(
         !matches!(
             sandbox["type"].as_str(),

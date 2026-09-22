@@ -156,6 +156,17 @@ def pass_origin(out, root, mutant=None):
         assert view(owner, 'too-deep')['admission'] == 'refused'
         facts['depth_2_under_the_lead_at_depth_0'] = 'call_depth_exceeded'
 
+        # **And a depth that is too shallow is just as wrong.** Accepting
+        # anything up to the permitted depth let a child of the depth-0 lead
+        # record `depth: 0` and its grandchild `depth: 1`, so the tree's
+        # shape was whatever the caller said. `--mutant shallow-ok` claims
+        # the derived depth instead, and is admitted.
+        claimed = 1 if mutant == 'shallow-ok' else 0
+        answer = start(owner, 'too-shallow', origin('lead', claimed, 0))
+        assert refusal_of(answer) == 'call_depth_understated', (
+            f'depth {claimed} under a lead at depth 0 was not refused: {answer}')
+        facts['depth_0_under_the_lead_at_depth_0'] = 'call_depth_understated'
+
         # 2. A spent call budget refuses the next start.
         answer = start(owner, 'run-2', origin('lead', 1, 0))
         assert refusal_of(answer) == 'call_budget_spent', (
@@ -264,6 +275,10 @@ def pass_initiator_is_bound(out, root, mutant=None):
     subtree, so naming the lead is legitimate and the submit is admitted —
     which is what shows the refusal is about the binding and not about
     origins under grants.
+- `--mutant unscoped-grant` hands out a grant that names no subtree, which
+  therefore requires no origin, so a submit claiming no lineage is admitted.
+- `--mutant shallow-ok` claims the derived depth, so the submit is admitted:
+  the refusal is about the depth being wrong, not about depth being stated.
     """
     daemon, socket_path, files = start_service(root, out, name='spoof',
                                                credentials=(LEAD_CREDENTIAL,))
@@ -286,6 +301,20 @@ def pass_initiator_is_bound(out, root, mutant=None):
                  delegation=dict(allowed=False, max_depth=0)),
             command_id=f'grant-{grant_id}'))
         assert 'result' in issued, issued
+        # A second grant, scoped to the lead's subtree, for the
+        # omitted-origin case below. The mutant makes it unscoped.
+        scoped_id = str(uuid.uuid4())
+        issued = owner.call(command(
+            'core.grant.issue', dict(kind='core.grant', id=scoped_id),
+            dict(holder='lead', audience=PROVIDER,
+                 rights=['execution.submit', 'execution.read'],
+                 resources=[dict(kind='execution.execution')
+                            if mutant == 'unscoped-grant'
+                            else dict(kind='execution.execution',
+                                      id_prefix='lead.')],
+                 delegation=dict(allowed=False, max_depth=0)),
+            command_id=f'grant-{scoped_id}'))
+        assert 'result' in issued, issued
         stranger = Caller(socket_path, LEAD_CREDENTIAL, grant=grant_id, features=FEATURES)
 
         # The spoof: a run of the stranger's, claiming the lead started it.
@@ -302,6 +331,21 @@ def pass_initiator_is_bound(out, root, mutant=None):
         assert admitted(start(owner, 'lead.run-1', origin('lead', 1, 0))), \
             "the lead's own call was spent by a submit that was refused"
         facts['lead_budget_intact'] = 'admitted'
+
+        # **Omitting the origin is the same hole by the other door.** With
+        # the lead's budget now spent, a submit under its prefix carrying no
+        # origin at all was admitted and its view carried no lineage — the
+        # budget checked nothing because there was nothing to check.
+        scoped = Caller(socket_path, LEAD_CREDENTIAL, grant=scoped_id,
+                        features=FEATURES)
+        bare = start(scoped, 'lead.bare')
+        code = bare.get('error', {}).get('data', {}).get('code')
+        assert code == 'permission_denied', (
+            'a submit under a subtree-scoped grant claimed no lineage and was '
+            f'admitted: {bare}')
+        assert bare['error']['data']['details']['reason'] == 'out_of_scope', bare
+        facts['omitted_origin'] = 'permission_denied / out_of_scope'
+        scoped.close()
         stranger.close()
         owner.close()
     finally:
@@ -443,7 +487,8 @@ def main():
     parser.add_argument('--out', type=Path, default=ROOT / 'target/lead-runs')
     parser.add_argument('--mutant', choices=['deeper', 'richer', 'no-origin',
                                              'may-answer', 'owner-steers',
-                                             'bound-initiator'])
+                                             'bound-initiator', 'unscoped-grant',
+                                             'shallow-ok'])
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     roots = []

@@ -40,11 +40,6 @@ FICTIONAL = {
 
 # Files that may carry the shape for a stated reason. This script itself does,
 # because it has to name what it forbids.
-ALLOWED_FILES = {
-    'scripts/check_private_paths.py',
-}
-
-
 def redact(value, home=None):
     """Rewrite absolute home paths out of a value before it is written.
 
@@ -85,8 +80,6 @@ def tracked(root):
 def scan(root, names):
     findings = []
     for name in names:
-        if name in ALLOWED_FILES:
-            continue
         path = root / name
         try:
             body = path.read_bytes()
@@ -105,6 +98,13 @@ def selftest():
     import os
     import tempfile
 
+    # Assembled, never written out whole. A literal home path in this file
+    # would be a home path in a committed file — which is the thing being
+    # checked — and the check used to exempt itself to live with that, which
+    # is how a real account name sat in a public repository. No exemption
+    # now: the name is a placeholder, and the path is built from parts so it
+    # exists only while the test runs.
+    home = '/' + 'Users' + '/' + 'operator' + '/'
     scratch = Path(tempfile.mkdtemp(prefix='private-path-', dir='/tmp')).resolve()
     try:
         subprocess.run(['git', '-C', str(scratch), 'init', '-q'], check=True)
@@ -115,16 +115,18 @@ def selftest():
         assert scan(scratch, tracked(scratch)) == [], 'a clean tree was reported'
 
         planted = scratch / 'receipt.json'
-        planted.write_text('{"target": "/Users/comreton/pio-m3b-live/outside/marker.txt"}\n')
+        planted.write_text(
+            '{"target": "' + home + 'pio-m3b-live/outside/marker.txt"}\n')
         subprocess.run(['git', '-C', str(scratch), 'add', '-A'], check=True,
                        capture_output=True)
         found = scan(scratch, tracked(scratch))
         assert [f[0] for f in found] == ['receipt.json'], found
-        assert found[0][2] == '/Users/comreton/', found
+        assert found[0][2] == home, found
 
         # And a binary file, because a path in one is still a path.
         planted.unlink()
-        (scratch / 'blob.bin').write_bytes(b'\x00\x01/Users/comreton/secret/\x00')
+        (scratch / 'blob.bin').write_bytes(
+            b'\x00\x01' + home.encode() + b'secret/\x00')
         subprocess.run(['git', '-C', str(scratch), 'add', '-A'], check=True,
                        capture_output=True)
         found = scan(scratch, tracked(scratch))

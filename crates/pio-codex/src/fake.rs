@@ -217,7 +217,13 @@ pub fn run() -> Result<()> {
                         let thread_value =
                             json!({"id":thread_id,"modelProvider":"pio-fake","preview":""});
                         send(
-                            json!({"id":id,"result":{"thread":thread_value,"model":"pio-fake-model","modelProvider":"pio-fake","cwd":cwd,"sandbox":sandbox_projection(&sandbox),"approvalPolicy":params["approvalPolicy"].as_str().unwrap_or("on-request")}}),
+                            json!({"id":id,"result":{"thread":thread_value,"model":"pio-fake-model","modelProvider":"pio-fake","cwd":cwd,"sandbox":sandbox_projection(&sandbox),"approvalPolicy":params["approvalPolicy"].as_str().unwrap_or("on-request"),
+                        // Measured from the app-server's own schema: the
+                        // enum is `user | auto_review | guardian_subagent`,
+                        // and a thread nobody redirected answers `user`.
+                        // The scenario can say otherwise so the host's
+                        // refusal is something a case can reach.
+                        "approvalsReviewer":scenario["approvals_reviewer"].as_str().unwrap_or("user")}}),
                         )?;
                         send(json!({"method":"thread/started","params":{"thread":thread_value}}))?;
                     }

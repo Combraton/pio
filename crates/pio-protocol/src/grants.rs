@@ -192,9 +192,22 @@ impl Provider {
                 //
                 // A grant that names no subtree names no initiator, so an
                 // `origin` under one is refused rather than trusted.
-                if let Some(origin) = p["payload"].get("origin")
+                // **And a grant that names a subtree owner requires one.**
+                // Omitting `origin` skipped the check entirely: after a
+                // lead's budget was spent, further submits under its prefix
+                // with no origin at all were admitted, and their views
+                // carried no lineage. A grant scoped to a subtree authorizes
+                // runs *in* that subtree; a run that claims no lineage
+                // claims no place in it, so it is `out_of_scope` — the same
+                // reason as a forged one, because it is the same fence.
+                let owner = subtree_owner(grant);
+                let claimed = p["payload"].get("origin");
+                if owner.is_some() != claimed.is_some() {
+                    return Err(denied("out_of_scope"));
+                }
+                if let Some(origin) = claimed
                     && (origin["initiator"]["kind"] != "execution.execution"
-                        || subtree_owner(grant).as_deref() != origin["initiator"]["id"].as_str())
+                        || owner.as_deref() != origin["initiator"]["id"].as_str())
                 {
                     return Err(denied("out_of_scope"));
                 }

@@ -335,7 +335,15 @@ The initiator is now bound to the grant. Under a grant, the only run a caller ma
 
 **The lead grant's resources were unscoped.** `kind: execution.execution` with no `id` or `id_prefix` let a lead read every run on the service, including ones it did not start. Children are now named under the lead's prefix and the grant is scoped `id_prefix: "<lead>."`; an inspect outside it is `permission_denied` / `out_of_scope`.
 
-`--mutant bound-initiator` scopes the stranger's grant to the lead's own subtree, so naming the lead is legitimate and the submit is admitted — which is what shows the refusal is about the binding and not about origins under grants.
+**Omitting the origin was the same hole by the other door.** Once the lead's budget was spent, submits under its prefix carrying **no origin at all** were admitted, and their views carried no lineage — the budget checked nothing because there was nothing to check. A grant that names a subtree owner now *requires* an origin naming it; the reason is `out_of_scope`, the same as a forged one, because it is the same fence: a grant scoped to a subtree authorizes runs **in** that subtree, and a run that claims no lineage claims no place in it.
+
+**Depth was accepted if it did not exceed the permitted one, not if it matched.** A child of the depth-0 lead could record `depth: 0` and its grandchild `depth: 1`, so the tree's shape was whatever the caller said. The depth is derived, so a claim that disagrees is refused, and the two directions are named apart — `call_depth_exceeded` and `call_depth_understated` — because "exceeded" is not true of a depth that is too shallow.
+
+Mutants: `bound-initiator` scopes the stranger's grant to the lead's own subtree, so naming the lead is legitimate and the submit is admitted; `unscoped-grant` hands out a grant that names no subtree and therefore requires no origin; `shallow-ok` claims the derived depth. Each shows the refusal is about the specific thing and not about origins, grants or depth in general.
+
+### Codex — approvals come to the person
+
+`ThreadStartParams.approvalsReviewer` overrides **where approval requests are routed**, and its enum is `user | auto_review | guardian_subagent` — two of the three send them somewhere other than the person. The whole `thread` object is operator configuration that reaches `thread/start` unchanged, so **PIO refuses to send the field at all**, at the wire, and asserts the harness's answer is `user` on every run. The answer is recorded in `thread_started` as well as asserted, because a field that is never read is not a check. `approvals_reviewer_must_be_user` makes the fake answer `guardian_subagent` and the run fails with `approvals_reviewer_not_user`.
 
 ### Steer authorship — filed, not widened
 
