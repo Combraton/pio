@@ -645,8 +645,21 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                             action_seq,
                             (message.clone(), std::time::Instant::now() + answer_timeout),
                         );
+                        // What PIO will send if nobody answers, computed by
+                        // the same function that will send it rather than
+                        // written out beside it — so the walk cannot promise
+                        // one option kind and the lapse send another.
+                        let (_, mut if_nobody_answers) = permission_answer(&message, "deny");
+                        // The offered list is beside it already; carrying it
+                        // twice in one payload buys nothing.
+                        if let Some(record) = if_nobody_answers.as_object_mut() {
+                            record.remove("options_offered");
+                        }
                         life.event(json!({"kind":"action_requested",
                             "action_seq":action_seq,"request_id":message["id"],
+                            "answer_deadline_seconds":answer_timeout.as_secs(),
+                            "options":&message["params"]["options"],
+                            "if_nobody_answers":if_nobody_answers,
                             "classification":classification}))?;
                     }
                 }

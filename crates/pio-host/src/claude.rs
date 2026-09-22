@@ -339,8 +339,25 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                             action_seq,
                             (message.clone(), std::time::Instant::now() + answer_timeout),
                         );
+                        // Same rule as the OpenCode host: what PIO will
+                        // send if nobody answers is built by the function
+                        // that will send it. This harness offers no option
+                        // list at all, so `options` is null rather than an
+                        // invented one.
+                        let would = pio_claude::permission_decision(
+                            &message,
+                            "deny",
+                            "no caller answered within the delivery timeout",
+                        )?;
                         life.event(json!({"kind":"action_requested",
                             "action_seq":action_seq,"request_id":message["request_id"],
+                            "answer_deadline_seconds":answer_timeout.as_secs(),
+                            "options":Value::Null,
+                            "if_nobody_answers":{
+                                "behavior":&would["envelope"]["response"]["response"]["behavior"],
+                                "single_use":&would["single_use"],
+                                "suggestions_offered":&would["suggestions_offered"],
+                                "widening_fields_sent":&would["widening_fields_sent"]},
                             "classification":classification}))?;
                     }
                 }

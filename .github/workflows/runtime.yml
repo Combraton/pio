@@ -50,6 +50,12 @@ jobs:
         run: PYTHONPATH=scripts python3 scripts/claude_host_matrix.py --out target/claude-host --repetitions 3
       - name: A board drawn from the events fold (G1 and G6)
         run: PYTHONPATH=scripts python3 scripts/board_fold.py --out target/board-fold
+      - name: The approval walk through a real host path (G2)
+        # `--skip-baseline` here only: the "a caller ignoring the keys sees
+        # what it saw before" diff builds the binary at a22c98c in its own
+        # worktree, which needs full history and a second cargo build. It is
+        # run locally and its result is recorded in the map.
+        run: PYTHONPATH=scripts python3 scripts/approval_desk.py --out target/approval-desk --skip-baseline
       - name: No private paths in any committed file
         run: |
           python3 scripts/check_private_paths.py --selftest

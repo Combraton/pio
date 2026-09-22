@@ -391,7 +391,9 @@ impl Provider {
                 self.execution_event(
                     e,
                     "execution.action.answered",
-                    json!({"action_id":action_id,"response_effect":effect}),
+                    json!({"action_id":action_id,"response_effect":effect,
+                           "pio.combraton.dev/decision":{
+                               "decided_by":"caller","decision":decision}}),
                     Some((p, op)),
                 );
                 Ok(json!({"action_id":action_id,"state":"answered","response_effect":effect}))
@@ -708,10 +710,32 @@ impl Provider {
                 e["view"]["runtime"] = "requires_action".into();
                 e["view"]["runtime_detail"] =
                     json!({"action_id":action_id,"owner":profile.adapter});
+                // G2. `action_entry` is closed, so the deadline, the option
+                // list the harness offered, what PIO will send if nobody
+                // answers, and the classification cannot go in the view.
+                // They ride here, in a payload that is already open, under a
+                // namespaced key of the Protocol's own `extension_key` shape.
+                // A client that reads only `runtime`, `action_id` and
+                // `owner` behaves exactly as it does today.
                 self.execution_event(
                     e,
                     "execution.runtime.changed",
-                    json!({"runtime":"requires_action","action_id":action_id,"owner":profile.adapter}),
+                    json!({"runtime":"requires_action","action_id":action_id,"owner":profile.adapter,
+                           "pio.combraton.dev/approval":{
+                               "action_id":action_id,
+                               "requested_at":self.now,
+                               "method":event["method"],
+                               "approval_kind":event["approval_kind"],
+                               // Null where a harness has no such notion,
+                               // and the nulls mean something: the Codex
+                               // host offers no option list and sets no
+                               // answer deadline, so a Codex action waits
+                               // until a caller answers it. The walk shows
+                               // that rather than inventing a countdown.
+                               "answer_deadline_seconds":event["answer_deadline_seconds"],
+                               "options":event["options"],
+                               "if_nobody_answers":event["if_nobody_answers"],
+                               "classification":event["classification"]}}),
                     None,
                 );
             }
@@ -870,12 +894,87 @@ impl Provider {
             // An acknowledgment whose proof did not hold is not a delivery.
             "turn_acknowledged" => e[&ns]["acknowledgment_unproven"] = true.into(),
 
-            // PIO's own decline. It is not an action the caller was asked
-            // about and never becomes one.
-            "request_declined_by_pio" => {
-                push(
-                    &mut e[&ns]["declined_by_pio"],
-                    event["classification"].clone(),
+            // PIO's own two decisions: a request it declined before any
+            // caller was asked, and a request whose deadline lapsed. Neither
+            // has a command behind it, so both reach the stream as a
+            // **provider-origin** `execution.action.answered` — the event a
+            // caller already watches for "this request is settled".
+            //
+            // Before this, the decline lived only in the adapter namespace
+            // and the lapse reached the stream nowhere at all: `actions[]`
+            // showed a settled request `pending` for ever, and a caller could
+            // not tell it from one still waiting. Screen 7 promises "anything
+            // PIO decided, marked as PIO's decision"; neither reached it.
+            //
+            // `origin` stays `provider`, with no `operation_ref` and no
+            // `command_id`. The event schema's if/then refuses the mix, and
+            // there is no command here to name.
+            "request_declined_by_pio" | "request_denied_by_default" => {
+                let declined = text(&event["kind"]) == "request_declined_by_pio";
+                if declined {
+                    push(
+                        &mut e[&ns]["declined_by_pio"],
+                        event["classification"].clone(),
+                    );
+                }
+                let action_id = format!("{id}.action-{}", num(&event["action_seq"]));
+                if !e[format!("{ns}_actions")][&action_id].is_object() {
+                    // A decline is never put to a caller, so no
+                    // `action_requested` precedes it. The walk still needs an
+                    // entry to show the decision against.
+                    e[format!("{ns}_actions")][&action_id] =
+                        json!({"seq":event["action_seq"],"request_id":Value::Null});
+                }
+                let mut settled = false;
+                // A run whose only request PIO declined has no `actions`
+                // array at all — nothing was ever put to a caller. The
+                // caller-answered path can assume one; this cannot.
+                if let Some(actions) = e["view"]["actions"].as_array_mut() {
+                    for action in actions {
+                        if action["action_id"] == action_id {
+                            action["state"] = "answered".into();
+                            action["answered_at"] = self.now.clone().into();
+                            settled = true;
+                        }
+                    }
+                }
+                if !settled {
+                    push(
+                        &mut e["view"]["actions"],
+                        json!({"action_id":action_id,"owner":profile.adapter,
+                               "state":"answered","requested_at":self.now,
+                               "answered_at":self.now}),
+                    );
+                }
+                if e["view"]["runtime_detail"]["action_id"] == action_id {
+                    e["view"].as_object_mut().unwrap().remove("runtime_detail");
+                    e["view"]["runtime"] = "active".into();
+                }
+                let mut decision = json!({"decided_by":"pio",
+                "decision":event["decision"],
+                "basis":if declined { "out_of_scope" } else { "deadline_lapsed" },
+                "reason":if declined {
+                    event["classification"]["reason"].clone()
+                } else {
+                    json!("no caller answered within the delivery timeout")
+                }});
+                if declined {
+                    decision["classification"] = event["classification"].clone();
+                } else {
+                    decision["after_seconds"] = event["after_seconds"].clone();
+                }
+                // Recorded only where the harness has the notion at all.
+                for field in ["option_id", "option_kind", "always_option_taken"] {
+                    if !event[field].is_null() {
+                        decision[field] = event[field].clone();
+                    }
+                }
+                self.execution_event(
+                    e,
+                    "execution.action.answered",
+                    json!({"action_id":action_id,
+                           "pio.combraton.dev/decision":decision}),
+                    None,
                 );
             }
 

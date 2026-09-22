@@ -75,7 +75,10 @@ Three facts, checked in the source, that decide everything below.
 
 1. **Host `life.event` records go to the private `*.events.jsonl`, not to `core.events.read`.** `permission_options_observed`, `action_requested`, `request_declined_by_pio` and `request_denied_by_default` are host records. No caller can read them.
 2. **On the Protocol stream, a pending action is only `execution.runtime.changed`**, with payload `{runtime: "requires_action", action_id, owner}`. The projection turns `action_requested` into a closed `action_entry` in `view.actions[]` — `action_id`, `owner`, `state`, `requested_at` — and emits that one event. The deadline, the offered options, the classification and the decider reach the stream **nowhere**.
-3. **`request_denied_by_default` is not projected at all.** Zero occurrences in the projection. When nobody answers and PIO denies on the caller's behalf, the Protocol stream learns nothing and `view.actions[]` shows the action **`pending` for ever**. A caller cannot tell a lapsed request from a waiting one. That is a defect, not a gap, and it is named in the obligations below.
+3. **`request_denied_by_default` is not projected at all.** Zero occurrences in the projection. When nobody answers and PIO denies on the caller's behalf, the Protocol stream learns nothing and `view.actions[]` shows the action **`pending` for ever**. A caller cannot tell a lapsed request from a waiting one. That is a defect, not a gap.
+4. **`request_declined_by_pio` reaches only the private adapter namespace.** It is folded into `e[<adapter>]["declined_by_pio"]` and never becomes an action. So PIO's own decline was as invisible to a caller as the lapse. Screen 7 promises "anything PIO decided, marked as PIO's decision", and **neither of PIO's two decisions reached it**.
+
+Both are fixed, and both were measured rather than argued: `scripts/approval_desk.py --baseline-as-mutant` runs the same probes against the binary built at `a22c98c` and requires them to fail there. At that commit a lapsed action's state, read after the run has exited, is `"pending"`.
 
 ### The decisions
 
@@ -86,9 +89,21 @@ Three facts, checked in the source, that decide everything below.
 | Deadline, offered options with their kinds, the option kind PIO will send, the classification and where it lands | `execution.runtime.changed`, which already fires at the moment the action becomes pending | `pio.combraton.dev/approval` |
 | Who decided, and the option actually sent | `execution.action.answered`, which already fires when a caller answers | `pio.combraton.dev/decision` |
 | **A lapsed deadline** | `execution.action.answered` **must also fire for PIO's own default deny**, with `decided_by: "pio"`, and set the action to `answered` | `pio.combraton.dev/decision` |
+| **A decline PIO made before any caller was asked** | the same event. A decline is an action PIO answered at once: it enters `actions[]` already `answered`, so the walk and the "while you were away" list read one shape and not two | `pio.combraton.dev/decision`, with `basis: "out_of_scope"` and the classification |
 | The end-of-turn tool-use audit: placement and decider per tool use | `execution.exit.observed`, which already fires at turn end | `pio.combraton.dev/tool-uses` |
 
-**A client that ignores the key still works.** Every existing field of those payloads is unchanged, and a reader that knows only `runtime`, `action_id` and `owner` behaves exactly as it does today. The keys are additive in an already-open object. **Conformance stays at 206.**
+### The schema constraint on PIO's own decisions
+
+An `execution.action.answered` emitted for a decision **PIO** made has no command behind it. The event schema's `if/then` makes the mix impossible: `origin: "command"` *requires* `operation_ref` and `command_id`, and anything else *forbids* both. So these two emits pass `None` where the caller's answer passes `Some((p, op))`, and come out `origin: "provider"` with neither field. `scripts/approval_desk.py` reads `$defs.event` out of the vendored schema and checks that rule on every event it sees, so a future emit that gets it backwards fails the run rather than the validator.
+
+**A client that ignores the key still works.** Every existing field of those payloads is unchanged, and a reader that knows only `runtime`, `action_id` and `owner` behaves exactly as it does today. The keys are additive in an already-open object. **Conformance stays at 206** — re-run, not assumed.
+
+Proven by diff, not by inspection. `approval_desk.py` builds the binary at `a22c98c` in its own worktree and runs the same scenarios through both:
+
+- **A run with no PIO decision**: with the namespaced keys removed, the two streams are the **same stream** — 8 events, equal field for field once instants, uuids, SHAs and the temporary root are normalized.
+- **A run where PIO decided**: every event the old stream carried is still there, unchanged and in the same order, and the single addition is the `execution.action.answered` whose stripped payload is `{"action_id": …}` and nothing else. Sequence and revision necessarily advance, because a new event on a stream advances the stream; that is why the diff is on type, subject, origin and payload rather than on counters.
+
+`--mutant unstripped` runs the same comparison without removing the keys and must fail, so "the only difference is the keys" is a claim the run can lose.
 
 ### What a caller holding only `core.events.read` on a run may see of another run
 
@@ -108,6 +123,32 @@ Three facts, checked in the source, that decide everything below.
 | Who decided, afterwards | `control_applied.decided_by`, `request_denied_by_default.decided_by` | event payload |
 
 The negative control — an answer aimed at the wrong run or a stale controller — is **already fenced** by `execution.respond_action` on subject and revision.
+
+### G2 is proven, and where
+
+`scripts/approval_desk.py`, through **`serve-opencode`** with the labeled ACP fake behind it — a real host process, a real journal, the real projection, the public Unix API in front. `serve-fake` has no approvals, so it cannot prove this. Everything is read from `core.events.read` and `execution.inspect`; the host's private events file is never opened.
+
+| What | How it is shown | Its mutant |
+| --- | --- | --- |
+| Two requests pending across two runs, ordered by deadline | run 1 is submitted first and due last (300s); run 2 is submitted second and due first (75s), so arrival order and deadline order disagree and the walk has to use the deadline — which is only on the stream because G2 put it there | `--mutant arrival-order` walks them as they arrived and fails on `['run-1', 'run-2']` |
+| A caller answers through `execution.respond_action` | the answer reaches the stream as `execution.action.answered`, `origin: command`, `decided_by: "caller"` | the baseline probe: no `pio.combraton.dev/decision` at `a22c98c` |
+| An answer aimed at the wrong run is refused | run 2's `action_id` sent against run 1's subject is refused `not_found`, and both runs are still `requires_action` afterwards | `--mutant cross-run` sends the same envelope at its **own** run, which succeeds — so the refusal is attributable to the run mismatch and not to a malformed envelope |
+| A lapsed deadline is PIO's decision | `origin: provider`, no `operation_ref`, no `command_id`, `decided_by: "pio"`, `basis: "deadline_lapsed"`, `after_seconds: 75`, `option_kind: "reject_once"`; the action reads `answered` with an `answered_at`; the walk, redrawn from the same fold, is empty | `--baseline-as-mutant`: at `a22c98c` the same run ends with **no** answered event and the action still `"pending"` |
+| A decline is PIO's decision | the run never enters `requires_action` at all; one action, already `answered`, and `basis: "out_of_scope"` with the classification on the event | `--baseline-as-mutant`: at `a22c98c` there is no answered event and no action |
+
+### One open item, reported rather than closed
+
+**A run waiting on an approval is sometimes ended by a PIO timeout before its answer clock lapses.** The signature is exact: `execution.timeout.passed` on that run, **no** `execution.usage.observed` (so the harness was stopped, not finished), and the action still `pending`. Seen **three times in twenty-eight runs**, always while other heavy work was running, and **not once in the twenty-five since** — including a batch run with the machine deliberately saturated. I could not identify which of the five timeouts fires, and I will not claim a cause I have not measured.
+
+What is known:
+
+- **It is not a regression of this fix.** At `a22c98c` the same run also ends with the action `pending`; that is the defect this section fixes. This failure is the *absence* of a lapse to observe, not a lapse that went unreported.
+- **`action_answer_timeout_seconds` *is* `timeouts.delivery`.** A run's answer deadline and its delivery deadline are the same number. While delivery is still `pending` the delivery timeout is live — which is why the pass now asserts **acknowledged delivery before drawing the walk**. That assertion was already in place when the third failure happened, so it is not the whole story.
+- **The screen is correct under this failure anyway.** A run that has exited cannot answer anything, so **the walk drops approvals whose run has exited** — a rule that is exercised on real data, including at `a22c98c` where it is the *only* thing that empties the walk.
+
+The pass now tells the two apart: if `execution.timeout.passed` is present for the lapse run it fails with that named, and dumps the service's own record for the execution — the timeouts, `admitted_at`, `timeouts_passed` and the delivery state — which is what will identify the clock the next time it happens.
+
+The classification the walk shows for this harness is `disposition: surface_as_action`, `placement: not_classifiable` — an `execute` call announced with a command line and no path, which the resolver will not place. The screen shows that, rather than guessing `inside`. Same rule as G3.
 
 ## G3 — blocks as they happen, not an end-of-turn audit
 
@@ -184,7 +225,9 @@ The screen that needs the least is the one about uncertainty. That is the right 
 
 ## Screen 7 — leaving and coming back
 
-Runs still working and approvals still waiting are **G1** and **G2**. *While you were away* is `core.events.read` from the stored cursor — **have**. Anything PIO decided is in the events already.
+Runs still working and approvals still waiting are **G1** and **G2**. *While you were away* is `core.events.read` from the stored cursor — **have**.
+
+"Anything PIO decided is in the events already" is what the first draft of this section said, and it was **wrong twice over**: PIO's two decisions, the lapse and the decline, were the two things a caller could not see. They are both there now, both as `execution.action.answered` with `pio.combraton.dev/decision`, so this list is one filter over one event type rather than a special case per decider.
 
 ## What the first draft got wrong
 
@@ -197,4 +240,4 @@ Recorded rather than quietly fixed, because the reviewer will want to know which
 
 The reviewer's own correction to the design input, on `origin`, is recorded in [`design-input/CORRECTIONS.md`](design-input/CORRECTIONS.md).
 
-**Step 2 order:** ~~G1 and G6 (the events fold)~~ **done**, then G2, then G3. Each with its own headless case and a mutant.
+**Step 2 order:** ~~G1 and G6 (the events fold)~~ **done**, ~~G2 (the approval walk)~~ **done**, then G3. Each with its own headless case and a mutant.
