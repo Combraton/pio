@@ -62,6 +62,34 @@ impl Provider {
         Ok(grant)
     }
     pub fn authorize(&self, session: &Session, method: &str, p: &Value) -> Result<(), Error> {
+        /// The execution a grant was issued for: the single run whose
+        /// subtree it covers.
+        ///
+        /// A lead grant is scoped `id_prefix: "<lead>."`, so the run it was
+        /// issued for is that prefix without its trailing separator. A
+        /// grant scoped to one `id` names that run. Anything else — an
+        /// unscoped kind, or two resources naming different runs — names
+        /// nobody, and `None` is the honest answer rather than a guess.
+        fn subtree_owner(grant: &Value) -> Option<String> {
+            let mut named: Vec<String> = list(&grant["resources"])
+                .iter()
+                .filter(|r| r["kind"] == "execution.execution")
+                .map(|r| match (r["id"].as_str(), r["id_prefix"].as_str()) {
+                    (Some(id), _) => Some(id.to_owned()),
+                    (_, Some(prefix)) => prefix
+                        .strip_suffix('.')
+                        .filter(|owner| !owner.is_empty())
+                        .map(str::to_owned),
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>()?;
+            named.dedup();
+            match named.as_slice() {
+                [only] => Some(only.clone()),
+                _ => None,
+            }
+        }
+
         let principal = session.principal.as_deref().unwrap_or("");
         let authority = self.authorities.iter().any(|a| a == principal);
         if method == "core.grant.issue" {
@@ -148,8 +176,30 @@ impl Provider {
             // lead grant a scope rather than a wish: it can carry steer, and
             // the refusal of an answer is then attributable to the right
             // being withheld rather than to the operation being ungrantable.
-            "execution.submit"
-            | "execution.cancel"
+            "execution.submit" => {
+                needed.push((method, p["subject"].clone()));
+                // **An `origin` is a claim about lineage, and lineage spends
+                // budget.** Under a grant, the only initiator a caller may
+                // name is the run the grant was issued for — the owner of
+                // the subtree the grant covers.
+                //
+                // Without this the field was an unchecked caller claim: a
+                // principal holding a plain submit grant could name any run
+                // as its initiator, and the named run's next start was then
+                // refused `call_budget_spent`. Forged lineage and budget
+                // theft, from a grant that was never meant to reach that run
+                // at all.
+                //
+                // A grant that names no subtree names no initiator, so an
+                // `origin` under one is refused rather than trusted.
+                if let Some(origin) = p["payload"].get("origin")
+                    && (origin["initiator"]["kind"] != "execution.execution"
+                        || subtree_owner(grant).as_deref() != origin["initiator"]["id"].as_str())
+                {
+                    return Err(denied("out_of_scope"));
+                }
+            }
+            "execution.cancel"
             | "execution.steer"
             | "execution.respond_action"
             | "execution.controller.claim"

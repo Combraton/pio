@@ -327,6 +327,16 @@ Before this, `execution.steer` and `execution.respond_action` both fell to the d
 
 The negative runs through **`serve-opencode`**, not `serve-fake`: the fake advertises no `execution.actions`, so an answer there is refused `unsupported_required_feature` before authorization is reached — a refusal that says nothing about scope. Steer needed the same treatment, and the session has to negotiate the feature as well as hold the right.
 
+### Two holes the reviewer found, closed before any live lead run
+
+**`origin.initiator` was an unchecked caller claim.** A principal holding a plain submit grant could submit a run naming an **unrelated** run as its initiator. It was admitted, and the named run's next start was then refused `call_budget_spent`: forged lineage and budget theft, from a grant that was never meant to reach that run at all.
+
+The initiator is now bound to the grant. Under a grant, the only run a caller may name is the one whose subtree the grant covers — derived from the grant's own resources (`id_prefix: "<lead>."` names `<lead>`), because `core.grant.issue`'s params are closed and no field could be added. **A grant that names no subtree names no initiator**, so an `origin` under an unscoped grant is refused rather than trusted: `permission_denied` / `out_of_scope`. The spoof case also asserts the victim's budget is **still there** afterwards.
+
+**The lead grant's resources were unscoped.** `kind: execution.execution` with no `id` or `id_prefix` let a lead read every run on the service, including ones it did not start. Children are now named under the lead's prefix and the grant is scoped `id_prefix: "<lead>."`; an inspect outside it is `permission_denied` / `out_of_scope`.
+
+`--mutant bound-initiator` scopes the stranger's grant to the lead's own subtree, so naming the lead is legitimate and the submit is admitted — which is what shows the refusal is about the binding and not about origins under grants.
+
 ### Steer authorship — filed, not widened
 
 `steering_entry` is closed and the event record has no authorship field, so **a steer from a lead and a steer from the owner are indistinguishable on the stream**. PIO records the grant in the payload of `execution.steer.requested` under `pio.combraton.dev/under-grant` — `{grant, holder, recorded_by: "pio"}` — which says plainly that this is the implementation's record and not the Protocol's. Nothing closed gained a field and no new event type name was introduced.

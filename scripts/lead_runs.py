@@ -190,8 +190,13 @@ def pass_lead_grant(out, root, mutant=None):
         if mutant == 'may-answer':
             rights.append('execution.respond_action')
         grant_id = str(uuid.uuid4())
+        # **Scoped to the lead's own subtree.** An unscoped
+        # `kind: execution.execution` let a lead read every run on the
+        # service, including ones it did not start. Children are named under
+        # the prefix so the scope has something to bind to.
         terms = dict(holder='lead', audience=PROVIDER, rights=rights,
-                     resources=[dict(kind='execution.execution')],
+                     resources=[dict(kind='execution.execution',
+                                     id_prefix='lead.')],
                      delegation=dict(allowed=False, max_depth=0))
         issued = owner.call(command('core.grant.issue',
                                     dict(kind='core.grant', id=grant_id), terms,
@@ -201,16 +206,25 @@ def pass_lead_grant(out, root, mutant=None):
 
         lead = Caller(socket_path, LEAD_CREDENTIAL, grant=grant_id, features=FEATURES)
         # What the lead may do.
-        started = start(lead, 'lead-run', origin('lead', 1, 0))
+        started = start(lead, 'lead.run-1', origin('lead', 1, 0))
         assert admitted(started), started
         facts['submit'] = 'allowed'
+
+        # And nothing outside the subtree. `work` is the owner's run; the
+        # lead never started it and may not read it.
+        outside = lead.query('execution.inspect', {'execution': 'work'})
+        assert 'error' in outside, (
+            f'the lead read a run outside its own subtree: {outside}')
+        assert outside['error']['data']['code'] == 'permission_denied', outside
+        assert outside['error']['data']['details']['reason'] == 'out_of_scope', outside
+        facts['inspect_outside_the_subtree'] = 'permission_denied / out_of_scope'
 
         # Steer is **not** tried here either: this service advertises no
         # `execution.steering`, so it would be refused for a missing feature
         # before authorization is reached. Both halves that need a feature
         # this service does not have run against a real host path below.
 
-        assert view(lead, 'work')['execution']['id'] == 'work'
+        assert view(lead, 'lead.run-1')['execution']['id'] == 'lead.run-1'
         facts['read'] = 'allowed'
         events = lead.query('core.events.read',
                             {'limit': 50, 'from': 'start',
@@ -224,6 +238,71 @@ def pass_lead_grant(out, root, mutant=None):
         # a refusal that says nothing about the lead's scope. That half runs
         # through a real host path, in `pass_lead_cannot_answer`.
         lead.close()
+        owner.close()
+    finally:
+        daemon.kill()
+        daemon.wait(timeout=10)
+        for handle in files:
+            handle.close()
+    return facts
+
+
+def pass_initiator_is_bound(out, root, mutant=None):
+    """A grant may not name someone else's run as the initiator.
+
+    `origin.initiator` was an unchecked caller claim. A principal holding a
+    plain submit grant could submit a run naming an unrelated run as its
+    initiator; it was admitted, and that run's **next** start was then
+    refused `call_budget_spent`. Forged lineage and budget theft, from a
+    grant that was never meant to reach that run at all.
+
+    The initiator is now bound to the grant: the only run a caller may name
+    is the one whose subtree the grant covers. A grant that names no subtree
+    names no initiator.
+
+    `--mutant bound-initiator` scopes the stranger's grant to the lead's own
+    subtree, so naming the lead is legitimate and the submit is admitted —
+    which is what shows the refusal is about the binding and not about
+    origins under grants.
+    """
+    daemon, socket_path, files = start_service(root, out, name='spoof',
+                                               credentials=(LEAD_CREDENTIAL,))
+    facts = {}
+    try:
+        owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
+        # A lead with one call to spend, and the run it legitimately starts.
+        assert admitted(start(owner, 'lead', origin('lead', 0, 1)))
+
+        # A stranger with a plain submit grant over everything.
+        scope = (dict(kind='execution.execution', id_prefix='lead.')
+                 if mutant == 'bound-initiator'
+                 else dict(kind='execution.execution'))
+        grant_id = str(uuid.uuid4())
+        issued = owner.call(command(
+            'core.grant.issue', dict(kind='core.grant', id=grant_id),
+            dict(holder='lead', audience=PROVIDER,
+                 rights=['execution.submit', 'execution.read'],
+                 resources=[scope],
+                 delegation=dict(allowed=False, max_depth=0)),
+            command_id=f'grant-{grant_id}'))
+        assert 'result' in issued, issued
+        stranger = Caller(socket_path, LEAD_CREDENTIAL, grant=grant_id, features=FEATURES)
+
+        # The spoof: a run of the stranger's, claiming the lead started it.
+        spoofed = start(stranger, 'lead.stolen', origin('lead', 1, 0))
+        code = spoofed.get('error', {}).get('data', {}).get('code')
+        assert code == 'permission_denied', (
+            'a grant that does not cover the lead named it as initiator and '
+            f'was admitted — forged lineage: {spoofed}')
+        assert spoofed['error']['data']['details']['reason'] == 'out_of_scope', spoofed
+        facts['spoofed_initiator'] = 'permission_denied / out_of_scope'
+
+        # And the budget it would have stolen is still there: the lead's own
+        # one call still starts a run.
+        assert admitted(start(owner, 'lead.run-1', origin('lead', 1, 0))), \
+            "the lead's own call was spent by a submit that was refused"
+        facts['lead_budget_intact'] = 'admitted'
+        stranger.close()
         owner.close()
     finally:
         daemon.kill()
@@ -251,10 +330,10 @@ def pass_lead_cannot_answer(out, mutant=None):
                               scenario={'permission_request': ASKS})
     try:
         case.start()
-        case.submit(identity='work', delivery_timeout=300)
+        case.submit(identity='lead.work', delivery_timeout=300)
         waiting = None
         for _ in range(240):
-            waiting = case.inspect('work')
+            waiting = case.inspect('lead.work')
             if waiting['runtime'] == 'requires_action':
                 break
             time.sleep(0.5)
@@ -294,10 +373,11 @@ def pass_lead_cannot_answer(out, mutant=None):
         # grant, so the assertion is about `permission_denied` and nothing
         # else.
         note = b'keep to the fixture'
-        steer = command('execution.steer', subject('work'),
+        steer = command('execution.steer', subject('lead.work'),
                         dict(message=dict(digest=content_digest(note),
                                           media_type='text/plain')),
-                        command_id='lead-steer', revision=case.inspect('work')['revision'])
+                        command_id='lead-steer',
+                        revision=case.inspect('lead.work')['revision'])
         steer['extensions'] = {'pio.combraton.dev/content':
                                dict(media_type='text/plain', text=note.decode())}
         steered = (owner if mutant == 'owner-steers' else lead).call(steer)
@@ -328,7 +408,7 @@ def pass_lead_cannot_answer(out, mutant=None):
         facts['under_grant'] = under
 
         body = json.dumps({'decision': 'allow'}).encode()
-        attempt = command('execution.respond_action', subject('work'),
+        attempt = command('execution.respond_action', subject('lead.work'),
                           dict(action_id=action,
                                response=dict(digest=content_digest(body),
                                              media_type='application/json')),
@@ -345,8 +425,9 @@ def pass_lead_cannot_answer(out, mutant=None):
         facts['without_the_right'] = 'permission_denied / right_missing'
         # And the refusal is about the right, not about the action: the
         # owner answers the same one.
-        answered = case.respond(action, 'allow', case.inspect('work')['revision'],
-                                identity='work')
+        answered = case.respond(action, 'allow',
+                                case.inspect('lead.work')['revision'],
+                                identity='lead.work')
         assert answered.get('result', {}).get('outcome', {}).get(
             'state') == 'answered', answered
         facts['owner_answers_the_same_action'] = 'answered'
@@ -361,18 +442,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, default=ROOT / 'target/lead-runs')
     parser.add_argument('--mutant', choices=['deeper', 'richer', 'no-origin',
-                                             'may-answer', 'owner-steers'])
+                                             'may-answer', 'owner-steers',
+                                             'bound-initiator'])
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     roots = []
     try:
-        for label, work in (('origin', pass_origin), ('lead_grant', pass_lead_grant)):
+        for _ in range(3):
             root = Path(tempfile.mkdtemp(prefix='pio-lead-', dir='/tmp')).resolve()
             os.chmod(root, 0o700)
             roots.append(root)
         record = dict(
             origin=pass_origin(args.out, roots[0], args.mutant),
             lead_grant=pass_lead_grant(args.out, roots[1], args.mutant),
+            initiator_is_bound=pass_initiator_is_bound(args.out, roots[2],
+                                                       args.mutant),
             lead_cannot_answer=pass_lead_cannot_answer(args.out, args.mutant))
         (args.out / 'lead-runs.json').write_text(
             json.dumps(record, indent=2, sort_keys=True) + '\n')
