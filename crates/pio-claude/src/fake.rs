@@ -28,6 +28,11 @@ use serde_json::{Value, json};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
+/// The tool use a permission request is about. Distinct from the
+/// `toolu_fake_{index}` ids `tool_uses` blocks carry, so the two can never
+/// collide in one scenario.
+const ASK_TOOL_USE: &str = "toolu_fake_ask";
+
 pub const SOURCE: &str = "pio-fake-claude-cli";
 
 /// Set by the SIGINT handler when the scenario asks the fake to abort the way
@@ -164,14 +169,19 @@ fn request_permission(
     let request_id = "req_1_fake";
     emit(&assistant(json!([{
         "type":"tool_use","name":request["tool_name"].as_str().unwrap_or("Bash"),
-        "id":"toolu_fake_1","input":&request["input"]}])))?;
+        // Named, not numbered. `tool_uses` blocks are `toolu_fake_{index}`,
+        // so a scenario with two of them gave the second the same id as the
+        // one this asks about, and an audit keyed by id merged two different
+        // uses into one row. A fake that can emit a duplicate id can hide a
+        // real merge, which is the whole reason this is not `toolu_fake_1`.
+        "id":ASK_TOOL_USE,"input":&request["input"]}])))?;
     emit(&json!({
         "type":"control_request","request_id":request_id,
         "request":{
             "subtype":"can_use_tool",
             "tool_name":request["tool_name"].as_str().unwrap_or("Bash"),
             "input":&request["input"],
-            "tool_use_id":"toolu_fake_1",
+            "tool_use_id":ASK_TOOL_USE,
             // The harness offers a rule update. A host that acts on one has
             // widened a permission; the marker below proves PIO did not.
             "permission_suggestions":[{
@@ -426,7 +436,7 @@ pub fn run() -> Result<()> {
                     // whoever decided it. Listing only the ones it decided
                     // itself left the attribution path untested.
                     denied_by_harness.push(json!({"tool_name":&request["tool_name"],
-                        "tool_use_id":"toolu_fake_1","tool_input":&request["input"]}));
+                        "tool_use_id":ASK_TOOL_USE,"tool_input":&request["input"]}));
                     denials += 1;
                 }
             }

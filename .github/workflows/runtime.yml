@@ -60,6 +60,16 @@ jobs:
         run: PYTHONPATH=scripts python3 scripts/approval_desk.py --out target/approval-desk --skip-baseline
       - name: Transcript blocks as they happen, and the audit (G3)
         run: PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/transcript-blocks
+      - name: The walk and the blocks through the other two release harnesses
+        # What each harness does **not** do is the point: Codex sets no
+        # answer deadline and never denies by default, Claude Code offers a
+        # rule update PIO never sends, and Codex emits no tool-use audit at
+        # all.
+        run: |
+          PYTHONPATH=scripts python3 scripts/approval_desk.py --out target/desk-claude --harness claude
+          PYTHONPATH=scripts python3 scripts/approval_desk.py --out target/desk-codex --harness codex
+          PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-claude --harness claude
+          PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-codex --harness codex
       - name: No private paths in any committed file
         run: |
           python3 scripts/check_private_paths.py --selftest

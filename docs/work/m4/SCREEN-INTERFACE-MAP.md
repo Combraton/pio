@@ -138,7 +138,11 @@ The negative control — an answer aimed at the wrong run or a stale controller 
 
 ### One open item, reported rather than closed
 
-**A run waiting on an approval is sometimes ended by a PIO timeout before its answer clock lapses.** The signature is exact: `execution.timeout.passed` on that run, **no** `execution.usage.observed` (so the harness was stopped, not finished), and the action still `pending`. Seen **three times in twenty-eight runs**, always while other heavy work was running, and **not once in the twenty-five since** — including a batch run with the machine deliberately saturated. I could not identify which of the five timeouts fires, and I will not claim a cause I have not measured.
+**A run waiting on an approval is sometimes ended by a PIO timeout before its answer clock lapses.** The signature is exact: `execution.timeout.passed` on that run, **no** `execution.usage.observed` (so the harness was stopped, not finished), and the action still `pending`. Seen **three times in twenty-eight runs**, always while other heavy work was running, and **not once since** — several dozen runs now, including a batch with the machine deliberately saturated by CPU burners.
+
+**What has changed since it was first recorded.** The run now records the clock **by name**: `execution.timeout.passed` carries `{"timeout": <name>}`, and which of the five it is decides whether this is the delivery deadline sharing its number with the answer deadline or something else entirely. Guessing cost three rounds, so the name is read rather than inferred. And the acknowledged-delivery wait that `pass_one` makes is now made by the lapse probe too — it was the one path that could hit the delivery timeout while measuring the answer timeout, and it had no such wait.
+
+I still have not seen the name, because the failure has not recurred. **The item stays open with a measurement attached rather than a conclusion**: I will not name a clock I have not read.
 
 What is known:
 
@@ -147,6 +151,28 @@ What is known:
 - **The screen is correct under this failure anyway.** A run that has exited cannot answer anything, so **the walk drops approvals whose run has exited** — a rule that is exercised on real data, including at `a22c98c` where it is the *only* thing that empties the walk.
 
 The pass now tells the two apart: if `execution.timeout.passed` is present for the lapse run it fails with that named, and dumps the service's own record for the execution — the timeouts, `admitted_at`, `timeouts_passed` and the delivery state — which is what will identify the clock the next time it happens.
+
+### The same walk, through the other two release harnesses
+
+`approval_desk.py --harness claude` and `--harness codex` run it through
+`serve-claude` and `serve-codex`. What each harness **does not** do is the point.
+
+| | Codex | Claude Code | OpenCode |
+| --- | --- | --- | --- |
+| Answer deadline | **none** — `answer_deadline_seconds` is null | the caller's own `timeouts.delivery` | the same |
+| If nobody answers | **nothing.** No default deny exists in this host at all | a single-use `deny` | a `reject_once` chosen by kind |
+| Option list | none | none | `once` / `always` / `reject`, measured live |
+| Also carries | `method`, `approval_kind` | `suggestions_offered`, `widening_fields_sent` | the offered list and what PIO will send |
+
+**Codex waits until it is answered.** Left alone for 45 seconds — long past any deadline the other two would have hit — the action is still `pending`, nothing has decided it, and it is still on the walk. So the screen shows **no countdown** for a Codex approval, because a countdown there would promise a decision PIO will never make. `--mutant assume-countdown` substitutes a default for the missing deadline and fails on exactly that.
+
+**Claude Code offers a rule update with every request.** Acting on one widens a permission beyond the request. What PIO will send is built by `permission_decision`, which cannot encode one, so the walk shows `suggestions_offered: 1` and `widening_fields_sent: []` — and the fake's own marker confirms `widening_fields_received: []`, which is the harness's record rather than PIO's.
+
+### Two actions on one run
+
+The default-deny arm resolves an action from `action_seq`. With one action that number is always 1, so nothing separated *settles the right row* from *settles the only row*. A turn that asks about two things does: both lapse, and the run ends with `run-1.action-1` and `run-1.action-2` each `answered`, each with its own `answered_at`, and two decisions rather than one twice.
+
+This check has **no baseline mutant**, deliberately: the fake at `a22c98c` has no `permission_requests` knob, so the scenario would produce no actions and the probe would fail because the fixture is newer than the binary. A mutant that dies for the wrong reason proves nothing.
 
 The classification the walk shows for this harness is `disposition: surface_as_action`, `placement: not_classifiable` — an `execute` call announced with a command line and no path, which the resolver will not place. The screen shows that, rather than guessing `inside`. Same rule as G3.
 
@@ -171,6 +197,12 @@ Placement and decider are different. **No Protocol event fires per tool use**, a
 | A screen may say it does not know, but anything it **does** say must survive the audit | the audit is compared against what the screen claimed live, not merged over it | `--mutant guess-inside` calls a call `inside` because its command names a workspace path; the audit says `not_classifiable` and the run fails |
 | The audit fills the blanks in place | the ids seen live are a subset of the audited ids, and every one is placed | `--baseline-as-mutant`: at `a22c98c` `execution.exit.observed` carries no audit at all |
 | Three deciders told apart | one call the caller answered, two nobody was asked about; `decided_by: null` is shown as **nobody was asked**, never as a decider | — |
+
+### Blocks and the audit, through the other two
+
+`transcript_blocks.py --harness claude` and `--harness codex`. The live half reads the same on all three — bytes arrive while the run is still working, every tool use is `not yet classified` and `unknown`, and the reader never re-reads what it has shown. The decoder is per harness: one record per `session/update` for OpenCode, per assistant message for Claude Code, per item event for Codex.
+
+**Codex produces no audit at all.** Its host emits no `tool_uses` record, so `execution.exit.observed` carries no `pio.combraton.dev/tool-uses` and a Codex run's placements are **never** classified. The screen has to say that. Showing an absent audit as "nothing happened outside" would be a containment claim PIO never made, so the pass asserts the key is absent and that every placement stays `not yet classified`.
 
 Three placements come back from one turn — `inside_fixture`, and `not_classifiable` twice — which is why the screen cannot collapse them into "inside or outside".
 

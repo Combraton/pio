@@ -24,7 +24,7 @@
 //! once at the end), `model_on_creation`, `ignore_model_selection`,
 //! `refuse_model_selection`, `mode_on_creation`, `mode`,
 //! `ignore_mode_selection`, `session_error`, `delay_ms`, `ignore_cancel`,
-//! `markers`.
+//! `markers`, `permission_requests` (a list, asked one at a time).
 //! A `tool_calls` entry takes `title`, `kind`, `input` and an optional
 //! `status` for the state the call ends in.
 use anyhow::{Context, Result};
@@ -322,13 +322,20 @@ pub fn run() -> Result<()> {
                         json!({"event":state,"attached":handshook,
                                             "tool_call_id":"call_permission"}),
                     )?;
-                } else if !scenario["permission_request"].is_null() {
-                    request_permission(
-                        &scenario["permission_request"],
-                        session,
-                        &mut lines,
-                        &markers,
-                    )?;
+                } else if !scenario["permission_request"].is_null()
+                    || scenario["permission_requests"].is_array()
+                {
+                    // One turn may ask about several things. This fake asks
+                    // about them **one at a time**, because that is how the
+                    // ACP exchange works: the agent blocks on each answer
+                    // before it can do the next thing.
+                    let asked: Vec<Value> = match scenario["permission_requests"].as_array() {
+                        Some(list) => list.clone(),
+                        None => vec![scenario["permission_request"].clone()],
+                    };
+                    for (index, request) in asked.iter().enumerate() {
+                        request_permission(request, index, session, &mut lines, &markers)?;
+                    }
                 }
                 if let Some(calls) = scenario["tool_calls"].as_array() {
                     for (index, call) in calls.iter().enumerate() {
@@ -465,11 +472,16 @@ fn permission_options(request: &Value) -> Value {
 
 fn request_permission(
     request: &Value,
+    index: usize,
     session: &str,
     lines: &mut impl Iterator<Item = std::io::Result<String>>,
     markers: &Option<PathBuf>,
 ) -> Result<()> {
-    let id = json!(9001);
+    // Indexed, both of them. A turn may ask about more than one thing, and
+    // a second request reusing the first's call id would give one run two
+    // actions that an audit keyed by id merges into one.
+    let id = json!(9001 + index as u64);
+    let call = format!("call_permission_{index}");
     let options = permission_options(request);
     // The tool call the request is about, announced the way a real agent
     // announces one. Without it there is no record for a decision to be
@@ -478,7 +490,7 @@ fn request_permission(
     // `locations`, `status: pending`. What the call touches arrives next.
     emit(&json!({"jsonrpc":"2.0","method":"session/update",
         "params":{"sessionId":session,"update":{
-            "sessionUpdate":"tool_call","toolCallId":"call_permission",
+            "sessionUpdate":"tool_call","toolCallId":&call,
             "title":&request["title"],
             "kind":request["kind"].as_str().unwrap_or("execute"),
             "rawInput":{},"locations":[],"status":"pending"}}}))?;
@@ -487,7 +499,7 @@ fn request_permission(
         .or_else(|| request["input"]["file_path"].as_str());
     emit(&json!({"jsonrpc":"2.0","method":"session/update",
         "params":{"sessionId":session,"update":{
-            "sessionUpdate":"tool_call_update","toolCallId":"call_permission",
+            "sessionUpdate":"tool_call_update","toolCallId":&call,
             "title":&request["title"],
             "kind":request["kind"].as_str().unwrap_or("execute"),
             "rawInput":&request["input"],
@@ -497,7 +509,7 @@ fn request_permission(
     emit(
         &json!({"jsonrpc":"2.0","id":id,"method":"session/request_permission",
         "params":{"sessionId":session,
-            "toolCall":{"toolCallId":"call_permission","title":&request["title"],
+            "toolCall":{"toolCallId":&call,"title":&request["title"],
                         "kind":request["kind"].as_str().unwrap_or("execute"),
                         "rawInput":&request["input"]},
             "options":&options}}),

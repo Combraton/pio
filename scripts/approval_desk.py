@@ -52,6 +52,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import opencode_host_matrix as matrix
+import proof_harness
 from opencode_host_matrix import ServiceCase, poll, release_live_cases
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -147,7 +148,7 @@ def events_of(case, identity=None):
     return items
 
 
-def walk(events, order='deadline'):
+def walk(events, order='deadline', assume=None):
     """The approval walk: every request still waiting, soonest due first.
 
     Built only from the stream. `actions[]` is where identity and state live;
@@ -171,15 +172,32 @@ def walk(events, order='deadline'):
     if order == 'arrival':
         rows.sort(key=lambda r: r['arrived'])
     else:
-        rows.sort(key=lambda r: (r['requested_at'], -r['answer_deadline_seconds']))
-        rows.sort(key=lambda r: due(r))
+        rows.sort(key=lambda r: r['arrived'])
+        # Soonest due first, and a request that never becomes due sorts
+        # after every one that does.
+        rows.sort(key=lambda r: (due(r, assume) is None, due(r, assume) or 0))
+    for row in rows:
+        row['due'] = due(row, assume)
     return rows
 
 
-def due(row):
-    """When PIO will decide, if nobody does: `requested_at` plus the deadline."""
+def due(row, assume=None):
+    """When PIO will decide, if nobody does — or `None` when it never will.
+
+    The Codex host sets no answer deadline and has no default deny: its
+    action waits until a caller answers it. A screen that invented a
+    countdown there would be promising a decision PIO will never make, so
+    `None` is the honest answer and the walk shows it as such.
+
+    `assume` is the mutant: a default substituted for the missing deadline.
+    """
+    seconds = row['answer_deadline_seconds']
+    if seconds is None:
+        if assume is None:
+            return None
+        seconds = assume
     stamp = time.strptime(row['requested_at'][:19], '%Y-%m-%dT%H:%M:%S')
-    return time.mktime(stamp) + row['answer_deadline_seconds']
+    return time.mktime(stamp) + seconds
 
 
 def host_kinds(case):
@@ -193,6 +211,10 @@ def host_kinds(case):
         out[path.name] = [json.loads(line)['kind']
                           for line in path.read_text().splitlines() if line.strip()]
     return out
+
+
+def text(value):
+    return value if isinstance(value, str) else repr(value)
 
 
 def journal_state(case, identity):
@@ -315,14 +337,20 @@ def pass_one(out, mutant=None):
         # chance". Seen three times in twenty-eight runs, always under load,
         # never since — and not reproducible on demand even with the machine
         # deliberately saturated, so it is reported rather than claimed fixed.
-        stopped = [e['payload'] for e in events
-                   if e['type'] == 'execution.timeout.passed'
-                   and e['subject']['id'] == soon['run']]
-        assert not stopped, (
-            f'this run was ended by a PIO timeout {stopped} before its answer '
-            'clock lapsed, so there was no lapse to observe. Not a regression of '
-            "the fix — at a22c98c the same run also ends with the action pending. "
-            f"journal={journal_state(case, soon['run'])} host={host_kinds(case)}")
+        # The clock, by name. `execution.timeout.passed` carries
+        # `{"timeout": <name>}`, and which of the five it is decides whether
+        # this is the delivery deadline sharing its number with the answer
+        # deadline or something else entirely. Guessing cost three rounds;
+        # the name is now recorded rather than inferred.
+        clocks = [text(e['payload'].get('timeout')) for e in events
+                  if e['type'] == 'execution.timeout.passed'
+                  and e['subject']['id'] == soon['run']]
+        assert not clocks, (
+            f'this run was ended by the {clocks} timeout before its answer '
+            'clock lapsed, so there was no lapse to observe. Not a regression '
+            'of the fix — at a22c98c the same run also ends with the action '
+            f"pending. journal={journal_state(case, soon['run'])} "
+            f'host={host_kinds(case)}')
         assert by_pio is not None, (
             'the deadline lapsed and the stream never said so — actions[] still '
             f"reads pending. action={soon['action_id']} "
@@ -397,6 +425,179 @@ def pass_two(out):
         return record, events
 
 
+def pass_two_actions(out, lapse_after=20):
+    """Two actions on one run, both lapsing.
+
+    The default-deny arm resolves an action from `action_seq`. With a single
+    action that number is always 1, so nothing distinguished "settles the
+    right entry" from "settles the only entry". A turn that asks about two
+    things does: each has to reach its own row, and the run has to end with
+    two answered actions and two decisions, not one twice.
+
+    **This one has no baseline mutant, and the reason is worth stating.**
+    `--baseline-as-mutant` runs its probes against the binary built at
+    `a22c98c`, where the fake has no `permission_requests` knob at all — so
+    the scenario would produce no actions and the probe would fail because
+    the fixture is newer than the binary, not because the projection lacks
+    the arm. A mutant that dies for the wrong reason proves nothing, so this
+    check carries its discrimination in the assertions instead: two distinct
+    `action_id`s in order, two rows in `actions[]`, both `answered`, each
+    with its own `answered_at`. A projection that settled only the first, or
+    settled the same row twice, fails every one of them.
+    """
+    with service(out, 'two-actions',
+                 permission_requests=[ASKS, dict(ASKS, title='run another command',
+                                                 input={'command': 'git tag pio-second'})]) \
+            as case:
+        case.start()
+        case.submit(identity='run-1', delivery_timeout=lapse_after)
+        poll(lambda: case.inspect('run-1'),
+             lambda v: v['runtime'] == 'requires_action'
+             and v['delivery'] == 'acknowledged', seconds=120)
+        view = poll(lambda: case.inspect('run-1'), lambda v: v['runtime'] == 'exited',
+                    seconds=240)
+        events = events_of(case, 'run-1')
+        clocks = [e['payload'].get('timeout') for e in events
+                  if e['type'] == 'execution.timeout.passed']
+        assert not clocks, f'this run was ended by the {clocks} timeout: {view}'
+
+        settled = [e for e in events if e['type'] == 'execution.action.answered']
+        assert len(settled) == 2, [e['type'] for e in events]
+        ids = [e['payload']['action_id'] for e in settled]
+        assert ids == ['run-1.action-1', 'run-1.action-2'], ids
+        for event in settled:
+            decision = event['payload'][DECISION]
+            assert event['origin'] == 'provider', event
+            assert decision['decided_by'] == 'pio', decision
+            assert decision['basis'] == 'deadline_lapsed', decision
+            assert decision['after_seconds'] == lapse_after, decision
+            assert decision['option_kind'] == 'reject_once', decision
+
+        actions = case.inspect('run-1')['actions']
+        assert [a['action_id'] for a in actions] == ids, actions
+        assert [a['state'] for a in actions] == ['answered', 'answered'], actions
+        assert all('answered_at' in a for a in actions), actions
+        # Two rows, not one row twice: each keeps its own requested_at, and
+        # the second was asked about only after the first had lapsed.
+        assert actions[0]['requested_at'] <= actions[1]['requested_at'], actions
+        assert len({a['action_id'] for a in actions}) == 2, actions
+        assert walk(events) == [], walk(events)
+        case.finish()
+    return dict(actions=ids, states=['answered', 'answered'],
+                decided_by=['pio', 'pio'], after_seconds=lapse_after)
+
+
+# --- the walk against the other two release harnesses -------------------------
+
+def pass_harness(out, harness, mutant=None):
+    """The walk through `serve-claude` or `serve-codex`.
+
+    What each harness **does not** do is the point. Codex sets no answer
+    deadline and has no default deny at all, so its approval carries no
+    countdown and never lapses. Claude Code offers a rule update with every
+    request, and acting on one would widen a permission beyond it — so
+    suggestions appear as offered and never as something PIO will send.
+    """
+    facts = {'harness': harness.serve}
+    with harness.service(out, f'{harness.name}-walk', **harness.ask) as svc:
+        svc.start()
+        svc.submit(identity='run-1', delivery_timeout=300)
+        poll(lambda: svc.inspect('run-1'),
+             lambda v: v['runtime'] == 'requires_action', seconds=120)
+        rows = walk(events_of(svc), assume=120 if mutant == 'assume-countdown' else None)
+        assert len(rows) == 1, rows
+        row = rows[0]
+        facts['approval'] = {k: row[k] for k in
+                             ('answer_deadline_seconds', 'options', 'method',
+                              'approval_kind', 'if_nobody_answers') if k in row}
+
+        if harness.lapses:
+            assert row['answer_deadline_seconds'] == 300, row
+            assert row['due'] is not None, row
+        else:
+            # Codex. Asserted, not inferred from an empty field: there is no
+            # deadline, so the walk reports no due time, and `--mutant
+            # assume-countdown` — which substitutes a default — fails here.
+            assert row['answer_deadline_seconds'] is None, row
+            assert row['due'] is None, (
+                'this harness sets no answer deadline and never denies by '
+                'default, so a due time is a countdown to a decision PIO '
+                f'will never make: {row}')
+            assert row['method'] and row['approval_kind'], row
+
+        if harness.offers_options:
+            assert [o['kind'] for o in row['options']] == \
+                ['allow_once', 'allow_always', 'reject_once'], row
+        else:
+            assert row['options'] is None, (
+                'this harness offers no option list, and an invented one '
+                f'would be a list the screen could not send from: {row}')
+
+        if harness.suggests:
+            # Claude Code. The harness offers a rule update on every request.
+            # What PIO will send is built by `permission_decision`, which
+            # cannot encode one — so the walk shows the suggestion as offered
+            # and never as an option PIO sends.
+            sending = row['if_nobody_answers']
+            assert sending['behavior'] == 'deny', sending
+            assert sending['single_use'] is True, sending
+            assert sending['suggestions_offered'] == 1, sending
+            assert sending['widening_fields_sent'] == [], sending
+
+        # The caller answers its own run, through the released operation.
+        view = svc.inspect('run-1')
+        accepted = svc.respond(row['action_id'], harness.allow, view['revision'],
+                               identity='run-1')
+        assert accepted.get('result', {}).get('outcome', {}).get('state') == 'answered', \
+            accepted
+        settled = answered(events_of(svc), row['action_id'])
+        assert settled is not None, 'the caller answered and the stream did not say so'
+        assert settled['origin'] == 'command', settled
+        assert settled['payload'][DECISION] == {'decided_by': 'caller',
+                                                'decision': harness.allow}, settled
+        facts['caller_decision'] = settled['payload'][DECISION]
+        poll(lambda: svc.inspect('run-1'), lambda v: v['runtime'] == 'exited',
+             seconds=200)
+        if harness.suggests:
+            # Measured at the harness, not only in PIO's own payload: the
+            # fake records any widening field it receives, and the Claude
+            # matrix proves that detector fires when one does.
+            received = [m for m in svc.case.markers_of('permission_decision')]
+            assert received, 'the fake recorded no decision'
+            assert all(m['widening_fields_received'] == [] for m in received), received
+            facts['widening_fields_received'] = []
+        svc.finish()
+
+    if not harness.lapses:
+        # And the other half of "waits until answered": left alone, it is
+        # still pending when a harness that denies by default would have
+        # decided long ago.
+        facts['never_lapses'] = pass_never_lapses(out, harness)
+    return facts
+
+
+def pass_never_lapses(out, harness, seconds=45):
+    """A Codex action left unanswered stays pending, and nothing decides it."""
+    with harness.service(out, f'{harness.name}-waits', **harness.ask) as svc:
+        svc.start()
+        svc.submit(identity='run-1')
+        poll(lambda: svc.inspect('run-1'),
+             lambda v: v['runtime'] == 'requires_action', seconds=120)
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            time.sleep(2)
+        view = svc.inspect('run-1')
+        assert view['runtime'] == 'requires_action', view
+        assert [a['state'] for a in view['actions']] == ['pending'], view['actions']
+        events = events_of(svc, 'run-1')
+        assert not [e for e in events
+                    if e['type'] == 'execution.action.answered'], \
+            'something decided an action this harness never decides'
+        assert walk(events), 'the walk lost a request that is still waiting'
+        svc.finish()
+    return dict(waited_seconds=seconds, state='pending', decided_by=None)
+
+
 # --- 6. what a caller that ignores the keys sees ------------------------------
 
 def normalize(value, strip=True):
@@ -432,8 +633,15 @@ def collect(out, label, lapse, request=None, keep=False):
     with service(out, label, permission_request=request or ASKS) as case:
         case.start()
         case.submit(identity='run-1', delivery_timeout=20 if lapse else 150)
+            # The same wait `pass_one` makes, and for the same reason: while
+        # delivery is still `pending` the delivery timeout is live, and it
+        # shares its number with the answer deadline. Without this, the run
+        # whose lapse the probe is measuring could be ended by the other
+        # clock instead — which is the open item below, reproduced here.
         view = poll(lambda: case.inspect('run-1'),
-                    lambda v: v['runtime'] in ('requires_action', 'exited'), seconds=120)
+                    lambda v: v['runtime'] == 'exited'
+                    or (v['runtime'] == 'requires_action'
+                        and v['delivery'] == 'acknowledged'), seconds=120)
         if not lapse and view['runtime'] == 'requires_action':
             # A declined request never surfaces, so there is nothing to answer.
             case.respond(view['runtime_detail']['action_id'], 'deny', view['revision'],
@@ -561,6 +769,7 @@ def baseline_mutants(out, commit):
     probes['a_decline_is_pios_decision'] = (
         decline, lambda r: r['answered'] == ['execution.action.answered'])
 
+
     for name, (probe, holds) in probes.items():
         before = with_binary(binary, lambda: probe('mutant'))
         release_live_cases()
@@ -581,7 +790,11 @@ def baseline_mutants(out, commit):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, default=ROOT / 'target/approval-desk')
-    parser.add_argument('--mutant', choices=['arrival-order', 'cross-run', 'unstripped'])
+    parser.add_argument('--mutant', choices=['arrival-order', 'cross-run', 'unstripped',
+                                             'assume-countdown'])
+    parser.add_argument('--harness', default='opencode', choices=proof_harness.NAMES,
+                        help='opencode runs the full proof; claude and codex run the '
+                             'walk against the other two release harnesses')
     parser.add_argument('--baseline-as-mutant', action='store_true',
                         help='run passes 1 and 2 against the pre-G2 binary; '
                              'both must fail')
@@ -598,9 +811,24 @@ def main():
             print('every mutant died')
             return
 
+        if args.harness != 'opencode':
+            # The other two release harnesses. The deep passes — two runs
+            # ordered by deadline, the wrong-run refusal, the lapse, the
+            # decline and the a22c98c diff — stay on OpenCode, whose
+            # permission path is the one measured live. What these prove is
+            # that the walk reads the same on all three, and that each
+            # harness's own behaviour reaches it.
+            harness = proof_harness.load(args.harness)
+            record = pass_harness(out, harness, args.mutant)
+            (out / f'approval-desk-{args.harness}.json').write_text(
+                json.dumps(record, indent=2, sort_keys=True) + '\n')
+            print(json.dumps(record, indent=2, sort_keys=True))
+            print(f'approval desk ({harness.serve}): pass')
+            return
         record = dict(harness='serve-opencode with the labeled ACP fake')
         record['desk'] = pass_one(out, args.mutant)[0]
         record['decline'] = pass_two(out)[0]
+        record['two_actions_one_run'] = pass_two_actions(out)
         if not args.skip_baseline:
             record['unchanged_for_a_caller_that_ignores_the_keys'] = pass_three(
                 out, args.baseline_commit, strip=args.mutant != 'unstripped')

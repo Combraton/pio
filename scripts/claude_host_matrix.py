@@ -451,7 +451,7 @@ def run_case(out, name):
         # made. The first was refused after the decision was transported; the
         # second was not, so it is the observed effect.
         assert len(uses) == 2, uses
-        assert {u['id'] for u in uses} == {'toolu_fake_0', 'toolu_fake_1'}, uses
+        assert {u['id'] for u in uses} == {'toolu_fake_0', 'toolu_fake_ask'}, uses
         record = json.loads(subprocess.run(
             [str(BINARY), 'claude', 'tool-uses', '--workspace', str(case.workspace),
              '--cwd', str(case.workspace)],
@@ -463,7 +463,7 @@ def run_case(out, name):
         by_id = {u['tool_use_id']: u for u in record['tool_uses']}
         # Refused, so not an effect. Driven directly, so nothing can say who
         # decided; the service cases cover attribution.
-        assert by_id['toolu_fake_1']['outcome'] == 'attempted_and_denied', by_id
+        assert by_id['toolu_fake_ask']['outcome'] == 'attempted_and_denied', by_id
         assert by_id['toolu_fake_0']['outcome'] == 'performed', by_id
         # A receipt carries labels and digests, never raw paths.
         assert str(case.fixtures) not in json.dumps(record), record
