@@ -78,12 +78,6 @@ jobs:
         run: |
           sudo systemctl start "user@$(id -u).service"
           echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
-      - name: No case left its store behind
-        # Every suite above starts services in private stores and releases
-        # them in a `finally`. Four survived on /tmp once because two proof
-        # scripts released on the success path alone; this is the check that
-        # says so without anyone looking.
-        run: python3 scripts/check_case_leaks.py
       - name: Private packaging and native user-job lifecycle
         run: python3 scripts/packaging_check.py --out target/packaging
       - name: Pinned Protocol runner against PIO
@@ -103,3 +97,14 @@ jobs:
             target/codex-host
             target/packaging
           if-no-files-found: error
+      - name: No case left its store behind
+        # **Last step, deliberately.** Every suite above starts services in
+        # private stores and releases them in a `finally`; packaging and the
+        # conformance runner make stores of their own, so a count placed
+        # before them cannot see what they leave. Four stores survived on
+        # /tmp once because two proof scripts released on the success path
+        # alone, and 114 marker directories survived in $TMPDIR because
+        # `permit_prefix` says a directory may be removed and removes
+        # nothing. This is the check that says so without anyone looking.
+        if: always()
+        run: python3 scripts/check_case_leaks.py

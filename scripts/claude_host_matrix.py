@@ -139,6 +139,7 @@ class Case:
             config = json.loads(self.config_path.read_text())
             config['claude']['env']['PIO_CLAUDE_FAKE_SCENARIO'] = json.dumps(self.scenario)
             self.config_path.write_text(json.dumps(config))
+        self.extra_roots = []
         LIVE_CASES.append(self)
 
     def env(self):
@@ -207,6 +208,14 @@ class Case:
         # Kills anything still naming this store and asserts none survives,
         # so a host that refuses to exit is a failure rather than a leak.
         case_cleanup.release(self.root)
+        # Anything this case made **outside** its own store, which the
+        # store's release cannot reach. The out-of-fixture marker is the
+        # only one, and it leaked 114 directories into `$TMPDIR` before the
+        # leak check widened its roots far enough to see them:
+        # `permit_prefix` says a directory *may* be removed, and nothing was
+        # calling `release` on it.
+        for extra in self.extra_roots:
+            case_cleanup.release(extra)
 
 
 class ServiceCase(Case):
@@ -789,6 +798,11 @@ def run_case(out, name):
                              'input': {'command': 'git tag pio-live-marker'}})
             case = ServiceCase(out, f'{name}-{decision}',
                                scenario={'permission_request': request})
+            # The marker is deliberately outside the fixture, so the store's
+            # own release cannot reach it. `permit_prefix` alone says it *may*
+            # be removed and removes nothing; this is what removes it. Without
+            # it every attempt left one directory in `$TMPDIR` for ever.
+            case.extra_roots.append(Path(outside).parent)
             case.start()
             case.submit()
             if decision == 'pio-declines':

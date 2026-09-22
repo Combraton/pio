@@ -19,6 +19,7 @@ never failed is not known to work.
 """
 import argparse
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -28,11 +29,42 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import case_cleanup
 
-# Where the suites put their stores, and the prefixes they use. Every one of
-# these comes from a `mkdtemp(prefix=...)` in a script beside this one.
-ROOTS = ['/tmp', '/private/tmp']
-PREFIXES = ('pio-oc-', 'pio-cl-', 'pio-cx-', 'pio-board-', 'pio-caller-',
-            'pio-pkg-', 'pio-fh-', 'pio-outside-', 'private-path-')
+# Where the suites put their temporary directories. Two of them pass no
+# `dir=`, so they land in `$TMPDIR` — on macOS that is under `/var/folders`,
+# not `/tmp`, and a list of two roots missed them.
+ROOTS = ['/tmp', '/private/tmp', tempfile.gettempdir()]
+# Everything this repo creates is named `pio-…`, so the rule is the shape
+# rather than a list that has to be kept in step with the scripts. Two names
+# predate the convention and are named here because they cannot be inferred.
+SHAPE = re.compile(r'^pio-')
+EXCEPTIONS = ('oc-selftest-', 'private-path-')
+SCRIPTS = Path(__file__).resolve().parent
+LITERAL = re.compile(r'''mkdtemp\(\s*prefix\s*=\s*['"]([^'"]+)['"]''')
+
+
+def covered(name):
+    return bool(SHAPE.match(name)) or name.startswith(EXCEPTIONS)
+
+
+def declared_prefixes():
+    """Every prefix a script beside this one actually creates."""
+    found = {}
+    for script in sorted(SCRIPTS.glob('*.py')):
+        for prefix in LITERAL.findall(script.read_text()):
+            found.setdefault(prefix, script.name)
+    return found
+
+
+def uncovered():
+    """Prefixes this check would not recognise if they leaked.
+
+    The list of prefixes used to be maintained by hand, and it had already
+    fallen behind by three. Deriving the answer from the scripts means the
+    next one cannot slip past: a prefix that does not fit the shape has to be
+    named as an exception, deliberately.
+    """
+    return {prefix: script for prefix, script in declared_prefixes().items()
+            if not covered(prefix)}
 
 
 def stores():
@@ -42,7 +74,7 @@ def stores():
         if not os.path.isdir(root):
             continue
         for entry in sorted(os.listdir(root)):
-            if not entry.startswith(PREFIXES):
+            if not covered(entry):
                 continue
             path = os.path.join(root, entry)
             if os.path.isdir(path) and not os.path.islink(path):
@@ -60,9 +92,19 @@ def describe(path):
 
 
 def check():
+    # Two different failures, reported apart. A prefix nothing recognises is
+    # not a leak yet — it is a leak this check would miss.
+    missing = uncovered()
+    if missing:
+        print(f'case stores: {len(missing)} prefix(es) this check would not see')
+        for prefix, script in sorted(missing.items()):
+            print(f'  {prefix!r} from {script}')
+        print('\nName it in EXCEPTIONS, or rename it to the pio- shape.')
+        return 1
     leaked = stores()
     if not leaked:
-        print('case stores: none left behind')
+        print(f'case stores: none left behind '
+              f'({len(declared_prefixes())} prefixes covered)')
         return 0
     print(f'case stores: {len(leaked)} left behind')
     for path in leaked:
@@ -85,7 +127,19 @@ def selftest():
     finally:
         shutil.rmtree(planted, ignore_errors=True)
     assert check() == 0, 'the check still fails once the planted store is gone'
-    print('check_case_leaks selftest: a planted store fails the check')
+
+    # And the coverage half: a prefix no rule recognises fails the check,
+    # which is what stops the next one slipping past.
+    global EXCEPTIONS
+    kept, EXCEPTIONS = EXCEPTIONS, ()
+    try:
+        assert uncovered(), 'dropping the exceptions left nothing uncovered'
+        assert check() == 1, 'the check passed with an unrecognised prefix'
+    finally:
+        EXCEPTIONS = kept
+    assert not uncovered(), f'these prefixes are not covered: {uncovered()}'
+    print('check_case_leaks selftest: a planted store and an unknown prefix '
+          'each fail the check')
     return 0
 
 
