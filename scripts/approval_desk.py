@@ -42,6 +42,7 @@ namespaced keys, so "the only difference is the keys" is a claim the run can
 fail.
 """
 import argparse
+import contextlib
 import json
 import re
 import subprocess
@@ -99,6 +100,28 @@ def check_event(event, schema):
 
 
 # --- the desk ----------------------------------------------------------------
+
+@contextlib.contextmanager
+def service(out, label, **scenario):
+    """One service, released whether or not the pass that used it passed.
+
+    The matrices wrap every case in a `finally` and release it there. These
+    proofs did not: `cleanup()` sat on the success path, so a failing
+    assertion left the store, the daemon and the harness behind until the
+    process exited — and if the process was killed instead, for ever. Four
+    stores survived on `/tmp` that way. A context manager makes the shape
+    impossible to get wrong in the next pass someone adds.
+
+    A cleanup that itself fails is not swallowed: a surviving process is a
+    real failure, and Python shows it chained to whatever raised first.
+    """
+    case = ServiceCase(out, label, model=matrix.REQUESTED, scenario=scenario)
+    try:
+        yield case
+    finally:
+        case.cleanup()
+
+
 
 def events_of(case, identity=None):
     """Every Protocol event this caller may see, from the fold."""
@@ -203,170 +226,175 @@ def answered(events, action_id):
 
 def pass_one(out, mutant=None):
     """Two runs, two pending requests, one caller."""
-    case = ServiceCase(out, 'desk', model=matrix.REQUESTED,
-                       scenario={'permission_request': ASKS})
-    case.start()
-    # Run 1 goes first and is due last. Arrival order and deadline order
-    # disagree on purpose: a walk that sorts by arrival gets them backwards.
-    #
-    # The numbers are not free. `action_answer_timeout_seconds` **is**
-    # `timeouts.delivery`, so PIO's answer deadline and PIO's delivery
-    # deadline are the same number for a run. While delivery is still
-    # `pending` the delivery timeout is live, and on a loaded machine it can
-    # end the run before the host's answer clock ever lapses — which leaves
-    # the action `pending` on a dead run and nothing for this pass to read.
-    # That is a real interaction, not a flake in the fix, and it cost one run
-    # in five before the wait below was added. So: deadlines long enough that
-    # the fold is never the slow part, and **acknowledged delivery asserted
-    # before the walk is drawn**, which is what makes the delivery timeout
-    # dead and the answer timeout the only clock left.
-    case.submit(identity='run-1', delivery_timeout=300)
-    case.submit(identity='run-2', delivery_timeout=75)
-    for identity in ('run-1', 'run-2'):
-        view = poll(lambda i=identity: case.inspect(i),
-                    lambda v: v['runtime'] == 'requires_action'
-                    and v['delivery'] == 'acknowledged', seconds=120)
-        assert 'delivery' not in view.get('timeouts_passed', []), view
+    with service(out, 'desk', permission_request=ASKS) as case:
+        case.start()
+        # Run 1 goes first and is due last. Arrival order and deadline order
+        # disagree on purpose: a walk that sorts by arrival gets them backwards.
+        #
+        # The numbers are not free. `action_answer_timeout_seconds` **is**
+        # `timeouts.delivery`, so PIO's answer deadline and PIO's delivery
+        # deadline are the same number for a run. While delivery is still
+        # `pending` the delivery timeout is live, and on a loaded machine it can
+        # end the run before the host's answer clock ever lapses — which leaves
+        # the action `pending` on a dead run and nothing for this pass to read.
+        # That is a real interaction, not a flake in the fix, and it cost one run
+        # in five before the wait below was added. So: deadlines long enough that
+        # the fold is never the slow part, and **acknowledged delivery asserted
+        # before the walk is drawn**, which is what makes the delivery timeout
+        # dead and the answer timeout the only clock left.
+        #
+        # Run 1 is submitted **and surfaced** before run 2 is submitted at
+        # all, so arrival order is `['run-1', 'run-2']` no matter how the two
+        # hosts are scheduled. Submitting both at once left it to chance, and
+        # chance obliged: the `arrival-order` mutant passed once because the
+        # two orders happened to agree that time. A mutant that survives
+        # because of scheduling is not a mutant.
+        for identity, seconds in (('run-1', 300), ('run-2', 75)):
+            case.submit(identity=identity, delivery_timeout=seconds)
+            view = poll(lambda i=identity: case.inspect(i),
+                        lambda v: v['runtime'] == 'requires_action'
+                        and v['delivery'] == 'acknowledged', seconds=120)
+            assert 'delivery' not in view.get('timeouts_passed', []), view
 
-    events = events_of(case)
-    rows = walk(events, 'arrival' if mutant == 'arrival-order' else 'deadline')
-    assert len(rows) == 2, rows
-    # 1. Ordered by deadline, which is only on the stream because G2 put it
-    #    there. `actions[]` is closed and holds `requested_at` alone.
-    assert [r['run'] for r in rows] == ['run-2', 'run-1'], \
-        [(r['run'], r['answer_deadline_seconds']) for r in rows]
-    assert [r['answer_deadline_seconds'] for r in rows] == [75, 300], rows
-    for row in rows:
-        # The option list the harness offered, measured live in M3b, and the
-        # one PIO will send if nobody answers — chosen by kind, never by id.
-        assert [o['kind'] for o in row['options']] == \
-            ['allow_once', 'allow_always', 'reject_once'], row
-        assert row['if_nobody_answers']['option_kind'] == 'reject_once', row
-        assert row['if_nobody_answers']['always_option_taken'] is False, row
-        # Measured, not assumed: this harness announces an `execute` call
-        # with a command line and no path, so the resolver cannot place it
-        # and says so rather than guessing. That is the value the walk shows.
-        assert row['classification']['disposition'] == 'surface_as_action', row
-        assert row['classification']['placement'] == 'not_classifiable', row
-        entry = [a for a in case.inspect(row['run'])['actions']
-                 if a['action_id'] == row['action_id']]
-        assert entry and entry[0]['state'] == 'pending', entry
-        assert 'answer_deadline_seconds' not in entry[0], entry
+        events = events_of(case)
+        # The premise, asserted rather than hoped for: the two orders disagree.
+        assert [r['run'] for r in walk(events, 'arrival')] == ['run-1', 'run-2'], \
+            walk(events, 'arrival')
+        rows = walk(events, 'arrival' if mutant == 'arrival-order' else 'deadline')
+        assert len(rows) == 2, rows
+        # 1. Ordered by deadline, which is only on the stream because G2 put it
+        #    there. `actions[]` is closed and holds `requested_at` alone.
+        assert [r['run'] for r in rows] == ['run-2', 'run-1'], \
+            [(r['run'], r['answer_deadline_seconds']) for r in rows]
+        assert [r['answer_deadline_seconds'] for r in rows] == [75, 300], rows
+        for row in rows:
+            # The option list the harness offered, measured live in M3b, and the
+            # one PIO will send if nobody answers — chosen by kind, never by id.
+            assert [o['kind'] for o in row['options']] == \
+                ['allow_once', 'allow_always', 'reject_once'], row
+            assert row['if_nobody_answers']['option_kind'] == 'reject_once', row
+            assert row['if_nobody_answers']['always_option_taken'] is False, row
+            # Measured, not assumed: this harness announces an `execute` call
+            # with a command line and no path, so the resolver cannot place it
+            # and says so rather than guessing. That is the value the walk shows.
+            assert row['classification']['disposition'] == 'surface_as_action', row
+            assert row['classification']['placement'] == 'not_classifiable', row
+            entry = [a for a in case.inspect(row['run'])['actions']
+                     if a['action_id'] == row['action_id']]
+            assert entry and entry[0]['state'] == 'pending', entry
+            assert 'answer_deadline_seconds' not in entry[0], entry
 
-    soon, later = rows[0], rows[1]
-    # 3. An answer aimed at the wrong run. The mutant aims it at its own.
-    target = soon['run'] if mutant == 'cross-run' else later['run']
-    view = case.inspect(target)
-    refusal = case.respond(soon['action_id'], 'allow', view['revision'], identity=target)
-    assert 'error' in refusal, refusal
-    assert refusal['error']['data']['code'] == 'not_found', refusal
-    for identity in ('run-1', 'run-2'):
-        assert case.inspect(identity)['runtime'] == 'requires_action', identity
+        soon, later = rows[0], rows[1]
+        # 3. An answer aimed at the wrong run. The mutant aims it at its own.
+        target = soon['run'] if mutant == 'cross-run' else later['run']
+        view = case.inspect(target)
+        refusal = case.respond(soon['action_id'], 'allow', view['revision'], identity=target)
+        assert 'error' in refusal, refusal
+        assert refusal['error']['data']['code'] == 'not_found', refusal
+        for identity in ('run-1', 'run-2'):
+            assert case.inspect(identity)['runtime'] == 'requires_action', identity
 
-    # 2. The caller answers its own run.
-    view = case.inspect(later['run'])
-    accepted = case.respond(later['action_id'], 'deny', view['revision'],
-                            identity=later['run'])
-    assert accepted.get('result', {}).get('outcome', {}).get('state') == 'answered', accepted
-    events = events_of(case)
-    by_caller = answered(events, later['action_id'])
-    assert by_caller is not None, 'the caller answered and the stream did not say so'
-    assert by_caller['origin'] == 'command', by_caller
-    assert by_caller['payload'][DECISION] == {'decided_by': 'caller', 'decision': 'deny'}, \
-        by_caller
+        # 2. The caller answers its own run.
+        view = case.inspect(later['run'])
+        accepted = case.respond(later['action_id'], 'deny', view['revision'],
+                                identity=later['run'])
+        assert accepted.get('result', {}).get('outcome', {}).get('state') == 'answered', accepted
+        events = events_of(case)
+        by_caller = answered(events, later['action_id'])
+        assert by_caller is not None, 'the caller answered and the stream did not say so'
+        assert by_caller['origin'] == 'command', by_caller
+        assert by_caller['payload'][DECISION] == {'decided_by': 'caller', 'decision': 'deny'}, \
+            by_caller
 
-    # 4. Nobody answers run-2. PIO decides, and says so on the stream.
-    poll(lambda: case.inspect(soon['run']), lambda v: v['runtime'] == 'exited', seconds=200)
-    events = events_of(case)
-    by_pio = answered(events, soon['action_id'])
-    # Two different failures wear the same face, and telling them apart is
-    # the difference between "the fix regressed" and "this run never got the
-    # chance". Seen three times in twenty-eight runs, always under load,
-    # never since — and not reproducible on demand even with the machine
-    # deliberately saturated, so it is reported rather than claimed fixed.
-    stopped = [e['payload'] for e in events
-               if e['type'] == 'execution.timeout.passed'
-               and e['subject']['id'] == soon['run']]
-    assert not stopped, (
-        f'this run was ended by a PIO timeout {stopped} before its answer '
-        'clock lapsed, so there was no lapse to observe. Not a regression of '
-        "the fix — at a22c98c the same run also ends with the action pending. "
-        f"journal={journal_state(case, soon['run'])} host={host_kinds(case)}")
-    assert by_pio is not None, (
-        'the deadline lapsed and the stream never said so — actions[] still '
-        f"reads pending. action={soon['action_id']} "
-        f"actions={case.inspect(soon['run'])['actions']} "
-        f"events={[(e['type'], e['payload']) for e in events if e['subject']['id'] == soon['run'] and e['type'] != 'execution.runtime.changed']} "
-        f"host={host_kinds(case)} "
-        f"journal={journal_state(case, soon['run'])} "
-        f"timeout_payloads={[e['payload'] for e in events if e['type'] == 'execution.timeout.passed']}")
-    assert by_pio['origin'] == 'provider', by_pio
-    assert 'operation_ref' not in by_pio and 'command_id' not in by_pio, by_pio
-    decision = by_pio['payload'][DECISION]
-    assert decision['decided_by'] == 'pio', decision
-    assert decision['decision'] == 'deny', decision
-    assert decision['basis'] == 'deadline_lapsed', decision
-    assert decision['after_seconds'] == 75, decision
-    assert decision['option_kind'] == 'reject_once', decision
-    assert decision['always_option_taken'] is False, decision
-    lapsed = [a for a in case.inspect(soon['run'])['actions']
-              if a['action_id'] == soon['action_id']][0]
-    assert lapsed['state'] == 'answered', lapsed
-    assert 'answered_at' in lapsed, lapsed
-    # And the walk, drawn again from the same fold, is empty.
-    assert walk(events) == [], walk(events)
+        # 4. Nobody answers run-2. PIO decides, and says so on the stream.
+        poll(lambda: case.inspect(soon['run']), lambda v: v['runtime'] == 'exited', seconds=200)
+        events = events_of(case)
+        by_pio = answered(events, soon['action_id'])
+        # Two different failures wear the same face, and telling them apart is
+        # the difference between "the fix regressed" and "this run never got the
+        # chance". Seen three times in twenty-eight runs, always under load,
+        # never since — and not reproducible on demand even with the machine
+        # deliberately saturated, so it is reported rather than claimed fixed.
+        stopped = [e['payload'] for e in events
+                   if e['type'] == 'execution.timeout.passed'
+                   and e['subject']['id'] == soon['run']]
+        assert not stopped, (
+            f'this run was ended by a PIO timeout {stopped} before its answer '
+            'clock lapsed, so there was no lapse to observe. Not a regression of '
+            "the fix — at a22c98c the same run also ends with the action pending. "
+            f"journal={journal_state(case, soon['run'])} host={host_kinds(case)}")
+        assert by_pio is not None, (
+            'the deadline lapsed and the stream never said so — actions[] still '
+            f"reads pending. action={soon['action_id']} "
+            f"actions={case.inspect(soon['run'])['actions']} "
+            f"events={[(e['type'], e['payload']) for e in events if e['subject']['id'] == soon['run'] and e['type'] != 'execution.runtime.changed']} "
+            f"host={host_kinds(case)} "
+            f"journal={journal_state(case, soon['run'])} "
+            f"timeout_payloads={[e['payload'] for e in events if e['type'] == 'execution.timeout.passed']}")
+        assert by_pio['origin'] == 'provider', by_pio
+        assert 'operation_ref' not in by_pio and 'command_id' not in by_pio, by_pio
+        decision = by_pio['payload'][DECISION]
+        assert decision['decided_by'] == 'pio', decision
+        assert decision['decision'] == 'deny', decision
+        assert decision['basis'] == 'deadline_lapsed', decision
+        assert decision['after_seconds'] == 75, decision
+        assert decision['option_kind'] == 'reject_once', decision
+        assert decision['always_option_taken'] is False, decision
+        lapsed = [a for a in case.inspect(soon['run'])['actions']
+                  if a['action_id'] == soon['action_id']][0]
+        assert lapsed['state'] == 'answered', lapsed
+        assert 'answered_at' in lapsed, lapsed
+        # And the walk, drawn again from the same fold, is empty.
+        assert walk(events) == [], walk(events)
 
-    record = dict(runs=2, ordered_by='deadline',
-                  order=[r['run'] for r in rows],
-                  deadlines=[r['answer_deadline_seconds'] for r in rows],
-                  wrong_run_answer=refusal['error']['data']['code'],
-                  caller_decision=by_caller['payload'][DECISION],
-                  pio_decision=decision,
-                  events=[e['type'] for e in events])
-    case.finish()
-    case.cleanup()
-    return record, events
+        record = dict(runs=2, ordered_by='deadline',
+                      order=[r['run'] for r in rows],
+                      deadlines=[r['answer_deadline_seconds'] for r in rows],
+                      wrong_run_answer=refusal['error']['data']['code'],
+                      caller_decision=by_caller['payload'][DECISION],
+                      pio_decision=decision,
+                      events=[e['type'] for e in events])
+        case.finish()
+        return record, events
 
 
 def pass_two(out):
     """A decline PIO made before any caller was asked."""
-    case = ServiceCase(out, 'decline', model=matrix.REQUESTED,
-                       scenario={'permission_request': DECLINES})
-    case.start()
-    case.submit(identity='run-3')
-    poll(lambda: case.inspect('run-3'), lambda v: v['runtime'] == 'exited', seconds=120)
-    events = events_of(case, 'run-3')
-    # PIO was not asking, so no request ever became `requires_action`.
-    assert not [e for e in events
-                if e['type'] == 'execution.runtime.changed'
-                and e['payload']['runtime'] == 'requires_action'], \
-        [e['payload'] for e in events if e['type'] == 'execution.runtime.changed']
-    settled = [e for e in events if e['type'] == 'execution.action.answered']
-    assert len(settled) == 1, \
-        "PIO declined and the stream never said so: the decline reached only " \
-        f"the private adapter namespace. events={[e['type'] for e in events]}"
-    event = settled[0]
-    assert event['origin'] == 'provider', event
-    assert 'operation_ref' not in event and 'command_id' not in event, event
-    decision = event['payload'][DECISION]
-    assert decision['decided_by'] == 'pio', decision
-    assert decision['decision'] == 'deny', decision
-    assert decision['basis'] == 'out_of_scope', decision
-    assert decision['classification']['disposition'] == 'decline', decision
-    assert decision['classification']['placement'] == 'outside_fixture', decision
-    assert decision['reason'], decision
-    actions = case.inspect('run-3')['actions']
-    assert len(actions) == 1, actions
-    assert actions[0]['state'] == 'answered', actions
-    assert actions[0]['action_id'] == event['payload']['action_id'], actions
-    # Closed shape: the classification is on the event, never in the view.
-    assert set(actions[0]) <= {'action_id', 'owner', 'state', 'requested_at',
-                               'answered_at', 'response_effect'}, actions
-    record = dict(run='run-3', decision=decision, actions=actions,
-                  events=[e['type'] for e in events])
-    case.finish()
-    case.cleanup()
-    return record, events
+    with service(out, 'decline', permission_request=DECLINES) as case:
+        case.start()
+        case.submit(identity='run-3')
+        poll(lambda: case.inspect('run-3'), lambda v: v['runtime'] == 'exited', seconds=120)
+        events = events_of(case, 'run-3')
+        # PIO was not asking, so no request ever became `requires_action`.
+        assert not [e for e in events
+                    if e['type'] == 'execution.runtime.changed'
+                    and e['payload']['runtime'] == 'requires_action'], \
+            [e['payload'] for e in events if e['type'] == 'execution.runtime.changed']
+        settled = [e for e in events if e['type'] == 'execution.action.answered']
+        assert len(settled) == 1, \
+            "PIO declined and the stream never said so: the decline reached only " \
+            f"the private adapter namespace. events={[e['type'] for e in events]}"
+        event = settled[0]
+        assert event['origin'] == 'provider', event
+        assert 'operation_ref' not in event and 'command_id' not in event, event
+        decision = event['payload'][DECISION]
+        assert decision['decided_by'] == 'pio', decision
+        assert decision['decision'] == 'deny', decision
+        assert decision['basis'] == 'out_of_scope', decision
+        assert decision['classification']['disposition'] == 'decline', decision
+        assert decision['classification']['placement'] == 'outside_fixture', decision
+        assert decision['reason'], decision
+        actions = case.inspect('run-3')['actions']
+        assert len(actions) == 1, actions
+        assert actions[0]['state'] == 'answered', actions
+        assert actions[0]['action_id'] == event['payload']['action_id'], actions
+        # Closed shape: the classification is on the event, never in the view.
+        assert set(actions[0]) <= {'action_id', 'owner', 'state', 'requested_at',
+                                   'answered_at', 'response_effect'}, actions
+        record = dict(run='run-3', decision=decision, actions=actions,
+                      events=[e['type'] for e in events])
+        case.finish()
+        return record, events
 
 
 # --- 6. what a caller that ignores the keys sees ------------------------------
@@ -401,22 +429,20 @@ def collect(out, label, lapse, request=None, keep=False):
     Asserts nothing about G2 — it has to behave the same on both binaries,
     because the whole point is to compare them.
     """
-    case = ServiceCase(out, label, model=matrix.REQUESTED,
-                       scenario={'permission_request': request or ASKS})
-    case.start()
-    case.submit(identity='run-1', delivery_timeout=20 if lapse else 150)
-    view = poll(lambda: case.inspect('run-1'),
-                lambda v: v['runtime'] in ('requires_action', 'exited'), seconds=120)
-    if not lapse and view['runtime'] == 'requires_action':
-        # A declined request never surfaces, so there is nothing to answer.
-        case.respond(view['runtime_detail']['action_id'], 'deny', view['revision'],
-                     identity='run-1')
-    final = poll(lambda: case.inspect('run-1'), lambda v: v['runtime'] == 'exited',
-                 seconds=150)
-    events = events_of(case, 'run-1')
-    case.finish()
-    case.cleanup()
-    return (events, final) if keep else events
+    with service(out, label, permission_request=request or ASKS) as case:
+        case.start()
+        case.submit(identity='run-1', delivery_timeout=20 if lapse else 150)
+        view = poll(lambda: case.inspect('run-1'),
+                    lambda v: v['runtime'] in ('requires_action', 'exited'), seconds=120)
+        if not lapse and view['runtime'] == 'requires_action':
+            # A declined request never surfaces, so there is nothing to answer.
+            case.respond(view['runtime_detail']['action_id'], 'deny', view['revision'],
+                         identity='run-1')
+        final = poll(lambda: case.inspect('run-1'), lambda v: v['runtime'] == 'exited',
+                     seconds=150)
+        events = events_of(case, 'run-1')
+        case.finish()
+        return (events, final) if keep else events
 
 
 def build_baseline(commit):
