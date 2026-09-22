@@ -56,6 +56,8 @@ jobs:
         # worktree, which needs full history and a second cargo build. It is
         # run locally and its result is recorded in the map.
         run: PYTHONPATH=scripts python3 scripts/approval_desk.py --out target/approval-desk --skip-baseline
+      - name: Transcript blocks as they happen, and the audit (G3)
+        run: PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/transcript-blocks
       - name: No private paths in any committed file
         run: |
           python3 scripts/check_private_paths.py --selftest

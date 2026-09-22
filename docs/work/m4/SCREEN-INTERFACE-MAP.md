@@ -157,7 +157,24 @@ The classification the walk shows for this harness is `disposition: surface_as_a
 Placement and decider are different. **No Protocol event fires per tool use**, and for a tool use nobody was asked about — R2 and R3 of the MiniMax sequence, where the harness simply acted — there is no Protocol event at all. So:
 
 - **Live, before the audit exists**, the screen shows `not yet classified` and `unknown`. That is the *absence* of a record, so nothing has to travel for it.
-- **The end-of-turn audit** rides on `execution.exit.observed`'s open payload under `pio.combraton.dev/tool-uses`. No new event type name, and a client that ignores the key sees today's behaviour.
+- **The end-of-turn audit** rides on `execution.exit.observed`'s open payload under `pio.combraton.dev/tool-uses`. No new event type name, and a client that ignores the key sees today's behaviour. The harness's own per-call status travels beside it on purpose, so a reader can see the two **disagree** rather than being handed one of them.
+
+### G3 is proven, and where
+
+`scripts/transcript_blocks.py`, through the same real host path.
+
+| What | How it is shown | Its mutant |
+| --- | --- | --- |
+| Blocks arrive **while the run is still working** | the screen reads `execution.output.read` from its own offset and gets bytes in more than one read with the run still at `requires_action` — measured, not assumed | — |
+| A live reader never re-reads what it has seen | every read starts exactly where the last one ended | `--mutant whole-spool` reads from offset 0 every tick and fails that |
+| Live, a tool use is **not placed and nobody is named** | every call on the screen reads `not yet classified` / `unknown`, and nothing on the stream places it either — the absence is asserted, not assumed | — |
+| A screen may say it does not know, but anything it **does** say must survive the audit | the audit is compared against what the screen claimed live, not merged over it | `--mutant guess-inside` calls a call `inside` because its command names a workspace path; the audit says `not_classifiable` and the run fails |
+| The audit fills the blanks in place | the ids seen live are a subset of the audited ids, and every one is placed | `--baseline-as-mutant`: at `a22c98c` `execution.exit.observed` carries no audit at all |
+| Three deciders told apart | one call the caller answered, two nobody was asked about; `decided_by: null` is shown as **nobody was asked**, never as a decider | — |
+
+Three placements come back from one turn — `inside_fixture`, and `not_classifiable` twice — which is why the screen cannot collapse them into "inside or outside".
+
+**The first draft of this proof passed while proving nothing.** It read the transcript forty times, got **zero bytes every time**, then everything at once after the run had exited — and still asserted that the audit filled in the blanks. A turn from this fake is over in about a second, which is not long enough to watch. The live window now is a **pending approval**: a real pause with real blocks spooled behind it.
 
 
 The first draft called this "mostly promotion". It is not, and the reason matters.
@@ -240,4 +257,4 @@ Recorded rather than quietly fixed, because the reviewer will want to know which
 
 The reviewer's own correction to the design input, on `origin`, is recorded in [`design-input/CORRECTIONS.md`](design-input/CORRECTIONS.md).
 
-**Step 2 order:** ~~G1 and G6 (the events fold)~~ **done**, ~~G2 (the approval walk)~~ **done**, then G3. Each with its own headless case and a mutant.
+**Step 2 order:** ~~G1 and G6 (the events fold)~~ **done**, ~~G2 (the approval walk)~~ **done**, ~~G3 (blocks and the audit)~~ **done**. Each with its own headless case and a mutant. Next: step 3, orchestrate.

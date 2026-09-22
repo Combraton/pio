@@ -889,7 +889,23 @@ impl Provider {
                 e["view"]["exit"] = exit.clone();
                 e["view"]["runtime"] = "exited".into();
                 e["view"].as_object_mut().unwrap().remove("runtime_detail");
-                self.execution_event(e, "execution.exit.observed", json!({"exit":exit}), None);
+                // G3. The end-of-turn audit: where each tool use landed and
+                // who decided it. `tool_uses` is a host record folded just
+                // before this event, and nothing in the view can hold it —
+                // `containment` carries counts, not rows. It rides here,
+                // under a namespaced key, on the event that already marks
+                // the end of the turn. A client that reads only `exit`
+                // behaves exactly as it does today.
+                //
+                // `harness_status` travels beside the audit on purpose: it
+                // is the harness's own record of each call, so a reader can
+                // see the two disagree rather than being handed one of them.
+                let mut payload = json!({"exit":exit});
+                if e[&ns]["tool_uses"].is_object() {
+                    payload["pio.combraton.dev/tool-uses"] = json!({"audit":e[&ns]["tool_uses"],
+                               "harness_status":e[&ns]["tool_use_harness_status"]});
+                }
+                self.execution_event(e, "execution.exit.observed", payload, None);
             }
             // An acknowledgment whose proof did not hold is not a delivery.
             "turn_acknowledged" => e[&ns]["acknowledgment_unproven"] = true.into(),
@@ -984,6 +1000,7 @@ impl Provider {
             "tool_uses" => {
                 let record = &event["record"];
                 e[&ns]["tool_uses"] = record.clone();
+                e[&ns]["tool_use_harness_status"] = event["harness_status"].clone();
                 e["view"]["containment"] = record["containment"].clone();
                 // Three different things a caller must be able to tell apart:
                 // what the harness refused on its own, what PIO declined, and
