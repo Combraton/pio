@@ -19,10 +19,17 @@ reads that file.
 
 No model is called, because nothing is prompted. A session or thread is
 started and immediately closed.
+
+**What this does not show.** The probe runs with HOME redirected to its own
+directory, so the owner's configuration was never in reach. That the
+registration arrives without consulting it is therefore **by construction**,
+not an observation: nothing here shows what either harness would do with a
+real user configuration present.
 """
 import argparse
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -95,14 +102,20 @@ class Probe:
         self.witness.chmod(0o755)
         self.cwd = self.root / 'work'
         self.cwd.mkdir()
+        # **HOME gets its own directory, not the store root.** A harness
+        # handed the root as HOME changes its mode to 0755, and the cleanup
+        # guard then refuses to remove it — correctly, since a
+        # world-readable directory is not a private store.
+        self.home = self.root / 'home'
+        self.home.mkdir()
         # Codex refuses to start if CODEX_HOME does not exist, so PIO's own
         # one is made here rather than borrowed from the owner.
-        (self.root / 'codex-home').mkdir()
+        (self.home / 'codex-home').mkdir()
         (self.cwd / 'README.md').write_text('probe fixture\n')
         self.owner_before = owner_service()
 
     def env(self, **extra):
-        return dict(PATH='/usr/bin:/bin:/usr/local/bin', HOME=str(self.root),
+        return dict(PATH='/usr/bin:/bin:/usr/local/bin', HOME=str(self.home),
                     PIO_WITNESS_LOG=str(self.log), **extra)
 
     def witnessed(self):
@@ -211,7 +224,7 @@ def probe_codex(out, executable):
     try:
         child = subprocess.Popen(
             [executable, 'app-server'], cwd=str(probe.cwd),
-            env=probe.env(CODEX_HOME=str(probe.root / 'codex-home')),
+            env=probe.env(CODEX_HOME=str(probe.home / 'codex-home')),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=(probe.out / 'stderr.log').open('w'), text=True, bufsize=1,
             # Its own session, so the **group** can be taken down. Killing
@@ -265,7 +278,10 @@ def main():
     parser.add_argument('--out', type=Path, default=ROOT / 'target/lead-tool-probe')
     parser.add_argument('--opencode', default=str(Path.home() /
                                                   '.local/lib/node_modules/@opencode/cli/bin/opencode.exe'))
-    parser.add_argument('--codex', default='codex')
+    # Resolved here, not in the child: the probe hands the harness a
+    # minimal PATH, and a bare name is then looked up in *that* PATH rather
+    # than the one this process was started with.
+    parser.add_argument('--codex', default=shutil.which('codex') or 'codex')
     parser.add_argument('--only', choices=['opencode', 'codex'])
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
