@@ -190,6 +190,19 @@ impl Provider {
                 {
                     return Err(denied("owner_authority_required"));
                 }
+                // **A root run is the owner's act; a grant starts runs only
+                // inside a lead's subtree.** Owner decision, 2026-09-24
+                // (review 45). A run that names itself as its initiator is a
+                // root: nothing started it, so nothing a grant was issued
+                // for can have. Before this was said, a grant naming one run
+                // by id was refused `initiator_unknown` for submitting that
+                // run, which was true and explained nothing.
+                if let Some(origin) = p["payload"].get("origin")
+                    && origin["initiator"]["kind"] == "execution.execution"
+                    && origin["initiator"]["id"] == p["subject"]["id"]
+                {
+                    return Err(denied("owner_authority_required"));
+                }
                 // **An `origin` is a claim about lineage, and lineage spends
                 // budget.** Under a grant, the only initiator a caller may
                 // name is the run the grant was issued for — the owner of

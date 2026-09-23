@@ -50,6 +50,9 @@ it dies on the claim it undermines:
 - `--mutant known-initiator-ok` admits the grant's subtree owner before its
   children are submitted, so they are admitted. The refusal is about PIO never
   having seen the initiator, not about grants or origins.
+- `--mutant owner-submits-root` sends the root submits as the owner, with no
+  grant, so they are admitted. The refusal is about a grant starting a root,
+  not about root runs.
 """
 import argparse
 import hashlib
@@ -495,6 +498,69 @@ def pass_initiator_unknown(out, root, mutant=None):
     return facts
 
 
+def pass_root_runs_are_the_owners(out, root, mutant=None):
+    """A root run is the owner's act; a grant starts runs only inside a
+    lead's subtree.
+
+    Owner decision, 2026-09-24 (review 45). A run naming itself as its
+    initiator is a root. Under a grant it is refused `owner_authority_required`,
+    whichever run the grant names: one run by id, or a subtree whose owner is
+    the run being submitted. Without an origin, a grant that names a subtree
+    owner refuses the submit `out_of_scope`, as before. The owner, with no
+    grant, starts a root as it always has.
+    """
+    daemon, socket_path, files = start_service(root, out, name='roots',
+                                               credentials=(LEAD_CREDENTIAL,),
+                                               duration_ms=LEAD_ALIVE_MS)
+    facts = {}
+    try:
+        owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
+
+        def grant(resource):
+            grant_id = str(uuid.uuid4())
+            issued = owner.call(command(
+                'core.grant.issue', dict(kind='core.grant', id=grant_id),
+                dict(holder='lead', audience=PROVIDER,
+                     rights=['execution.submit', 'execution.read'],
+                     resources=[dict(kind='execution.execution', **resource)],
+                     delegation=dict(allowed=False, max_depth=0)),
+                command_id=f'grant-{grant_id}'))
+            assert 'result' in issued, issued
+            return Caller(socket_path, LEAD_CREDENTIAL, grant=grant_id, features=FEATURES)
+
+        solo, subtree = grant(dict(id='solo')), grant(dict(id_prefix='tree.'))
+        # `--mutant owner-submits-root` sends these as the owner instead.
+        by = {'solo': owner if mutant == 'owner-submits-root' else solo,
+              'tree': owner if mutant == 'owner-submits-root' else subtree}
+        for label, identity in (('the run a grant names by id', 'solo'),
+                                ("a subtree's owner, under that subtree's grant", 'tree')):
+            answer = start(by[identity], identity, origin(identity, 0, 1))
+            data = answer.get('error', {}).get('data', {})
+            assert (data.get('code'), (data.get('details') or {}).get('reason')) == (
+                'permission_denied', 'owner_authority_required'), (
+                f'{label} was started as a root under a grant: {answer}')
+            facts[f'root under a grant: {label}'] = 'permission_denied / owner_authority_required'
+        bare = start(solo, 'solo')
+        assert bare.get('error', {}).get('data', {}).get('details', {}).get('reason') \
+            == 'out_of_scope', bare
+        facts['no origin, under a grant naming one run'] = 'permission_denied / out_of_scope'
+        # The owner starts the same root, and the lead it becomes may then
+        # start a child through the subtree grant.
+        assert admitted(start(owner, 'tree', origin('tree', 0, 1)))
+        child = start(subtree, 'tree.child', origin('tree', 1, 0))
+        assert admitted(child), child
+        facts['the same root, started by the owner'] = 'admitted, and its child under the grant'
+        solo.close()
+        subtree.close()
+        owner.close()
+    finally:
+        daemon.kill()
+        daemon.wait(timeout=10)
+        for handle in files:
+            handle.close()
+    return facts
+
+
 def pass_lead_cannot_answer(out, mutant=None):
     """The one thing a lead may not do, proven where an action exists.
 
@@ -629,12 +695,13 @@ def main():
                                              'bound-initiator', 'unscoped-grant',
                                              'shallow-ok', 'refused-initiator-ok',
                                              'exited-initiator-ok',
-                                             'known-initiator-ok'])
+                                             'known-initiator-ok',
+                                             'owner-submits-root'])
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     roots = []
     try:
-        for _ in range(5):
+        for _ in range(6):
             root = Path(tempfile.mkdtemp(prefix='pio-lead-', dir='/tmp')).resolve()
             os.chmod(root, 0o700)
             roots.append(root)
@@ -646,6 +713,7 @@ def main():
             initiator_liveness=pass_initiator_liveness(args.out, roots[3],
                                                        args.mutant),
             initiator_unknown=pass_initiator_unknown(args.out, roots[4], args.mutant),
+            root_runs=pass_root_runs_are_the_owners(args.out, roots[5], args.mutant),
             lead_cannot_answer=pass_lead_cannot_answer(args.out, args.mutant))
         (args.out / 'lead-runs.json').write_text(
             json.dumps(record, indent=2, sort_keys=True) + '\n')
