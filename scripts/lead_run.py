@@ -35,8 +35,22 @@ every byte the session has sent so far — and cancels a run whose bound passes
 its ceiling, or a lead that has made more than `CALL_CEILING` tool calls.
 OpenCode does not end a turn on `session/cancel` (M3b, R4), so the host kills
 it ten seconds later; until then the lead's own tool holds every call, so the
-lead cannot take another step through it. The charge is the reported total
-times the number of steps the turn could have taken.
+lead cannot take another step through it.
+
+**Charged from the owner's store where it can be read.** Owner decision,
+2026-09-24: the runner may read, read-only, the `session_message` rows of the
+sessions PIO started from the owner's OpenCode store, and nothing else in it.
+A run is charged the sum of its steps as recorded there, with the bound (the
+reported total times the steps the turn could have taken) beside it; where
+the store cannot be read, or its last step disagrees with the report, the
+bound is charged.
+
+**Reserved before anything can spend.** Before the service starts, each run's
+worst-case share is written to the ledger as a `reserved` line, and the exit
+path replaces each with its charge. A runner killed from outside, which no
+exit path survives, leaves its reservation standing, and a watchdog in its own
+session cancels whatever still runs and stops the service (review 45). Run the
+live runner detached, never under a tool's timeout.
 
 What only the live run can show: that a real model uses the tool at all,
 that what the runs report is what the files say, and what the owner's OpenCode
@@ -59,10 +73,14 @@ does with a permission prompt.
 - `lead-loops` has the lead keep calling `read_run` after it has its answers,
   so the runner must cancel it at the call ceiling;
 - `interrupted` raises `KeyboardInterrupt` mid-run; the receipt and the
-  charge must be written anyway.
+  charge must be written anyway;
+- `runner-killed` has the runner SIGKILLed once the desk has answered: there is
+  no receipt, the ledger must still hold every run's reservation, and the
+  watchdog must have stopped the service.
 """
 import argparse
 import base64
+import contextlib
 import hashlib
 import json
 import os
@@ -106,9 +124,10 @@ APPROVALS = dict(
 
 # --- The bound on what one attempt can spend.
 #
-# A lead needs two starts and a read per child; `read_run` waits up to 20
-# seconds for its run, so sixteen calls cover a child held at the desk for
-# 260 of the 300 seconds it may wait for an answer.
+# A lead needs two starts and a read per child. `read_run` waits up to 55
+# seconds for its run, so a child held at the desk for the whole 300 seconds
+# it may wait for an answer costs six reads, and sixteen calls leave room for
+# more than twice that.
 CALL_CEILING = 16
 # Every M3b turn on this harness and model began at 7,960 to 8,076 input
 # tokens before the brief said anything; the lead adds its tool's schema and
@@ -129,7 +148,9 @@ LAST_STEP = 51_200
 # enforced — PIO cannot bound the size of a child's step.
 KILL_STEPS = 11
 CHILD_STEP = 12_000
-WORST_CASE = (2 * LEAD_CEILING + LAST_STEP) + 2 * (CHILD_CEILING + KILL_STEPS * CHILD_STEP)
+LEAD_SHARE = 2 * LEAD_CEILING + LAST_STEP
+CHILD_SHARE = CHILD_CEILING + KILL_STEPS * CHILD_STEP
+WORST_CASE = LEAD_SHARE + 2 * CHILD_SHARE
 BOUND = dict(
     call_ceiling=CALL_CEILING, step_base=STEP_BASE, lead_ceiling=LEAD_CEILING,
     child_ceiling=CHILD_CEILING, last_step=LAST_STEP, kill_steps=KILL_STEPS,
@@ -182,6 +203,7 @@ MUTANTS = {
     'desk-silent': 'Every approval was decided at the desk',
     'lead-loops': 'Every run stayed within its ceilings',
     'interrupted': 'The run finished without an error',
+    'runner-killed': 'The ledger holds the reservation',
 }
 
 
@@ -226,6 +248,14 @@ def now():
     return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
 
 
+def scrub(value):
+    """What may leave this machine: home paths redacted, and the repository
+    and any other volume path named rather than spelled out. `redact`
+    rewrites only home paths, and the repository lives on a volume."""
+    text = json.dumps(redact(value)).replace(str(ROOT), '<repo>')
+    return json.loads(re.sub(r'/Volumes/[^/"\\]+', '<volume>', text))
+
+
 class Rows:
     """Every observation, its expected value, and whether they agree."""
 
@@ -234,11 +264,15 @@ class Rows:
         self.rows = []
 
     def add(self, name, observed, expected, holds=None, live_only=False, note=''):
+        """`holds` may answer None: the observation could not decide the row.
+        That is recorded as inconclusive, neither held nor failed."""
         agrees = holds(observed) if holds else observed == expected
         provable = not (live_only and self.rehearse)
+        verdict = bool(agrees) if provable and agrees is not None else None
+        if provable and agrees is None:
+            note = f'{note}; inconclusive' if note else 'inconclusive'
         self.rows.append(dict(row=name, kind='row', observed=observed, expected=expected,
-                              holds=bool(agrees) if provable else None,
-                              proven=bool(agrees) and provable, note=note))
+                              holds=verdict, proven=verdict is True, note=note))
 
     def record(self, name, observed, note=''):
         """What was seen, with nothing to compare it against. Never proven."""
@@ -303,6 +337,12 @@ class Service:
             [str(BINARY), 'serve-opencode', '--data-dir', str(self.store),
              '--config', str(self.config_path), '--socket', str(self.socket)],
             stdout=out, stderr=err)
+        # In its own session, so nothing that kills the runner kills it.
+        self.watchdog = subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve()), '--watch-runner',
+             str(os.getpid()), '--daemon', str(self.daemon.pid), '--root', str(self.root)],
+            stdout=(self.root / 'watchdog.log').open('w'), stderr=subprocess.STDOUT,
+            start_new_session=True)
         deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
             try:
@@ -600,7 +640,7 @@ class Desk:
                                 approval=approval, state='waiting')
                     self.items[action_id] = item
                     pending = self.directory / f'pending-{action_id}.json'
-                    pending.write_text(json.dumps(redact(item), indent=2) + '\n')
+                    pending.write_text(json.dumps(scrub(item), indent=2) + '\n')
                     print(f'DESK pending {identity} {action_id} {pending}', flush=True)
                 if item is None or item['state'] != 'waiting':
                     continue
@@ -756,6 +796,7 @@ def run(args):
             raise SystemExit('stop: the MiniMax cap would reach its stop')
         root = private(live.HOME / 'pio-m4-live' / f'L1-{uuid.uuid4().hex[:8]}')
     record['root'] = str(root)
+    print(f'ROOT {root}', flush=True)
     awake = NoSleep(required=not rehearse)
     record['no_sleep'] = awake.record
     rows = Rows(rehearse)
@@ -764,6 +805,9 @@ def run(args):
     meters = {LEAD: Meter(LEAD, LEAD_CEILING),
               **{f'{LEAD}.{c}': Meter(f'{LEAD}.{c}', CHILD_CEILING) for c in CHILDREN}}
     state = dict(submitted=set(), grant_id=None, spec=None, repo=None)
+    # Before anything can spend: each run's worst case, held in the ledger
+    # until the exit path replaces it with what the run is charged.
+    record['reserved'] = reserve(book_path, names, started_at)
     previous = signal.signal(signal.SIGTERM, on_sigterm)
     error = None
     try:
@@ -801,9 +845,12 @@ def run(args):
         awake.close()
         record['rows'] = rows.rows
         record['failed'] = rows.failed()
-        record['charge'] = charge(book_path, names, record.get('usage', {}), started_at)
+        record['charge'] = charge(book_path, names, record.get('usage', {}), started_at,
+                                  authoritative=observed is not None)
         record['finished_at'] = now()
-        args.receipt.write_text(json.dumps(redact(record), indent=2, sort_keys=True) + '\n')
+        args.receipt.write_text(json.dumps(scrub(record), indent=2, sort_keys=True) + '\n')
+        if root.exists():
+            (root / 'runner-done').write_text(now() + '\n')
         signal.signal(signal.SIGINT, signal.default_int_handler)
         signal.signal(signal.SIGTERM, previous)
     if error is not None:
@@ -988,6 +1035,9 @@ def settle(record, service, meters, state, root):
                        for e in log if e.get('event') == 'tool_call'
                        and e.get('tool') == 'start_run'})
         host = service.host_events(views, briefs)
+        sessions = {i: next((e.get('session_id') for e in host.get(i, [])
+                             if e['kind'] == 'session_created'), None) for i in RUNS}
+        steps, record['store_read'] = store_steps(service.config['opencode']['home'], sessions)
         said = {c: spoken(owner, f'{LEAD}.{c}') for c in CHILDREN}
         relay = spoken(owner, LEAD)
     finally:
@@ -995,21 +1045,57 @@ def settle(record, service, meters, state, root):
     calls = len([e for e in log if e.get('event') == 'request'
                  and e.get('method') == 'tools/call'])
     record['meters'] = {i: g.summary(calls if i == LEAD else None) for i, g in meters.items()}
-    record['usage'] = usage_of(views, meters, state['submitted'] | started_runs(root))
+    record['usage'] = usage_of(views, meters, state['submitted'] | started_runs(root), steps)
     record.update(views=views, tool_log=log, spoken=dict(said, lead=relay))
-    return dict(views=views, stream=stream, log=log, host=host, said=said, relay=relay)
+    return dict(views=views, stream=stream, log=log, host=host, said=said, relay=relay,
+                steps=steps)
 
 
-def usage_of(views, meters, submitted):
+def store_steps(home, sessions):
+    """Each run's model steps, from the owner's OpenCode store.
+
+    Owner decision, 2026-09-24: read-only, and only the `session_message`
+    rows of the sessions PIO started. Nothing else in the store is opened,
+    and no other table is named. A rehearsal's home has no store, so there
+    the answer is that nothing could be read.
+    """
+    path = Path(home) / '.local/share/opencode/opencode.db'
+    ids = sorted({s for s in sessions.values() if s})
+    if not ids or not path.exists():
+        return {i: None for i in sessions}, dict(
+            read=False, reason='no store at the harness home' if ids else 'no session id')
+    marks = ','.join('?' * len(ids))
+    with contextlib.closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True)) as db:
+        found = db.execute(
+            'select session_id, data from session_message '
+            f"where type = 'assistant' and session_id in ({marks}) "
+            'order by session_id, seq', ids).fetchall()
+    by_session = {}
+    for session, data in found:
+        tokens = json.loads(data).get('tokens') or {}
+        cache = tokens.get('cache') or {}
+        by_session.setdefault(session, []).append(
+            sum(tokens.get(k) or 0 for k in ('input', 'output', 'reasoning'))
+            + (cache.get('read') or 0) + (cache.get('write') or 0))
+    steps = {i: (dict(steps=by_session.get(s, []), total=sum(by_session.get(s, [])))
+                 if s else None) for i, s in sessions.items()}
+    return steps, dict(read=True, table='session_message', mode='ro',
+                       sessions=len(ids), rows=len(found))
+
+
+def usage_of(views, meters, submitted, steps=None):
     """What each run reported, and what it is charged, on what basis.
 
     OpenCode's turn usage is its **last model step's**, so a turn that made
     tool calls reported less than it spent. Every earlier step's context is
     contained in the last one's, so the turn spent at most the reported total
     times the number of steps it could have taken: one per tool call, plus
-    one. A run that reported nothing is charged its meter's bound, and never
-    less than the M3b allowance.
+    one. Where the owner's store gives the steps themselves and its last step
+    is the one reported, the run is charged their sum. A run that reported
+    nothing is charged its meter's bound, never less than the M3b allowance,
+    and never less than the steps the store holds.
     """
+    steps = steps or {}
     usage = {}
     for identity in RUNS:
         current = views.get(identity) or {}
@@ -1021,16 +1107,42 @@ def usage_of(views, meters, submitted):
         observations = (current.get('usage') or {}).get('observations') or []
         reported = observations[0]['amount'] if observations else None
         gauge = meters[identity]
-        steps = len(gauge.calls) + 1
+        most = len(gauge.calls) + 1
+        measured = steps.get(identity) or {}
+        recorded = measured.get('steps') or []
         if isinstance(reported, int) and reported > 0:
-            usage[identity] = dict(reported_last_step=reported, steps_at_most=steps,
-                                   charged=reported * steps, basis='steps_bound',
-                                   meter_estimate=gauge.estimate())
+            entry = dict(reported_last_step=reported, steps_at_most=most,
+                         bound=reported * most, measured_steps=recorded or None,
+                         meter_estimate=gauge.estimate())
+            if recorded and recorded[-1] == reported:
+                entry.update(charged=sum(recorded), basis='measured_per_step')
+            elif recorded:
+                entry.update(charged=max(sum(recorded), reported * most),
+                             basis='steps_bound',
+                             why="the store's last step is not the one reported")
+            else:
+                entry.update(charged=reported * most, basis='steps_bound')
+            usage[identity] = entry
         else:
             usage[identity] = dict(reported_last_step=None, usage='unknown',
-                                   charged=max(live.CANCEL_ALLOWANCE, gauge.estimate()),
+                                   measured_steps=recorded or None,
+                                   charged=max(live.CANCEL_ALLOWANCE, gauge.estimate(),
+                                               sum(recorded)),
                                    basis='allowance', meter_estimate=gauge.estimate())
     return usage
+
+
+def running_steer(s):
+    """The running steer holds only against a turn that was running and
+    delivered when it was sent, and still running just after. A turn that
+    ended inside the steer's round trip decides nothing either way."""
+    if not (s and s.get('request') == 'not_supported'
+            and s.get('runtime_at_steer') == 'active'
+            and s.get('delivery_at_steer') == 'acknowledged'):
+        return False
+    if s.get('runtime_after_steer') == 'exited':
+        return None
+    return s.get('runtime_after_steer') is not None
 
 
 def host_model(records):
@@ -1125,10 +1237,7 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
     rows.add('A steer while the child runs', record.get('steer_running'),
              'not_supported, sent while the turn was active and delivered, and '
              'before it exited',
-             holds=lambda s: bool(s) and s.get('request') == 'not_supported'
-             and s.get('runtime_at_steer') == 'active'
-             and s.get('delivery_at_steer') == 'acknowledged'
-             and s.get('runtime_after_steer') not in (None, 'exited'),
+             holds=running_steer,
              note="OpenCode's own negative: its turn was running and delivered, and "
                   'the host never sets a turn id')
     rows.add('A steer on an exited run', record.get('steer_exited'),
@@ -1223,6 +1332,20 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
              and max(m[LEAD]['calls'], m[LEAD]['tool_log_calls'] or 0) <= CALL_CEILING,
              note=f"estimate {BOUND['estimate']}")
     usage = record['usage']
+    ran = {i: u for i, u in usage.items() if u['basis'] != 'refused before any model call'}
+    rows.add("Each run's steps were read from the owner's store",
+             dict(read=record.get('store_read'),
+                  runs={i: dict(steps=u.get('measured_steps'),
+                                reported_last_step=u.get('reported_last_step'),
+                                basis=u['basis']) for i, u in ran.items()}),
+             'every run that ran has its steps there, and the last is the one reported',
+             holds=lambda o: bool((o['read'] or {}).get('read')) and bool(o['runs'])
+             and all(r['steps'] and (r['reported_last_step'] is None
+                                     or r['steps'][-1] == r['reported_last_step'])
+                     for r in o['runs'].values()),
+             live_only=True,
+             note="owner decision 2026-09-24: session_message rows of PIO's sessions, "
+                  'read-only')
     rows.add('Every run reported its usage',
              {i: u.get('reported_last_step') for i, u in usage.items()
               if u['basis'] != 'refused before any model call'},
@@ -1252,35 +1375,182 @@ def sequence_charged(book):
                if e.get('sequence') == SEQUENCE)
 
 
-def charge(path, names, usage, at):
-    """One ledger line per run that ran, the sequence total, and whether a
-    stop fired. Charged, never observed; unknown is never zero."""
+def write_ledger(path, book):
+    temporary = path.with_name(path.name + '.tmp')
+    temporary.write_text(json.dumps(book, indent=2) + '\n')
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, path)
+
+
+def reserve(path, names, at):
+    """Each run's worst-case share, in the ledger before anything can spend."""
     book = read_ledger(path)
     lines = {}
-    for identity, entry in usage.items():
-        if entry['basis'] == 'refused before any model call':
-            continue
-        line = dict(sequence=SEQUENCE, model=MODEL, at=at, charged=entry['charged'],
-                    charge_basis=entry['basis'],
-                    observed_total_tokens=entry.get('reported_last_step'),
-                    observed_is='the last model step of the turn',
-                    steps_at_most=entry.get('steps_at_most'),
-                    meter_estimate=entry.get('meter_estimate'))
-        if entry['basis'] == 'allowance':
-            line.update(usage='unknown', why='no usage reported; charged the run\'s '
-                        f'meter bound, and never less than {live.CANCEL_ALLOWANCE}')
+    for identity in RUNS:
+        line = dict(sequence=SEQUENCE, model=MODEL, at=at, charge_basis='reserved',
+                    charged=LEAD_SHARE if identity == LEAD else CHILD_SHARE,
+                    why='the worst case this run could spend; the exit path replaces it '
+                        'with the charge, and a runner killed from outside leaves it')
         book['runs'][names[identity]] = line
         lines[names[identity]] = line
-    path.write_text(json.dumps(book, indent=2) + '\n')
+    write_ledger(path, book)
+    return lines
+
+
+def charge(path, names, usage, at, authoritative):
+    """Replace every reservation with its charge, and report the sequence
+    total and whether a stop fired. Charged, never observed; unknown is never
+    zero. A run the service says was refused, or never submitted, is charged
+    nothing; where the service could not be asked, a run with no usage keeps
+    its reservation."""
+    book = read_ledger(path)
+    lines = {}
+    for identity in RUNS:
+        entry = usage.get(identity)
+        base = dict(sequence=SEQUENCE, model=MODEL, at=at)
+        if entry is None and not authoritative:
+            continue
+        if entry is None:
+            line = dict(base, charged=0, charge_basis='never submitted')
+        elif entry['basis'] == 'refused before any model call':
+            line = dict(base, charged=0, charge_basis=entry['basis'])
+        else:
+            line = dict(base, charged=entry['charged'], charge_basis=entry['basis'],
+                        observed_total_tokens=entry.get('reported_last_step'),
+                        observed_is='the last model step of the turn',
+                        measured_steps=entry.get('measured_steps'),
+                        bound=entry.get('bound'), steps_at_most=entry.get('steps_at_most'),
+                        meter_estimate=entry.get('meter_estimate'))
+            if entry.get('why'):
+                line['why'] = entry['why']
+            if entry['basis'] == 'allowance':
+                line.update(usage='unknown', why='no usage reported; charged the run\'s '
+                            f'meter bound, and never less than {live.CANCEL_ALLOWANCE}')
+        book['runs'][names[identity]] = line
+        lines[names[identity]] = line
+    write_ledger(path, book)
     total = sequence_charged(book)
     return dict(ledger='rehearsal ledger' if 'rehearsal' in path.name else 'MiniMax ledger',
-                lines=lines, sequence_charged=total, sequence_cap=SEQUENCE_CAP,
+                lines=lines, reservations_left=sorted(
+                    k for k, v in book['runs'].items()
+                    if k in names.values() and v.get('charge_basis') == 'reserved'),
+                sequence_charged=total, sequence_cap=SEQUENCE_CAP,
                 sequence_stop=SEQUENCE_STOP, stop_reached=total >= SEQUENCE_STOP,
                 minimax_charged=live.cumulative(book), minimax_cap=live.CAP,
                 measured_against='charged')
 
 
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def watchdog(runner, daemon, root):
+    """Stop the service if the runner dies without its exit path.
+
+    Started in its own session by `Service.start`, so whatever kills the
+    runner does not kill it. It leaves quietly when the service is gone or
+    the runner finished (`runner-done`, or a rehearsal's root released).
+    Otherwise it stops the lead's tool, cancels every run still going, waits
+    out the host's kill, stops the daemon, and writes `watchdog.json`. The
+    ledger keeps its reservations: nothing here knows what was spent.
+    """
+    while True:
+        if not alive(daemon) or not root.exists():
+            return
+        if not alive(runner):
+            if (root / 'runner-done').exists():
+                return
+            break
+        time.sleep(0.5)
+    record = dict(runner_pid=runner, runner_gone_at=now(), daemon_pid=daemon)
+    (root / 'lead-stop').touch()
+    try:
+        config = json.loads((root / 'service.json').read_text())
+        owner = Caller(root / 'socket' / 'public.sock',
+                       config['protocol']['credentials'][0]['credential'],
+                       features=FEATURES, execution_features=EXECUTION_FEATURES)
+        try:
+            record['cancelled'] = {
+                i: cancel(owner, i, 'watchdog') for i in RUNS
+                if (view(owner, i) or {}).get('admission') == 'admitted'
+                and (view(owner, i) or {}).get('runtime') != 'exited'}
+            end = time.monotonic() + 60
+            while time.monotonic() < end and any(
+                    (view(owner, i) or {}).get('runtime') not in (None, 'exited')
+                    for i in record['cancelled']):
+                time.sleep(0.5)
+            record['runtimes'] = {i: (view(owner, i) or {}).get('runtime') for i in RUNS}
+        finally:
+            owner.close()
+    except Exception as caught:
+        record['error'] = repr(caught)[:500]
+    try:
+        os.kill(daemon, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    end = time.monotonic() + 10
+    while alive(daemon) and time.monotonic() < end:
+        time.sleep(0.2)
+    record.update(daemon_stopped=not alive(daemon), finished_at=now())
+    (root / 'watchdog.json').write_text(json.dumps(record, indent=2) + '\n')
+
+
+def runner_killed(args):
+    """The one exit no exit path survives: SIGKILL, from outside, once the
+    desk has answered. What must be left is the reservation in the ledger,
+    no receipt, and a service the watchdog has stopped."""
+    command_line = [sys.executable, str(Path(__file__).resolve()), '--rehearse',
+                    '--mutant', 'runner-killed', '--inner', '--out', str(args.out)]
+    child = subprocess.Popen(command_line, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True)
+    root, answered = None, False
+    for line in child.stdout:
+        print(line, end='', flush=True)
+        if line.startswith('ROOT '):
+            root = Path(line.split(' ', 1)[1].strip())
+        if line.startswith('DESK answered'):
+            answered = True
+            break
+    os.kill(child.pid, signal.SIGKILL)
+    child.wait()
+    assert root is not None and answered, 'the runner never reached the desk'
+    try:
+        end = time.monotonic() + 150
+        while not (root / 'watchdog.json').exists() and time.monotonic() < end:
+            time.sleep(0.5)
+        stopped = json.loads((root / 'watchdog.json').read_text())
+        print(f"watchdog: {json.dumps(stopped)[:400]}")
+        assert stopped.get('daemon_stopped') is True, stopped
+        assert LEAD in stopped.get('cancelled', {}), stopped
+        assert not args.receipt.exists(), 'a receipt was written by a runner that was killed'
+        book = read_ledger(args.receipt.with_name(args.receipt.stem + '-ledger.json'))
+        held = {i: (book['runs'].get(i) or {}) for i in RUNS}
+        assert all(line.get('charge_basis') == 'reserved' for line in held.values()), held
+        assert held[LEAD]['charged'] == LEAD_SHARE and all(
+            held[f'{LEAD}.{c}']['charged'] == CHILD_SHARE for c in CHILDREN), held
+    finally:
+        if root is not None:
+            case_cleanup.release(root, remove=True)
+    wanted = MUTANTS['runner-killed']
+    print(f"mutant runner-killed: dies on {wanted!r}: no receipt, every reservation "
+          f"stands ({LEAD_SHARE} + 2 x {CHILD_SHARE}), and the watchdog stopped the service")
+    raise SystemExit(1)
+
+
 def main():
+    if '--watch-runner' in sys.argv:
+        watch_args = argparse.ArgumentParser()
+        watch_args.add_argument('--watch-runner', type=int, required=True)
+        watch_args.add_argument('--daemon', type=int, required=True)
+        watch_args.add_argument('--root', type=Path, required=True)
+        given = watch_args.parse_args()
+        return watchdog(given.watch_runner, given.daemon, given.root)
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--out', type=Path, default=ROOT / 'target/lead-run')
@@ -1290,6 +1560,7 @@ def main():
                                        'desk; required for a live run, quoted in the receipt')
     parser.add_argument('--attempt', help='a new name for a live run the ledger already holds')
     parser.add_argument('--mutant', choices=sorted(MUTANTS))
+    parser.add_argument('--inner', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     if not args.rehearse and not args.desk:
         raise SystemExit('a live run needs --desk: the owner confirms they are at the '
@@ -1300,6 +1571,9 @@ def main():
     name = ('rehearsal' if args.rehearse else (args.attempt or LEAD)) + \
         (f'-mutant-{args.mutant}' if args.mutant else '')
     args.receipt = args.out / f'{name}.json'
+    if args.mutant == 'runner-killed' and not args.inner:
+        args.receipt.unlink(missing_ok=True)
+        return runner_killed(args)
     args.receipt.unlink(missing_ok=True)
     try:
         record = run(args)
@@ -1326,8 +1600,9 @@ def main():
         charged = record['charge']['lines']
         ran = {i for i, u in record['usage'].items()
                if u['basis'] != 'refused before any model call'}
-        assert ran <= set(charged) and all(line['charged'] > 0
-                                           for line in charged.values()), (ran, charged)
+        assert ran <= set(charged) and all(charged[i]['charged'] > 0 for i in ran), (
+            ran, charged)
+        assert not record['charge']['reservations_left'], record['charge']
         if args.mutant == 'lead-loops':
             stops = [s for s in record.get('ceiling_stops', []) if s['run'] == LEAD]
             assert stops and any('tool calls' in w for w in stops[0]['why']), stops

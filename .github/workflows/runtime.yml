@@ -75,13 +75,15 @@ jobs:
       - name: The L1 lead run, rehearsed against the labeled fake, and its mutants
         # The same code path as the live run. Each mutant changes one thing
         # and must fail the row it is named for, and leave its receipt and
-        # its charge behind; one that does not fails this step.
+        # its charge behind; one that does not fails this step. The one
+        # exception is `runner-killed`, which must leave no receipt, every
+        # reservation in the ledger, and the service stopped by the watchdog.
         # `desk-silent` waits out the 300-second delivery timeout.
         run: |
           PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --out target/lead-run
           for m in no-tool reports-refused-as-started grant-may-answer grant-no-steer \
                    wrong-child wrong-relay lead-without-brief lead-loops interrupted \
-                   desk-silent; do
+                   runner-killed desk-silent; do
             if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --mutant "$m" \
                  --out target/lead-run-mutants > "target/lead-run-mutant-$m.log" 2>&1; then
               echo "mutant $m survived"; exit 1

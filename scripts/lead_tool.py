@@ -51,10 +51,15 @@ WORKSPACE = os.environ.get('PIO_LEAD_WORKSPACE', '')
 BASE = os.environ.get('PIO_LEAD_BASE', '')
 LOG = os.environ.get('PIO_LEAD_LOG', '')
 CONTENT = 'pio.combraton.dev/content'
-# A third of the MCP TypeScript SDK's default request timeout (60 seconds).
-# What OpenCode itself allows a tool call is not measured; the live run's
-# tool log shows whether a waiting read came back.
-READ_WAIT = 20
+# Under the MCP TypeScript SDK's default request timeout (60 seconds), and far
+# under what OpenCode 2.0.11 allows: its shipped code turns an ACP-supplied
+# server into a local server with no timeout, and `callTool` falls back to
+# 43,200,000 ms (12 hours). That is static evidence from the shipped code
+# (review 45), not a measurement; the live run's tool log is the check. A
+# longer wait is fewer model steps: at 20 seconds, a child held at the desk
+# cost the lead a step every 20 seconds, and the lead's meter could stop it
+# before the owner had answered (review 45).
+READ_WAIT = 55
 TEXT_LIMIT = 2000
 CALL_CEILING = int(os.environ.get('PIO_LEAD_CALL_CEILING') or 0)
 STOP = os.environ.get('PIO_LEAD_STOP', '')
