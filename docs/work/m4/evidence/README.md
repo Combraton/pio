@@ -32,3 +32,28 @@ observation: nothing here shows what either harness would do with a real
 user configuration present. The Claude Code route does not have that gap —
 `--strict-mcp-config` is the harness's own guarantee — but for these two it
 remains to be shown when a live run has a real configuration beside it.
+
+## `L1-rehearsal.json`
+
+The L1 lead run rehearsed against the labeled fake, through one
+`serve-opencode` service, by `scripts/lead_run.py --rehearse` at a clean
+committed head (`commit` and `dirty: false` are in the record). **Zero
+tokens, no model call.** It is the same code path the live run takes. Only
+the harness binary and its environment differ.
+
+Each of the 27 rows carries what was observed, what was expected, and
+whether they agree, and a disagreement would have failed the run. Two rows
+are marked not provable here: what the owner's OpenCode does with a
+permission prompt, and whether PIO deleted a session in the owner's history.
+
+**What this does not show.** The fake is not a model. It launches the lead
+tool the way 2.0.11 was measured doing, then makes the tool calls a script
+tells it to. It counts the lines itself. So the two "true count" rows show
+that the runner compares the runs' words with its own `wc -l`; the
+`wrong-child` and `wrong-relay` mutants are what show the comparison can fail.
+Whether a real model uses the tool at all, and reports what the files say, is
+the live run's to show.
+
+The first rehearsal record under this name (`d99855b`) was reverted: its lead
+had been refused for a missing brief while its children ran, and its runner
+had no live path. See issue #12.
