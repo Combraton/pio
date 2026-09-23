@@ -74,6 +74,7 @@ CASES = [
     'service_refuses_a_selection_that_did_not_take',
     'service_asks_for_the_narrower_mode_and_checks_it_took',
     'service_audits_a_tool_use_by_its_real_target',
+    'the_recording_boundary_redacts_a_home_path',
     'service_stops_when_the_model_selection_is_refused',
     'service_refuses_a_downgraded_session_before_any_prompt',
     'service_tells_a_harness_refusal_apart_from_a_pio_decline',
@@ -232,7 +233,8 @@ class Case:
 class ServiceCase(Case):
     """Driven through `pio serve-opencode` over the public Unix API."""
 
-    def __init__(self, out, name, **kw):
+    def __init__(self, out, name, extra_credentials=(), **kw):
+        self.extra_credentials = tuple(extra_credentials)
         super().__init__(out, name, **kw)
         from public_api import Client, CREDENTIAL
 
@@ -260,8 +262,18 @@ class ServiceCase(Case):
         config['format'] = 'pio-opencode-service/1'
         config['protocol'] = dict(
             format='combraton-conformance-config/1', principal='owner',
-            credentials=[dict(credential=CREDENTIAL)],
+            # A second principal, when a case needs one. The principal is the
+            # middle field of the credential, so a `ccred1.lead.…` holder
+            # authenticates as `lead` and holds nothing until the owner
+            # grants it something.
+            credentials=[dict(credential=c) for c in
+                         (CREDENTIAL, *getattr(self, 'extra_credentials', ()))],
             executor=dict(host_id='opencode-host'))
+        if self.extra_credentials:
+            # A grant names its audience, and the audience is this provider.
+            # Only set where a second principal needs one, so no existing
+            # case's manifest moves.
+            config['protocol']['provider_id'] = 'conformance-provider'
         self.config_path.write_text(json.dumps(config))
 
     def client(self):
@@ -321,6 +333,21 @@ class ServiceCase(Case):
     def inspect(self, identity='work'):
         with self.client() as c:
             return c.query('execution.inspect', {'execution': identity})['result']
+
+    def journal_receipts(self):
+        """Every **receipt** this store holds, read-only.
+
+        The other half of the recording boundary: `Lifecycle::complete` and
+        `Lifecycle::fail` each store one, and neither goes through the events
+        file. Only the receipt, not the whole invocation row — the launch spec
+        beside it legitimately carries absolute paths, because it is how the
+        host finds the harness. A spec is internal state; a receipt is
+        published.
+        """
+        import sqlite3
+        with sqlite3.connect(f'file:{self.store}/journal.sqlite3?mode=ro', uri=True) as db:
+            rows = [json.loads(r[0]) for r in db.execute('select state from invocations')]
+        return [row['receipt'] for row in rows if row.get('receipt') is not None]
 
     def host_events(self):
         """The durable host's own append-only events file, read-only."""
@@ -965,6 +992,71 @@ def run_case(out, name):
         status = {s['tool_use_id']: s['status'] for s in record['harness_status']}
         assert status == {'call_0': 'completed', 'call_1': 'failed'}, status
         (case.out / 'record.json').write_text(json.dumps(record, indent=2))
+
+    elif name == 'the_recording_boundary_redacts_a_home_path':
+        # The **boundary**, not the function. `pio_core::redact_home` has its
+        # own unit test; this asserts that a home-shaped path a harness
+        # reports never reaches the stored events or the stored receipt. The
+        # reviewer's mutant — replacing the call with a clone — passed 102
+        # tests and three matrices, because only the function was covered.
+        #
+        # The path travels: the fake reports it in a tool call's `locations`
+        # and `rawInput`, the host folds the updates and records them in the
+        # `tool_uses` event's `harness_status`.
+        # A deliberately fictional account name, on the private-path gate's own
+        # allowlist.  has no allowlist and rewrites it anyway,
+        # which is the point: the gate scans this file too, and a test about
+        # not publishing a home path is the last place to publish one.
+        outside_home = '/Users/someone/private/notes.txt'
+        case = ServiceCase(out, name, model=REQUESTED, scenario={'tool_calls': [
+            {'title': 'read', 'kind': 'read',
+             'input': {'path': outside_home}, 'status': 'completed'},
+        ]})
+        own_home = str(case.root)
+        case.start()
+        case.submit()
+        poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        events_text = (sorted(case.store.glob('opencode-*.events.jsonl'))[0]).read_text()
+        # Nobody's home directory, in any form.
+        assert '/Users/' not in events_text, [
+            line for line in events_text.splitlines() if '/Users/' in line][:2]
+        assert own_home not in events_text, own_home
+        # And the redacted form **is** there, so a host that dropped the field
+        # entirely could not pass this instead.
+        assert '~/private/notes.txt' in events_text, events_text[:400]
+        status = [e for e in case.host_events()
+                  if e['kind'] == 'tool_uses'][0]['harness_status']
+        assert status[0]['locations'] == [{'path': '~/private/notes.txt'}], status
+        # The stored receipt as well. No completed receipt carries a path
+        # today, so this assertion cannot fail on its own — it is here to fail
+        # the day one does, and the failed-run case below is what actually
+        # covers a receipt that can carry one.
+        stored = json.dumps(case.journal_receipts())
+        assert '/Users/' not in stored, stored[:400]
+        assert own_home not in stored, stored[:400]
+        case.finish()
+        case.cleanup()
+
+        # The receipt that **can** carry a path: a host that failed before
+        # release stores the harness's own error message, and a real harness
+        # error routinely names a file. That receipt was the one site
+        # redaction had been added everywhere except.
+        failed = ServiceCase(out, f'{name}-failed', model=REQUESTED, scenario={
+            'session_error': f'cannot open {outside_home}: permission denied'})
+        failed.start()
+        failed.submit()
+        poll(lambda: failed.inspect(),
+             lambda v: v['delivery'] in ('failed_before_delivery', 'not_delivered'))
+        receipts = json.dumps(failed.journal_receipts())
+        assert 'known_not_released' in receipts, receipts[:400]
+        assert '/Users/' not in receipts, receipts[:400]
+        assert str(failed.root) not in receipts, receipts[:400]
+        # Again, the redacted form is present, so dropping the reason would
+        # not pass instead.
+        assert '~/private/notes.txt' in receipts, receipts[:400]
+        failed.finish()
+        failed.cleanup()
+        case = Case(out, name, model=REQUESTED)
 
     elif name == 'service_stops_when_the_model_selection_is_refused':
         # The harness refuses the selection outright. PIO stops with the brief

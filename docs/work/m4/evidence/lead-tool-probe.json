@@ -1,0 +1,57 @@
+{
+  "codex": {
+    "approvals_reviewer": "user",
+    "harness": "codex app-server",
+    "honoured": true,
+    "initialize": true,
+    "model_calls": 0,
+    "owner_service_untouched": true,
+    "prompted": false,
+    "thread_start": "accepted",
+    "witness": [
+      {
+        "argv": [],
+        "event": "started"
+      },
+      {
+        "event": "request",
+        "method": "initialize"
+      },
+      {
+        "event": "request",
+        "method": "notifications/initialized"
+      },
+      {
+        "event": "request",
+        "method": "tools/list"
+      }
+    ]
+  },
+  "opencode": {
+    "harness": "opencode acp",
+    "honoured": true,
+    "initialize": true,
+    "model_calls": 0,
+    "owner_service_untouched": true,
+    "prompted": false,
+    "session_new": "accepted",
+    "witness": [
+      {
+        "argv": [],
+        "event": "started"
+      },
+      {
+        "event": "request",
+        "method": "initialize"
+      },
+      {
+        "event": "request",
+        "method": "notifications/initialized"
+      },
+      {
+        "event": "request",
+        "method": "tools/list"
+      }
+    ]
+  }
+}

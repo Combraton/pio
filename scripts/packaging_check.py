@@ -9,6 +9,7 @@ import platform
 import re
 import subprocess
 import tempfile
+import case_cleanup
 from public_api import Client, CREDENTIAL
 from fake_host_matrix import poll
 
@@ -80,12 +81,21 @@ def main():
         removed=package('uninstall','--prefix',prefix)
         assert preserved.read_text()=='preserve unowned addition' and (data/'journal.sqlite3').exists()
         assert not (prefix/'install.json').exists() and not payload.exists() and not os.path.lexists(bins/'pio-standalone') and witness()==before
-        report.update(outcome='pass',manager=kind,started_identity=identity,stop_observed=True,discovery=discovery,unrelated_pio_before=before,unrelated_pio_after=witness(),collision_refusal=collision.stderr,modified_removal_refusal=refusal.stderr,manifest_tampering_refusal=tampering.stderr,temporary_state='retained for diagnosis outside repository',uninstall=json.loads(removed.stdout),state_preserved=True)
+        report.update(outcome='pass',manager=kind,started_identity=identity,stop_observed=True,discovery=discovery,unrelated_pio_before=before,unrelated_pio_after=witness(),collision_refusal=collision.stderr,modified_removal_refusal=refusal.stderr,manifest_tampering_refusal=tampering.stderr,uninstall=json.loads(removed.stdout),state_preserved=True)
     except Exception as error:
         report.update(outcome='fail',reason=f'{type(error).__name__}: {error}');raise
     finally:
         if stop:run(stop,expected=None)
         if unit and unit.exists():unit.unlink();run(['systemctl','--user','daemon-reload'],expected=None)
-        (args.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
+        # Released here, pass or fail, once the job is stopped. The report
+        # carries every command and its output; a root "retained for
+        # diagnosis" on a CI runner is thrown away with the runner, and the
+        # leak gate, run last, rightly counts it as a store left behind.
+        try:
+            case_cleanup.release(root);report['temporary_state']='released'
+        except AssertionError as error:
+            report['temporary_state']=f'not released: {error}';raise
+        finally:
+            (args.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps({k:v for k,v in report.items() if k not in ('commands','discovery')},indent=2))
 if __name__=='__main__':main()

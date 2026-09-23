@@ -258,8 +258,15 @@ impl Lifecycle {
                 "known_not_released",
                 None,
                 None,
-                Some(json!({"source":self.source,"kind":"known_not_released",
-                            "release_attempted":false,"reason":format!("{error:#}")})),
+                // The same boundary. A harness's own error message routinely
+                // names a file, so this receipt can carry a path where the
+                // completed one cannot — and it was the one site redaction
+                // had been added everywhere except.
+                Some(pio_core::redact_home(
+                    &json!({"source":self.source,"kind":"known_not_released",
+                            "release_attempted":false,"reason":format!("{error:#}")}),
+                    self.home(),
+                )),
             );
         }
     }

@@ -36,8 +36,10 @@ jobs:
           cargo clippy --workspace --locked -- -D warnings
           python3 scripts/check_docs.py
           git diff --exit-code -- Cargo.lock
-      - name: Case cleanup guard self-test
-        run: python3 scripts/case_cleanup.py
+      - name: Case cleanup guard self-tests
+        run: |
+          python3 scripts/case_cleanup.py
+          python3 scripts/check_case_leaks.py --selftest
       - name: Experimental fake-host fault matrix
         run: python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3
       - name: Public Unix process matrix and caller recovery
@@ -48,6 +50,28 @@ jobs:
         run: python3 scripts/codex_host_matrix.py --out target/codex-host --repetitions 3
       - name: Offline Claude adapter matrix (labeled fake CLI)
         run: PYTHONPATH=scripts python3 scripts/claude_host_matrix.py --out target/claude-host --repetitions 3
+      - name: A board drawn from the events fold (G1 and G6)
+        run: PYTHONPATH=scripts python3 scripts/board_fold.py --out target/board-fold
+      - name: The approval walk through a real host path (G2)
+        # `--skip-baseline` here only: the "a caller ignoring the keys sees
+        # what it saw before" diff builds the binary at a22c98c in its own
+        # worktree, which needs full history and a second cargo build. It is
+        # run locally and its result is recorded in the map.
+        run: PYTHONPATH=scripts python3 scripts/approval_desk.py --out target/approval-desk --skip-baseline
+      - name: Transcript blocks as they happen, and the audit (G3)
+        run: PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/transcript-blocks
+      - name: The walk and the blocks through the other two release harnesses
+        # What each harness does **not** do is the point: Codex sets no
+        # answer deadline and never denies by default, Claude Code offers a
+        # rule update PIO never sends, and Codex emits no tool-use audit at
+        # all.
+        run: |
+          PYTHONPATH=scripts python3 scripts/approval_desk.py --out target/desk-claude --harness claude
+          PYTHONPATH=scripts python3 scripts/approval_desk.py --out target/desk-codex --harness codex
+          PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-claude --harness claude
+          PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-codex --harness codex
+      - name: A lead that starts runs, and the scope it holds (M4b step 3)
+        run: PYTHONPATH=scripts python3 scripts/lead_runs.py --out target/lead-runs
       - name: No private paths in any committed file
         run: |
           python3 scripts/check_private_paths.py --selftest
@@ -85,3 +109,14 @@ jobs:
             target/codex-host
             target/packaging
           if-no-files-found: error
+      - name: No case left its store behind
+        # **Last step, deliberately.** Every suite above starts services in
+        # private stores and releases them in a `finally`; packaging and the
+        # conformance runner make stores of their own, so a count placed
+        # before them cannot see what they leave. Four stores survived on
+        # /tmp once because two proof scripts released on the success path
+        # alone, and 114 marker directories survived in $TMPDIR because
+        # `permit_prefix` says a directory may be removed and removes
+        # nothing. This is the check that says so without anyone looking.
+        if: always()
+        run: python3 scripts/check_case_leaks.py
