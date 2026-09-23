@@ -4,6 +4,8 @@ Every element of every accepted screen, and the **public operation** that feeds 
 
 Design input: [`design-input/M4-DESIGN-INPUT.md`](design-input/M4-DESIGN-INPUT.md), accepted by the owner 2026-09-21, with its [corrections](design-input/CORRECTIONS.md). Rule 1 of that document is the constraint this map exists to test: *the screen reads and writes only through the public API the command line uses.*
 
+**Steps 2 and 3 merged as `d0fd88f`** ([PR #15](https://github.com/Combraton/pio/pull/15), 2026-09-23), from reviewed head `f915137`; main's tree is identical to that head's. The L1 lead run is built on its own branch from there.
+
 **Revised 2026-09-21** after the reviewer's read. Four corrections, and three of them changed conclusions rather than wording. What the first draft got wrong is recorded at the end rather than quietly fixed.
 
 ## The rule that governs every answer below
