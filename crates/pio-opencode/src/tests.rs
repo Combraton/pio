@@ -275,3 +275,45 @@ fn an_unqualified_executable_is_refused_and_not_merely_reported() {
     assert_eq!(record["admitted"], false);
     assert_eq!(record["session_started"], false);
 }
+
+/// The lead tool's server spec is journaled with the run, so what it may
+/// carry is narrow: the measured stdio shape, an absolute command, and no
+/// credential by name or by value.
+#[test]
+fn a_lead_tool_spec_is_refused_for_what_it_must_not_carry() {
+    let good = json!({"name":"pio-lead","command":"/usr/bin/python3",
+        "args":["/opt/pio/lead_tool.py","--credential-file","/private/lead.credential"],
+        "env":[{"name":"PIO_LEAD_GRANT","value":"a-grant-id"}]});
+    assert!(
+        lead_tool_refusals(&good).is_empty(),
+        "{:?}",
+        lead_tool_refusals(&good)
+    );
+    let reasons = |tool: Value| -> Vec<String> {
+        lead_tool_refusals(&tool)
+            .iter()
+            .map(|r| r["reason"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let mut relative = good.clone();
+    relative["command"] = json!("python3");
+    assert_eq!(
+        reasons(relative),
+        ["lead_tool_command_must_be_an_absolute_path"]
+    );
+    let mut named = good.clone();
+    named["env"] = json!([{"name":"PIO_LEAD_TOKEN","value":"x"}]);
+    assert_eq!(reasons(named), ["env_carries_a_credential_variable"]);
+    let mut valued = good.clone();
+    valued["env"] = json!([{"name":"PIO_LEAD_NOTE","value":"ccred1.lead.abc"}]);
+    assert_eq!(reasons(valued), ["lead_tool_carries_a_credential_value"]);
+    let mut in_args = good.clone();
+    in_args["args"] = json!(["/opt/pio/lead_tool.py", "ccred1.lead.abc"]);
+    assert_eq!(reasons(in_args), ["lead_tool_carries_a_credential_value"]);
+    let mut extra = good.clone();
+    extra["cwd"] = json!("/tmp");
+    assert_eq!(reasons(extra), ["lead_tool_unsupported_field"]);
+    let mut loose = good;
+    loose["env"] = json!({"PIO_LEAD_GRANT":"a-grant-id"});
+    assert_eq!(reasons(loose), ["lead_tool_env_must_be_name_value_pairs"]);
+}

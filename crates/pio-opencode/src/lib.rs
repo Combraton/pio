@@ -507,6 +507,79 @@ fn qualification_of(work: &Path, opencode: &Value, refusals: &[Value]) -> Result
 /// How the labeled fake is told which scenario to play.
 pub const FAKE_SCENARIO_VAR: &str = "PIO_OPENCODE_FAKE_SCENARIO";
 
+/// The prefix of every credential PIO's own Protocol configuration issues.
+pub const PIO_CREDENTIAL_PREFIX: &str = "ccred1.";
+
+/// Why a lead-tool server spec is refused, if it is.
+///
+/// The spec is an ACP `McpServer` in the stdio shape measured from 2.0.11 by
+/// `lead_tool_probe.py`: `{name, command, args, env: [{name, value}]}`. It
+/// becomes the lead session's `mcpServers` and is **journaled** with the run,
+/// so nothing secret may be in it. The lead's own Protocol credential travels
+/// as a *path* to a private file, never as a value, and a variable whose name
+/// marks it as a credential is refused exactly as it is for the harness's own
+/// environment.
+pub fn lead_tool_refusals(tool: &Value) -> Vec<Value> {
+    let mut refusals = Vec::new();
+    let Some(object) = tool.as_object() else {
+        return vec![refusal("lead_tool_must_be_an_object", Value::Null)];
+    };
+    for name in object.keys() {
+        if !["name", "command", "args", "env"].contains(&name.as_str()) {
+            refusals.push(refusal("lead_tool_unsupported_field", json!(name)));
+        }
+    }
+    if !tool["name"].as_str().is_some_and(|n| !n.is_empty()) {
+        refusals.push(refusal("lead_tool_needs_a_name", Value::Null));
+    }
+    if !tool["command"]
+        .as_str()
+        .is_some_and(|p| Path::new(p).is_absolute())
+    {
+        refusals.push(refusal(
+            "lead_tool_command_must_be_an_absolute_path",
+            Value::Null,
+        ));
+    }
+    let args = tool["args"].as_array();
+    if !args.is_some_and(|a| a.iter().all(Value::is_string)) {
+        refusals.push(refusal("lead_tool_args_must_be_strings", Value::Null));
+    }
+    let env = tool["env"].as_array();
+    if !env.is_some_and(|e| {
+        e.iter().all(|v| {
+            v.as_object().is_some_and(|o| o.len() == 2)
+                && v["name"].is_string()
+                && v["value"].is_string()
+        })
+    }) {
+        refusals.push(refusal(
+            "lead_tool_env_must_be_name_value_pairs",
+            Value::Null,
+        ));
+    }
+    for variable in env.into_iter().flatten() {
+        let name = variable["name"].as_str().unwrap_or_default();
+        if CREDENTIAL_MARKERS
+            .iter()
+            .any(|m| name.to_uppercase().contains(m))
+        {
+            refusals.push(refusal("env_carries_a_credential_variable", json!(name)));
+        }
+    }
+    let values = args
+        .into_iter()
+        .flatten()
+        .chain(env.into_iter().flatten().map(|v| &v["value"]));
+    if values
+        .filter_map(Value::as_str)
+        .any(|v| v.contains(PIO_CREDENTIAL_PREFIX))
+    {
+        refusals.push(refusal("lead_tool_carries_a_credential_value", Value::Null));
+    }
+    refusals
+}
+
 pub mod fake;
 
 #[cfg(test)]

@@ -7,6 +7,12 @@ use pio_host::harness::{append_control, events_path, read_jsonl};
 use serde_json::{Value, json};
 
 pub const CONTENT_EXTENSION: &str = "pio.combraton.dev/content";
+/// An MCP server attached to **this** run's harness session, and no other's.
+/// The lead tool for M4b: the owner starts a lead with it, and the runs the
+/// lead starts get none. Owner authority only — a submit under any grant that
+/// carries it is refused before admission (`grants.rs`), because a server spec
+/// is a command the host's child will launch.
+pub const LEAD_TOOL_EXTENSION: &str = "pio.combraton.dev/lead-tool";
 const CONTENT_PATH: &str = "/extensions/pio.combraton.dev~1content";
 pub const FEATURES: &[&str] = &[
     "execution.controller",
@@ -228,6 +234,22 @@ impl Provider {
                 format!("Send the brief bytes in the {CONTENT_EXTENSION} extension").into();
             return Some("capability_unavailable");
         }
+        let lead_tool = p["extensions"].get(LEAD_TOOL_EXTENSION);
+        if let Some(tool) = lead_tool {
+            // Only the OpenCode host sends `mcpServers` on the run's own
+            // session. Anywhere else the tool would be silently dropped, and
+            // a lead that has no tool is a lead that cannot do its job.
+            if ns != "opencode" {
+                e["view"]["alternative"] =
+                    "The lead tool is attached only through serve-opencode".into();
+                return Some("capability_unavailable");
+            }
+            let refusals = pio_opencode::lead_tool_refusals(tool);
+            if !refusals.is_empty() {
+                e["view"]["alternative"] = format!("Lead tool refused: {}", json!(refusals)).into();
+                return Some("capability_unavailable");
+            }
+        }
         let host = &self.host_config;
         // The checks above are the same for every harness; only what the host
         // needs to launch differs.
@@ -259,6 +281,11 @@ impl Provider {
                 // The narrower session posture, when one was asked for. Only
                 // narrowing values reach here: admission refuses the rest.
                 spec["mode"] = host["mode"].clone();
+                // The lead tool, for this run's session alone. Validated
+                // above; journaled, which is why it may carry no secret.
+                if let Some(tool) = lead_tool {
+                    spec["lead_tool"] = tool.clone();
+                }
             }
             _ => {
                 spec["codex_home"] = host["codex_home"].clone();

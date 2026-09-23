@@ -178,6 +178,18 @@ impl Provider {
             // being withheld rather than to the operation being ungrantable.
             "execution.submit" => {
                 needed.push((method, p["subject"].clone()));
+                // **Attaching a tool is the owner's act, never a grant's.**
+                // A lead-tool spec is a command the harness will launch
+                // beside the run, so a submit under any grant that carries
+                // one is refused — whatever else the grant allows. Without
+                // this a lead could give its own children a tool, and a tool
+                // is anything that can be launched.
+                if p["extensions"]
+                    .get(crate::codex::LEAD_TOOL_EXTENSION)
+                    .is_some()
+                {
+                    return Err(denied("owner_authority_required"));
+                }
                 // **An `origin` is a claim about lineage, and lineage spends
                 // budget.** Under a grant, the only initiator a caller may
                 // name is the run the grant was issued for — the owner of
