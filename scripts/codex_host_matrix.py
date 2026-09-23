@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BINARY = ROOT / 'target/debug/pio'
 CONTENT = 'pio.combraton.dev/content'
 FEATURES = ['execution.controller', 'execution.output', 'execution.discovery', 'execution.workspaces', 'execution.usage', 'execution.actions', 'execution.steering']
-CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approval_decline', 'approval_accept', 'interrupt_cancels_turn', 'steer_acknowledged', 'suppressed_ack_negative_control',
+CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_reviewer_absent_refused', 'approval_decline', 'approval_accept', 'interrupt_cancels_turn', 'steer_acknowledged', 'suppressed_ack_negative_control',
          'missing_content_refused', 'content_digest_mismatch', 'outside_fixture_refused', 'unqualified_executable_refused', 'restart_reattach_no_duplicate', 'host_lost_no_respawn', 'discovery_reports_observed_authentication',
          'widening_decisions_refused', 'deadline_stop_interrupts', 'thread_settings_broader_refused', 'permission_grant_refused']
 
@@ -206,6 +206,8 @@ def run_case(out, name):
     scenario = dict(
         approvals_reviewer_must_be_user={'approval': 'command', 'delay_ms': 100,
                                         'approvals_reviewer': 'guardian_subagent'},
+        approvals_reviewer_absent_refused={'approval': 'command', 'delay_ms': 100,
+                                           'approvals_reviewer': None},
         approval_decline={'approval': 'command', 'approval_kind': 'writeStdin', 'delay_ms': 100},
         approval_accept={'approval': 'command', 'delay_ms': 100},
         interrupt_cancels_turn={'delay_ms': 60000},
@@ -316,22 +318,30 @@ def run_case(out, name):
             assert view['delivery'] == 'acknowledged' and view['exit'] == 'unavailable', view
             assert case.app_server_processes() == []
             return dict(outcome='pass', runtime=view['runtime'], delivery=view['delivery'], spawn_markers=1, turn_received=1, recovery=view['recovery'], respawned=False)
-        if name == 'approvals_reviewer_must_be_user':
+        if name in ('approvals_reviewer_must_be_user', 'approvals_reviewer_absent_refused'):
             # Owner decision, 2026-09-22: approvals from led runs come to the
             # person. The app-server's own enum is
             # `user | auto_review | guardian_subagent`, and two of the three
             # send them somewhere else. PIO never sets the field, and every
             # run asserts the harness's answer — a field that is never read
             # is not a check, so this case makes the fake answer otherwise.
+            # The second case has it answer **nothing**: the field is
+            # required in 0.155.1's response, and silence is not `user`.
+            answered = None if name == 'approvals_reviewer_absent_refused' else 'guardian_subagent'
             final = poll(lambda: case.inspect()['result'],
                          lambda v: v['runtime'] == 'exited', 60)
             started = events_of(case, 'thread_started')
-            assert [e['approvals_reviewer'] for e in started] == ['guardian_subagent'], started
+            assert [e['approvals_reviewer'] for e in started] == [answered], started
             assert final['exit'] == 'unavailable', final
-            _, invocations = case.journal()
-            reasons = [str(r.get('receipt', {}).get('reason', '')) for r in invocations]
-            assert any('approvals_reviewer_not_user' in r for r in reasons), reasons
-            return dict(outcome='pass', reviewer='guardian_subagent',
+            # The host commits its failure phase just after the exit
+            # observation, so `exited` on the view can arrive while the
+            # receipt is still null. Read it once it is there; reading it
+            # at once failed one run in twenty.
+            invocations = poll(lambda: case.journal()[1],
+                               lambda i: i and i[0]['phase'] == 'known_not_released')
+            reason = str(invocations[0]['receipt']['reason'])
+            assert 'approvals_reviewer_not_user' in reason, invocations
+            return dict(outcome='pass', reviewer=answered,
                         refused='approvals_reviewer_not_user')
 
         if name == 'widening_decisions_refused':

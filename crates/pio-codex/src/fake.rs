@@ -216,15 +216,23 @@ pub fn run() -> Result<()> {
                         thread = Some(thread_id.clone());
                         let thread_value =
                             json!({"id":thread_id,"modelProvider":"pio-fake","preview":""});
-                        send(
-                            json!({"id":id,"result":{"thread":thread_value,"model":"pio-fake-model","modelProvider":"pio-fake","cwd":cwd,"sandbox":sandbox_projection(&sandbox),"approvalPolicy":params["approvalPolicy"].as_str().unwrap_or("on-request"),
+                        let mut result = json!({"thread":thread_value,"model":"pio-fake-model","modelProvider":"pio-fake","cwd":cwd,"sandbox":sandbox_projection(&sandbox),"approvalPolicy":params["approvalPolicy"].as_str().unwrap_or("on-request"),
                         // Measured from the app-server's own schema: the
                         // enum is `user | auto_review | guardian_subagent`,
                         // and a thread nobody redirected answers `user`.
                         // The scenario can say otherwise so the host's
                         // refusal is something a case can reach.
-                        "approvalsReviewer":scenario["approvals_reviewer"].as_str().unwrap_or("user")}}),
-                        )?;
+                        "approvalsReviewer":scenario["approvals_reviewer"].as_str().unwrap_or("user")});
+                        // `null` omits the field. 0.155.1's schema makes it
+                        // required, so an answer without it is not from the
+                        // qualified app-server, and silence is not `user`.
+                        if let Some(Value::Null) = scenario.get("approvals_reviewer") {
+                            result
+                                .as_object_mut()
+                                .context("thread/start result")?
+                                .remove("approvalsReviewer");
+                        }
+                        send(json!({"id":id,"result":result}))?;
                         send(json!({"method":"thread/started","params":{"thread":thread_value}}))?;
                     }
                     "turn/start" => {

@@ -267,9 +267,12 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         )?;
     // And the harness's own answer, on every run: approvals come to the
     // person. Recorded in the event above and asserted here, because a
-    // field that is never read is not a check.
+    // field that is never read is not a check. **Absent is not `user`.**
+    // 0.155.1's `ThreadStartResponse` lists `approvalsReviewer` as required,
+    // so a response without it did not come from the qualified app-server,
+    // and a run whose routing nobody stated is not a run that asserted it.
     ensure!(
-        matches!(result["approvalsReviewer"].as_str(), None | Some("user")),
+        result["approvalsReviewer"].as_str() == Some("user"),
         "approvals_reviewer_not_user: {}",
         result["approvalsReviewer"]
     );
