@@ -500,9 +500,20 @@ impl Provider {
         // a limit could not have gone there — and a constant would have been
         // a number with no reason behind it.
         //
-        // An initiator PIO has never seen constrains nothing: PIO enforces
-        // what it can read from its own journal and says so rather than
-        // guessing.
+        // An initiator PIO has never seen constrains nothing when the owner
+        // names it: PIO enforces what it can read from its own journal and
+        // says so rather than guessing.
+        //
+        // **Under a grant, it is refused.** The grant binds the initiator to
+        // the run whose subtree it covers, and that run has to exist before
+        // anything is started in its name. Before this, a grant for `ghost.`
+        // with no run `ghost` admitted four children, one at depth 9 with a
+        // budget of 99, because an unknown initiator derived no depth and
+        // declared no budget. And children submitted before their lead
+        // existed spent the budget it was later admitted with (review 44).
+        if started_by.is_none() && p.get("grant").is_some() {
+            return Some("initiator_unknown");
+        }
         // **An initiator must be a run that is alive to ask.** Owner decision,
         // 2026-09-23: a run PIO refused never started, and a run that has
         // exited has finished its turn, so neither can be calling anything —

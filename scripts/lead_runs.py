@@ -47,6 +47,9 @@ it dies on the claim it undermines:
 - `--mutant exited-initiator-ok` submits the child while the initiator is
   still running, so it is admitted. The refusal is about the initiator having
   exited, not about initiators in general.
+- `--mutant known-initiator-ok` admits the grant's subtree owner before its
+  children are submitted, so they are admitted. The refusal is about PIO never
+  having seen the initiator, not about grants or origins.
 """
 import argparse
 import hashlib
@@ -201,12 +204,16 @@ def pass_origin(out, root, mutant=None):
 def pass_lead_grant(out, root, mutant=None):
     """What a lead may do, and the one thing it may not."""
     daemon, socket_path, files = start_service(root, out, name='grant',
-                                              credentials=(LEAD_CREDENTIAL,))
+                                              credentials=(LEAD_CREDENTIAL,),
+                                              duration_ms=LEAD_ALIVE_MS)
     facts = {}
     try:
         owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
         # A run the lead will steer, and an action to try to answer.
         assert admitted(start(owner, 'work', origin('lead', 1, 0), duration=4000))
+        # The lead itself, alive: under a grant, a child may name only an
+        # initiator PIO has seen. `work` names it too and spends one call.
+        assert admitted(start(owner, 'lead', origin('lead', 0, 2)))
 
         rights = ['execution.submit', 'execution.steer', 'execution.read',
                   'core.events.read']
@@ -429,6 +436,65 @@ def pass_initiator_liveness(out, root, mutant=None):
     return facts
 
 
+def pass_initiator_unknown(out, root, mutant=None):
+    """Under a grant, an initiator PIO has never seen is refused.
+
+    Review 44 probed a grant for `ghost.` with no run `ghost`: it admitted
+    four children, one claiming depth 9 and a budget of 99, because an
+    initiator PIO has not seen derives no depth and declares no budget. And
+    children submitted before their lead existed spent the budget it was
+    admitted with later. The grant already binds the initiator to its
+    subtree's owner; that owner now has to exist.
+
+    The owner, with no grant, may still name an initiator PIO has not seen:
+    that is PIO recording a claim it cannot check, and the case records it.
+    """
+    daemon, socket_path, files = start_service(root, out, name='unknown',
+                                               credentials=(LEAD_CREDENTIAL,),
+                                               duration_ms=LEAD_ALIVE_MS)
+    facts = {}
+    try:
+        owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
+        grant_id = str(uuid.uuid4())
+        issued = owner.call(command(
+            'core.grant.issue', dict(kind='core.grant', id=grant_id),
+            dict(holder='lead', audience=PROVIDER,
+                 rights=['execution.submit', 'execution.read'],
+                 resources=[dict(kind='execution.execution', id_prefix='ghost.')],
+                 delegation=dict(allowed=False, max_depth=0)),
+            command_id=f'grant-{grant_id}'))
+        assert 'result' in issued, issued
+        if mutant == 'known-initiator-ok':
+            assert admitted(start(owner, 'ghost', origin('ghost', 0, 2)))
+        lead = Caller(socket_path, LEAD_CREDENTIAL, grant=grant_id, features=FEATURES)
+        # The depth the tree would give, and the review's depth 9 with a
+        # budget of 99: neither may be admitted in the name of nobody.
+        for identity, depth, budget in (('ghost.a', 1, 0), ('ghost.deep', 9, 99)):
+            answer = start(lead, identity, origin('ghost', depth, budget))
+            assert refusal_of(answer) == 'initiator_unknown', (
+                f'{identity} named an initiator PIO has never seen, under a '
+                f'grant, and was not refused: {answer}')
+            facts[f'{identity} (depth {depth}, budget {budget})'] = 'initiator_unknown'
+        # The refused children spent nothing: the lead, admitted now with a
+        # budget of one, still starts its one run.
+        assert admitted(start(owner, 'ghost', origin('ghost', 0, 1)))
+        assert admitted(start(lead, 'ghost.late', origin('ghost', 1, 0))), \
+            'children refused before their lead existed spent its budget'
+        facts['lead_budget_after_refusals'] = 'intact'
+        # The owner may still record a claim PIO cannot check.
+        owned = start(owner, 'elsewhere.child', origin('elsewhere', 1, 0))
+        assert admitted(owned), owned
+        facts['owner_naming_an_unseen_initiator'] = 'admitted, unchecked'
+        lead.close()
+        owner.close()
+    finally:
+        daemon.kill()
+        daemon.wait(timeout=10)
+        for handle in files:
+            handle.close()
+    return facts
+
+
 def pass_lead_cannot_answer(out, mutant=None):
     """The one thing a lead may not do, proven where an action exists.
 
@@ -562,12 +628,13 @@ def main():
                                              'may-answer', 'owner-steers',
                                              'bound-initiator', 'unscoped-grant',
                                              'shallow-ok', 'refused-initiator-ok',
-                                             'exited-initiator-ok'])
+                                             'exited-initiator-ok',
+                                             'known-initiator-ok'])
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     roots = []
     try:
-        for _ in range(4):
+        for _ in range(5):
             root = Path(tempfile.mkdtemp(prefix='pio-lead-', dir='/tmp')).resolve()
             os.chmod(root, 0o700)
             roots.append(root)
@@ -578,6 +645,7 @@ def main():
                                                        args.mutant),
             initiator_liveness=pass_initiator_liveness(args.out, roots[3],
                                                        args.mutant),
+            initiator_unknown=pass_initiator_unknown(args.out, roots[4], args.mutant),
             lead_cannot_answer=pass_lead_cannot_answer(args.out, args.mutant))
         (args.out / 'lead-runs.json').write_text(
             json.dumps(record, indent=2, sort_keys=True) + '\n')
