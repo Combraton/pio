@@ -41,17 +41,22 @@ committed head (`commit` and `dirty: false` are in the record). **Zero
 tokens, no model call.** It is the same code path the live run takes. Only
 the harness binary and its environment differ.
 
-Each of the 28 rows carries what was observed, what was expected, and
-whether they agree, and a disagreement would have failed the run. One row is
+Each of the 29 rows carries what was observed, what was expected, and
+whether they agree, and a disagreement would have failed the run. Two rows are
 marked not provable here: whether PIO deleted a session in the owner's
-history. What OpenCode does with a permission prompt is a **record**, with no
-expected value, and is never counted; here it is the fake's.
+history, and whether each run's steps could be read from the owner's store (a
+rehearsal's home has none). What OpenCode does with a permission prompt is a
+**record**, with no expected value, and is never counted; here it is the
+fake's.
 
-The record also carries the receipt the live run will write: every run's
-meter (tool calls, bytes its session sent, the bound, the ceiling), the charge
-on a ledger of the rehearsal's own (the reported total times the steps the
-turn could have taken, because OpenCode reports only a turn's last step), the
-owner's approvals, and the no-sleep assertion held for the run.
+The record also carries the receipt the live run will write: the
+reservations made before the service started, every run's meter (tool calls,
+bytes its session sent, the bound, the ceiling), the charge on a ledger of the
+rehearsal's own, the owner's approvals, and the no-sleep assertion held for
+the run. The charge here is the bound, the reported total times the steps the
+turn could have taken, because there is no store to read. Live, it is the sum
+of the steps the owner's store records, when its last step is the one
+reported.
 
 **What this does not show.** The fake is not a model. It launches the lead
 tool the way 2.0.11 was measured doing, then makes the tool calls a script
@@ -67,4 +72,6 @@ had no live path. The second (`d552b55`, from `f3b3895`) was replaced after
 review 44, which found that a failure path wrote no receipt and no ledger line,
 that the desk exited when nobody answered, that the lead's polling was bounded
 only by its deadline, and that an unknown initiator was admitted under a grant.
-See issue #12.
+The third (`29ed7a5`, from `d68adde`) was replaced after review 45: a runner
+killed from outside left no ledger line, and the lead's 20-second reads let its
+meter stop it before a slow desk answered. See issue #12.
