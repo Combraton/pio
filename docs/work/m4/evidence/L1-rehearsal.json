@@ -1,12 +1,110 @@
 {
+  "approvals": {
+    "l1": "Owner approval, 2026-09-23 \u2014 L1, the amended plan (issue #12)",
+    "lead_tool": "owner-2026-09-22-m4b-lead-tool",
+    "model_exception": "owner-2026-09-20-m3b-opencode-fixture-runs"
+  },
+  "bound": {
+    "assumes": [
+      "a token is at least one byte",
+      "everything added to a context after the first step is sent as a session update, which PIO spools",
+      "the runner reads every meter at least once per model step (every half second; the fastest measured step took 0.96 s)",
+      "no built-in tool returns more than OpenCode truncates to",
+      "a child's step stays near the size measured in M3b"
+    ],
+    "call_ceiling": 16,
+    "child": "at most its ceiling, plus eleven steps before the kill",
+    "child_ceiling": 90000,
+    "child_step": 12000,
+    "estimate": "(tool calls + 1) x (step base + bytes the session has sent)",
+    "kill_steps": 11,
+    "last_step": 51200,
+    "lead": "at most its ceiling, plus the step in flight at the stop (at most its ceiling again, plus one tool result)",
+    "lead_ceiling": 450000,
+    "step_base": 10000,
+    "worst_case": 1395200
+  },
   "budget": 2,
-  "commit": "f3b389508649c7600e32af57d51e1681373f5286",
+  "charge": {
+    "ledger": "rehearsal ledger",
+    "lines": {
+      "L1": {
+        "at": "2026-09-23T18:07:54Z",
+        "charge_basis": "steps_bound",
+        "charged": 20480,
+        "meter_estimate": 65520,
+        "model": "minimax-coding-plan/MiniMax-M3",
+        "observed_is": "the last model step of the turn",
+        "observed_total_tokens": 4096,
+        "sequence": "M4-lead-opencode",
+        "steps_at_most": 5
+      },
+      "L1.alpha": {
+        "at": "2026-09-23T18:07:54Z",
+        "charge_basis": "steps_bound",
+        "charged": 8192,
+        "meter_estimate": 21590,
+        "model": "minimax-coding-plan/MiniMax-M3",
+        "observed_is": "the last model step of the turn",
+        "observed_total_tokens": 4096,
+        "sequence": "M4-lead-opencode",
+        "steps_at_most": 2
+      },
+      "L1.beta": {
+        "at": "2026-09-23T18:07:54Z",
+        "charge_basis": "steps_bound",
+        "charged": 8192,
+        "meter_estimate": 21590,
+        "model": "minimax-coding-plan/MiniMax-M3",
+        "observed_is": "the last model step of the turn",
+        "observed_total_tokens": 4096,
+        "sequence": "M4-lead-opencode",
+        "steps_at_most": 2
+      }
+    },
+    "measured_against": "charged",
+    "minimax_cap": 300000000,
+    "minimax_charged": 36864,
+    "sequence_cap": 2000000,
+    "sequence_charged": 36864,
+    "sequence_stop": 1600000,
+    "stop_reached": false
+  },
+  "commit": "d68added398a118342c2acfbb5dde33cba3a6e80",
   "configured": {
     "read": false,
     "reason": "dry run: the owner's configuration is never read",
     "source": "~/.config/opencode/opencode.jsonc"
   },
-  "desk": [
+  "credential_check": {
+    "id": "0356c4fa-6ebf-43b8-b0cd-d17f12164b0d",
+    "jsonrpc": "2.0",
+    "result": {
+      "acknowledgment": {
+        "command_digest": "sha256:ec46c39ee031f87bbf4ffeccf3f38edce02070e9544e64583d1404a2fc7ec88b",
+        "command_id": "credential-check",
+        "effect_refs": [],
+        "operation_ref": "cf503b57-fdbe-4b4e-943b-ea45b8f6f6d0",
+        "revision": 1,
+        "subject": {
+          "id": "credential-check",
+          "kind": "execution.execution"
+        }
+      },
+      "outcome": {
+        "admission": "refused",
+        "alternative": "Lead tool refused: [{\"detail\":null,\"reason\":\"lead_tool_carries_a_credential_value\"}]",
+        "execution": {
+          "id": "credential-check",
+          "kind": "execution.execution"
+        },
+        "reason": "capability_unavailable"
+      },
+      "replay": false
+    }
+  },
+  "desk": null,
+  "desk_items": [
     {
       "action_id": "L1.alpha.action-1",
       "answer": {
@@ -14,6 +112,7 @@
         "decision": "allow",
         "words": "rehearsal: the runner answers; no owner is asked"
       },
+      "answered_by_desk_at": "2026-09-23T18:08:01Z",
       "approval": {
         "action_id": "L1.alpha.action-1",
         "answer_deadline_seconds": 300,
@@ -58,11 +157,13 @@
             "optionId": "opt_3"
           }
         ],
-        "requested_at": "2026-09-23T15:30:29Z"
+        "requested_at": "2026-09-23T18:08:01Z"
       },
-      "requested_at": "2026-09-23T15:30:29Z",
+      "relayed_at": "2026-09-23T18:08:01Z",
+      "requested_at": "2026-09-23T18:08:01Z",
       "run": "L1.alpha",
-      "sent": "answered"
+      "sent": "answered",
+      "state": "answered"
     },
     {
       "action_id": "L1.beta.action-1",
@@ -71,6 +172,7 @@
         "decision": "allow",
         "words": "rehearsal: the runner answers; no owner is asked"
       },
+      "answered_by_desk_at": "2026-09-23T18:08:02Z",
       "approval": {
         "action_id": "L1.beta.action-1",
         "answer_deadline_seconds": 300,
@@ -115,18 +217,21 @@
             "optionId": "opt_3"
           }
         ],
-        "requested_at": "2026-09-23T15:30:29Z"
+        "requested_at": "2026-09-23T18:08:01Z"
       },
-      "requested_at": "2026-09-23T15:30:29Z",
+      "relayed_at": "2026-09-23T18:08:01Z",
+      "requested_at": "2026-09-23T18:08:01Z",
       "run": "L1.beta",
-      "sent": "answered"
+      "sent": "answered",
+      "state": "answered"
     }
   ],
   "dirty": false,
   "failed": [],
-  "format": "pio-lead-run/1",
+  "finished_at": "2026-09-23T18:08:05Z",
+  "format": "pio-lead-run/2",
   "grant": {
-    "id": "170edc8b-69f0-4912-8913-8dba56779d64",
+    "id": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
     "terms": {
       "audience": "conformance-provider",
       "delegation": {
@@ -148,7 +253,52 @@
       ]
     }
   },
+  "grant_attach": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "owner_authority_required"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "1ea2f93b-a285-4d6f-a452-35e93fc48e7d",
+    "jsonrpc": "2.0"
+  },
   "lead": "L1",
+  "lead_answer": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "right_missing"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "3efc9300-8472-4469-9dee-53d15ebd9292",
+    "jsonrpc": "2.0"
+  },
+  "lead_reads_itself": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "out_of_scope"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "8951dfec-d98d-4981-abf2-cfa483cef79f",
+    "jsonrpc": "2.0"
+  },
   "lead_submit": {
     "admission": "admitted",
     "delivery_id": "L1.delivery-1",
@@ -157,9 +307,41 @@
       "kind": "execution.execution"
     }
   },
+  "meters": {
+    "L1": {
+      "bytes": 3104,
+      "calls": 4,
+      "ceiling": 450000,
+      "estimate": 65520,
+      "stopped": null,
+      "tool_log_calls": 4
+    },
+    "L1.alpha": {
+      "bytes": 795,
+      "calls": 1,
+      "ceiling": 90000,
+      "estimate": 21590,
+      "stopped": null,
+      "tool_log_calls": null
+    },
+    "L1.beta": {
+      "bytes": 795,
+      "calls": 1,
+      "ceiling": 90000,
+      "estimate": 21590,
+      "stopped": null,
+      "tool_log_calls": null
+    }
+  },
   "mode": "rehearsal",
   "model": "minimax-coding-plan/MiniMax-M3",
   "mutant": null,
+  "no_sleep": {
+    "command": "caffeinate -i -s -w 87545",
+    "held": true,
+    "held_to_the_end": true,
+    "power": "Now drawing from 'AC Power'"
+  },
   "owner_service_after": [
     "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
   ],
@@ -170,10 +352,12 @@
     "checked": false,
     "reason": "rehearsal"
   },
+  "root": "/private/tmp/pio-l1-i06yv1ct",
   "rows": [
     {
       "expected": "admitted",
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": "admitted",
       "proven": true,
@@ -182,6 +366,7 @@
     {
       "expected": "acknowledged",
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": "acknowledged",
       "proven": true,
@@ -195,6 +380,7 @@
         "runtime": "exited"
       },
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": {
         "exit": {
@@ -204,6 +390,59 @@
       },
       "proven": true,
       "row": "The lead exited normally"
+    },
+    {
+      "expected": {
+        "L1": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        },
+        "L1.alpha": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        },
+        "L1.beta": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "model_selected, then session_created (reported_model, model_matches_requested), both before turn_start_sent; the fake reports what it was asked for",
+      "observed": {
+        "L1": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        },
+        "L1.alpha": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        },
+        "L1.beta": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        }
+      },
+      "proven": true,
+      "row": "Each run was on the plan's model before its turn started"
     },
     {
       "expected": {
@@ -220,6 +459,7 @@
         ]
       },
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": {
         "L1": [
@@ -240,6 +480,7 @@
     {
       "expected": 1,
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": 1,
       "proven": true,
@@ -252,6 +493,7 @@
         "tools/list"
       ],
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": [
         "initialize",
@@ -273,6 +515,7 @@
         ]
       ],
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": [
         [
@@ -289,12 +532,13 @@
     },
     {
       "expected": [
-        "170edc8b-69f0-4912-8913-8dba56779d64"
+        "6bb71a4b-f9fa-4915-a237-60a0ada5fe47"
       ],
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": [
-        "170edc8b-69f0-4912-8913-8dba56779d64"
+        "6bb71a4b-f9fa-4915-a237-60a0ada5fe47"
       ],
       "proven": true,
       "row": "Every tool request carried the grant"
@@ -305,6 +549,7 @@
         "L1.beta": "admitted"
       },
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": {
         "L1.alpha": "admitted",
@@ -333,6 +578,7 @@
         }
       },
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": {
         "L1.alpha": {
@@ -373,6 +619,7 @@
         }
       },
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": {
         "L1.alpha": {
@@ -400,6 +647,7 @@
         "started": false
       },
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": {
         "code": "call_budget_spent",
@@ -415,6 +663,7 @@
         "L1.beta"
       ],
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": [
         "L1.alpha",
@@ -424,12 +673,15 @@
       "row": "L1 has exactly two children that ran"
     },
     {
-      "expected": "not_supported, while the child had not exited",
+      "expected": "not_supported, sent while the turn was active and delivered, and before it exited",
       "holds": true,
-      "note": "OpenCode has no steer: the host never sets a turn id",
+      "kind": "row",
+      "note": "OpenCode's own negative: its turn was running and delivered, and the host never sets a turn id",
       "observed": {
         "alternative": "Steering needs an acknowledged, running native turn",
+        "delivery_at_steer": "acknowledged",
         "request": "not_supported",
+        "runtime_after_steer": "active",
         "runtime_at_steer": "active"
       },
       "proven": true,
@@ -438,10 +690,13 @@
     {
       "expected": "not_supported on any harness, once the turn is over",
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": {
         "alternative": "Steering needs an acknowledged, running native turn",
+        "delivery_at_steer": "acknowledged",
         "request": "not_supported",
+        "runtime_after_steer": "exited",
         "runtime_at_steer": "exited"
       },
       "proven": true,
@@ -450,26 +705,27 @@
     {
       "expected": [
         {
-          "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+          "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
           "holder": "lead",
           "recorded_by": "pio"
         },
         {
-          "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+          "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
           "holder": "lead",
           "recorded_by": "pio"
         }
       ],
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": [
         {
-          "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+          "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
           "holder": "lead",
           "recorded_by": "pio"
         },
         {
-          "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+          "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
           "holder": "lead",
           "recorded_by": "pio"
         }
@@ -483,6 +739,7 @@
         "reason": "right_missing"
       },
       "holds": true,
+      "kind": "row",
       "note": "aimed at a child it may read, so only the missing right can refuse it",
       "observed": {
         "code": "permission_denied",
@@ -497,6 +754,7 @@
         "reason": "owner_authority_required"
       },
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": {
         "code": "permission_denied",
@@ -512,6 +770,7 @@
         "reason": "capability_unavailable"
       },
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": {
         "admission": "refused",
@@ -527,6 +786,7 @@
         "reason": "out_of_scope"
       },
       "holds": true,
+      "kind": "row",
       "note": "the grant covers L1. and not L1",
       "observed": {
         "code": "permission_denied",
@@ -541,6 +801,7 @@
         "beta.md": 4
       },
       "holds": true,
+      "kind": "row",
       "note": "rehearsal: the fake counted, so this shows the runner compares",
       "observed": {
         "alpha.md": 7,
@@ -555,6 +816,7 @@
         "beta.md": 4
       },
       "holds": true,
+      "kind": "row",
       "note": "rehearsal: the fake counted, so this shows the runner compares",
       "observed": {
         "alpha.md": 7,
@@ -564,9 +826,10 @@
       "row": "The lead relayed the true counts"
     },
     {
-      "expected": "each relayed, decided by the caller, sent as the single-use kind, never always, none lapsed",
+      "expected": "each relayed and answered at the desk, decided by the caller, sent as the single-use kind, never always, none lapsed",
       "holds": true,
-      "note": "2 approval(s) asked",
+      "kind": "row",
+      "note": "2 approval(s) asked; a lapse is the host's single-use reject after the delivery timeout, and it fails L1",
       "observed": {
         "decisions": [
           {
@@ -574,7 +837,8 @@
             "always_option_taken": false,
             "applied": true,
             "decided_by": "caller",
-            "desk": "allow",
+            "desk": "answered",
+            "desk_decision": "allow",
             "option_kind": "allow_once",
             "run": "L1.alpha"
           },
@@ -583,38 +847,80 @@
             "always_option_taken": false,
             "applied": true,
             "decided_by": "caller",
-            "desk": "allow",
+            "desk": "answered",
+            "desk_decision": "allow",
             "option_kind": "allow_once",
             "run": "L1.beta"
           }
         ],
-        "lapsed": [],
-        "relayed": 2
+        "desk": {
+          "L1.alpha.action-1": "answered",
+          "L1.beta.action-1": "answered"
+        },
+        "lapsed": []
       },
       "proven": true,
       "row": "Every approval was decided at the desk"
     },
     {
-      "expected": "observed live",
+      "expected": null,
       "holds": null,
-      "note": "",
+      "kind": "record",
+      "note": "the fake in a rehearsal; the owner's OpenCode live",
       "observed": [
         {
+          "desk": "answered",
           "option_kind": "allow_once",
           "run": "L1.alpha"
         },
         {
+          "desk": "answered",
           "option_kind": "allow_once",
           "run": "L1.beta"
         }
       ],
       "proven": false,
-      "row": "What real OpenCode does with a permission prompt"
+      "row": "What OpenCode does with a permission prompt"
     },
     {
-      "expected": "a positive amount per run",
+      "expected": "no stop; the lead made at most 16 tool calls; every bound stayed under its ceiling",
       "holds": true,
-      "note": "",
+      "kind": "row",
+      "note": "estimate (tool calls + 1) x (step base + bytes the session has sent)",
+      "observed": {
+        "L1": {
+          "bytes": 3104,
+          "calls": 4,
+          "ceiling": 450000,
+          "estimate": 65520,
+          "stopped": null,
+          "tool_log_calls": 4
+        },
+        "L1.alpha": {
+          "bytes": 795,
+          "calls": 1,
+          "ceiling": 90000,
+          "estimate": 21590,
+          "stopped": null,
+          "tool_log_calls": null
+        },
+        "L1.beta": {
+          "bytes": 795,
+          "calls": 1,
+          "ceiling": 90000,
+          "estimate": 21590,
+          "stopped": null,
+          "tool_log_calls": null
+        }
+      },
+      "proven": true,
+      "row": "Every run stayed within its ceilings"
+    },
+    {
+      "expected": "a positive amount per run that ran",
+      "holds": true,
+      "kind": "row",
+      "note": "OpenCode's last model step; charged times the steps it could have taken",
       "observed": {
         "L1": 4096,
         "L1.alpha": 4096,
@@ -626,6 +932,7 @@
     {
       "expected": true,
       "holds": true,
+      "kind": "row",
       "note": "",
       "observed": true,
       "proven": true,
@@ -634,6 +941,7 @@
     {
       "expected": true,
       "holds": null,
+      "kind": "row",
       "note": "",
       "observed": null,
       "proven": false,
@@ -656,15 +964,19 @@
     "beta": "fake turn started4",
     "lead": "alpha.md: 7\nbeta.md: 4"
   },
-  "started_at": "2026-09-23T15:30:22Z",
+  "started_at": "2026-09-23T18:07:54Z",
   "steer_exited": {
     "alternative": "Steering needs an acknowledged, running native turn",
+    "delivery_at_steer": "acknowledged",
     "request": "not_supported",
+    "runtime_after_steer": "exited",
     "runtime_at_steer": "exited"
   },
   "steer_running": {
     "alternative": "Steering needs an acknowledged, running native turn",
+    "delivery_at_steer": "acknowledged",
     "request": "not_supported",
+    "runtime_after_steer": "active",
     "runtime_at_steer": "active"
   },
   "third": {
@@ -681,27 +993,27 @@
   "tool_log": [
     {
       "event": "started",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "lead": "L1"
     },
     {
       "event": "request",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "method": "initialize"
     },
     {
       "event": "request",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "method": "notifications/initialized"
     },
     {
       "event": "request",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "method": "tools/list"
     },
     {
       "event": "request",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "method": "tools/call"
     },
     {
@@ -710,7 +1022,7 @@
         "name": "alpha"
       },
       "event": "tool_call",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "result": {
         "admission": "admitted",
         "run": "L1.alpha",
@@ -720,7 +1032,7 @@
     },
     {
       "event": "request",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "method": "tools/call"
     },
     {
@@ -729,7 +1041,7 @@
         "name": "beta"
       },
       "event": "tool_call",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "result": {
         "admission": "admitted",
         "run": "L1.beta",
@@ -739,7 +1051,7 @@
     },
     {
       "event": "request",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "method": "tools/call"
     },
     {
@@ -747,83 +1059,7 @@
         "name": "alpha"
       },
       "event": "tool_call",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
-      "result": {
-        "exit": "unavailable",
-        "run": "L1.alpha",
-        "runtime": "active",
-        "text": "fake turn started"
-      },
-      "tool": "read_run"
-    },
-    {
-      "event": "request",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
-      "method": "tools/call"
-    },
-    {
-      "arguments": {
-        "name": "alpha"
-      },
-      "event": "tool_call",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
-      "result": {
-        "exit": "unavailable",
-        "run": "L1.alpha",
-        "runtime": "active",
-        "text": "fake turn started"
-      },
-      "tool": "read_run"
-    },
-    {
-      "event": "request",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
-      "method": "tools/call"
-    },
-    {
-      "arguments": {
-        "name": "alpha"
-      },
-      "event": "tool_call",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
-      "result": {
-        "exit": "unavailable",
-        "run": "L1.alpha",
-        "runtime": "active",
-        "text": "fake turn started"
-      },
-      "tool": "read_run"
-    },
-    {
-      "event": "request",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
-      "method": "tools/call"
-    },
-    {
-      "arguments": {
-        "name": "alpha"
-      },
-      "event": "tool_call",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
-      "result": {
-        "exit": "unavailable",
-        "run": "L1.alpha",
-        "runtime": "requires_action",
-        "text": "fake turn started"
-      },
-      "tool": "read_run"
-    },
-    {
-      "event": "request",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
-      "method": "tools/call"
-    },
-    {
-      "arguments": {
-        "name": "alpha"
-      },
-      "event": "tool_call",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "result": {
         "exit": {
           "code": 0
@@ -836,7 +1072,7 @@
     },
     {
       "event": "request",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "method": "tools/call"
     },
     {
@@ -844,7 +1080,7 @@
         "name": "beta"
       },
       "event": "tool_call",
-      "grant": "170edc8b-69f0-4912-8913-8dba56779d64",
+      "grant": "6bb71a4b-f9fa-4915-a237-60a0ada5fe47",
       "result": {
         "exit": {
           "code": 0
@@ -857,9 +1093,27 @@
     }
   ],
   "usage": {
-    "L1": 4096,
-    "L1.alpha": 4096,
-    "L1.beta": 4096
+    "L1": {
+      "basis": "steps_bound",
+      "charged": 20480,
+      "meter_estimate": 65520,
+      "reported_last_step": 4096,
+      "steps_at_most": 5
+    },
+    "L1.alpha": {
+      "basis": "steps_bound",
+      "charged": 8192,
+      "meter_estimate": 21590,
+      "reported_last_step": 4096,
+      "steps_at_most": 2
+    },
+    "L1.beta": {
+      "basis": "steps_bound",
+      "charged": 8192,
+      "meter_estimate": 21590,
+      "reported_last_step": 4096,
+      "steps_at_most": 2
+    }
   },
   "views": {
     "L1": {
@@ -873,7 +1127,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L1.delivery-1",
-          "determined_at": "2026-09-23T15:30:26Z",
+          "determined_at": "2026-09-23T18:07:57Z",
           "evidence": {
             "class": "native_session_update",
             "source": "pio-fake-opencode-acp/host"
@@ -881,7 +1135,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-23T15:30:26Z"
+              "recorded_at": "2026-09-23T18:07:57Z"
             }
           ]
         }
@@ -903,7 +1157,7 @@
         "generation": 1,
         "id": "opencode-host"
       },
-      "next_cursor": "f1337f39-ae49-487f-a3f2-244fdcaa274c:1:27",
+      "next_cursor": "a1c5f09d-4d99-473c-9214-d179cad7da37:1:27",
       "obligations": [],
       "origin": {
         "call_budget": 2,
@@ -923,20 +1177,20 @@
           {
             "amount": 4096,
             "basis": "observed",
-            "invocation_id": "430f2eb9-0b9e-456e-8b58-7efced8cb882",
+            "invocation_id": "4cac38cc-a47b-414f-ab40-65cb7eaf26b5",
             "measure": "opencode.tokens.total",
-            "recorded_at": "2026-09-23T15:30:32Z"
+            "recorded_at": "2026-09-23T18:08:02Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "3e57228ff4f786725999c462c345659db50491fb",
+          "base": "efd0f31e33edee9673df55fe31890a7d7ced23bf",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L1.workspace",
-          "repository": "/private/tmp/pio-l1-gfox0bnc/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-i06yv1ct/fixtures/lead",
           "writer": "owner"
         }
       }
@@ -945,9 +1199,9 @@
       "actions": [
         {
           "action_id": "L1.alpha.action-1",
-          "answered_at": "2026-09-23T15:30:30Z",
+          "answered_at": "2026-09-23T18:08:01Z",
           "owner": "opencode",
-          "requested_at": "2026-09-23T15:30:29Z",
+          "requested_at": "2026-09-23T18:08:01Z",
           "response_effect": "L1.alpha.response-1",
           "state": "answered"
         }
@@ -962,7 +1216,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L1.alpha.delivery-1",
-          "determined_at": "2026-09-23T15:30:26Z",
+          "determined_at": "2026-09-23T18:07:58Z",
           "evidence": {
             "class": "native_session_update",
             "source": "pio-fake-opencode-acp/host"
@@ -970,7 +1224,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-23T15:30:26Z"
+              "recorded_at": "2026-09-23T18:07:58Z"
             }
           ]
         }
@@ -993,7 +1247,7 @@
         "generation": 1,
         "id": "opencode-host"
       },
-      "next_cursor": "f1337f39-ae49-487f-a3f2-244fdcaa274c:1:27",
+      "next_cursor": "a1c5f09d-4d99-473c-9214-d179cad7da37:1:27",
       "obligations": [
         {
           "deadline": null,
@@ -1017,13 +1271,13 @@
       "steering": [
         {
           "alternative": "Steering needs an acknowledged, running native turn",
-          "recorded_at": "2026-09-23T15:30:26Z",
+          "recorded_at": "2026-09-23T18:07:58Z",
           "request": "not_supported",
           "steer_id": "L1.alpha.steer-1"
         },
         {
           "alternative": "Steering needs an acknowledged, running native turn",
-          "recorded_at": "2026-09-23T15:30:34Z",
+          "recorded_at": "2026-09-23T18:08:03Z",
           "request": "not_supported",
           "steer_id": "L1.alpha.steer-2"
         }
@@ -1034,20 +1288,20 @@
           {
             "amount": 4096,
             "basis": "observed",
-            "invocation_id": "fdd28909-a3b1-434b-9376-53d72d78487b",
+            "invocation_id": "00663783-cd32-45a6-b853-c2217a01182f",
             "measure": "opencode.tokens.total",
-            "recorded_at": "2026-09-23T15:30:31Z"
+            "recorded_at": "2026-09-23T18:08:01Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "3e57228ff4f786725999c462c345659db50491fb",
+          "base": "efd0f31e33edee9673df55fe31890a7d7ced23bf",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L1.alpha.workspace",
-          "repository": "/private/tmp/pio-l1-gfox0bnc/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-i06yv1ct/fixtures/lead",
           "writer": "lead"
         }
       }
@@ -1056,9 +1310,9 @@
       "actions": [
         {
           "action_id": "L1.beta.action-1",
-          "answered_at": "2026-09-23T15:30:32Z",
+          "answered_at": "2026-09-23T18:08:02Z",
           "owner": "opencode",
-          "requested_at": "2026-09-23T15:30:29Z",
+          "requested_at": "2026-09-23T18:08:01Z",
           "response_effect": "L1.beta.response-1",
           "state": "answered"
         }
@@ -1073,7 +1327,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L1.beta.delivery-1",
-          "determined_at": "2026-09-23T15:30:26Z",
+          "determined_at": "2026-09-23T18:07:58Z",
           "evidence": {
             "class": "native_session_update",
             "source": "pio-fake-opencode-acp/host"
@@ -1081,7 +1335,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-23T15:30:26Z"
+              "recorded_at": "2026-09-23T18:07:58Z"
             }
           ]
         }
@@ -1104,7 +1358,7 @@
         "generation": 1,
         "id": "opencode-host"
       },
-      "next_cursor": "f1337f39-ae49-487f-a3f2-244fdcaa274c:1:27",
+      "next_cursor": "a1c5f09d-4d99-473c-9214-d179cad7da37:1:27",
       "obligations": [
         {
           "deadline": null,
@@ -1131,20 +1385,20 @@
           {
             "amount": 4096,
             "basis": "observed",
-            "invocation_id": "e50008a1-8897-4375-a0c2-f6c8815648ef",
+            "invocation_id": "ab6c38d6-fc5a-456a-a988-81d9290e3529",
             "measure": "opencode.tokens.total",
-            "recorded_at": "2026-09-23T15:30:32Z"
+            "recorded_at": "2026-09-23T18:08:02Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "3e57228ff4f786725999c462c345659db50491fb",
+          "base": "efd0f31e33edee9673df55fe31890a7d7ced23bf",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L1.beta.workspace",
-          "repository": "/private/tmp/pio-l1-gfox0bnc/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-i06yv1ct/fixtures/lead",
           "writer": "lead"
         }
       }
@@ -1165,7 +1419,7 @@
         "generation": 1,
         "id": "opencode-host"
       },
-      "next_cursor": "f1337f39-ae49-487f-a3f2-244fdcaa274c:1:27",
+      "next_cursor": "a1c5f09d-4d99-473c-9214-d179cad7da37:1:27",
       "obligations": [],
       "origin": {
         "call_budget": 0,
@@ -1187,11 +1441,11 @@
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "3e57228ff4f786725999c462c345659db50491fb",
+          "base": "efd0f31e33edee9673df55fe31890a7d7ced23bf",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L1.third.workspace",
-          "repository": "/private/tmp/pio-l1-gfox0bnc/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-i06yv1ct/fixtures/lead",
           "writer": "lead"
         }
       }

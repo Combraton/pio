@@ -41,10 +41,17 @@ committed head (`commit` and `dirty: false` are in the record). **Zero
 tokens, no model call.** It is the same code path the live run takes. Only
 the harness binary and its environment differ.
 
-Each of the 27 rows carries what was observed, what was expected, and
-whether they agree, and a disagreement would have failed the run. Two rows
-are marked not provable here: what the owner's OpenCode does with a
-permission prompt, and whether PIO deleted a session in the owner's history.
+Each of the 28 rows carries what was observed, what was expected, and
+whether they agree, and a disagreement would have failed the run. One row is
+marked not provable here: whether PIO deleted a session in the owner's
+history. What OpenCode does with a permission prompt is a **record**, with no
+expected value, and is never counted; here it is the fake's.
+
+The record also carries the receipt the live run will write: every run's
+meter (tool calls, bytes its session sent, the bound, the ceiling), the charge
+on a ledger of the rehearsal's own (the reported total times the steps the
+turn could have taken, because OpenCode reports only a turn's last step), the
+owner's approvals, and the no-sleep assertion held for the run.
 
 **What this does not show.** The fake is not a model. It launches the lead
 tool the way 2.0.11 was measured doing, then makes the tool calls a script
@@ -56,4 +63,8 @@ the live run's to show.
 
 The first rehearsal record under this name (`d99855b`) was reverted: its lead
 had been refused for a missing brief while its children ran, and its runner
-had no live path. See issue #12.
+had no live path. The second (`d552b55`, from `f3b3895`) was replaced after
+review 44, which found that a failure path wrote no receipt and no ledger line,
+that the desk exited when nobody answered, that the lead's polling was bounded
+only by its deadline, and that an unknown initiator was admitted under a grant.
+See issue #12.
