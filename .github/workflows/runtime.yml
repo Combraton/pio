@@ -72,6 +72,21 @@ jobs:
           PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-codex --harness codex
       - name: A lead that starts runs, and the scope it holds (M4b step 3)
         run: PYTHONPATH=scripts python3 scripts/lead_runs.py --out target/lead-runs
+      - name: The L1 lead run, rehearsed against the labeled fake, and its mutants
+        # The same code path as the live run. Each mutant changes one thing
+        # and must fail the row it is named for; one that fails some other
+        # row, or none, fails this step.
+        run: |
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --out target/lead-run
+          for m in no-tool reports-refused-as-started grant-may-answer grant-no-steer \
+                   wrong-child wrong-relay lead-without-brief; do
+            if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --mutant "$m" \
+                 --out target/lead-run-mutants > "target/lead-run-mutant-$m.log" 2>&1; then
+              echo "mutant $m survived"; exit 1
+            fi
+            grep -q "mutant $m: dies on" "target/lead-run-mutant-$m.log" \
+              || { cat "target/lead-run-mutant-$m.log"; exit 1; }
+          done
       - name: No private paths in any committed file
         run: |
           python3 scripts/check_private_paths.py --selftest
