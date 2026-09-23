@@ -34,7 +34,10 @@
 //! measured doing by `lead_tool_probe.py`. `lead.calls` then scripts the
 //! `tools/call`s the model would make, **inside** the turn, so the lead is
 //! running while its children start: `{tool, arguments, until: "exited",
-//! report_as}`. `report_as` makes the final message relay the first number in
+//! repeat, report_as}`. Each call is its own announced tool call, as a model
+//! polling makes one per step: `until: "exited"` calls again until the run it
+//! reads has exited, and `repeat` calls exactly that many times (a lead that
+//! will not stop). `report_as` makes the final message relay the first number in
 //! that call's `text`, plus `lead.relay_offset` (a lead that relays wrong
 //! numbers). `ask_in` (`lead` or `led`) limits the permission requests to
 //! sessions with or without servers. A session with **no** servers stands in
@@ -567,23 +570,28 @@ pub fn run() -> Result<()> {
                     let mut relay = Vec::new();
                     for (index, call) in calls.iter().enumerate() {
                         let tool = call["tool"].as_str().unwrap_or_default();
-                        let call_id = format!("call_mcp_{index}");
                         let title = format!("{}_{tool}", server.name);
-                        update(
-                            session,
-                            json!({"sessionUpdate":"tool_call","toolCallId":&call_id,
-                                   "title":&title,"kind":"other","rawInput":{},
-                                   "locations":[],"status":"pending"}),
-                        )?;
-                        update(
-                            session,
-                            json!({"sessionUpdate":"tool_call_update","toolCallId":&call_id,
-                                   "title":&title,"kind":"other","rawInput":&call["arguments"],
-                                   "locations":[],"status":"in_progress"}),
-                        )?;
+                        let repeat = call["repeat"].as_u64();
                         let mut tries = 0;
+                        // One announced call per try: a model that polls
+                        // makes a new tool call, and takes a new step, each
+                        // time. The runner's call ceiling counts these.
                         let (text, failed) = loop {
+                            let call_id = format!("call_mcp_{index}_{tries}");
                             tries += 1;
+                            update(
+                                session,
+                                json!({"sessionUpdate":"tool_call","toolCallId":&call_id,
+                                       "title":&title,"kind":"other","rawInput":{},
+                                       "locations":[],"status":"pending"}),
+                            )?;
+                            update(
+                                session,
+                                json!({"sessionUpdate":"tool_call_update",
+                                       "toolCallId":&call_id,"title":&title,"kind":"other",
+                                       "rawInput":&call["arguments"],"locations":[],
+                                       "status":"in_progress"}),
+                            )?;
                             let answered = server.request(
                                 "tools/call",
                                 json!({"name":tool,"arguments":&call["arguments"]}),
@@ -594,21 +602,28 @@ pub fn run() -> Result<()> {
                                 .to_owned();
                             let failed = answered["result"]["isError"] == true
                                 || !answered["error"].is_null();
-                            let done = call["until"] != "exited"
-                                || serde_json::from_str::<Value>(&text)
-                                    .is_ok_and(|v| v["runtime"] == "exited");
-                            if done || failed || tries >= 480 {
+                            update(
+                                session,
+                                json!({"sessionUpdate":"tool_call_update",
+                                       "toolCallId":&call_id,
+                                       "status":if failed { "failed" } else { "completed" },
+                                       "content":[{"type":"content","content":{"type":"text",
+                                           "text":&text}}]}),
+                            )?;
+                            let done = match repeat {
+                                Some(times) => tries >= times,
+                                None => {
+                                    call["until"] != "exited"
+                                        || failed
+                                        || serde_json::from_str::<Value>(&text)
+                                            .is_ok_and(|v| v["runtime"] == "exited")
+                                }
+                            };
+                            if done || tries >= 480 {
                                 break (text, failed);
                             }
                             std::thread::sleep(std::time::Duration::from_millis(250));
                         };
-                        update(
-                            session,
-                            json!({"sessionUpdate":"tool_call_update","toolCallId":&call_id,
-                                   "status":if failed { "failed" } else { "completed" },
-                                   "content":[{"type":"content","content":{"type":"text",
-                                       "text":&text}}]}),
-                        )?;
                         marker(
                             &markers,
                             json!({"event":"mcp_tool_called","tool":tool,

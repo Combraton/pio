@@ -21,6 +21,19 @@ no field for (Combraton/protocol#17).
 **The credential is read from a file named on the command line**, never
 passed as a value. The spec that launches this tool is journaled with the
 lead's run, so a value there would sit in the journal; admission refuses one.
+
+**`read_run` waits for the run, here, not in the model.** It returns when the
+run has exited or after `READ_WAIT` seconds, whichever is first. A read that
+returned at once made every poll a model step, and a lead told to read "again
+until exited" had nothing but its deadline to stop it (review 44). What it
+returns is bounded too: the run's words are cut to their last `TEXT_LIMIT`
+characters, so no call can add more than that to the lead's context.
+
+**A stopped lead's calls are held.** Past `PIO_LEAD_CALL_CEILING` calls, or
+once the runner has created the file `PIO_LEAD_STOP`, a call is held for
+`HOLD` seconds and then refused. OpenCode does not end a turn on
+`session/cancel` (M3b, R4); the host kills it ten seconds later. A call held
+past the kill is a model step the lead cannot take in between.
 """
 import base64
 import hashlib
@@ -28,6 +41,7 @@ import json
 import os
 import socket
 import sys
+import time
 import uuid
 
 SOCKET = os.environ.get('PIO_LEAD_SOCKET', '')
@@ -37,6 +51,15 @@ WORKSPACE = os.environ.get('PIO_LEAD_WORKSPACE', '')
 BASE = os.environ.get('PIO_LEAD_BASE', '')
 LOG = os.environ.get('PIO_LEAD_LOG', '')
 CONTENT = 'pio.combraton.dev/content'
+# A third of the MCP TypeScript SDK's default request timeout (60 seconds).
+# What OpenCode itself allows a tool call is not measured; the live run's
+# tool log shows whether a waiting read came back.
+READ_WAIT = 20
+TEXT_LIMIT = 2000
+CALL_CEILING = int(os.environ.get('PIO_LEAD_CALL_CEILING') or 0)
+STOP = os.environ.get('PIO_LEAD_STOP', '')
+HOLD = 30
+CALLS = []
 
 
 def credential():
@@ -167,13 +190,20 @@ def message_text(raw):
 
 
 def read_run(name):
-    """What a run this lead started has produced so far."""
+    """What a run this lead started has produced, once it has exited or
+    `READ_WAIT` seconds have passed."""
     identity = f'{LEAD}.{name}'
     api = Api()
-    view = api.call('execution.inspect', dict(execution=identity))
-    if 'error' in view:
-        return dict(run=identity, refused=view['error']['data'])
-    view = view['result']
+    until = time.monotonic() + READ_WAIT
+    while True:
+        view = api.call('execution.inspect', dict(execution=identity))
+        if 'error' in view:
+            return dict(run=identity, refused=view['error']['data'])
+        view = view['result']
+        if view['runtime'] == 'exited' or view.get('admission') == 'refused' \
+                or time.monotonic() >= until:
+            break
+        time.sleep(0.5)
     out = api.call('execution.output.read',
                    dict(execution=identity, offset=0, max_bytes=65536))
     raw = ''
@@ -181,7 +211,7 @@ def read_run(name):
         raw = base64.b64decode(out['result']['data_base64']).decode(
             'utf-8', 'replace')
     return dict(run=identity, runtime=view['runtime'], exit=view.get('exit'),
-                text=message_text(raw)[-4000:])
+                text=message_text(raw)[-TEXT_LIMIT:])
 
 
 TOOLS = {
@@ -190,7 +220,8 @@ TOOLS = {
                    'properties': {'name': {'type': 'string'},
                                   'brief': {'type': 'string'}},
                    'required': ['name', 'brief']}),
-    'read_run': (read_run, 'Read a run this lead started.',
+    'read_run': (read_run, 'Read a run this lead started. Waits up to '
+                           f'{READ_WAIT} seconds for it to exit.',
                  {'type': 'object',
                   'properties': {'name': {'type': 'string'}},
                   'required': ['name']}),
@@ -210,6 +241,16 @@ def handle(message):
     if method == 'tools/call':
         name = message['params']['name']
         arguments = message['params'].get('arguments') or {}
+        CALLS.append(name)
+        why = ([f'call {len(CALLS)}, past the ceiling of {CALL_CEILING}']
+               if CALL_CEILING and len(CALLS) > CALL_CEILING else []) + \
+            (['the runner stopped this lead'] if STOP and os.path.exists(STOP) else [])
+        if why:
+            note({'event': 'held', 'tool': name, 'call': len(CALLS), 'why': why,
+                  'seconds': HOLD})
+            time.sleep(HOLD)
+            return {'isError': True,
+                    'content': [{'type': 'text', 'text': 'stopped: ' + '; '.join(why)}]}
         if name not in TOOLS:
             return {'isError': True,
                     'content': [{'type': 'text', 'text': f'no tool {name}'}]}

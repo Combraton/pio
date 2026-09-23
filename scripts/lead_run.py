@@ -1,22 +1,42 @@
 #!/usr/bin/env python3
 """L1 — a lead that starts runs, through one `serve-opencode` service.
 
-Owner approvals `owner-2026-09-22-m4b-lead-tool` and 2026-09-23 (L1, the
-amended plan), posted on issue #12: one service; the lead and both led runs on
-`minimax-coding-plan/MiniMax-M3`; call budget 2; cap 2,000,000 for the lead
-sequence with its stop at 1,600,000 read from **charged**; rehearsal against
-the labeled fake first; the owner at the desk for the live run.
+Owner approvals `owner-2026-09-22-m4b-lead-tool` and "Owner approval,
+2026-09-23 — L1, the amended plan", both posted on issue #12: one service; the
+lead and both led runs on `minimax-coding-plan/MiniMax-M3`; call budget 2; cap
+2,000,000 for the lead sequence with its stop at 1,600,000 read from
+**charged**; rehearsal against the labeled fake first; the owner at the desk
+for the live run.
 
 **One code path.** `--rehearse` and the live run differ in the harness binary
 and its environment and in nothing else a row depends on. The labeled fake
 launches the lead tool the way OpenCode 2.0.11 was measured doing
 (`lead_tool_probe.py`) and scripts the calls a model would make; the live run
-gives the same tool to the owner's own OpenCode. The first version of this
-runner had a rehearsal branch and an unbuilt live branch, and its rehearsal's
-lead was never admitted; both are why it was reverted.
+gives the same tool to the owner's own OpenCode. A rehearsal charges a ledger
+of its own, so the charging code is the code the live run uses.
 
 **Every row carries its expected value, and a mismatch fails the run.** A row
-that cannot be observed in a rehearsal says so and is not counted as proven.
+that cannot be observed in a rehearsal says so and is not counted as proven. A
+*record* is an observation with no expected value, and is never counted.
+
+**Every exit writes the receipt and charges the ledger** — an exception,
+`SystemExit`, `KeyboardInterrupt` or `SIGTERM` included. Whatever still runs is
+cancelled, usage is read from the views before the service is released, a run
+whose usage is unknown is charged an allowance, and the error is recorded and
+raised again (review 44).
+
+**Every run's spend is bounded while it runs.** OpenCode reports a turn's
+usage once, at its end, and it reports the **last model step's** tokens, not
+the turn's: three M3b turns that each made a tool call recorded one step of
+two (read back from the owner's own store, for sessions PIO started). So the
+runner meters each run from what its session sends — each tool call is at
+most one more model step, and no step's context can exceed a fixed base plus
+every byte the session has sent so far — and cancels a run whose bound passes
+its ceiling, or a lead that has made more than `CALL_CEILING` tool calls.
+OpenCode does not end a turn on `session/cancel` (M3b, R4), so the host kills
+it ten seconds later; until then the lead's own tool holds every call, so the
+lead cannot take another step through it. The charge is the reported total
+times the number of steps the turn could have taken.
 
 What only the live run can show: that a real model uses the tool at all,
 that what the runs report is what the files say, and what the owner's OpenCode
@@ -33,7 +53,13 @@ does with a permission prompt.
 - `wrong-child` has each led run report one line too many;
 - `wrong-relay` has the lead relay one line too many;
 - `lead-without-brief` sends the lead's brief without its bytes, which is how
-  the first rehearsal's lead came to be refused.
+  the first rehearsal's lead came to be refused;
+- `desk-silent` never answers the desk, so the host's single-use reject lands
+  after the delivery timeout; the run must still finish and leave a receipt;
+- `lead-loops` has the lead keep calling `read_run` after it has its answers,
+  so the runner must cancel it at the call ceiling;
+- `interrupted` raises `KeyboardInterrupt` mid-run; the receipt and the
+  charge must be written anyway.
 """
 import argparse
 import base64
@@ -42,6 +68,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -72,6 +99,53 @@ SEQUENCE_CAP = 2_000_000
 SEQUENCE_STOP = 1_600_000
 DELIVERY_TIMEOUT = 300
 EXECUTION_DEADLINE = 900
+APPROVALS = dict(
+    model_exception=live.MODEL_EXCEPTION,
+    lead_tool='owner-2026-09-22-m4b-lead-tool',
+    l1='Owner approval, 2026-09-23 — L1, the amended plan (issue #12)')
+
+# --- The bound on what one attempt can spend.
+#
+# A lead needs two starts and a read per child; `read_run` waits up to 20
+# seconds for its run, so sixteen calls cover a child held at the desk for
+# 260 of the 300 seconds it may wait for an answer.
+CALL_CEILING = 16
+# Every M3b turn on this harness and model began at 7,960 to 8,076 input
+# tokens before the brief said anything; the lead adds its tool's schema and
+# a longer brief. Rounded up.
+STEP_BASE = 10_000
+LEAD_CEILING = 450_000
+CHILD_CEILING = 90_000
+# The lead's last step: the one in flight when it is stopped. Its next call
+# through the tool is held until the kill, so there is no step after it. It
+# holds at most its context at the stop plus one tool result: OpenCode's own
+# truncation (50 KiB, not measured by PIO) for a built-in tool, 2,000
+# characters for `read_run`.
+LAST_STEP = 51_200
+# A child has no tool of PIO's to hold. It runs until the host's kill, ten
+# seconds after the cancel, and the fastest step M3b measured on this model
+# took 0.96 seconds: at most eleven more steps. A child step in the M3b
+# fixture was 8,135 to 8,392 tokens; this is rounded up, and it is **not**
+# enforced — PIO cannot bound the size of a child's step.
+KILL_STEPS = 11
+CHILD_STEP = 12_000
+WORST_CASE = (2 * LEAD_CEILING + LAST_STEP) + 2 * (CHILD_CEILING + KILL_STEPS * CHILD_STEP)
+BOUND = dict(
+    call_ceiling=CALL_CEILING, step_base=STEP_BASE, lead_ceiling=LEAD_CEILING,
+    child_ceiling=CHILD_CEILING, last_step=LAST_STEP, kill_steps=KILL_STEPS,
+    child_step=CHILD_STEP, worst_case=WORST_CASE,
+    estimate='(tool calls + 1) x (step base + bytes the session has sent)',
+    lead='at most its ceiling, plus the step in flight at the stop '
+         '(at most its ceiling again, plus one tool result)',
+    child='at most its ceiling, plus eleven steps before the kill',
+    assumes=['a token is at least one byte',
+             'everything added to a context after the first step is sent as a '
+             'session update, which PIO spools',
+             'the runner reads every meter at least once per model step '
+             '(every half second; the fastest measured step took 0.96 s)',
+             'no built-in tool returns more than OpenCode truncates to',
+             "a child's step stays near the size measured in M3b"])
+
 FEATURES = ('core.events', 'core.capabilities', 'core.effects', 'core.grants')
 EXECUTION_FEATURES = (*matrix.FEATURES, 'execution.steering')
 CONTENT = 'pio.combraton.dev/content'
@@ -81,6 +155,7 @@ APPROVAL = 'pio.combraton.dev/approval'
 DECISION = 'pio.combraton.dev/decision'
 FILES = {'alpha.md': 7, 'beta.md': 4}
 CHILDREN = {name.split('.')[0]: name for name in FILES}
+RUNS = (LEAD, *[f'{LEAD}.{c}' for c in CHILDREN])
 
 
 def child_brief(name):
@@ -104,6 +179,9 @@ MUTANTS = {
     'wrong-child': 'Each child reported the true count',
     'wrong-relay': 'The lead relayed the true counts',
     'lead-without-brief': 'The lead was admitted',
+    'desk-silent': 'Every approval was decided at the desk',
+    'lead-loops': 'Every run stayed within its ceilings',
+    'interrupted': 'The run finished without an error',
 }
 
 
@@ -144,6 +222,10 @@ def fresh_credential(principal):
         os.urandom(32)).decode().rstrip('=')
 
 
+def now():
+    return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+
+
 class Rows:
     """Every observation, its expected value, and whether they agree."""
 
@@ -154,9 +236,14 @@ class Rows:
     def add(self, name, observed, expected, holds=None, live_only=False, note=''):
         agrees = holds(observed) if holds else observed == expected
         provable = not (live_only and self.rehearse)
-        self.rows.append(dict(row=name, observed=observed, expected=expected,
+        self.rows.append(dict(row=name, kind='row', observed=observed, expected=expected,
                               holds=bool(agrees) if provable else None,
                               proven=bool(agrees) and provable, note=note))
+
+    def record(self, name, observed, note=''):
+        """What was seen, with nothing to compare it against. Never proven."""
+        self.rows.append(dict(row=name, kind='record', observed=observed, expected=None,
+                              holds=None, proven=False, note=note))
 
     def failed(self):
         return [r['row'] for r in self.rows if r['holds'] is False]
@@ -288,19 +375,23 @@ def events(caller):
                    'kinds': ['execution.execution']}
 
 
-def spoken(caller, identity):
-    """What a run said, decoded from its spool the way the lead tool does."""
-    raw, offset = b'', 0
+def spool(caller, identity, offset=0):
+    """A run's spooled session updates from `offset`, and where they end."""
+    raw = b''
     while True:
         result = caller.query('execution.output.read', {
             'execution': identity, 'offset': offset, 'max_bytes': 65536}).get('result')
         if not result:
-            break
+            return raw, offset
         raw += base64.b64decode(result['data_base64'])
         if result['next_offset'] == offset:
-            break
+            return raw, offset
         offset = result['next_offset']
-    return message_text(raw.decode('utf-8', 'replace'))
+
+
+def spoken(caller, identity):
+    """What a run said, decoded from its spool the way the lead tool does."""
+    return message_text(spool(caller, identity)[0].decode('utf-8', 'replace'))
 
 
 def first_number(text):
@@ -328,7 +419,8 @@ def submit(caller, identity, brief, repo, base, origin, extensions):
 
 
 def steer(caller, identity):
-    """One steer under the lead's grant; what came back, and who it names."""
+    """One steer under the lead's grant: what came back, and the run's state
+    just before and just after it, so the steer is bracketed by the turn."""
     current = view(caller, identity) or {}
     note = b'keep to the fixture'
     envelope = command('execution.steer', dict(kind='execution.execution', id=identity),
@@ -338,12 +430,13 @@ def steer(caller, identity):
                        revision=current.get('revision', 0))
     envelope['extensions'] = {CONTENT: dict(media_type='text/plain', text=note.decode())}
     answer = caller.call(envelope)
+    after = (view(caller, identity) or {}).get('runtime')
+    at = dict(runtime_at_steer=current.get('runtime'),
+              delivery_at_steer=current.get('delivery'), runtime_after_steer=after)
     if 'error' in answer:
-        return dict(refused=answer['error']['data'].get('code'),
-                    runtime_at_steer=current.get('runtime'))
+        return dict(at, refused=answer['error']['data'].get('code'))
     outcome = answer['result'].get('outcome', {})
-    return dict(request=outcome.get('request'), alternative=outcome.get('alternative'),
-                runtime_at_steer=current.get('runtime'))
+    return dict(at, request=outcome.get('request'), alternative=outcome.get('alternative'))
 
 
 def respond(caller, identity, action_id, decision, revision):
@@ -357,6 +450,74 @@ def respond(caller, identity, action_id, decision, revision):
     envelope['extensions'] = {CONTENT: dict(media_type='application/json',
                                             text=body.decode())}
     return caller.call(envelope)
+
+
+def cancel(caller, identity, why):
+    current = view(caller, identity) or {}
+    envelope = command('execution.cancel', dict(kind='execution.execution', id=identity),
+                       {}, command_id=f'{identity}.cancel-{why}',
+                       revision=current.get('revision', 0))
+    answer = caller.call(envelope)
+    if 'error' in answer:
+        return dict(refused=answer['error']['data'].get('code'))
+    return dict(outcome=answer['result'].get('outcome'))
+
+
+class Meter:
+    """An upper bound on what one run has spent so far, from its own session.
+
+    OpenCode reports usage once, at the end of a turn, and then only for the
+    last model step, so nothing the harness says during a turn can stop it.
+    What PIO does see is every session update, spooled as it arrives. Each
+    tool call is followed by at most one more model step, and no step's
+    context can hold more than the harness's fixed base plus everything the
+    session has sent so far (a token is at least one byte). So the run has
+    spent at most `(tool calls + 1) x (STEP_BASE + bytes)`.
+    """
+
+    def __init__(self, identity, ceiling):
+        self.identity = identity
+        self.ceiling = ceiling
+        self.offset = 0
+        self.bytes = 0
+        self.partial = b''
+        self.calls = set()
+        self.stopped = None
+
+    def read(self, caller):
+        raw, self.offset = spool(caller, self.identity, self.offset)
+        self.bytes += len(raw)
+        lines = (self.partial + raw).split(b'\n')
+        self.partial = lines.pop()
+        for line in lines:
+            try:
+                update = json.loads(line).get('update', {})
+            except ValueError:
+                continue
+            if update.get('sessionUpdate') in ('tool_call', 'tool_call_update') \
+                    and update.get('toolCallId'):
+                self.calls.add(update['toolCallId'])
+
+    def estimate(self):
+        return (len(self.calls) + 1) * (STEP_BASE + self.bytes)
+
+    def summary(self, tool_calls=None):
+        return dict(calls=len(self.calls), tool_log_calls=tool_calls, bytes=self.bytes,
+                    estimate=self.estimate(), ceiling=self.ceiling, stopped=self.stopped)
+
+
+def tool_log(root):
+    path = root / 'lead-tool.jsonl'
+    if not path.exists():
+        return []
+    return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+
+
+def started_runs(root):
+    """The runs the lead's tool reported started, from its own log."""
+    return {f"{LEAD}.{e['arguments'].get('name')}" for e in tool_log(root)
+            if e.get('event') == 'tool_call' and e.get('tool') == 'start_run'
+            and (e.get('result') or {}).get('started')}
 
 
 class ToolInstance:
@@ -403,60 +564,120 @@ class ToolInstance:
 class Desk:
     """Every pending approval, put in front of the person who decides.
 
-    Live, the request is written to `desk/pending-<action>.json` and the
-    runner waits for `desk/answer-<action>.json` — the owner's decision,
-    relayed by the builder with their words. A rehearsal answers for itself
-    and says so. Only `allow` and `deny` are encodable: the host takes the
-    single-use option by kind, and an `*_always` option is never selected.
+    Live, a request is written to `desk/pending-<action>.json`, and the answer
+    is `desk/answer-<action>.json` — the owner's decision, relayed by the
+    builder with their words. A rehearsal answers for itself and says so.
+    Only `allow` and `deny` are encodable: the host takes the single-use
+    option by kind, and an `*_always` option is never selected.
+
+    **The desk never blocks the run and never gives up on it.** It is asked
+    on every pass of the watch. A request nobody has answered is left alone:
+    the host's single-use reject lands when the delivery timeout runs out,
+    counted from the moment the request reached it, and the desk records the
+    request as lapsed. The run goes on, and the receipt is written.
     """
 
-    def __init__(self, directory, rehearse):
+    def __init__(self, directory, rehearse, silent=False):
         self.directory = private(directory)
         self.rehearse = rehearse
-        self.seen = {}
+        self.silent = silent
+        self.items = {}
 
-    def relay(self, service, identity, current, stream):
-        for action in current.get('actions', []):
-            if action['state'] != 'pending' or action['action_id'] in self.seen:
-                continue
-            approval = next((e['payload'].get(APPROVAL) for e in stream
-                             if e['subject']['id'] == identity
-                             and e['type'] == 'execution.runtime.changed'
-                             and e['payload'].get('action_id') == action['action_id']), None)
-            item = dict(run=identity, action_id=action['action_id'],
-                        requested_at=action['requested_at'], approval=approval)
-            self.seen[action['action_id']] = item
-            pending = self.directory / f"pending-{action['action_id']}.json"
-            pending.write_text(json.dumps(redact(item), indent=2) + '\n')
-            print(f"DESK pending {identity} {action['action_id']} {pending}", flush=True)
-            answer = self.answer(action['action_id'])
-            item['answer'] = answer
-            if answer['decision'] not in ('allow', 'deny'):
-                raise SystemExit(f"the desk answered {answer['decision']!r}; "
-                                 'only allow and deny are single-use')
-            owner = service.owner()
-            try:
-                sent = respond(owner, identity, action['action_id'], answer['decision'],
-                               view(owner, identity)['revision'])
-            finally:
-                owner.close()
-            item['sent'] = sent.get('result', {}).get('outcome', {}).get('state') \
-                or sent.get('error', {}).get('data')
-            print(f"DESK answered {action['action_id']} {answer['decision']} "
-                  f"by {answer['decided_by']}", flush=True)
+    def poll(self, owner, views):
+        stream = None
+        for identity, current in views.items():
+            for action in (current or {}).get('actions', []):
+                action_id = action['action_id']
+                item = self.items.get(action_id)
+                if item is None and action['state'] == 'pending':
+                    stream = stream if stream is not None else events(owner)
+                    approval = next((e['payload'].get(APPROVAL) for e in stream
+                                     if e['subject']['id'] == identity
+                                     and e['type'] == 'execution.runtime.changed'
+                                     and e['payload'].get('action_id') == action_id), None)
+                    item = dict(run=identity, action_id=action_id,
+                                requested_at=action['requested_at'], relayed_at=now(),
+                                approval=approval, state='waiting')
+                    self.items[action_id] = item
+                    pending = self.directory / f'pending-{action_id}.json'
+                    pending.write_text(json.dumps(redact(item), indent=2) + '\n')
+                    print(f'DESK pending {identity} {action_id} {pending}', flush=True)
+                if item is None or item['state'] != 'waiting':
+                    continue
+                if action['state'] != 'pending':
+                    # Settled without an answer from here: the host's default.
+                    item.update(state='lapsed', settled_as=action['state'],
+                                settled_at=action.get('answered_at'))
+                    print(f'DESK lapsed {identity} {action_id}', flush=True)
+                    continue
+                answer = self.answer(action_id)
+                if answer is None:
+                    continue
+                if answer.get('decision') not in ('allow', 'deny'):
+                    # Never sent, and never the end of the run: set aside so
+                    # a corrected answer can be written in its place.
+                    item.setdefault('refused_answers', []).append(answer)
+                    source = self.directory / f'answer-{action_id}.json'
+                    if source.exists():
+                        source.rename(self.directory / f'answer-{action_id}.refused-'
+                                      f"{len(item['refused_answers'])}.json")
+                    print(f"DESK refused answer {action_id} {answer.get('decision')!r}: "
+                          'only allow and deny are single-use', flush=True)
+                    continue
+                sent = respond(owner, identity, action_id, answer['decision'],
+                               (view(owner, identity) or {}).get('revision', 0))
+                if 'error' in sent and sent['error']['data'].get('code') == 'conflict':
+                    continue
+                item.update(answer=answer, state='answered', answered_by_desk_at=now(),
+                            sent=sent.get('result', {}).get('outcome', {}).get('state')
+                            or sent.get('error', {}).get('data'))
+                print(f"DESK answered {action_id} {answer['decision']} "
+                      f"by {answer.get('decided_by')}", flush=True)
 
     def answer(self, action_id):
-        path = self.directory / f'answer-{action_id}.json'
         if self.rehearse:
+            if self.silent:
+                return None
             return dict(decision='allow', decided_by='rehearsal',
                         words='rehearsal: the runner answers; no owner is asked')
-        deadline = time.monotonic() + DELIVERY_TIMEOUT - 20
-        while time.monotonic() < deadline:
-            if path.exists():
-                return json.loads(path.read_text())
-            time.sleep(0.5)
-        return dict(decision=None, decided_by=None,
-                    words='no answer reached the desk before the deadline')
+        path = self.directory / f'answer-{action_id}.json'
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text())
+        except ValueError as error:
+            return dict(decision=None, unreadable=str(error))
+
+
+class NoSleep:
+    """A no-sleep assertion held for the whole run.
+
+    macOS stops its monotonic clock while asleep, so every deadline here would
+    stop with it, and a reviewer's gate run slept on battery (review 44).
+    `-i` holds against idle sleep on battery too; `-s` only on AC power.
+    """
+
+    def __init__(self, required):
+        self.process = None
+        tool = shutil.which('caffeinate')
+        if tool is None:
+            if required:
+                raise SystemExit('refusing to run live: nothing here can hold the '
+                                 'machine awake (no caffeinate)')
+            self.record = dict(held=False, reason='no caffeinate on this platform')
+            return
+        self.process = subprocess.Popen([tool, '-i', '-s', '-w', str(os.getpid())])
+        power = subprocess.run(['pmset', '-g', 'ps'], capture_output=True,
+                               text=True).stdout.splitlines()
+        self.record = dict(held=True, command=f'caffeinate -i -s -w {os.getpid()}',
+                           power=power[0] if power else None)
+
+    def close(self):
+        if self.process is None:
+            return
+        self.record['held_to_the_end'] = self.process.poll() is None
+        self.process.terminate()
+        self.process.wait(timeout=10)
 
 
 def mutated_tool(root):
@@ -476,8 +697,10 @@ def scenario(mutant):
                   report_as=name) for short, name in CHILDREN.items()]
     starts = [dict(tool='start_run', arguments=dict(name=short, brief=child_brief(name)))
               for short, name in CHILDREN.items()]
+    loops = ([dict(tool='read_run', arguments=dict(name='alpha'), repeat=CALL_CEILING * 2)]
+             if mutant == 'lead-loops' else [])
     return dict(
-        lead=dict(calls=starts + reads,
+        lead=dict(calls=starts + reads + loops,
                   relay_offset=1 if mutant == 'wrong-relay' else 0),
         answer_line_counts=True, led_offset=1 if mutant == 'wrong-child' else 0,
         # Long enough to be steered while it runs, and asked about one thing,
@@ -486,13 +709,18 @@ def scenario(mutant):
         usage_total=4096)
 
 
+def on_sigterm(signum, frame):
+    raise SystemExit('SIGTERM')
+
+
 def run(args):
     rehearse = args.rehearse
-    started_at = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-    record = dict(format='pio-lead-run/1', mode='rehearsal' if rehearse else 'live',
+    started_at = now()
+    record = dict(format='pio-lead-run/2', mode='rehearsal' if rehearse else 'live',
                   lead=LEAD, model=MODEL, budget=BUDGET, sequence=SEQUENCE,
                   sequence_cap=SEQUENCE_CAP, sequence_stop=SEQUENCE_STOP,
-                  mutant=args.mutant, started_at=started_at, desk=args.desk)
+                  approvals=APPROVALS, bound=BOUND, mutant=args.mutant,
+                  started_at=started_at, desk=args.desk)
     head = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'],
                           capture_output=True, text=True).stdout.strip()
     dirty = bool(subprocess.run(['git', '-C', str(ROOT), 'status', '--porcelain'],
@@ -504,314 +732,519 @@ def run(args):
         record['preflight'] = {'checked': False, 'reason': 'rehearsal'}
         root = Path(tempfile.mkdtemp(prefix='pio-l1-', dir='/tmp')).resolve()
         os.chmod(root, 0o700)
+        book_path = args.receipt.with_name(args.receipt.stem + '-ledger.json')
+        book_path.unlink(missing_ok=True)
     else:
         # A clean tree, a binary built from it, and its digest. The build is
         # the runner's own, so "built from HEAD" is not an inference.
         subprocess.run(['cargo', 'build', '--locked', '--workspace'], cwd=ROOT, check=True)
         record['preflight'] = live.preflight(False, root=ROOT, binary=BINARY)
-        book = live.ledger()
+        book_path = live.ledger_path()
+        book = read_ledger(book_path)
         for key in names.values():
             if key in book['runs']:
                 raise SystemExit(f'the ledger already holds {key}; those tokens were '
                                  'spent. Run again under --attempt instead.')
         spent = sequence_charged(book)
-        if spent >= SEQUENCE_STOP:
-            raise SystemExit(f'stop: the lead sequence has charged {spent} of '
-                             f'{SEQUENCE_CAP}, at or past the {SEQUENCE_STOP} stop')
-        if live.cumulative(book) >= live.STOP_AT:
-            raise SystemExit('stop: the MiniMax cap has reached its stop')
+        # The stop is checked against what this attempt could spend at worst,
+        # not only against what has been spent: nothing checks it mid-run.
+        if spent + WORST_CASE > SEQUENCE_STOP:
+            raise SystemExit(f'stop: the lead sequence has charged {spent}; one more '
+                             f'attempt could spend {WORST_CASE}, past the '
+                             f'{SEQUENCE_STOP} stop')
+        if live.cumulative(book) + WORST_CASE >= live.STOP_AT:
+            raise SystemExit('stop: the MiniMax cap would reach its stop')
         root = private(live.HOME / 'pio-m4-live' / f'L1-{uuid.uuid4().hex[:8]}')
+    record['root'] = str(root)
+    awake = NoSleep(required=not rehearse)
+    record['no_sleep'] = awake.record
     rows = Rows(rehearse)
     service = Service(root, rehearse, scenario(args.mutant))
-    desk = Desk(root / 'desk', rehearse)
+    desk = Desk(root / 'desk', rehearse, silent=args.mutant == 'desk-silent')
+    meters = {LEAD: Meter(LEAD, LEAD_CEILING),
+              **{f'{LEAD}.{c}': Meter(f'{LEAD}.{c}', CHILD_CEILING) for c in CHILDREN}}
+    state = dict(submitted=set(), grant_id=None, spec=None, repo=None)
+    previous = signal.signal(signal.SIGTERM, on_sigterm)
+    error = None
     try:
-        repo, base = fixture(root)
-        truth = wc_l(repo)
-        record['wc_l'] = truth
-        record['owner_service_before'] = live.owner_service()
-        record['sessions_before'] = live.session_listing(repo, rehearse)
-        record['configured'] = live.configured_model(rehearse)
-        service.start()
-        owner = service.owner()
+        watch(args, record, service, desk, meters, state)
+    except BaseException as caught:  # SystemExit and KeyboardInterrupt too
+        error = caught
+        record['error'] = dict(type=type(caught).__name__,
+                               message=redact(str(caught))[:2000], at=now())
+    finally:
+        # Nothing below may be cut short: a second interrupt here would leave
+        # tokens spent with no ledger line.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        try:
+            observed = settle(record, service, meters, state, root)
+        except Exception as caught:
+            observed = None
+            record['settle_error'] = redact(repr(caught))[:2000]
+        if 'usage' not in record:
+            # The service could not be asked: every run that was submitted
+            # or reported started is charged its bound, never nothing.
+            record['usage'] = usage_of({}, meters, state['submitted'] | started_runs(root))
+        record['desk_items'] = list(desk.items.values())
+        try:
+            if observed is not None:
+                judge(rows, record, observed, desk, meters, state, rehearse)
+        except Exception as caught:
+            record['judge_error'] = redact(repr(caught))[:2000]
+        if error is not None:
+            rows.add('The run finished without an error', record['error'], None)
+        try:
+            service.release(remove=rehearse)
+        except Exception as caught:
+            record['release_error'] = redact(repr(caught))[:2000]
+        awake.close()
+        record['rows'] = rows.rows
+        record['failed'] = rows.failed()
+        record['charge'] = charge(book_path, names, record.get('usage', {}), started_at)
+        record['finished_at'] = now()
+        args.receipt.write_text(json.dumps(redact(record), indent=2, sort_keys=True) + '\n')
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+        signal.signal(signal.SIGTERM, previous)
+    if error is not None:
+        raise error
+    return record
 
-        grant_id = str(uuid.uuid4())
-        rights = ['execution.submit', 'execution.steer', 'execution.read',
-                  'core.events.read']
-        if args.mutant == 'grant-may-answer':
-            rights.append('execution.respond_action')
-        if args.mutant == 'grant-no-steer':
-            rights.remove('execution.steer')
-        terms = dict(holder='lead', audience=PROVIDER, rights=rights,
-                     resources=[dict(kind='execution.execution', id_prefix=f'{LEAD}.')],
-                     delegation=dict(allowed=False, max_depth=0))
-        issued = owner.call(command('core.grant.issue', dict(kind='core.grant', id=grant_id),
-                                    terms, command_id=f'grant-{grant_id}'))
-        assert 'result' in issued, issued
-        record['grant'] = dict(id=grant_id, terms=terms)
 
-        credential_file = root / 'lead.credential'
-        credential_file.write_text(service.lead_credential + '\n')
-        os.chmod(credential_file, 0o600)
-        tool = mutated_tool(root) if args.mutant == 'reports-refused-as-started' else TOOL
-        spec = dict(name='pio-lead', command=sys.executable,
-                    args=[str(tool), '--credential-file', str(credential_file)],
-                    env=[dict(name='PIO_LEAD_SOCKET', value=str(service.socket)),
-                         dict(name='PIO_LEAD_GRANT', value=grant_id),
-                         dict(name='PIO_LEAD_ID', value=LEAD),
-                         dict(name='PIO_LEAD_WORKSPACE', value=str(repo)),
-                         dict(name='PIO_LEAD_BASE', value=base),
-                         dict(name='PIO_LEAD_LOG', value=str(root / 'lead-tool.jsonl'))])
-        extensions = {CONTENT: dict(media_type='text/plain', text=BRIEF)}
-        if args.mutant == 'lead-without-brief':
-            extensions = {}
-        if args.mutant != 'no-tool':
-            extensions[LEAD_TOOL] = spec
-        record['lead_submit'] = submit(owner, LEAD, BRIEF, repo, base,
-                                       dict(initiator=dict(kind='execution.execution',
-                                                           id=LEAD),
-                                            depth=0, call_budget=BUDGET),
-                                       extensions).get('result', {}).get('outcome')
+def watch(args, record, service, desk, meters, state):
+    """Everything the runner asks of the service, in order."""
+    rehearse = args.rehearse
+    root = service.root
+    repo, base = fixture(root)
+    state['repo'] = repo
+    record['wc_l'] = wc_l(repo)
+    record['owner_service_before'] = live.owner_service()
+    record['sessions_before'] = live.session_listing(repo, rehearse)
+    record['configured'] = live.configured_model(rehearse)
+    service.start()
+    owner = service.owner()
 
-        # Watch until the lead's turn is over: relay approvals, steer a child
-        # while it is running, and make the third start while the lead is.
-        lead_grant = service.lead(grant_id)
-        steered, third = None, None
-        deadline = time.monotonic() + EXECUTION_DEADLINE + 120
-        while time.monotonic() < deadline:
-            views = {i: view(owner, i) for i in (LEAD, *[f'{LEAD}.{c}' for c in CHILDREN])}
-            stream = None
-            for identity, current in views.items():
-                if current and current.get('runtime') == 'requires_action':
-                    stream = stream or events(owner)
-                    desk.relay(service, identity, current, stream)
-            first = views[f'{LEAD}.alpha']
-            if steered is None and first and first['admission'] == 'admitted' \
-                    and first['runtime'] != 'exited':
-                steered = steer(lead_grant, f'{LEAD}.alpha')
-            both = all(views[f'{LEAD}.{c}'] and views[f'{LEAD}.{c}']['admission'] == 'admitted'
-                       for c in CHILDREN)
-            lead_view = views[LEAD] or {}
-            if third is None and both and lead_view.get('runtime') != 'exited':
-                instance = ToolInstance(spec, root / 'runner-tool.jsonl')
-                try:
-                    third = dict(result=instance.tool('start_run', name='third',
-                                                      brief='a third run the budget does not allow'),
-                                 lead_runtime=view(owner, LEAD)['runtime'])
-                finally:
-                    instance.close()
-            if lead_view.get('runtime') == 'exited' or lead_view.get('admission') == 'refused':
-                break
-            time.sleep(0.25)
-        # The children, too, before anything is read from them.
-        for c in CHILDREN:
-            end = time.monotonic() + 120
-            while time.monotonic() < end:
-                current = view(owner, f'{LEAD}.{c}')
-                if not current or current['runtime'] == 'exited' \
-                        or current['admission'] == 'refused':
-                    break
-                time.sleep(0.25)
+    grant_id = str(uuid.uuid4())
+    rights = ['execution.submit', 'execution.steer', 'execution.read',
+              'core.events.read']
+    if args.mutant == 'grant-may-answer':
+        rights.append('execution.respond_action')
+    if args.mutant == 'grant-no-steer':
+        rights.remove('execution.steer')
+    terms = dict(holder='lead', audience=PROVIDER, rights=rights,
+                 resources=[dict(kind='execution.execution', id_prefix=f'{LEAD}.')],
+                 delegation=dict(allowed=False, max_depth=0))
+    issued = owner.call(command('core.grant.issue', dict(kind='core.grant', id=grant_id),
+                                terms, command_id=f'grant-{grant_id}'))
+    assert 'result' in issued, issued
+    record['grant'] = dict(id=grant_id, terms=terms)
+    state['grant_id'] = grant_id
 
-        exited_steer = steer(lead_grant, f'{LEAD}.alpha')
-        answer = respond(lead_grant, f'{LEAD}.alpha', f'{LEAD}.alpha.action-1', 'allow',
-                         (view(owner, f'{LEAD}.alpha') or {}).get('revision', 0))
-        own = lead_grant.query('execution.inspect', {'execution': LEAD})
-        # Attaching a tool is the owner's act: under the lead's grant it is
-        # refused before anything else about the submit is looked at.
-        attach = submit(lead_grant, f'{LEAD}.attached', 'give my child a tool', repo, base,
-                        dict(initiator=dict(kind='execution.execution', id=LEAD), depth=1,
-                             call_budget=0),
-                        {CONTENT: dict(media_type='text/plain', text='give my child a tool'),
-                         LEAD_TOOL: spec})
-        lead_grant.close()
-        # And a spec that carries a credential value is refused at admission,
-        # because the spec is journaled. A credential-shaped dummy, never the
-        # lead's own: a refused submit is journaled too.
-        leaky = dict(spec, env=[*spec['env'], dict(name='PIO_LEAD_NOTE',
-                                                   value='ccred1.lead.' + 'x' * 43)])
-        brief_bytes = 'a spec with a credential value in it'
-        credential_check = submit(owner, 'credential-check', brief_bytes, repo, base, None,
-                                  {CONTENT: dict(media_type='text/plain', text=brief_bytes),
-                                   LEAD_TOOL: leaky})
-        # Read after every command the runner makes, so the stream holds them.
-        views = {i: view(owner, i) or {} for i in
-                 (LEAD, *[f'{LEAD}.{c}' for c in CHILDREN], f'{LEAD}.third')}
+    credential_file = root / 'lead.credential'
+    credential_file.write_text(service.lead_credential + '\n')
+    os.chmod(credential_file, 0o600)
+    tool = mutated_tool(root) if args.mutant == 'reports-refused-as-started' else TOOL
+    spec = dict(name='pio-lead', command=sys.executable,
+                args=[str(tool), '--credential-file', str(credential_file)],
+                env=[dict(name='PIO_LEAD_SOCKET', value=str(service.socket)),
+                     dict(name='PIO_LEAD_GRANT', value=grant_id),
+                     dict(name='PIO_LEAD_ID', value=LEAD),
+                     dict(name='PIO_LEAD_WORKSPACE', value=str(repo)),
+                     dict(name='PIO_LEAD_BASE', value=base),
+                     dict(name='PIO_LEAD_LOG', value=str(root / 'lead-tool.jsonl')),
+                     dict(name='PIO_LEAD_CALL_CEILING', value=str(CALL_CEILING)),
+                     dict(name='PIO_LEAD_STOP', value=str(root / 'lead-stop'))])
+    state['spec'] = spec
+    extensions = {CONTENT: dict(media_type='text/plain', text=BRIEF)}
+    if args.mutant == 'lead-without-brief':
+        extensions = {}
+    if args.mutant != 'no-tool':
+        extensions[LEAD_TOOL] = spec
+    state['submitted'].add(LEAD)
+    record['lead_submit'] = submit(owner, LEAD, BRIEF, repo, base,
+                                   dict(initiator=dict(kind='execution.execution', id=LEAD),
+                                        depth=0, call_budget=BUDGET),
+                                   extensions).get('result', {}).get('outcome')
+
+    # Watch until every run is over: relay approvals, meter every run, steer a
+    # child while its turn is running, and make the third start while the
+    # lead is.
+    lead_grant = service.lead(grant_id)
+    record['steer_running'], record['third'] = None, None
+    metered = 0.0
+    deadline = time.monotonic() + EXECUTION_DEADLINE + 120
+    while time.monotonic() < deadline:
+        views = {i: view(owner, i) for i in RUNS}
+        desk.poll(owner, views)
+        if time.monotonic() - metered >= 0.5:
+            metered = time.monotonic()
+            meter(owner, views, meters, root, record)
+        first = views[f'{LEAD}.alpha']
+        # **Only a turn that is running and has been delivered.** Anything
+        # earlier is `not_supported` on every harness, so it would say nothing
+        # about OpenCode (review 44).
+        if record['steer_running'] is None and first and first['admission'] == 'admitted' \
+                and first['runtime'] == 'active' and first.get('delivery') == 'acknowledged':
+            record['steer_running'] = steer(lead_grant, f'{LEAD}.alpha')
+        both = all(views[f'{LEAD}.{c}'] and views[f'{LEAD}.{c}']['admission'] == 'admitted'
+                   for c in CHILDREN)
+        lead_view = views[LEAD] or {}
+        if record['third'] is None and both and lead_view.get('runtime') != 'exited':
+            if args.mutant == 'interrupted':
+                raise KeyboardInterrupt('the interrupted mutant, with every run admitted')
+            instance = ToolInstance(spec, root / 'runner-tool.jsonl')
+            try:
+                record['third'] = dict(
+                    result=instance.tool('start_run', name='third',
+                                         brief='a third run the budget does not allow'),
+                    lead_runtime=view(owner, LEAD)['runtime'])
+            finally:
+                instance.close()
+        over = lambda v: not v or v.get('admission') == 'refused' or v.get('runtime') == 'exited'
+        if all(over(views[i]) for i in RUNS):
+            break
+        time.sleep(0.25)
+
+    record['steer_exited'] = steer(lead_grant, f'{LEAD}.alpha')
+    record['lead_answer'] = respond(lead_grant, f'{LEAD}.alpha', f'{LEAD}.alpha.action-1',
+                                    'allow',
+                                    (view(owner, f'{LEAD}.alpha') or {}).get('revision', 0))
+    record['lead_reads_itself'] = lead_grant.query('execution.inspect', {'execution': LEAD})
+    # Attaching a tool is the owner's act: under the lead's grant it is
+    # refused before anything else about the submit is looked at.
+    record['grant_attach'] = submit(
+        lead_grant, f'{LEAD}.attached', 'give my child a tool', repo, base,
+        dict(initiator=dict(kind='execution.execution', id=LEAD), depth=1, call_budget=0),
+        {CONTENT: dict(media_type='text/plain', text='give my child a tool'),
+         LEAD_TOOL: spec})
+    lead_grant.close()
+    # And a spec that carries a credential value is refused at admission,
+    # because the spec is journaled. A credential-shaped dummy, never the
+    # lead's own: a refused submit is journaled too.
+    leaky = dict(spec, env=[*spec['env'], dict(name='PIO_LEAD_NOTE',
+                                               value='ccred1.lead.' + 'x' * 43)])
+    brief_bytes = 'a spec with a credential value in it'
+    record['credential_check'] = submit(
+        owner, 'credential-check', brief_bytes, repo, base, None,
+        {CONTENT: dict(media_type='text/plain', text=brief_bytes), LEAD_TOOL: leaky})
+    owner.close()
+
+
+def meter(owner, views, meters, root, record):
+    """Read every live run's meter, and stop a run that passes its ceiling."""
+    calls = len([e for e in tool_log(root) if e.get('event') == 'request'
+                 and e.get('method') == 'tools/call'])
+    for identity, gauge in meters.items():
+        current = views.get(identity)
+        if not current or current.get('admission') == 'refused':
+            continue
+        gauge.read(owner)
+        if gauge.stopped or current.get('runtime') == 'exited':
+            continue
+        over = []
+        if identity == LEAD and max(len(gauge.calls), calls) > CALL_CEILING:
+            over.append(f'{max(len(gauge.calls), calls)} tool calls, past {CALL_CEILING}')
+        if gauge.estimate() >= gauge.ceiling:
+            over.append(f'at most {gauge.estimate()} tokens, past {gauge.ceiling}')
+        if over:
+            if identity == LEAD:
+                # First the hold, so the lead's next call waits for the kill.
+                (root / 'lead-stop').touch()
+            gauge.stopped = dict(why=over, at=now(), cancel=cancel(owner, identity, 'ceiling'))
+            record.setdefault('ceiling_stops', []).append(dict(run=identity, **gauge.stopped))
+            print(f'CEILING {identity}: {"; ".join(over)}; cancelled', flush=True)
+
+
+def settle(record, service, meters, state, root):
+    """Stop whatever still runs, and read everything the rows and the charge
+    need while the service is still there to ask."""
+    # The lead's tool holds from here on, whatever else happens.
+    (root / 'lead-stop').touch()
+    owner = service.owner()
+    try:
+        stopped = {}
+        for identity in RUNS:
+            current = view(owner, identity)
+            if current and current.get('admission') == 'admitted' \
+                    and current.get('runtime') != 'exited':
+                stopped[identity] = cancel(owner, identity, 'exit')
+        if stopped:
+            record['stopped_on_exit'] = stopped
+            # The host escalates an unanswered cancel to a kill after ten
+            # seconds; this waits for that, not for the turn.
+            end = time.monotonic() + 60
+            while time.monotonic() < end and any(
+                    (view(owner, i) or {}).get('runtime') not in (None, 'exited')
+                    for i in stopped):
+                time.sleep(0.5)
+        views = {i: view(owner, i) or {} for i in (*RUNS, f'{LEAD}.third')}
+        for identity, gauge in meters.items():
+            if views[identity]:
+                gauge.read(owner)
         stream = events(owner)
-        tool_log = [json.loads(l) for l in (root / 'lead-tool.jsonl').read_text().splitlines()
-                    if l.strip()] if (root / 'lead-tool.jsonl').exists() else []
+        log = tool_log(root)
         briefs = {LEAD: BRIEF}
         briefs.update({f"{LEAD}.{e['arguments'].get('name')}": e['arguments'].get('brief', '')
-                       for e in tool_log if e.get('event') == 'tool_call'
+                       for e in log if e.get('event') == 'tool_call'
                        and e.get('tool') == 'start_run'})
         host = service.host_events(views, briefs)
         said = {c: spoken(owner, f'{LEAD}.{c}') for c in CHILDREN}
         relay = spoken(owner, LEAD)
-        owner.close()
-        record.update(views=views, tool_log=tool_log, spoken=dict(said, lead=relay),
-                      steer_running=steered, steer_exited=exited_steer, third=third,
-                      desk=list(desk.seen.values()))
-
-        # --- The lead's own run.
-        lead_view = views[LEAD]
-        rows.add('The lead was admitted', lead_view.get('admission'), 'admitted')
-        rows.add("The lead's delivery was acknowledged", lead_view.get('delivery'),
-                 'acknowledged')
-        rows.add('The lead exited normally',
-                 dict(runtime=lead_view.get('runtime'), exit=lead_view.get('exit')),
-                 dict(runtime='exited', exit={'code': 0}))
-
-        # --- The tool, the lead's session and nobody else's.
-        sent = {run: [e.get('names') for e in host.get(run, [])
-                      if e['kind'] == 'mcp_servers_sent']
-                for run in (LEAD, *[f'{LEAD}.{c}' for c in CHILDREN])}
-        rows.add('Only the lead got the tool', sent,
-                 {LEAD: [['pio-lead']], **{f'{LEAD}.{c}': [[]] for c in CHILDREN}})
-        # The tool's own witness, not the host's account of itself: each
-        # launch writes `started`. One is the lead's session; none means the
-        # lead never had it, and three means the children did too.
-        rows.add('The tool was launched exactly once',
-                 len([e for e in tool_log if e.get('event') == 'started']), 1)
-        methods = [e['method'] for e in tool_log if e.get('event') == 'request']
-        rows.add('The tool reached the lead', methods[:3],
-                 ['initialize', 'notifications/initialized', 'tools/list'])
-        calls = [e for e in tool_log if e.get('event') == 'tool_call']
-        rows.add('The lead started its two runs through the tool',
-                 sorted((e['arguments'].get('name'), e['result'].get('started'))
-                        for e in calls if e['tool'] == 'start_run'),
-                 sorted((c, True) for c in CHILDREN))
-        rows.add('Every tool request carried the grant',
-                 sorted({e.get('grant') for e in tool_log}), [grant_id])
-
-        # --- The runs it started.
-        children = {f'{LEAD}.{c}': views[f'{LEAD}.{c}'] for c in CHILDREN}
-        rows.add('The submits landed', {i: v.get('admission') for i, v in children.items()},
-                 {i: 'admitted' for i in children})
-        rows.add('origin.initiator is bound', {i: v.get('origin') for i, v in children.items()},
-                 {i: dict(initiator=dict(kind='execution.execution', id=LEAD), depth=1,
-                          call_budget=0) for i in children})
-        rows.add('The children ran',
-                 {i: dict(delivery=v.get('delivery'), runtime=v.get('runtime'),
-                          exit=v.get('exit')) for i, v in children.items()},
-                 {i: dict(delivery='acknowledged', runtime='exited', exit={'code': 0})
-                  for i in children})
-        rows.add('A third start is refused by PIO',
-                 third and dict(started=third['result'].get('started'),
-                                code=(third['result'].get('refused') or {}).get('code'),
-                                lead_running=third['lead_runtime'] != 'exited'),
-                 dict(started=False, code='call_budget_spent', lead_running=True))
-        led = sorted(e['subject']['id'] for e in stream
-                     if e['type'] == 'execution.exit.observed'
-                     and e['subject']['id'].startswith(f'{LEAD}.'))
-        rows.add(f'{LEAD} has exactly two children that ran', led, sorted(children))
-
-        # --- What the grant carries, and the one thing it does not.
-        under = [e['payload'].get(UNDER_GRANT) for e in stream
-                 if e['type'] == 'execution.steer.requested'
-                 and e['subject']['id'] == f'{LEAD}.alpha']
-        rows.add('A steer while the child runs', steered,
-                 'not_supported, while the child had not exited',
-                 holds=lambda s: bool(s) and s.get('request') == 'not_supported'
-                 and s.get('runtime_at_steer') not in (None, 'exited'),
-                 note='OpenCode has no steer: the host never sets a turn id')
-        rows.add('A steer on an exited run', exited_steer,
-                 'not_supported on any harness, once the turn is over',
-                 holds=lambda s: s.get('request') == 'not_supported'
-                 and s.get('runtime_at_steer') == 'exited')
-        rows.add('Each steer names the grant that sent it',
-                 [dict(grant=u and u.get('grant'), holder=u and u.get('holder'),
-                       recorded_by=u and u.get('recorded_by')) for u in under],
-                 [dict(grant=grant_id, holder='lead', recorded_by='pio')] * 2)
-        data = answer.get('error', {}).get('data', {})
-        rows.add('The lead may not answer an approval',
-                 dict(code=data.get('code'), reason=(data.get('details') or {}).get('reason')),
-                 dict(code='permission_denied', reason='right_missing'),
-                 note='aimed at a child it may read, so only the missing right can refuse it')
-        data = attach.get('error', {}).get('data', {})
-        rows.add('A grant cannot attach the tool',
-                 dict(code=data.get('code'), reason=(data.get('details') or {}).get('reason')),
-                 dict(code='permission_denied', reason='owner_authority_required'))
-        outcome = credential_check.get('result', {}).get('outcome', {})
-        rows.add('A tool spec carrying a credential is refused',
-                 dict(admission=outcome.get('admission'), reason=outcome.get('reason'),
-                      named='lead_tool_carries_a_credential_value'
-                      in str(outcome.get('alternative'))),
-                 dict(admission='refused', reason='capability_unavailable', named=True))
-        data = own.get('error', {}).get('data', {})
-        rows.add('The lead cannot read its own run',
-                 dict(code=data.get('code'), reason=(data.get('details') or {}).get('reason')),
-                 dict(code='permission_denied', reason='out_of_scope'),
-                 note=f'the grant covers {LEAD}. and not {LEAD}')
-
-        # --- The results, against the runner's own count.
-        # In a rehearsal the fake counted and the relay is scripted, so these
-        # two show the runner compares — which is what kills `wrong-child`
-        # and `wrong-relay` — and not that a model got anything right.
-        compares = ('rehearsal: the fake counted, so this shows the runner compares'
-                    if rehearse else '')
-        rows.add('Each child reported the true count',
-                 {CHILDREN[c]: first_number(said[c]) for c in CHILDREN}, truth,
-                 note=compares)
-        rows.add('The lead relayed the true counts', relayed(relay), truth, note=compares)
-
-        # --- Approvals: the desk, never PIO by default, never "always".
-        # Who decided is on the stream; the option actually sent is the host's
-        # own record of what it applied, because the stream's decision for a
-        # caller's answer carries only the decision.
-        decisions = []
-        for e in stream:
-            if e['type'] != 'execution.action.answered':
-                continue
-            run_id, action_id = e['subject']['id'], e['payload'].get('action_id', '')
-            seq = int(action_id.rsplit('-', 1)[-1]) if action_id[-1:].isdigit() else None
-            applied = next((a for a in host.get(run_id, []) if a['kind'] == 'control_applied'
-                            and a.get('action_seq') == seq), {})
-            relayed_item = desk.seen.get(action_id, {})
-            decisions.append(dict(
-                run=run_id, action_id=action_id,
-                desk=(relayed_item.get('answer') or {}).get('decision'),
-                decided_by=e['payload'].get(DECISION, {}).get('decided_by'),
-                applied=applied.get('applied'), option_kind=applied.get('option_kind'),
-                always_option_taken=applied.get('always_option_taken')))
-        lapsed = [run_id for run_id, records in host.items()
-                  if any(r['kind'] == 'request_denied_by_default' for r in records)]
-        single_use = {'allow': 'allow_once', 'deny': 'reject_once'}
-        rows.add('Every approval was decided at the desk',
-                 dict(decisions=decisions, lapsed=lapsed, relayed=len(desk.seen)),
-                 'each relayed, decided by the caller, sent as the single-use kind, '
-                 'never always, none lapsed',
-                 holds=lambda o: not o['lapsed'] and o['relayed'] == len(o['decisions'])
-                 and all(d['decided_by'] == 'caller' and d['applied'] is True
-                         and d['option_kind'] == single_use.get(d['desk'])
-                         and d['always_option_taken'] is False for d in o['decisions']),
-                 note=f'{len(decisions)} approval(s) asked')
-        rows.add('What real OpenCode does with a permission prompt',
-                 [dict(run=d['run'], option_kind=d['option_kind']) for d in decisions],
-                 'observed live', holds=lambda ds: True, live_only=True)
-
-        # --- Usage, never zero for unknown.
-        usage = {}
-        for identity in (LEAD, *children):
-            observations = (views[identity].get('usage') or {}).get('observations') or []
-            usage[identity] = observations[0]['amount'] if observations else None
-        rows.add('Every run reported its usage', usage, 'a positive amount per run',
-                 holds=lambda u: all(isinstance(a, int) and a > 0 for a in u.values()))
-        record['usage'] = usage
-
-        record['owner_service_after'] = live.owner_service()
-        rows.add("The owner's OpenCode service was untouched",
-                 record['owner_service_after'] == record['owner_service_before'], True)
-        record['sessions_after'] = live.session_listing(repo, rehearse)
-        rows.add('PIO deleted no session',
-                 live.deleted_nothing(record['sessions_before'], record['sessions_after']),
-                 True, live_only=True)
     finally:
-        service.release(remove=rehearse)
+        owner.close()
+    calls = len([e for e in log if e.get('event') == 'request'
+                 and e.get('method') == 'tools/call'])
+    record['meters'] = {i: g.summary(calls if i == LEAD else None) for i, g in meters.items()}
+    record['usage'] = usage_of(views, meters, state['submitted'] | started_runs(root))
+    record.update(views=views, tool_log=log, spoken=dict(said, lead=relay))
+    return dict(views=views, stream=stream, log=log, host=host, said=said, relay=relay)
 
-    record['rows'] = rows.rows
-    record['failed'] = rows.failed()
-    if not rehearse:
-        record['charge'] = charge(names, usage, started_at)
-    return record
+
+def usage_of(views, meters, submitted):
+    """What each run reported, and what it is charged, on what basis.
+
+    OpenCode's turn usage is its **last model step's**, so a turn that made
+    tool calls reported less than it spent. Every earlier step's context is
+    contained in the last one's, so the turn spent at most the reported total
+    times the number of steps it could have taken: one per tool call, plus
+    one. A run that reported nothing is charged its meter's bound, and never
+    less than the M3b allowance.
+    """
+    usage = {}
+    for identity in RUNS:
+        current = views.get(identity) or {}
+        if current.get('admission') == 'refused':
+            usage[identity] = dict(charged=0, basis='refused before any model call')
+            continue
+        if not current and identity not in submitted:
+            continue
+        observations = (current.get('usage') or {}).get('observations') or []
+        reported = observations[0]['amount'] if observations else None
+        gauge = meters[identity]
+        steps = len(gauge.calls) + 1
+        if isinstance(reported, int) and reported > 0:
+            usage[identity] = dict(reported_last_step=reported, steps_at_most=steps,
+                                   charged=reported * steps, basis='steps_bound',
+                                   meter_estimate=gauge.estimate())
+        else:
+            usage[identity] = dict(reported_last_step=None, usage='unknown',
+                                   charged=max(live.CANCEL_ALLOWANCE, gauge.estimate()),
+                                   basis='allowance', meter_estimate=gauge.estimate())
+    return usage
+
+
+def host_model(records):
+    """The model a run's session was on, from the host's own events."""
+    kinds = [r['kind'] for r in records]
+    selected = next((r for r in records if r['kind'] == 'model_selected'), None)
+    created = next((r for r in records if r['kind'] == 'session_created'), None)
+    turn = kinds.index('turn_start_sent') if 'turn_start_sent' in kinds else None
+    return dict(
+        requested=selected and selected.get('requested_model'),
+        selection_error=selected and selected.get('error'),
+        reported=created and created.get('reported_model'),
+        matches=created and created.get('model_matches_requested'),
+        before_turn=turn is not None and selected is not None and created is not None
+        and kinds.index('model_selected') < turn and kinds.index('session_created') < turn)
+
+
+def judge(rows, record, observed, desk, meters, state, rehearse):
+    views, stream, log, host = (observed['views'], observed['stream'], observed['log'],
+                                observed['host'])
+    said, relay = observed['said'], observed['relay']
+    grant_id = state['grant_id']
+    truth = record['wc_l']
+
+    # --- The lead's own run.
+    lead_view = views[LEAD]
+    rows.add('The lead was admitted', lead_view.get('admission'), 'admitted')
+    rows.add("The lead's delivery was acknowledged", lead_view.get('delivery'),
+             'acknowledged')
+    rows.add('The lead exited normally',
+             dict(runtime=lead_view.get('runtime'), exit=lead_view.get('exit')),
+             dict(runtime='exited', exit={'code': 0}))
+
+    # --- The model every session was on, before its turn began. From the
+    # host's own record of the harness's answer, not from what PIO asked.
+    rows.add("Each run was on the plan's model before its turn started",
+             {i: host_model(host.get(i, [])) for i in RUNS},
+             {i: dict(requested=MODEL, selection_error=None, reported=MODEL, matches=True,
+                      before_turn=True) for i in RUNS},
+             note='model_selected, then session_created (reported_model, '
+                  'model_matches_requested), both before turn_start_sent'
+                  + ('; the fake reports what it was asked for' if rehearse else ''))
+
+    # --- The tool, the lead's session and nobody else's.
+    sent = {run: [e.get('names') for e in host.get(run, [])
+                  if e['kind'] == 'mcp_servers_sent'] for run in RUNS}
+    rows.add('Only the lead got the tool', sent,
+             {LEAD: [['pio-lead']], **{f'{LEAD}.{c}': [[]] for c in CHILDREN}})
+    # The tool's own witness, not the host's account of itself: each
+    # launch writes `started`. One is the lead's session; none means the
+    # lead never had it, and three means the children did too.
+    rows.add('The tool was launched exactly once',
+             len([e for e in log if e.get('event') == 'started']), 1)
+    methods = [e['method'] for e in log if e.get('event') == 'request']
+    rows.add('The tool reached the lead', methods[:3],
+             ['initialize', 'notifications/initialized', 'tools/list'])
+    calls = [e for e in log if e.get('event') == 'tool_call']
+    rows.add('The lead started its two runs through the tool',
+             sorted((e['arguments'].get('name'), e['result'].get('started'))
+                    for e in calls if e['tool'] == 'start_run'),
+             sorted((c, True) for c in CHILDREN))
+    rows.add('Every tool request carried the grant',
+             sorted({e.get('grant') for e in log}), [grant_id])
+
+    # --- The runs it started.
+    children = {f'{LEAD}.{c}': views[f'{LEAD}.{c}'] for c in CHILDREN}
+    rows.add('The submits landed', {i: v.get('admission') for i, v in children.items()},
+             {i: 'admitted' for i in children})
+    rows.add('origin.initiator is bound', {i: v.get('origin') for i, v in children.items()},
+             {i: dict(initiator=dict(kind='execution.execution', id=LEAD), depth=1,
+                      call_budget=0) for i in children})
+    rows.add('The children ran',
+             {i: dict(delivery=v.get('delivery'), runtime=v.get('runtime'),
+                      exit=v.get('exit')) for i, v in children.items()},
+             {i: dict(delivery='acknowledged', runtime='exited', exit={'code': 0})
+              for i in children})
+    third = record.get('third')
+    rows.add('A third start is refused by PIO',
+             third and dict(started=third['result'].get('started'),
+                            code=(third['result'].get('refused') or {}).get('code'),
+                            lead_running=third['lead_runtime'] != 'exited'),
+             dict(started=False, code='call_budget_spent', lead_running=True))
+    led = sorted(e['subject']['id'] for e in stream
+                 if e['type'] == 'execution.exit.observed'
+                 and e['subject']['id'].startswith(f'{LEAD}.'))
+    rows.add(f'{LEAD} has exactly two children that ran', led, sorted(children))
+
+    # --- What the grant carries, and the one thing it does not.
+    under = [e['payload'].get(UNDER_GRANT) for e in stream
+             if e['type'] == 'execution.steer.requested'
+             and e['subject']['id'] == f'{LEAD}.alpha']
+    rows.add('A steer while the child runs', record.get('steer_running'),
+             'not_supported, sent while the turn was active and delivered, and '
+             'before it exited',
+             holds=lambda s: bool(s) and s.get('request') == 'not_supported'
+             and s.get('runtime_at_steer') == 'active'
+             and s.get('delivery_at_steer') == 'acknowledged'
+             and s.get('runtime_after_steer') not in (None, 'exited'),
+             note="OpenCode's own negative: its turn was running and delivered, and "
+                  'the host never sets a turn id')
+    rows.add('A steer on an exited run', record.get('steer_exited'),
+             'not_supported on any harness, once the turn is over',
+             holds=lambda s: bool(s) and s.get('request') == 'not_supported'
+             and s.get('runtime_at_steer') == 'exited')
+    rows.add('Each steer names the grant that sent it',
+             [dict(grant=u and u.get('grant'), holder=u and u.get('holder'),
+                   recorded_by=u and u.get('recorded_by')) for u in under],
+             [dict(grant=grant_id, holder='lead', recorded_by='pio')] * 2)
+    data = (record.get('lead_answer') or {}).get('error', {}).get('data', {})
+    rows.add('The lead may not answer an approval',
+             dict(code=data.get('code'), reason=(data.get('details') or {}).get('reason')),
+             dict(code='permission_denied', reason='right_missing'),
+             note='aimed at a child it may read, so only the missing right can refuse it')
+    data = (record.get('grant_attach') or {}).get('error', {}).get('data', {})
+    rows.add('A grant cannot attach the tool',
+             dict(code=data.get('code'), reason=(data.get('details') or {}).get('reason')),
+             dict(code='permission_denied', reason='owner_authority_required'))
+    outcome = (record.get('credential_check') or {}).get('result', {}).get('outcome', {})
+    rows.add('A tool spec carrying a credential is refused',
+             dict(admission=outcome.get('admission'), reason=outcome.get('reason'),
+                  named='lead_tool_carries_a_credential_value'
+                  in str(outcome.get('alternative'))),
+             dict(admission='refused', reason='capability_unavailable', named=True))
+    data = (record.get('lead_reads_itself') or {}).get('error', {}).get('data', {})
+    rows.add('The lead cannot read its own run',
+             dict(code=data.get('code'), reason=(data.get('details') or {}).get('reason')),
+             dict(code='permission_denied', reason='out_of_scope'),
+             note=f'the grant covers {LEAD}. and not {LEAD}')
+
+    # --- The results, against the runner's own count.
+    # In a rehearsal the fake counted and the relay is scripted, so these
+    # two show the runner compares — which is what kills `wrong-child`
+    # and `wrong-relay` — and not that a model got anything right.
+    compares = ('rehearsal: the fake counted, so this shows the runner compares'
+                if rehearse else '')
+    rows.add('Each child reported the true count',
+             {CHILDREN[c]: first_number(said[c]) for c in CHILDREN}, truth,
+             note=compares)
+    rows.add('The lead relayed the true counts', relayed(relay), truth, note=compares)
+
+    # --- Approvals: the desk, never PIO by default, never "always".
+    # Who decided is on the stream; the option actually sent is the host's
+    # own record of what it applied, because the stream's decision for a
+    # caller's answer carries only the decision.
+    decisions = []
+    for e in stream:
+        if e['type'] != 'execution.action.answered':
+            continue
+        run_id, action_id = e['subject']['id'], e['payload'].get('action_id', '')
+        seq = int(action_id.rsplit('-', 1)[-1]) if action_id[-1:].isdigit() else None
+        applied = next((a for a in host.get(run_id, []) if a['kind'] == 'control_applied'
+                        and a.get('action_seq') == seq), {})
+        item = desk.items.get(action_id, {})
+        decisions.append(dict(
+            run=run_id, action_id=action_id, desk=item.get('state'),
+            desk_decision=(item.get('answer') or {}).get('decision'),
+            decided_by=e['payload'].get(DECISION, {}).get('decided_by'),
+            applied=applied.get('applied'), option_kind=applied.get('option_kind'),
+            always_option_taken=applied.get('always_option_taken')))
+    lapsed = [dict(run=run_id, action_seq=r.get('action_seq'),
+                   after_seconds=r.get('after_seconds'), option_kind=r.get('option_kind'))
+              for run_id, records in host.items() for r in records
+              if r['kind'] == 'request_denied_by_default']
+    single_use = {'allow': 'allow_once', 'deny': 'reject_once'}
+    rows.add('Every approval was decided at the desk',
+             dict(decisions=decisions, lapsed=lapsed,
+                  desk={a: i['state'] for a, i in desk.items.items()}),
+             'each relayed and answered at the desk, decided by the caller, sent as '
+             'the single-use kind, never always, none lapsed',
+             holds=lambda o: not o['lapsed']
+             and all(s == 'answered' for s in o['desk'].values())
+             and len(o['desk']) == len(o['decisions'])
+             and all(d['decided_by'] == 'caller' and d['applied'] is True
+                     and d['option_kind'] == single_use.get(d['desk_decision'])
+                     and d['always_option_taken'] is False for d in o['decisions']),
+             note=f'{len(decisions)} approval(s) asked; a lapse is the host\'s single-use '
+                  'reject after the delivery timeout, and it fails L1')
+    rows.record('What OpenCode does with a permission prompt',
+                [dict(run=d['run'], option_kind=d['option_kind'], desk=d['desk'])
+                 for d in decisions],
+                note='the fake in a rehearsal; the owner\'s OpenCode live')
+
+    # --- Spend: bounded while it ran, and reported at the end.
+    summary = record['meters']
+    rows.add('Every run stayed within its ceilings', summary,
+             f'no stop; the lead made at most {CALL_CEILING} tool calls; every '
+             'bound stayed under its ceiling',
+             holds=lambda m: all(g['stopped'] is None and g['estimate'] < g['ceiling']
+                                 for i, g in m.items() if views.get(i))
+             and max(m[LEAD]['calls'], m[LEAD]['tool_log_calls'] or 0) <= CALL_CEILING,
+             note=f"estimate {BOUND['estimate']}")
+    usage = record['usage']
+    rows.add('Every run reported its usage',
+             {i: u.get('reported_last_step') for i, u in usage.items()
+              if u['basis'] != 'refused before any model call'},
+             'a positive amount per run that ran',
+             holds=lambda u: bool(u) and all(isinstance(a, int) and a > 0
+                                             for a in u.values()),
+             note="OpenCode's last model step; charged times the steps it could have taken")
+
+    record['owner_service_after'] = live.owner_service()
+    rows.add("The owner's OpenCode service was untouched",
+             record['owner_service_after'] == record['owner_service_before'], True)
+    record['sessions_after'] = live.session_listing(state['repo'], rehearse)
+    rows.add('PIO deleted no session',
+             live.deleted_nothing(record['sessions_before'], record['sessions_after']),
+             True, live_only=True)
+
+
+def read_ledger(path):
+    if path.exists():
+        return json.loads(path.read_text())
+    return {'cap': live.CAP, 'stop_at': live.STOP_AT,
+            'measure': 'every token counter the harness reports, summed', 'runs': {}}
 
 
 def sequence_charged(book):
@@ -819,30 +1252,32 @@ def sequence_charged(book):
                if e.get('sequence') == SEQUENCE)
 
 
-def charge(names, usage, at):
-    """One ledger line per run, the sequence total, and whether a stop fired.
-
-    Charged, never observed: a run that reported nothing is charged the
-    sequence's allowance and its usage is recorded as unknown, never zero.
-    """
-    book = live.ledger()
+def charge(path, names, usage, at):
+    """One ledger line per run that ran, the sequence total, and whether a
+    stop fired. Charged, never observed; unknown is never zero."""
+    book = read_ledger(path)
     lines = {}
-    for identity, amount in usage.items():
-        entry = dict(sequence=SEQUENCE, model=MODEL, at=at)
-        if isinstance(amount, int) and amount > 0:
-            entry.update(observed_total_tokens=amount, charged=amount, charge_basis='observed')
-        else:
-            entry.update(observed_total_tokens=None, usage='unknown',
-                         charged=live.CANCEL_ALLOWANCE, charge_basis='allowance',
-                         why=live.CHARGE_BASIS)
-        book['runs'][names[identity]] = entry
-        lines[names[identity]] = entry
-    live.ledger_path().write_text(json.dumps(book, indent=2) + '\n')
+    for identity, entry in usage.items():
+        if entry['basis'] == 'refused before any model call':
+            continue
+        line = dict(sequence=SEQUENCE, model=MODEL, at=at, charged=entry['charged'],
+                    charge_basis=entry['basis'],
+                    observed_total_tokens=entry.get('reported_last_step'),
+                    observed_is='the last model step of the turn',
+                    steps_at_most=entry.get('steps_at_most'),
+                    meter_estimate=entry.get('meter_estimate'))
+        if entry['basis'] == 'allowance':
+            line.update(usage='unknown', why='no usage reported; charged the run\'s '
+                        f'meter bound, and never less than {live.CANCEL_ALLOWANCE}')
+        book['runs'][names[identity]] = line
+        lines[names[identity]] = line
+    path.write_text(json.dumps(book, indent=2) + '\n')
     total = sequence_charged(book)
-    return dict(lines=lines, sequence_charged=total, sequence_cap=SEQUENCE_CAP,
+    return dict(ledger='rehearsal ledger' if 'rehearsal' in path.name else 'MiniMax ledger',
+                lines=lines, sequence_charged=total, sequence_cap=SEQUENCE_CAP,
                 sequence_stop=SEQUENCE_STOP, stop_reached=total >= SEQUENCE_STOP,
                 minimax_charged=live.cumulative(book), minimax_cap=live.CAP,
-                measured_against='charged', limit_is_next_turn_only=True)
+                measured_against='charged')
 
 
 def main():
@@ -862,21 +1297,46 @@ def main():
     if args.mutant and not args.rehearse:
         raise SystemExit('a mutant is a rehearsal; it never spends a token')
     args.out.mkdir(parents=True, exist_ok=True)
-    record = run(args)
     name = ('rehearsal' if args.rehearse else (args.attempt or LEAD)) + \
         (f'-mutant-{args.mutant}' if args.mutant else '')
-    path = args.out / f'{name}.json'
-    path.write_text(json.dumps(redact(record), indent=2, sort_keys=True) + '\n')
+    args.receipt = args.out / f'{name}.json'
+    args.receipt.unlink(missing_ok=True)
+    try:
+        record = run(args)
+    except BaseException as error:
+        if not args.mutant or not args.receipt.exists():
+            raise
+        # The exit path wrote this, or nothing did.
+        print(f'the run ended with {type(error).__name__}: {error}')
+        record = json.loads(args.receipt.read_text())
     for row in record['rows']:
         mark = {True: 'ok  ', False: 'FAIL', None: 'n/a '}[row['holds']]
+        if row['kind'] == 'record':
+            mark = 'rec '
         print(f"{mark} {row['row']}: {json.dumps(row['observed'])[:140]}")
-    unproven = [r['row'] for r in record['rows'] if r['holds'] is None]
+    unproven = [r['row'] for r in record['rows'] if r['holds'] is None and r['kind'] == 'row']
     print(f"\n{len(record['rows'])} rows; not provable here: {unproven}")
+    print(f"charged: {json.dumps(record['charge'])[:400]}")
     if args.mutant:
         wanted = MUTANTS[args.mutant]
         assert wanted in record['failed'], (
             f'mutant {args.mutant} did not fail its row {wanted!r}; failed: {record["failed"]}')
-        print(f'mutant {args.mutant}: dies on {wanted!r}')
+        # The receipt is on disk, and it charged every run that ran.
+        assert args.receipt.exists(), 'no receipt was written'
+        charged = record['charge']['lines']
+        ran = {i for i, u in record['usage'].items()
+               if u['basis'] != 'refused before any model call'}
+        assert ran <= set(charged) and all(line['charged'] > 0
+                                           for line in charged.values()), (ran, charged)
+        if args.mutant == 'lead-loops':
+            stops = [s for s in record.get('ceiling_stops', []) if s['run'] == LEAD]
+            assert stops and any('tool calls' in w for w in stops[0]['why']), stops
+            held = [e for e in record['tool_log'] if e.get('event') == 'held']
+            assert held, 'the tool did not hold the call past its ceiling'
+        if args.mutant == 'interrupted':
+            assert record['error']['type'] == 'KeyboardInterrupt', record.get('error')
+            assert record.get('stopped_on_exit'), 'nothing was stopped on the way out'
+        print(f'mutant {args.mutant}: dies on {wanted!r}, receipt and charge written')
         raise SystemExit(1)
     if record['failed']:
         raise SystemExit(f"FAILED ROWS: {record['failed']}")
