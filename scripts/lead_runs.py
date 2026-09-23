@@ -538,7 +538,8 @@ def pass_root_runs_are_the_owners(out, root, mutant=None):
             data = answer.get('error', {}).get('data', {})
             assert (data.get('code'), (data.get('details') or {}).get('reason')) == (
                 'permission_denied', 'owner_authority_required'), (
-                f'{label} was started as a root under a grant: {answer}')
+                f'{label}, submitted as a root under a grant, was not refused '
+                f'owner_authority_required: {answer}')
             facts[f'root under a grant: {label}'] = 'permission_denied / owner_authority_required'
         bare = start(solo, 'solo')
         assert bare.get('error', {}).get('data', {}).get('details', {}).get('reason') \
