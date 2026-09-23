@@ -41,6 +41,12 @@ it dies on the claim it undermines:
 - `--mutant owner-steers` sends the same steer as the owner, with no grant,
   so no grant is recorded against it. The key says who held a grant, not
   that a steer happened.
+- `--mutant refused-initiator-ok` admits the initiator, so its child is
+  admitted too. The refusal is about the initiator having been refused, not
+  about depth or budget.
+- `--mutant exited-initiator-ok` submits the child while the initiator is
+  still running, so it is admitted. The refusal is about the initiator having
+  exited, not about initiators in general.
 """
 import argparse
 import hashlib
@@ -62,6 +68,11 @@ from public_api import CREDENTIAL, command, digest
 ROOT = Path(__file__).resolve().parents[1]
 PROVIDER = 'conformance-provider'
 LEAD_CREDENTIAL = 'ccred1.lead.' + 'l' * 43
+# How long a `serve-fake` run lasts where a case needs its lead **alive**
+# while children are started. Owner decision, 2026-09-23: an initiator that
+# has exited starts nothing, and the service default of 1.2 seconds would end
+# a lead in the middle of the case.
+LEAD_ALIVE_MS = 60_000
 FEATURES = ('core.events', 'core.capabilities', 'core.effects', 'core.grants')
 
 
@@ -117,7 +128,8 @@ def admitted(answer):
 def pass_origin(out, root, mutant=None):
     """Who started whom, how deep, and how many calls are left."""
     budget = 2 if mutant == 'richer' else 1
-    daemon, socket_path, files = start_service(root, out, name='origin')
+    daemon, socket_path, files = start_service(root, out, name='origin',
+                                               duration_ms=LEAD_ALIVE_MS)
     facts = {}
     try:
         owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
@@ -281,7 +293,8 @@ def pass_initiator_is_bound(out, root, mutant=None):
   the refusal is about the depth being wrong, not about depth being stated.
     """
     daemon, socket_path, files = start_service(root, out, name='spoof',
-                                               credentials=(LEAD_CREDENTIAL,))
+                                               credentials=(LEAD_CREDENTIAL,),
+                                               duration_ms=LEAD_ALIVE_MS)
     facts = {}
     try:
         owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
@@ -347,6 +360,66 @@ def pass_initiator_is_bound(out, root, mutant=None):
         facts['omitted_origin'] = 'permission_denied / out_of_scope'
         scoped.close()
         stranger.close()
+        owner.close()
+    finally:
+        daemon.kill()
+        daemon.wait(timeout=10)
+        for handle in files:
+            handle.close()
+    return facts
+
+
+def pass_initiator_liveness(out, root, mutant=None):
+    """An initiator must be alive to ask: not refused, and not exited.
+
+    Owner decision, 2026-09-23. The L1 rehearsal's lead was refused for a
+    missing brief, and its two children were admitted anyway — lineage
+    attached to a run that never started, spending a budget its caller had
+    merely claimed. A run that has exited is the same case later: its turn
+    is over, so it is not calling anything.
+    """
+    # Short runs, so the exited case can wait one out.
+    daemon, socket_path, files = start_service(root, out, name='liveness',
+                                               duration_ms=1500)
+    facts = {}
+    try:
+        owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
+
+        # **Refused.** A top-level run claiming depth 1 is refused
+        # `call_depth_exceeded`, and its origin is still recorded — which is
+        # exactly what let a child name it. `--mutant refused-initiator-ok`
+        # claims the right depth, so the initiator is admitted.
+        claimed = 0 if mutant == 'refused-initiator-ok' else 1
+        start(owner, 'lead-r', origin('lead-r', claimed, 2))
+        lead = view(owner, 'lead-r')
+        if mutant != 'refused-initiator-ok':
+            assert lead['admission'] == 'refused', lead
+        # The child claims the depth the recorded origin implies, so nothing
+        # but the initiator's state can refuse it.
+        depth = lead['origin']['depth'] + 1
+        answer = start(owner, 'lead-r.child', origin('lead-r', depth, 0))
+        assert refusal_of(answer) == 'initiator_refused', (
+            f'a child of a refused initiator was not refused: {answer}')
+        facts['child_of_a_refused_initiator'] = 'initiator_refused'
+
+        # **Exited.** `--mutant exited-initiator-ok` does not wait, so the
+        # child is submitted while the initiator is still running.
+        assert admitted(start(owner, 'lead-x', origin('lead-x', 0, 2)))
+        if mutant != 'exited-initiator-ok':
+            deadline = time.monotonic() + 60
+            while view(owner, 'lead-x')['runtime'] != 'exited':
+                assert time.monotonic() < deadline, view(owner, 'lead-x')
+                time.sleep(0.2)
+        facts['initiator_runtime_at_submit'] = view(owner, 'lead-x')['runtime']
+        answer = start(owner, 'lead-x.child', origin('lead-x', 1, 0))
+        assert refusal_of(answer) == 'initiator_exited', (
+            f'a child of an exited initiator was not refused: {answer}')
+        facts['child_of_an_exited_initiator'] = 'initiator_exited'
+
+        # And a run naming **itself** is untouched: it is being started, so
+        # it has no state to be refused or exited in.
+        assert admitted(start(owner, 'fresh', origin('fresh', 0, 1)))
+        facts['a_run_naming_itself'] = 'admitted'
         owner.close()
     finally:
         daemon.kill()
@@ -488,12 +561,13 @@ def main():
     parser.add_argument('--mutant', choices=['deeper', 'richer', 'no-origin',
                                              'may-answer', 'owner-steers',
                                              'bound-initiator', 'unscoped-grant',
-                                             'shallow-ok'])
+                                             'shallow-ok', 'refused-initiator-ok',
+                                             'exited-initiator-ok'])
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     roots = []
     try:
-        for _ in range(3):
+        for _ in range(4):
             root = Path(tempfile.mkdtemp(prefix='pio-lead-', dir='/tmp')).resolve()
             os.chmod(root, 0o700)
             roots.append(root)
@@ -501,6 +575,8 @@ def main():
             origin=pass_origin(args.out, roots[0], args.mutant),
             lead_grant=pass_lead_grant(args.out, roots[1], args.mutant),
             initiator_is_bound=pass_initiator_is_bound(args.out, roots[2],
+                                                       args.mutant),
+            initiator_liveness=pass_initiator_liveness(args.out, roots[3],
                                                        args.mutant),
             lead_cannot_answer=pass_lead_cannot_answer(args.out, args.mutant))
         (args.out / 'lead-runs.json').write_text(

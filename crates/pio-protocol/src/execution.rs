@@ -503,6 +503,23 @@ impl Provider {
         // An initiator PIO has never seen constrains nothing: PIO enforces
         // what it can read from its own journal and says so rather than
         // guessing.
+        // **An initiator must be a run that is alive to ask.** Owner decision,
+        // 2026-09-23: a run PIO refused never started, and a run that has
+        // exited has finished its turn, so neither can be calling anything —
+        // a child that names one attaches lineage and spends budget on behalf
+        // of a run that is not there. Before this, the L1 rehearsal's lead was
+        // refused for a missing brief and its two children were admitted
+        // anyway, under the budget its caller had merely claimed.
+        if let Some(other) = started_by
+            && other["view"]["execution"] != p["subject"]
+        {
+            if other["view"]["admission"] == "refused" {
+                return Some("initiator_refused");
+            }
+            if other["view"]["runtime"] == "exited" {
+                return Some("initiator_exited");
+            }
+        }
         let permitted = match started_by {
             Some(other) => Some(num(&other["view"]["origin"]["depth"]) + 1),
             None if *initiator == p["subject"] => Some(0),

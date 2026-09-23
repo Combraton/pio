@@ -341,6 +341,8 @@ The initiator is now bound to the grant. Under a grant, the only run a caller ma
 
 **Depth was accepted if it did not exceed the permitted one, not if it matched.** A child of the depth-0 lead could record `depth: 0` and its grandchild `depth: 1`, so the tree's shape was whatever the caller said. The depth is derived, so a claim that disagrees is refused, and the two directions are named apart — `call_depth_exceeded` and `call_depth_understated` — because "exceeded" is not true of a depth that is too shallow.
 
+**An initiator must be alive to ask.** Owner decision, 2026-09-23. The first L1 rehearsal's lead was refused for a missing brief, and its two children were admitted anyway: lineage attached to a run that never started, spending a budget its caller had merely claimed. A child now names only an initiator that was **not refused** and has **not exited**. The refusals are `initiator_refused` and `initiator_exited`. A run naming itself is untouched, because it is the one being started. Mutants: `refused-initiator-ok` admits the initiator, and `exited-initiator-ok` submits the child while it is still running; both are then admitted. The two lead passes that start children now give their `serve-fake` lead a 60-second run, so it is alive while they do.
+
 Mutants: `bound-initiator` scopes the stranger's grant to the lead's own subtree, so naming the lead is legitimate and the submit is admitted; `unscoped-grant` hands out a grant that names no subtree and therefore requires no origin; `shallow-ok` claims the derived depth. Each shows the refusal is about the specific thing and not about origins, grants or depth in general.
 
 ### Codex — approvals come to the person

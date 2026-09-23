@@ -237,7 +237,7 @@ class Board:
 
 
 def start_service(root, out, events=None, name='daemon', executor=None,
-                  credentials=()):
+                  credentials=(), duration_ms=1200):
     config = dict(
         format='pio-fake-service/1',
         protocol=dict(format='combraton-conformance-config/1', principal='owner',
@@ -251,7 +251,7 @@ def start_service(root, out, events=None, name='daemon', executor=None,
                       + [dict(credential=c) for c in credentials],
                       executor=dict(host_id='durable-fake-host', **(executor or {})),
                       **({'events': events} if events else {})),
-        fake_host=dict(duration_ms=1200, fault=''))
+        fake_host=dict(duration_ms=duration_ms, fault=''))
     config_path = root / 'service.json'
     config_path.write_text(json.dumps(config))
     socket_path = root / 'public.sock'
