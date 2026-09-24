@@ -437,5 +437,6 @@ L1 held two rows only because nothing could fail them: no approval was asked, an
 - **Review 47, in both plans:** the desk row is inconclusive when nothing was asked, and "no session deleted" is inconclusive when nothing was listed before.
 - **The fake** gained `led_delay_if` and `ask_if`, so only the run whose prompt names it waits or asks. Its line counter now reads `.env` names, and the lead's relay is parsed for the plan's own file names. Checked against L1's live relay, which ran on without a separator.
 - **Mutants:** `no-wait` fails the waiting row; `no-ask` must leave the desk row inconclusive.
+- **A leak the gate found.** L1b's first rehearsal crashed while building its scenario, after its tree existed and before the `try` that releases it, and the tree stayed in `/tmp`. Now a failure before anything is reserved releases the tree. Mutant `setup-fails` fails the scenario at that point: the tree must be gone, and there is no receipt. The source mutant (the release removed) fails it.
 
 **Step 2 order:** ~~G1 and G6 (the events fold)~~ **done**, ~~G2 (the approval walk)~~ **done**, ~~G3 (blocks and the audit)~~ **done**. Each with its own headless case and a mutant. Next: step 3, orchestrate.

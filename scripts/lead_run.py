@@ -101,6 +101,8 @@ does with a permission prompt.
 - `release-refused` has the cleanup's guard refuse the tree at the end, as it
   refused L1's live tree; the run must fail on it, and the tree is then
   released for real;
+- `setup-fails` makes the scenario fail after the tree exists and before
+  anything is reserved: the tree must be gone, and there is no receipt;
 - `no-wait` (L1b) has `alpha` finish in a second, so no read waits;
 - `no-ask` (L1b) has nobody ask, so the desk row must be inconclusive, not
   passed.
@@ -274,6 +276,9 @@ MUTANTS = {
     'interrupted': 'The run finished without an error',
     'runner-killed': 'The ledger holds the reservation',
     'release-refused': 'The service was released, and nothing it started survived',
+    # Not a row: the run fails before it has any. What must hold is that the
+    # tree it made is gone.
+    'setup-fails': 'A setup that fails leaves no tree behind',
     # L1b only.
     'no-wait': 'A read_run waited for its run, and it had exited',
 }
@@ -831,6 +836,8 @@ def mutated_tool(root):
 def scenario(mutant):
     """What the labeled fake plays: the calls a model would make, and the
     answers a model would give, neither of them a model."""
+    if mutant == 'setup-fails':
+        raise RuntimeError('setup-fails: the scenario could not be built')
     reads = [dict(tool='read_run', arguments=dict(name=short), until='exited',
                   report_as=name) for short, name in CHILDREN.items()]
     starts = [dict(tool='start_run', arguments=dict(name=short, brief=child_brief(name)))
@@ -913,6 +920,22 @@ def run(args):
         if live.cumulative(book) + WORST_CASE >= live.STOP_AT:
             raise SystemExit('stop: the MiniMax cap would reach its stop')
         root = live_tree(LEAD)
+    args.root = root
+    try:
+        return run_in(args, record, rehearse, root, names, book_path, started_at)
+    except BaseException:
+        if 'reserved' in record:
+            raise
+        # Nothing was reserved and nothing started, so the tree holds nothing
+        # worth keeping. A rehearsal that failed here left its tree in /tmp,
+        # and the leak gate found it (L1b's first rehearsal).
+        with contextlib.suppress(Exception):
+            case_cleanup.release(root)
+        raise
+
+
+def run_in(args, record, rehearse, root, names, book_path, started_at):
+    """The run, in a tree that exists: everything from the probe onward."""
     # The cleanup must be able to release the live tree, and that is checked
     # before anything is reserved or started, not found out at the end. A
     # rehearsal checks a probe made the same way, then releases it.
@@ -1773,6 +1796,14 @@ def main():
     try:
         record = run(args)
     except BaseException as error:
+        if args.mutant == 'setup-fails':
+            root = getattr(args, 'root', None)
+            assert root is not None and not Path(root).exists(), (
+                f'the setup failed and left its tree behind: {root}')
+            assert not args.receipt.exists(), 'a receipt for a run that never started'
+            print(f"mutant setup-fails: dies on {MUTANTS['setup-fails']!r}: "
+                  f'{type(error).__name__}, and the tree is gone')
+            raise SystemExit(1)
         if not args.mutant or not args.receipt.exists():
             raise
         # The exit path wrote this, or nothing did.
