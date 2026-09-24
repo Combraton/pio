@@ -154,3 +154,29 @@ process of the case, found nothing PIO started still running, and the
 owner's service and session still running with the same process ids. The live store is kept, as M3b's are, and
 `~/pio-m4-live` was made `0700` by hand at 10:30Z. The fix, and a row that
 fails on a release error, come before merge.
+
+## `L1b-rehearsal.json`
+
+L1b rehearsed against the labeled fake by `scripts/lead_run.py --rehearse
+--plan L1b` at clean head `65eaab5` (`dirty: false`). **Zero tokens, no model
+call.** Plan approved by the owner on 2026-09-24, with review 48's amendments
+(issue #12).
+
+**Every row holds: 33 rows and one record, none failed.** Two rows are not
+provable in a rehearsal, as for L1: the store read, and whether a session was
+deleted. What L1b adds:
+
+- **The desk had something to decide.** `beta`'s read of `beta.env` was
+  relayed as `L1b.beta.action-1`, answered `allow` and sent as `allow_once`.
+  It was decided by the caller, never "always", and nothing lapsed. **Here
+  the rehearsal answered for itself**, and the fake asked. Live, OpenCode
+  asks (its shipped default for `*.env`, review 48) and the owner answers.
+- **A read waited.** The lead's `read_run` of `L1b.alpha` took **30.6 s**, by
+  the tool's own log, and returned `exited`.
+- **Review 47's rule.** A desk nobody asked is inconclusive (mutant
+  `no-ask`), and so is a session listing that was empty before (live only).
+
+**What this does not show.** The fake is not OpenCode. Its read request uses
+the read tool's parameter name (`filePath`), not a measured permission
+request. Whether 2.0.11 asks about `beta.env` live is the live run's to show.
+If it doesn't ask, the desk row is inconclusive, not passed.
