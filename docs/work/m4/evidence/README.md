@@ -158,7 +158,7 @@ fails on a release error, come before merge.
 ## `L1b-rehearsal.json`
 
 L1b rehearsed against the labeled fake by `scripts/lead_run.py --rehearse
---plan L1b` at clean head `65eaab5` (`dirty: false`). **Zero tokens, no model
+--plan L1b` at clean head `117f283` (`dirty: false`). **Zero tokens, no model
 call.** Plan approved by the owner on 2026-09-24, with review 48's amendments
 (issue #12).
 
@@ -171,7 +171,7 @@ deleted. What L1b adds:
   It was decided by the caller, never "always", and nothing lapsed. **Here
   the rehearsal answered for itself**, and the fake asked. Live, OpenCode
   asks (its shipped default for `*.env`, review 48) and the owner answers.
-- **A read waited.** The lead's `read_run` of `L1b.alpha` took **30.6 s**, by
+- **A read waited.** The lead's `read_run` of `L1b.alpha` took **30.4 s**, by
   the tool's own log, and returned `exited`.
 - **Review 47's rule.** A desk nobody asked is inconclusive (mutant
   `no-ask`), and so is a session listing that was empty before (live only).
