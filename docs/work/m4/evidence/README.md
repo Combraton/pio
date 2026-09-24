@@ -158,7 +158,7 @@ fails on a release error, come before merge.
 ## `L1b-rehearsal.json`
 
 L1b rehearsed against the labeled fake by `scripts/lead_run.py --rehearse
---plan L1b` at clean head `117f283` (`dirty: false`). **Zero tokens, no model
+--plan L1b` at clean head `e042672` (`dirty: false`), for the second attempt. **Zero tokens, no model
 call.** Plan approved by the owner on 2026-09-24, with review 48's amendments
 (issue #12).
 
@@ -171,10 +171,15 @@ deleted. What L1b adds:
   It was decided by the caller, never "always", and nothing lapsed. **Here
   the rehearsal answered for itself**, and the fake asked. Live, OpenCode
   asks (its shipped default for `*.env`, review 48) and the owner answers.
-- **A read waited.** The lead's `read_run` of `L1b.alpha` took **30.4 s**, by
-  the tool's own log, and returned `exited`.
+- **A read waited.** The lead's `read_run` of `L1b.alpha` took **30.6 s**, by
+  the tool's own log, and returned `exited`. The row also holds on a read that
+  came back still running after the tool's 55 s limit (owner decision,
+  2026-09-25; mutant `alpha-outlasts`).
 - **Review 47's rule.** A desk nobody asked is inconclusive (mutant
   `no-ask`), and so is a session listing that was empty before (live only).
+
+The record under this name at `117f283` was the one attempt 1 ran on; it was
+replaced before attempt 2, after the waiting row was widened.
 
 **What this does not show.** The fake is not OpenCode. Its read request uses
 the read tool's parameter name (`filePath`), not a measured permission
