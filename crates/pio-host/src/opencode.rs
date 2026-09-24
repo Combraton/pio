@@ -329,10 +329,19 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
         "auth_methods":initialize["result"]["authMethods"],
         "capabilities":initialize["result"]["agentCapabilities"]}))?;
 
+    // **The lead tool rides on this session and no other.** Admission put it
+    // on this run's spec only if the owner attached it, with no grant, and
+    // checked it carries no secret; every other run sends `[]`, as every run
+    // did before. Measured by `lead_tool_probe.py`: 2.0.11 launches a server
+    // listed here at session creation, before any prompt.
+    let servers: Vec<Value> = life.spec.get("lead_tool").cloned().into_iter().collect();
+    life.event(json!({"kind":"mcp_servers_sent",
+        "names":servers.iter().map(|s| s["name"].clone()).collect::<Vec<_>>(),
+        "count":servers.len()}))?;
     let id = rpc.request(
         child,
         "session/new",
-        json!({"cwd":cwd.display().to_string(),"mcpServers":[]}),
+        json!({"cwd":cwd.display().to_string(),"mcpServers":servers}),
     )?;
     let created = rpc.wait(child, id, 120, |_| Ok(()))?;
     ensure!(

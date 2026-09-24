@@ -27,10 +27,32 @@
 //! `markers`, `permission_requests` (a list, asked one at a time).
 //! A `tool_calls` entry takes `title`, `kind`, `input` and an optional
 //! `status` for the state the call ends in.
-use anyhow::{Context, Result};
+//!
+//! **The lead tool.** A session created with `mcpServers` launches each one
+//! at `session/new` and speaks MCP to it — `initialize`,
+//! `notifications/initialized`, `tools/list` — which is what 2.0.11 was
+//! measured doing by `lead_tool_probe.py`. `lead.calls` then scripts the
+//! `tools/call`s the model would make, **inside** the turn, so the lead is
+//! running while its children start: `{tool, arguments, until: "exited",
+//! repeat, report_as}`. Each call is its own announced tool call, as a model
+//! polling makes one per step: `until: "exited"` calls again until the run it
+//! reads has exited, and `repeat` calls exactly that many times (a lead that
+//! will not stop). `report_as` makes the final message relay the first number in
+//! that call's `text`, plus `lead.relay_offset` (a lead that relays wrong
+//! numbers). `ask_in` (`lead` or `led`) limits the permission requests to
+//! sessions with or without servers. A session with **no** servers stands in
+//! for a led run: `led_delay_ms` keeps its turn running for a while, and
+//! `answer_line_counts` answers with the real line count of the file its
+//! prompt names, plus `led_offset` (a child that reports wrong).
+//!
+//! None of this is a model. The tool calls are scripted and the counts are
+//! read from disk; what a real model makes of the tool is the live run's to
+//! show.
+use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
-use std::io::{BufRead, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 pub const SOURCE: &str = "pio-fake-opencode-acp";
 pub const DEFAULT_MODEL: &str = "minimax-coding-plan/MiniMax-M2.7-highspeed";
@@ -82,6 +104,109 @@ fn usage_update(used: u64) -> Value {
            "cost":{"amount":0,"currency":"USD"},
            "size":204800,
            "used":used})
+}
+
+/// One MCP server this session launched, spoken to on its stdio.
+struct McpServer {
+    name: String,
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+    next: u64,
+}
+
+impl McpServer {
+    /// Launch a stdio server from its ACP `McpServer` spec, the way the
+    /// harness does: the listed variables on top of its own environment.
+    fn launch(spec: &Value) -> Result<Self> {
+        let mut command = Command::new(spec["command"].as_str().context("command")?);
+        for arg in spec["args"].as_array().into_iter().flatten() {
+            command.arg(arg.as_str().unwrap_or_default());
+        }
+        for variable in spec["env"].as_array().into_iter().flatten() {
+            command.env(
+                variable["name"].as_str().unwrap_or_default(),
+                variable["value"].as_str().unwrap_or_default(),
+            );
+        }
+        let mut child = command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()?;
+        let stdin = child.stdin.take().context("server stdin")?;
+        let stdout = BufReader::new(child.stdout.take().context("server stdout")?);
+        Ok(Self {
+            name: spec["name"].as_str().unwrap_or_default().to_owned(),
+            child,
+            stdin,
+            stdout,
+            next: 0,
+        })
+    }
+
+    fn send(&mut self, message: &Value) -> Result<()> {
+        writeln!(self.stdin, "{}", serde_json::to_string(message)?)?;
+        self.stdin.flush()?;
+        Ok(())
+    }
+
+    fn notify(&mut self, method: &str, params: Value) -> Result<()> {
+        self.send(&json!({"jsonrpc":"2.0","method":method,"params":params}))
+    }
+
+    fn request(&mut self, method: &str, params: Value) -> Result<Value> {
+        self.next += 1;
+        let id = self.next;
+        self.send(&json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}))?;
+        let mut line = String::new();
+        loop {
+            line.clear();
+            if self.stdout.read_line(&mut line)? == 0 {
+                bail!("the MCP server {} closed its output", self.name);
+            }
+            if let Ok(answer) = serde_json::from_str::<Value>(&line)
+                && answer["id"] == id
+            {
+                return Ok(answer);
+            }
+        }
+    }
+}
+
+impl Drop for McpServer {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// The first whole number in a piece of text, if there is one.
+fn first_number(text: &str) -> Option<u64> {
+    text.split(|c: char| !c.is_ascii_digit())
+        .find(|part| !part.is_empty())
+        .and_then(|part| part.parse().ok())
+}
+
+/// Stand in for a led run's model: the line count of the file its prompt
+/// names, read from the session's own working directory.
+fn line_count_answer(prompt: &Value, cwd: &str, offset: i64) -> Option<String> {
+    let text: String = prompt
+        .as_array()?
+        .iter()
+        .filter_map(|block| block["text"].as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let name = text
+        .split_whitespace()
+        .map(|word| word.trim_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '_'))
+        .map(|word| word.trim_end_matches('.'))
+        .find(|word| word.ends_with(".md"))?;
+    let lines = std::fs::read_to_string(std::path::Path::new(cwd).join(name))
+        .ok()?
+        .lines()
+        .count() as i64;
+    Some((lines + offset).to_string())
 }
 
 fn update(session: &str, update: Value) -> Result<()> {
@@ -177,6 +302,9 @@ pub fn run() -> Result<()> {
         .to_owned();
     let mut handshook = false;
     let mut cancelled = false;
+    // The servers `session/new` listed, launched, and the session's cwd.
+    let mut servers: Vec<McpServer> = Vec::new();
+    let mut cwd = String::new();
 
     while let Some(line) = lines.next() {
         let line = line?;
@@ -217,6 +345,49 @@ pub fn run() -> Result<()> {
             }
 
             "session/new" => {
+                cwd = message["params"]["cwd"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned();
+                let listed = message["params"]["mcpServers"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                // What the host sent, recorded before anything is launched,
+                // so a case can see which sessions got the tool and which
+                // got `[]`.
+                marker(
+                    &markers,
+                    json!({"event":"mcp_servers_received","count":listed.len(),
+                           "names":listed.iter().map(|s| s["name"].clone()).collect::<Vec<_>>()}),
+                )?;
+                for spec in &listed {
+                    match McpServer::launch(spec) {
+                        Ok(mut server) => {
+                            let initialized = server.request(
+                                "initialize",
+                                json!({"protocolVersion":"2025-06-18","capabilities":{},
+                                       "clientInfo":{"name":SOURCE,"version":&version}}),
+                            )?;
+                            server.notify("notifications/initialized", json!({}))?;
+                            let tools = server.request("tools/list", json!({}))?;
+                            marker(
+                                &markers,
+                                json!({"event":"mcp_server_launched","name":&server.name,
+                                       "initialized":initialized["result"].is_object(),
+                                       "tools":tools["result"]["tools"].as_array()
+                                           .map(|t| t.iter().map(|x| x["name"].clone())
+                                                .collect::<Vec<_>>())}),
+                            )?;
+                            servers.push(server);
+                        }
+                        Err(error) => marker(
+                            &markers,
+                            json!({"event":"mcp_server_failed","name":&spec["name"],
+                                   "error":error.to_string()}),
+                        )?,
+                    }
+                }
                 marker(
                     &markers,
                     json!({"event":"session_created","model":&current,
@@ -281,7 +452,15 @@ pub fn run() -> Result<()> {
                            "model":&current,
                            "prompt_blocks":message["params"]["prompt"].as_array().map(Vec::len)}),
                 )?;
-                if let Some(delay) = scenario["delay_ms"].as_u64() {
+                let delay = scenario["delay_ms"].as_u64().or_else(|| {
+                    // A led run stays at work for a while, so it can be
+                    // steered while its turn is still running.
+                    servers
+                        .is_empty()
+                        .then(|| scenario["led_delay_ms"].as_u64())
+                        .flatten()
+                });
+                if let Some(delay) = delay {
                     // A harness that works for a while starts streaming
                     // first. Sleeping before the first update instead made a
                     // cancel rehearsal wait out the whole delay and then
@@ -300,7 +479,15 @@ pub fn run() -> Result<()> {
                 // unconditionally — which is why the Claude attachment gap
                 // survived four live runs before anything caught it.
                 let decides_itself = !handshook || scenario["decide_by_rules"] == true;
-                if !scenario["permission_request"].is_null() && decides_itself {
+                // Which sessions ask: the lead (servers listed), the runs it
+                // led (none), or every session, which is the default.
+                let asks_here = match scenario["ask_in"].as_str() {
+                    Some("lead") => !servers.is_empty(),
+                    Some("led") => servers.is_empty(),
+                    _ => true,
+                };
+                if !asks_here {
+                } else if !scenario["permission_request"].is_null() && decides_itself {
                     let state = if handshook {
                         "denied_by_harness_rules_shadowed_the_host"
                     } else {
@@ -372,17 +559,112 @@ pub fn run() -> Result<()> {
                         )?;
                     }
                 }
+                // The lead's tool calls, inside the turn: the lead is running
+                // while its children start, which is the only time a lead can
+                // start anything.
+                let mut answer = None;
+                if let (Some(server), Some(calls)) =
+                    (servers.first_mut(), scenario["lead"]["calls"].as_array())
+                {
+                    let offset = scenario["lead"]["relay_offset"].as_i64().unwrap_or(0);
+                    let mut relay = Vec::new();
+                    for (index, call) in calls.iter().enumerate() {
+                        let tool = call["tool"].as_str().unwrap_or_default();
+                        let title = format!("{}_{tool}", server.name);
+                        let repeat = call["repeat"].as_u64();
+                        let mut tries = 0;
+                        // One announced call per try: a model that polls
+                        // makes a new tool call, and takes a new step, each
+                        // time. The runner's call ceiling counts these.
+                        let (text, failed) = loop {
+                            let call_id = format!("call_mcp_{index}_{tries}");
+                            tries += 1;
+                            update(
+                                session,
+                                json!({"sessionUpdate":"tool_call","toolCallId":&call_id,
+                                       "title":&title,"kind":"other","rawInput":{},
+                                       "locations":[],"status":"pending"}),
+                            )?;
+                            update(
+                                session,
+                                json!({"sessionUpdate":"tool_call_update",
+                                       "toolCallId":&call_id,"title":&title,"kind":"other",
+                                       "rawInput":&call["arguments"],"locations":[],
+                                       "status":"in_progress"}),
+                            )?;
+                            let answered = server.request(
+                                "tools/call",
+                                json!({"name":tool,"arguments":&call["arguments"]}),
+                            )?;
+                            let text = answered["result"]["content"][0]["text"]
+                                .as_str()
+                                .unwrap_or_default()
+                                .to_owned();
+                            let failed = answered["result"]["isError"] == true
+                                || !answered["error"].is_null();
+                            update(
+                                session,
+                                json!({"sessionUpdate":"tool_call_update",
+                                       "toolCallId":&call_id,
+                                       "status":if failed { "failed" } else { "completed" },
+                                       "content":[{"type":"content","content":{"type":"text",
+                                           "text":&text}}]}),
+                            )?;
+                            let done = match repeat {
+                                Some(times) => tries >= times,
+                                None => {
+                                    call["until"] != "exited"
+                                        || failed
+                                        || serde_json::from_str::<Value>(&text)
+                                            .is_ok_and(|v| v["runtime"] == "exited")
+                                }
+                            };
+                            if done || tries >= 480 {
+                                break (text, failed);
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(250));
+                        };
+                        marker(
+                            &markers,
+                            json!({"event":"mcp_tool_called","tool":tool,
+                                   "arguments":&call["arguments"],"tries":tries,
+                                   "failed":failed,"result":&text}),
+                        )?;
+                        if let Some(label) = call["report_as"].as_str() {
+                            let said = serde_json::from_str::<Value>(&text)
+                                .ok()
+                                .and_then(|v| v["text"].as_str().and_then(first_number));
+                            relay.push(match said {
+                                Some(n) => format!("{label}: {}", n as i64 + offset),
+                                None => format!("{label}: unknown"),
+                            });
+                        }
+                    }
+                    answer = Some(relay.join("\n"));
+                } else if servers.is_empty() && scenario["answer_line_counts"] == true {
+                    answer = line_count_answer(
+                        &message["params"]["prompt"],
+                        &cwd,
+                        scenario["led_offset"].as_i64().unwrap_or(0),
+                    );
+                }
                 let total = scenario["usage_total"].as_u64().unwrap_or(256);
                 // Different work streams a different number of chunks, for the
                 // same reason it costs a different number of tokens: a census
                 // that is identical in every scenario measures nothing.
                 let chunks = scenario["message_chunks"].as_u64().unwrap_or(1).max(1);
                 for index in 0..chunks {
+                    // The scripted answer is the message, sent once; the
+                    // numbered chunks are what every other turn streams.
+                    let text = match &answer {
+                        Some(text) if index == 0 => text.clone(),
+                        Some(_) => continue,
+                        None => format!("fake turn chunk {index}"),
+                    };
                     update(
                         session,
                         json!({"sessionUpdate":"agent_message_chunk",
-                               "content":{"type":"text",
-                                          "text":format!("fake turn chunk {index}")}}),
+                               "content":{"type":"text","text":text}}),
                     )?;
                     // A harness that reports as it goes rather than once at
                     // the end. R1 measured which one OpenCode is; this is the

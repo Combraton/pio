@@ -178,6 +178,32 @@ impl Provider {
             // being withheld rather than to the operation being ungrantable.
             "execution.submit" => {
                 needed.push((method, p["subject"].clone()));
+                // **Attaching a tool is the owner's act, never a grant's.**
+                // A lead-tool spec is a command the harness will launch
+                // beside the run, so a submit under any grant that carries
+                // one is refused — whatever else the grant allows. Without
+                // this a lead could give its own children a tool, and a tool
+                // is anything that can be launched.
+                if p["extensions"]
+                    .get(crate::codex::LEAD_TOOL_EXTENSION)
+                    .is_some()
+                {
+                    return Err(denied("owner_authority_required"));
+                }
+                // **A root run is the owner's act; a lead's grant starts
+                // runs only inside the lead's subtree.** Owner decision,
+                // 2026-09-24 (review 45). A run that names itself as its
+                // initiator is a root: nothing started it, so nothing a grant
+                // was issued for can have. Before this was said, a grant
+                // naming one run by id was refused `initiator_unknown` for
+                // submitting that run, which was true and explained nothing.
+                // A grant that names no subtree is not a lead's; see below.
+                if let Some(origin) = p["payload"].get("origin")
+                    && origin["initiator"]["kind"] == "execution.execution"
+                    && origin["initiator"]["id"] == p["subject"]["id"]
+                {
+                    return Err(denied("owner_authority_required"));
+                }
                 // **An `origin` is a claim about lineage, and lineage spends
                 // budget.** Under a grant, the only initiator a caller may
                 // name is the run the grant was issued for — the owner of
@@ -192,6 +218,17 @@ impl Provider {
                 //
                 // A grant that names no subtree names no initiator, so an
                 // `origin` under one is refused rather than trusted.
+                //
+                // **Such a grant is not a lead's, and it may still start a
+                // run with no lineage** (review 46). An unscoped kind, a bare
+                // prefix with no separator, or two runs named by id is a
+                // plain Protocol submit grant, and the pinned conformance
+                // suite issues one (`id_prefix: "a1-"`) and requires its
+                // origin-less submit to be admitted. So the root-run rule
+                // above is a rule about **lead grants**, the ones that name a
+                // subtree: refusing every submit under the rest was tried and
+                // failed two conformance fixtures.
+                //
                 // **And a grant that names a subtree owner requires one.**
                 // Omitting `origin` skipped the check entirely: after a
                 // lead's budget was spent, further submits under its prefix

@@ -41,6 +41,21 @@ it dies on the claim it undermines:
 - `--mutant owner-steers` sends the same steer as the owner, with no grant,
   so no grant is recorded against it. The key says who held a grant, not
   that a steer happened.
+- `--mutant refused-initiator-ok` admits the initiator, so its child is
+  admitted too. The refusal is about the initiator having been refused, not
+  about depth or budget.
+- `--mutant exited-initiator-ok` submits the child while the initiator is
+  still running, so it is admitted. The refusal is about the initiator having
+  exited, not about initiators in general.
+- `--mutant known-initiator-ok` admits the grant's subtree owner before its
+  children are submitted, so they are admitted. The refusal is about PIO never
+  having seen the initiator, not about grants or origins.
+- `--mutant owner-submits-root` sends the root submits as the owner, with no
+  grant, so they are admitted. The refusal is about a grant starting a root,
+  not about root runs.
+- `--mutant names-a-subtree` scopes the three plain grants to `x.`, so the
+  submit with no origin is refused. The admission is about the grant naming
+  no subtree, not about grants.
 """
 import argparse
 import hashlib
@@ -62,6 +77,11 @@ from public_api import CREDENTIAL, command, digest
 ROOT = Path(__file__).resolve().parents[1]
 PROVIDER = 'conformance-provider'
 LEAD_CREDENTIAL = 'ccred1.lead.' + 'l' * 43
+# How long a `serve-fake` run lasts where a case needs its lead **alive**
+# while children are started. Owner decision, 2026-09-23: an initiator that
+# has exited starts nothing, and the service default of 1.2 seconds would end
+# a lead in the middle of the case.
+LEAD_ALIVE_MS = 60_000
 FEATURES = ('core.events', 'core.capabilities', 'core.effects', 'core.grants')
 
 
@@ -117,7 +137,8 @@ def admitted(answer):
 def pass_origin(out, root, mutant=None):
     """Who started whom, how deep, and how many calls are left."""
     budget = 2 if mutant == 'richer' else 1
-    daemon, socket_path, files = start_service(root, out, name='origin')
+    daemon, socket_path, files = start_service(root, out, name='origin',
+                                               duration_ms=LEAD_ALIVE_MS)
     facts = {}
     try:
         owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
@@ -189,12 +210,16 @@ def pass_origin(out, root, mutant=None):
 def pass_lead_grant(out, root, mutant=None):
     """What a lead may do, and the one thing it may not."""
     daemon, socket_path, files = start_service(root, out, name='grant',
-                                              credentials=(LEAD_CREDENTIAL,))
+                                              credentials=(LEAD_CREDENTIAL,),
+                                              duration_ms=LEAD_ALIVE_MS)
     facts = {}
     try:
         owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
         # A run the lead will steer, and an action to try to answer.
         assert admitted(start(owner, 'work', origin('lead', 1, 0), duration=4000))
+        # The lead itself, alive: under a grant, a child may name only an
+        # initiator PIO has seen. `work` names it too and spends one call.
+        assert admitted(start(owner, 'lead', origin('lead', 0, 2)))
 
         rights = ['execution.submit', 'execution.steer', 'execution.read',
                   'core.events.read']
@@ -281,7 +306,8 @@ def pass_initiator_is_bound(out, root, mutant=None):
   the refusal is about the depth being wrong, not about depth being stated.
     """
     daemon, socket_path, files = start_service(root, out, name='spoof',
-                                               credentials=(LEAD_CREDENTIAL,))
+                                               credentials=(LEAD_CREDENTIAL,),
+                                               duration_ms=LEAD_ALIVE_MS)
     facts = {}
     try:
         owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
@@ -347,6 +373,266 @@ def pass_initiator_is_bound(out, root, mutant=None):
         facts['omitted_origin'] = 'permission_denied / out_of_scope'
         scoped.close()
         stranger.close()
+        owner.close()
+    finally:
+        daemon.kill()
+        daemon.wait(timeout=10)
+        for handle in files:
+            handle.close()
+    return facts
+
+
+def pass_initiator_liveness(out, root, mutant=None):
+    """An initiator must be alive to ask: not refused, and not exited.
+
+    Owner decision, 2026-09-23. The L1 rehearsal's lead was refused for a
+    missing brief, and its two children were admitted anyway — lineage
+    attached to a run that never started, spending a budget its caller had
+    merely claimed. A run that has exited is the same case later: its turn
+    is over, so it is not calling anything.
+    """
+    # Short runs, so the exited case can wait one out.
+    daemon, socket_path, files = start_service(root, out, name='liveness',
+                                               duration_ms=1500)
+    facts = {}
+    try:
+        owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
+
+        # **Refused.** A top-level run claiming depth 1 is refused
+        # `call_depth_exceeded`, and its origin is still recorded — which is
+        # exactly what let a child name it. `--mutant refused-initiator-ok`
+        # claims the right depth, so the initiator is admitted.
+        claimed = 0 if mutant == 'refused-initiator-ok' else 1
+        start(owner, 'lead-r', origin('lead-r', claimed, 2))
+        lead = view(owner, 'lead-r')
+        if mutant != 'refused-initiator-ok':
+            assert lead['admission'] == 'refused', lead
+        # The child claims the depth the recorded origin implies, so nothing
+        # but the initiator's state can refuse it.
+        depth = lead['origin']['depth'] + 1
+        answer = start(owner, 'lead-r.child', origin('lead-r', depth, 0))
+        assert refusal_of(answer) == 'initiator_refused', (
+            f'a child of a refused initiator was not refused: {answer}')
+        facts['child_of_a_refused_initiator'] = 'initiator_refused'
+
+        # **Exited.** `--mutant exited-initiator-ok` does not wait, so the
+        # child is submitted while the initiator is still running.
+        assert admitted(start(owner, 'lead-x', origin('lead-x', 0, 2)))
+        if mutant != 'exited-initiator-ok':
+            deadline = time.monotonic() + 60
+            while view(owner, 'lead-x')['runtime'] != 'exited':
+                assert time.monotonic() < deadline, view(owner, 'lead-x')
+                time.sleep(0.2)
+        facts['initiator_runtime_at_submit'] = view(owner, 'lead-x')['runtime']
+        answer = start(owner, 'lead-x.child', origin('lead-x', 1, 0))
+        assert refusal_of(answer) == 'initiator_exited', (
+            f'a child of an exited initiator was not refused: {answer}')
+        facts['child_of_an_exited_initiator'] = 'initiator_exited'
+
+        # And a run naming **itself** is untouched: it is being started, so
+        # it has no state to be refused or exited in.
+        assert admitted(start(owner, 'fresh', origin('fresh', 0, 1)))
+        facts['a_run_naming_itself'] = 'admitted'
+        owner.close()
+    finally:
+        daemon.kill()
+        daemon.wait(timeout=10)
+        for handle in files:
+            handle.close()
+    return facts
+
+
+def pass_initiator_unknown(out, root, mutant=None):
+    """Under a grant, an initiator PIO has never seen is refused.
+
+    Review 44 probed a grant for `ghost.` with no run `ghost`: it admitted
+    four children, one claiming depth 9 and a budget of 99, because an
+    initiator PIO has not seen derives no depth and declares no budget. And
+    children submitted before their lead existed spent the budget it was
+    admitted with later. The grant already binds the initiator to its
+    subtree's owner; that owner now has to exist.
+
+    The owner, with no grant, may still name an initiator PIO has not seen:
+    that is PIO recording a claim it cannot check, and the case records it.
+    """
+    daemon, socket_path, files = start_service(root, out, name='unknown',
+                                               credentials=(LEAD_CREDENTIAL,),
+                                               duration_ms=LEAD_ALIVE_MS)
+    facts = {}
+    try:
+        owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
+        grant_id = str(uuid.uuid4())
+        issued = owner.call(command(
+            'core.grant.issue', dict(kind='core.grant', id=grant_id),
+            dict(holder='lead', audience=PROVIDER,
+                 rights=['execution.submit', 'execution.read'],
+                 resources=[dict(kind='execution.execution', id_prefix='ghost.')],
+                 delegation=dict(allowed=False, max_depth=0)),
+            command_id=f'grant-{grant_id}'))
+        assert 'result' in issued, issued
+        if mutant == 'known-initiator-ok':
+            assert admitted(start(owner, 'ghost', origin('ghost', 0, 2)))
+        lead = Caller(socket_path, LEAD_CREDENTIAL, grant=grant_id, features=FEATURES)
+        # The depth the tree would give, and the review's depth 9 with a
+        # budget of 99: neither may be admitted in the name of nobody.
+        for identity, depth, budget in (('ghost.a', 1, 0), ('ghost.deep', 9, 99)):
+            answer = start(lead, identity, origin('ghost', depth, budget))
+            assert refusal_of(answer) == 'initiator_unknown', (
+                f'{identity} named an initiator PIO has never seen, under a '
+                f'grant, and was not refused: {answer}')
+            facts[f'{identity} (depth {depth}, budget {budget})'] = 'initiator_unknown'
+        # The refused children spent nothing: the lead, admitted now with a
+        # budget of one, still starts its one run.
+        assert admitted(start(owner, 'ghost', origin('ghost', 0, 1)))
+        assert admitted(start(lead, 'ghost.late', origin('ghost', 1, 0))), \
+            'children refused before their lead existed spent its budget'
+        facts['lead_budget_after_refusals'] = 'intact'
+        # The owner may still record a claim PIO cannot check.
+        owned = start(owner, 'elsewhere.child', origin('elsewhere', 1, 0))
+        assert admitted(owned), owned
+        facts['owner_naming_an_unseen_initiator'] = 'admitted, unchecked'
+        lead.close()
+        owner.close()
+    finally:
+        daemon.kill()
+        daemon.wait(timeout=10)
+        for handle in files:
+            handle.close()
+    return facts
+
+
+def pass_root_runs_are_the_owners(out, root, mutant=None):
+    """A root run is the owner's act; a lead's grant starts runs only inside
+    the lead's subtree. (A grant that names no subtree is not a lead's: see
+    `pass_plain_grants_are_not_leads`.)
+
+    Owner decision, 2026-09-24 (review 45). A run naming itself as its
+    initiator is a root. Under a grant it is refused `owner_authority_required`,
+    whichever run the grant names: one run by id, or a subtree whose owner is
+    the run being submitted. Without an origin, a grant that names a subtree
+    owner refuses the submit `out_of_scope`, as before. The owner, with no
+    grant, starts a root as it always has.
+    """
+    daemon, socket_path, files = start_service(root, out, name='roots',
+                                               credentials=(LEAD_CREDENTIAL,),
+                                               duration_ms=LEAD_ALIVE_MS)
+    facts = {}
+    try:
+        owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
+
+        def grant(resource):
+            grant_id = str(uuid.uuid4())
+            issued = owner.call(command(
+                'core.grant.issue', dict(kind='core.grant', id=grant_id),
+                dict(holder='lead', audience=PROVIDER,
+                     rights=['execution.submit', 'execution.read'],
+                     resources=[dict(kind='execution.execution', **resource)],
+                     delegation=dict(allowed=False, max_depth=0)),
+                command_id=f'grant-{grant_id}'))
+            assert 'result' in issued, issued
+            return Caller(socket_path, LEAD_CREDENTIAL, grant=grant_id, features=FEATURES)
+
+        solo, subtree = grant(dict(id='solo')), grant(dict(id_prefix='tree.'))
+        # `--mutant owner-submits-root` sends these as the owner instead.
+        by = {'solo': owner if mutant == 'owner-submits-root' else solo,
+              'tree': owner if mutant == 'owner-submits-root' else subtree}
+        for label, identity in (('the run a grant names by id', 'solo'),
+                                ("a subtree's owner, under that subtree's grant", 'tree')):
+            answer = start(by[identity], identity, origin(identity, 0, 1))
+            data = answer.get('error', {}).get('data', {})
+            assert (data.get('code'), (data.get('details') or {}).get('reason')) == (
+                'permission_denied', 'owner_authority_required'), (
+                f'{label}, submitted as a root under a grant, was not refused '
+                f'owner_authority_required: {answer}')
+            facts[f'root under a grant: {label}'] = 'permission_denied / owner_authority_required'
+        bare = start(solo, 'solo')
+        assert bare.get('error', {}).get('data', {}).get('details', {}).get('reason') \
+            == 'out_of_scope', bare
+        facts['no origin, under a grant naming one run'] = 'permission_denied / out_of_scope'
+        # The owner starts the same root, and the lead it becomes may then
+        # start a child through the subtree grant.
+        assert admitted(start(owner, 'tree', origin('tree', 0, 1)))
+        child = start(subtree, 'tree.child', origin('tree', 1, 0))
+        assert admitted(child), child
+        facts['the same root, started by the owner'] = 'admitted, and its child under the grant'
+        solo.close()
+        subtree.close()
+        owner.close()
+    finally:
+        daemon.kill()
+        daemon.wait(timeout=10)
+        for handle in files:
+            handle.close()
+    return facts
+
+
+def pass_plain_grants_are_not_leads(out, root, mutant=None):
+    """A grant that names no subtree is not a lead's (review 46).
+
+    Three shapes name no run a subtree belongs to: a grant over the whole
+    kind, a bare prefix with no separator (`x`, which covers `x.a` and `xy`
+    alike), and two runs named by id. Each is a plain Protocol submit grant.
+    Under each, a submit **with no origin is admitted** and carries no
+    lineage: the pinned conformance suite issues such a grant
+    (`id_prefix: "a1-"`) and requires exactly that, so refusing it was tried
+    and failed two fixtures. A submit that **claims an origin is refused**
+    `out_of_scope`, so such a grant can neither join a lead's subtree nor
+    spend its budget. The root-run rule is therefore a rule about lead grants,
+    the ones that name a subtree, and this case records where it stops.
+
+    `--mutant names-a-subtree` scopes each of the three grants to `x.`
+    instead, so the submit with no origin is refused: the admission is about
+    the grant naming no subtree, not about grants.
+    """
+    daemon, socket_path, files = start_service(root, out, name='plain',
+                                               credentials=(LEAD_CREDENTIAL,),
+                                               duration_ms=LEAD_ALIVE_MS)
+    facts = {}
+    try:
+        owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
+        # A live lead with one call, so that nothing but the grant can refuse
+        # a submit that names it, and its budget can be read afterwards.
+        assert admitted(start(owner, 'x', origin('x', 0, 1)))
+
+        def grant(resources):
+            if mutant == 'names-a-subtree':
+                resources = [dict(id_prefix='x.')]
+            grant_id = str(uuid.uuid4())
+            issued = owner.call(command(
+                'core.grant.issue', dict(kind='core.grant', id=grant_id),
+                dict(holder='lead', audience=PROVIDER,
+                     rights=['execution.submit', 'execution.read'],
+                     resources=[dict(kind='execution.execution', **r) for r in resources],
+                     delegation=dict(allowed=False, max_depth=0)),
+                command_id=f'grant-{grant_id}'))
+            assert 'result' in issued, issued
+            return Caller(socket_path, LEAD_CREDENTIAL, grant=grant_id, features=FEATURES)
+
+        shapes = (('the whole kind', [{}], 'x.kind', 'x.kind-claimed'),
+                  ('a bare prefix with no separator', [dict(id_prefix='x')],
+                   'x.bare', 'x.bare-claimed'),
+                  ('two runs named by id', [dict(id='x.one'), dict(id='x.two')],
+                   'x.one', 'x.two'))
+        for label, resources, plain, claimed in shapes:
+            holder = grant(resources)
+            answer = start(holder, plain)
+            assert admitted(answer), (
+                f'a plain submit grant over {label} was refused a submit with no '
+                f'origin, which Protocol conformance requires it to admit: {answer}')
+            assert view(owner, plain).get('origin') is None, view(owner, plain)
+            answer = start(holder, claimed, origin('x', 1, 0))
+            data = answer.get('error', {}).get('data', {})
+            assert (data.get('code'), (data.get('details') or {}).get('reason')) == (
+                'permission_denied', 'out_of_scope'), (
+                f'a grant over {label} claimed x as the initiator of {claimed}, '
+                f'and was not refused out_of_scope: {answer}')
+            facts[label] = dict(no_origin='admitted, no lineage',
+                                origin_naming_x='permission_denied / out_of_scope')
+            holder.close()
+        # The lead's one call is still its own.
+        assert admitted(start(owner, 'x.own', origin('x', 1, 0))), \
+            "the lead's call was spent by a plain grant's submits"
+        facts['the lead\'s budget afterwards'] = 'intact: its one call still starts a run'
         owner.close()
     finally:
         daemon.kill()
@@ -488,12 +774,16 @@ def main():
     parser.add_argument('--mutant', choices=['deeper', 'richer', 'no-origin',
                                              'may-answer', 'owner-steers',
                                              'bound-initiator', 'unscoped-grant',
-                                             'shallow-ok'])
+                                             'shallow-ok', 'refused-initiator-ok',
+                                             'exited-initiator-ok',
+                                             'known-initiator-ok',
+                                             'owner-submits-root',
+                                             'names-a-subtree'])
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     roots = []
     try:
-        for _ in range(3):
+        for _ in range(7):
             root = Path(tempfile.mkdtemp(prefix='pio-lead-', dir='/tmp')).resolve()
             os.chmod(root, 0o700)
             roots.append(root)
@@ -502,6 +792,12 @@ def main():
             lead_grant=pass_lead_grant(args.out, roots[1], args.mutant),
             initiator_is_bound=pass_initiator_is_bound(args.out, roots[2],
                                                        args.mutant),
+            initiator_liveness=pass_initiator_liveness(args.out, roots[3],
+                                                       args.mutant),
+            initiator_unknown=pass_initiator_unknown(args.out, roots[4], args.mutant),
+            root_runs=pass_root_runs_are_the_owners(args.out, roots[5], args.mutant),
+            plain_grants_are_not_leads=pass_plain_grants_are_not_leads(
+                args.out, roots[6], args.mutant),
             lead_cannot_answer=pass_lead_cannot_answer(args.out, args.mutant))
         (args.out / 'lead-runs.json').write_text(
             json.dumps(record, indent=2, sort_keys=True) + '\n')
