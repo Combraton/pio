@@ -18,6 +18,7 @@ import sqlite3
 import subprocess
 import tempfile
 import time
+import traceback
 import uuid
 import case_cleanup
 from public_api import Client, CREDENTIAL, command
@@ -462,6 +463,12 @@ def run_case(out, name):
         import base64
         text = base64.b64decode(output['data_base64']).decode()
         assert 'fake agent reply' in text, text
+        # Everything a caller must see is written before the event that makes
+        # the view `exited`, so a reader that sees `exited` finds it. The
+        # other order passed this case only by winning a race (review 47).
+        kinds = [json.loads(l)['kind'] for f in case.store.glob('codex-*.events.jsonl')
+                 for l in f.read_text().splitlines()]
+        assert kinds.index('config_after') < kinds.index('app_server_exited'), kinds
         diff = events_of(case, 'config_after')[0]['diff']
         assert [p['location'] for p in diff['projects_added']] == ['fixture'] and diff['other_changes'] is False, diff
         thread = events_of(case, 'thread_started')[0]
@@ -491,9 +498,14 @@ def main():
             try:
                 result.update(run_case(args.out / f'rep-{repetition}', name))
             except Exception as error:
-                result.update(outcome='harness_or_assertion_failure', reason=f'{type(error).__name__}: {error}')
+                # The line that raised, not only the exception: `IndexError:
+                # list index out of range` named no line, and a flake on CI
+                # went undiagnosed until a reviewer reproduced it (review 47).
+                frame = traceback.extract_tb(error.__traceback__)[-1]
+                result.update(outcome='harness_or_assertion_failure', reason=f'{type(error).__name__}: {error}',
+                              failed_at=f'{Path(frame.filename).name}:{frame.lineno} in {frame.name}: {frame.line}')
             results.append(result)
-            print(name, repetition, result['outcome'], result.get('reason', ''), flush=True)
+            print(name, repetition, result['outcome'], result.get('reason', ''), result.get('failed_at', ''), flush=True)
     counts = dict(Counter(r['outcome'] for r in results))
     report = dict(format='pio-codex-host-matrix/1', source='pio-fake-app-server', real_codex=False, live_tokens=0,
                   head=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
