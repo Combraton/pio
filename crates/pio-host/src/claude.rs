@@ -482,6 +482,15 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                 "usage":"unknown"}))?;
             break;
         } else if let Ok(Some(status)) = child.child.try_wait() {
+            // Exited, but what it wrote last may not have been read yet: a
+            // matrix run on CI recorded a use PIO had denied as `performed`,
+            // because the `result` naming the denial was still in the pipe
+            // when this branch ended the turn.
+            let rest = child.drain(Duration::from_secs(2))?;
+            if !rest.is_empty() {
+                early.extend(rest);
+                continue;
+            }
             // The harness left without a result; say so rather than waiting.
             life.event(json!({"kind":"result_missing","code":status.code()}))?;
             break;
