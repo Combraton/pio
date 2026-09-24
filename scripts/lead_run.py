@@ -105,7 +105,10 @@ does with a permission prompt.
   anything is reserved: the tree must be gone, and there is no receipt;
 - `no-wait` (L1b) has `alpha` finish in a second, so no read waits;
 - `no-ask` (L1b) has nobody ask, so the desk row must be inconclusive, not
-  passed.
+  passed;
+- `alpha-outlasts` (L1b) has `alpha` work 62 s, past the tool's 55 s wait:
+  the waiting row must still **hold**, and only through a read that came back
+  still running at the limit.
 """
 import argparse
 import base64
@@ -131,7 +134,7 @@ import opencode_live_run as live
 from approval_desk import ASKS
 from board_fold import Caller
 from check_private_paths import redact
-from lead_tool import message_text
+from lead_tool import READ_WAIT, message_text
 from public_api import command
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -280,13 +283,18 @@ MUTANTS = {
     # tree it made is gone.
     'setup-fails': 'A setup that fails leaves no tree behind',
     # L1b only.
-    'no-wait': 'A read_run waited for its run, and it had exited',
+    'no-wait': 'A read_run waited for its run: until it exited, or to the wait limit',
 }
 # L1b only: a mutant that must leave its row **inconclusive**, not failed. A
 # desk that was never asked has decided nothing, and must not say it has
 # (review 47).
 INCONCLUSIVE_MUTANTS = {'no-ask': 'Every approval was decided at the desk'}
-PLAN_MUTANTS = {'no-wait': 'L1b', 'no-ask': 'L1b'}
+# L1b only: a mutant whose row must still **hold**. `alpha` outlasts the lead
+# tool's wait, so its first read comes back still running at the limit, and
+# its second comes back `exited` too soon to count. Only the limit can hold
+# the row.
+HOLDING_MUTANTS = {'alpha-outlasts': 'A read_run waited for its run: until it exited, or to the wait limit'}
+PLAN_MUTANTS = {'no-wait': 'L1b', 'no-ask': 'L1b', 'alpha-outlasts': 'L1b'}
 
 
 def sha(data):
@@ -866,7 +874,9 @@ def plan_scenario(mutant):
         return {}
     waits, asks = CHILDREN[PLAN['waits']], CHILDREN[PLAN['asks']]
     return dict(
-        led_delay_ms=1000 if mutant == 'no-wait' else 30_000,
+        # `alpha-outlasts`: past the tool's 55 s wait, and not so far past
+        # that a second read waits another 20 s.
+        led_delay_ms={'no-wait': 1000, 'alpha-outlasts': 62_000}.get(mutant, 30_000),
         led_delay_if=child_brief(waits),
         # `no-ask`: text no prompt contains, so nobody asks.
         ask_if='no prompt names this' if mutant == 'no-ask' else asks,
@@ -1505,11 +1515,19 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                       seconds=e.get('seconds'))
                  for e in record['tool_log'] if e.get('event') == 'tool_call'
                  and e.get('tool') == 'read_run' and isinstance(e.get('result'), dict)]
-        rows.add('A read_run waited for its run, and it had exited',
+        # Two ways a read shows it waited: it took at least WAITED seconds
+        # and came back `exited`, or it came back still running at the tool's
+        # own limit. L1b's first attempt read `alpha` in 54.6 s of 55, so a
+        # slightly slower `alpha` would have failed a row about waiting by
+        # waiting the longest it can (owner decision, 2026-09-25).
+        rows.add('A read_run waited for its run: until it exited, or to the wait limit',
                  [r for r in reads if r['run'] == waiting],
-                 f'a read of {waiting} that took at least {WAITED} s and returned exited',
-                 holds=lambda o: any(r['runtime'] == 'exited'
-                                     and (r['seconds'] or 0) >= WAITED for r in o),
+                 f'a read of {waiting} that took at least {WAITED} s and returned exited, '
+                 f'or one that returned still running after the tool\'s {READ_WAIT} s limit',
+                 holds=lambda o: any(
+                     (r['runtime'] == 'exited' and (r['seconds'] or 0) >= WAITED)
+                     or (r['runtime'] not in ('exited', None)
+                         and (r['seconds'] or 0) >= READ_WAIT) for r in o),
                  note='seconds as the lead tool measured each call')
     rows.record('What OpenCode does with a permission prompt',
                 [dict(run=d['run'], option_kind=d['option_kind'], desk=d['desk'])
@@ -1773,7 +1791,8 @@ def main():
     parser.add_argument('--plan', choices=sorted(PLANS), default='L1',
                         help='L1, or L1b: the same shape, with a read that waits '
                              'and a request that comes to the desk')
-    parser.add_argument('--mutant', choices=sorted({*MUTANTS, *INCONCLUSIVE_MUTANTS}))
+    parser.add_argument('--mutant', choices=sorted({*MUTANTS, *INCONCLUSIVE_MUTANTS,
+                                                    *HOLDING_MUTANTS}))
     parser.add_argument('--inner', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     select_plan(args.plan)
@@ -1817,6 +1836,20 @@ def main():
     unproven = [r['row'] for r in record['rows'] if r['holds'] is None and r['kind'] == 'row']
     print(f"\n{len(record['rows'])} rows; not provable here: {unproven}")
     print(f"charged: {json.dumps(record['charge'])[:400]}")
+    if args.mutant in HOLDING_MUTANTS:
+        wanted = HOLDING_MUTANTS[args.mutant]
+        row = next(r for r in record['rows'] if r['row'] == wanted)
+        assert row['holds'] is True, f'mutant {args.mutant}: {wanted!r} did not hold: {row}'
+        at_limit = [r for r in row['observed'] if r['runtime'] not in ('exited', None)
+                    and (r['seconds'] or 0) >= READ_WAIT]
+        exited_long = [r for r in row['observed'] if r['runtime'] == 'exited'
+                       and (r['seconds'] or 0) >= WAITED]
+        # Held by the limit and by nothing else, or it proves nothing.
+        assert at_limit and not exited_long, row['observed']
+        assert not record['failed'], record['failed']
+        print(f'mutant {args.mutant}: holds on {wanted!r}, through a read that came back '
+              f"{at_limit[0]['runtime']} after {at_limit[0]['seconds']} s")
+        return
     if args.mutant in INCONCLUSIVE_MUTANTS:
         wanted = INCONCLUSIVE_MUTANTS[args.mutant]
         row = next(r for r in record['rows'] if r['row'] == wanted)
