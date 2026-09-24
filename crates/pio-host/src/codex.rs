@@ -464,8 +464,13 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
     let after = pio_codex::config_snapshot(&codex_home)?;
     let fixture_root = life.spec["fixture_root"].as_str().map(Path::new);
     let diff = pio_codex::config_diff(&before, &after, fixture_root);
-    life.event(json!({"kind":"app_server_exited","code":exit}))?;
+    // Ordered deliberately, as the Claude and OpenCode hosts are: the exit
+    // event is what turns the runtime to `exited`, so everything a caller
+    // must see on a finished execution is recorded first. This host had it
+    // the other way round, and a reader that saw `exited` could find no
+    // `config_after` yet (review 47: `j1_turn_completes`, `IndexError`).
     life.event(json!({"kind":"config_after","snapshot":after,"diff":diff}))?;
+    life.event(json!({"kind":"app_server_exited","code":exit}))?;
     let receipt = json!({"source":source(&life.spec),"kind":"native_turn_completed","turn_status":turn_status,"app_server_exit":exit,"output_digest":pio_core::digest(&all_output),"output_bytes":output_offset,"completion_is_acceptance":false});
     life.complete(receipt)?;
     Ok(())
