@@ -180,3 +180,44 @@ deleted. What L1b adds:
 the read tool's parameter name (`filePath`), not a measured permission
 request. Whether 2.0.11 asks about `beta.env` live is the live run's to show.
 If it doesn't ask, the desk row is inconclusive, not passed.
+
+## `L1b-live.json`
+
+L1b, **live**, at clean head `990c985` (`dirty: false`), 2026-09-24
+**18:11:55Z to 18:19:35Z**, detached, **on battery** (the owner lifted the AC
+condition; the no-sleep assertion was held to the end). The owner's desk
+words are in `desk`, verbatim except that their "HH:MM" placeholder was filled
+with the start time, and "on AC power" was changed to "on battery" at the
+owner's answer. Review 49 cleared the run; issue #12.
+
+**L1b failed, and its cause is the desk.** `beta`'s read of `beta.env` came to
+the desk (`L1b.beta.action-1`, requested 18:14:16Z) and was relayed at once.
+The owner's answer reached the relay at about 18:28Z, after the 300-second
+deadline (18:19:16Z). So **the host's single-use reject landed** (`reject_once`,
+decided by PIO, never "always"), and `beta` exited with no count. Three rows
+fail on that one cause: the desk row (lapsed), the children's counts (`beta`:
+none), and the lead's relay (`beta.env`: none). The owner's answer was
+"always allow". It could not have been sent as "always" in any case, because
+the desk encodes only `allow` and `deny`, and an allow is sent as `allow_once`.
+
+| | Observed |
+| --- | --- |
+| **The desk request** | OpenCode's read tool, `<fixture>/beta.env`, classified **`inside_fixture`**, disposition `surface_as_action`. OpenCode's options: `once` (`allow_once`), `always` (`allow_always`), `reject` (`reject_once`). So 2.0.11 does ask about `*.env` live, as the static reading said. |
+| **The waiting read** | The lead's `read_run` of `alpha` took **54.6 s** and returned `exited` with `7`. `beta`'s reads took 56.8, 56.5, 57.6 and 56.5 s (each `requires_action`), then 31.1 s (`exited`, after the reject), then 1.4 s. Nine tool calls against a ceiling of sixteen. |
+| **The lead** | Relayed `alpha.md: 7` and left `beta.env` blank: "Beta's text is empty, so the number beta reported is empty/absent." It invented nothing. Midway it said "Acknowledged — I won't use the pi-delegate skill": a skill from the owner's own OpenCode setup was visible to it, as configured. |
+| **Everything else** | Held, as in L1: tool on the lead only, launched once; both starts; the third refused `call_budget_spent`; steer `not_supported`, running and exited; the lead cannot answer; release clean; the owner's service untouched. |
+| **Inconclusive** | "PIO deleted no session": 0 sessions listed before (3 after), so nothing could be deleted (review 47). |
+
+**The charge: 128,790**, measured from the store's recorded steps (one
+`select` on `session_message` for the three PIO sessions, `mode=ro`, 13
+rows), not the bill.
+
+| Run | Steps recorded | Charged | Reported (last step) |
+| --- | --- | ---: | ---: |
+| `L1b` | 7,964 · 10,528 · 10,729 · 10,897 · 11,049 · 11,153 · 11,257 · 11,404 · 11,514 | 96,495 | 11,514 |
+| `L1b.alpha` | 8,113 · 8,169 · 8,197 | 24,479 | 8,197 |
+| `L1b.beta` | 7,816 | 7,816 | 7,816 |
+
+Sequence `M4-lead-opencode`: **202,322** of the 1,600,000 stop. MiniMax:
+**289,185 charged** of 300,000,000. The owner reconciles 18:11–18:20Z against
+the MiniMax console.
