@@ -83,7 +83,7 @@ jobs:
           PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --out target/lead-run
           for m in no-tool reports-refused-as-started grant-may-answer grant-no-steer \
                    wrong-child wrong-relay lead-without-brief lead-loops interrupted \
-                   runner-killed desk-silent; do
+                   runner-killed release-refused desk-silent; do
             if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --mutant "$m" \
                  --out target/lead-run-mutants > "target/lead-run-mutant-$m.log" 2>&1; then
               echo "mutant $m survived"; exit 1

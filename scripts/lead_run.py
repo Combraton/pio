@@ -43,7 +43,11 @@ sessions PIO started from the owner's OpenCode store, and nothing else in it.
 A run is charged the sum of its steps as recorded there, with the bound (the
 reported total times the steps the turn could have taken) beside it; where
 the store cannot be read, or its last step disagrees with the report, the
-bound is charged.
+bound is charged. That charge is **measured from the store's recorded steps,
+which is not the bill**: OpenCode 2.0.11 ships hidden agents (title, summary,
+compaction) whose calls a session's steps may not hold, so that the store
+holds every billed call is not proven, and the owner reconciles each live run
+against the MiniMax console (review 46).
 
 **Reserved before anything can spend.** Before the service starts, each run's
 worst-case share is written to the ledger as a `reserved` line, and the exit
@@ -51,6 +55,14 @@ path replaces each with its charge. A runner killed from outside, which no
 exit path survives, leaves its reservation standing, and a watchdog in its own
 session cancels whatever still runs and stops the service (review 45). Run the
 live runner detached, never under a tool's timeout.
+
+**After a SIGKILL the reservations stand, and so does the stop.** Nothing
+knows what a killed run spent, so its three `reserved` lines (1,395,200 in
+all) stay in the ledger and count as charged. The next attempt is refused
+before it starts, because 1,395,200 already charged plus another 1,395,200
+at worst passes the 1,600,000 stop. Replacing a reservation with a figure is
+**the owner's act, dated and recorded in the ledger**, never the runner's
+(review 46).
 
 What only the live run can show: that a real model uses the tool at all,
 that what the runs report is what the files say, and what the owner's OpenCode
@@ -76,7 +88,10 @@ does with a permission prompt.
   charge must be written anyway;
 - `runner-killed` has the runner SIGKILLed once the desk has answered: there is
   no receipt, the ledger must still hold every run's reservation, and the
-  watchdog must have stopped the service.
+  watchdog must have stopped the service;
+- `release-refused` has the cleanup's guard refuse the tree at the end, as it
+  refused L1's live tree; the run must fail on it, and the tree is then
+  released for real.
 """
 import argparse
 import base64
@@ -204,6 +219,7 @@ MUTANTS = {
     'lead-loops': 'Every run stayed within its ceilings',
     'interrupted': 'The run finished without an error',
     'runner-killed': 'The ledger holds the reservation',
+    'release-refused': 'The service was released, and nothing it started survived',
 }
 
 
@@ -216,6 +232,19 @@ def private(path):
     path.mkdir(parents=True, exist_ok=True)
     os.chmod(path, 0o700)
     return path
+
+
+def live_tree(name):
+    """A private tree under `~/pio-m4-live`, registered with the cleanup.
+
+    The M3b runner registers its own tree; L1's first live run did not, and
+    the release refused it at the end (review 46). Every rehearsal makes a
+    probe here through this same function, checks the cleanup would release
+    it, and releases it, so the live side of this is rehearsed too.
+    """
+    base = private(live.HOME / 'pio-m4-live')
+    case_cleanup.permit_prefix(base)
+    return private(base / f'{name}-{uuid.uuid4().hex[:8]}')
 
 
 def fixture(root):
@@ -794,7 +823,24 @@ def run(args):
                              f'{SEQUENCE_STOP} stop')
         if live.cumulative(book) + WORST_CASE >= live.STOP_AT:
             raise SystemExit('stop: the MiniMax cap would reach its stop')
-        root = private(live.HOME / 'pio-m4-live' / f'L1-{uuid.uuid4().hex[:8]}')
+        root = live_tree('L1')
+    # The cleanup must be able to release the live tree, and that is checked
+    # before anything is reserved or started, not found out at the end. A
+    # rehearsal checks a probe made the same way, then releases it.
+    probe = live_tree('probe') if rehearse else root
+    releasable, why = case_cleanup.releasable(probe)
+    record['live_tree'] = dict(releasable=releasable, why=why or None,
+                               probe=rehearse)
+    if rehearse:
+        try:
+            case_cleanup.release(probe)
+        except AssertionError as refused:
+            record['live_tree']['release_error'] = redact(str(refused))[:500]
+            with contextlib.suppress(OSError):
+                probe.rmdir()  # empty, and made above; never anything else
+        record['live_tree']['removed'] = not probe.exists()
+    elif not releasable:
+        raise SystemExit(f'refusing to start: the cleanup could not release {root}: {why}')
     record['root'] = str(root)
     print(f'ROOT {root}', flush=True)
     awake = NoSleep(required=not rehearse)
@@ -838,10 +884,30 @@ def run(args):
             record['judge_error'] = redact(repr(caught))[:2000]
         if error is not None:
             rows.add('The run finished without an error', record['error'], None)
+        rows.add('The live tree can be released', record['live_tree'],
+                 'releasable, and a probe removed',
+                 holds=lambda t: t['releasable'] and t.get('removed', True)
+                 and 'release_error' not in t)
+        # A step of the runner's own that raised left its rows unwritten, and
+        # a row that was never written never fails (L1 live, review 46).
+        rows.add("The runner's own steps raised no error",
+                 {k: record[k] for k in ('settle_error', 'judge_error') if k in record}, {})
         try:
-            service.release(remove=rehearse)
+            if args.mutant == 'release-refused':
+                # The guard refuses every tree, as it refused L1's live one.
+                with case_cleanup.no_permitted_prefixes():
+                    service.release(remove=rehearse)
+            else:
+                service.release(remove=rehearse)
         except Exception as caught:
             record['release_error'] = redact(repr(caught))[:2000]
+        rows.add('The service was released, and nothing it started survived',
+                 record.get('release_error') or 'released', 'released')
+        if args.mutant == 'release-refused':
+            try:
+                service.release(remove=rehearse)
+            except Exception as caught:
+                record['mutant_release_error'] = redact(repr(caught))[:2000]
         awake.close()
         record['rows'] = rows.rows
         record['failed'] = rows.failed()
@@ -1115,7 +1181,7 @@ def usage_of(views, meters, submitted, steps=None):
                          bound=reported * most, measured_steps=recorded or None,
                          meter_estimate=gauge.estimate())
             if recorded and recorded[-1] == reported:
-                entry.update(charged=sum(recorded), basis='measured_per_step')
+                entry.update(charged=sum(recorded), basis='measured_from_store_steps')
             elif recorded:
                 entry.update(charged=max(sum(recorded), reported * most),
                              basis='steps_bound',
@@ -1345,7 +1411,8 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                      for r in o['runs'].values()),
              live_only=True,
              note="owner decision 2026-09-24: session_message rows of PIO's sessions, "
-                  'read-only')
+                  "read-only; measured from the store's recorded steps, not the bill: "
+                  'that the store holds every billed call is not proven')
     rows.add('Every run reported its usage',
              {i: u.get('reported_last_step') for i, u in usage.items()
               if u['basis'] != 'refused before any model call'},
@@ -1458,8 +1525,14 @@ def watchdog(runner, daemon, root):
     the runner finished (`runner-done`, or a rehearsal's root released).
     Otherwise it stops the lead's tool, cancels every run still going, waits
     out the host's kill, stops the daemon, and writes `watchdog.json`. The
-    ledger keeps its reservations: nothing here knows what was spent.
+    ledger keeps its reservations: nothing here knows what was spent. It holds
+    a no-sleep assertion of its own for as long as it lives, since the
+    runner's died with the runner (review 46).
     """
+    if shutil.which('caffeinate'):
+        subprocess.Popen(['caffeinate', '-i', '-s', '-w', str(os.getpid())],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
     while True:
         if not alive(daemon) or not root.exists():
             return

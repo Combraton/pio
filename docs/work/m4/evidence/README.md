@@ -117,6 +117,8 @@ store recorded for its session, read under the owner's decision of
 2026-09-24 (`session_message` of the three PIO sessions, one `select`,
 `mode=ro`: 8 rows), because each last step equals what OpenCode reported.
 That is **measured from the store's recorded steps**, which is not the bill.
+The receipt names this basis `measured_per_step`, its name at `703706d`; after
+review 46 the runner calls it `measured_from_store_steps`.
 
 | Run | Steps recorded | Charged | Reported (last step) | Bound |
 | --- | --- | ---: | ---: | ---: |

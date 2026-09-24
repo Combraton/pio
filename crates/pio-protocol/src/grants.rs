@@ -190,13 +190,14 @@ impl Provider {
                 {
                     return Err(denied("owner_authority_required"));
                 }
-                // **A root run is the owner's act; a grant starts runs only
-                // inside a lead's subtree.** Owner decision, 2026-09-24
-                // (review 45). A run that names itself as its initiator is a
-                // root: nothing started it, so nothing a grant was issued
-                // for can have. Before this was said, a grant naming one run
-                // by id was refused `initiator_unknown` for submitting that
-                // run, which was true and explained nothing.
+                // **A root run is the owner's act; a lead's grant starts
+                // runs only inside the lead's subtree.** Owner decision,
+                // 2026-09-24 (review 45). A run that names itself as its
+                // initiator is a root: nothing started it, so nothing a grant
+                // was issued for can have. Before this was said, a grant
+                // naming one run by id was refused `initiator_unknown` for
+                // submitting that run, which was true and explained nothing.
+                // A grant that names no subtree is not a lead's; see below.
                 if let Some(origin) = p["payload"].get("origin")
                     && origin["initiator"]["kind"] == "execution.execution"
                     && origin["initiator"]["id"] == p["subject"]["id"]
@@ -217,6 +218,17 @@ impl Provider {
                 //
                 // A grant that names no subtree names no initiator, so an
                 // `origin` under one is refused rather than trusted.
+                //
+                // **Such a grant is not a lead's, and it may still start a
+                // run with no lineage** (review 46). An unscoped kind, a bare
+                // prefix with no separator, or two runs named by id is a
+                // plain Protocol submit grant, and the pinned conformance
+                // suite issues one (`id_prefix: "a1-"`) and requires its
+                // origin-less submit to be admitted. So the root-run rule
+                // above is a rule about **lead grants**, the ones that name a
+                // subtree: refusing every submit under the rest was tried and
+                // failed two conformance fixtures.
+                //
                 // **And a grant that names a subtree owner requires one.**
                 // Omitting `origin` skipped the check entirely: after a
                 // lead's budget was spent, further submits under its prefix

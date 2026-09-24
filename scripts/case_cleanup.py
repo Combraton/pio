@@ -29,6 +29,7 @@ groups** and their descendants, signals the groups, and **asserts both the
 groups and the store are empty** before removing anything. A store removed
 while a process still uses it is worse than one left behind.
 """
+import contextlib
 import os
 import shutil
 import signal
@@ -45,6 +46,23 @@ def permit_prefix(prefix):
     prefix = os.path.realpath(prefix)
     if prefix not in PERMITTED_PREFIXES:
         PERMITTED_PREFIXES.append(prefix)
+
+
+def releasable(root):
+    """Whether `release` would act on `root`: `(True, '')`, or `(False, why)`.
+    For a runner to ask before it starts anything, not after."""
+    return _removable(root)
+
+
+@contextlib.contextmanager
+def no_permitted_prefixes():
+    """Every tree refused, for a mutant that must see the guard refuse."""
+    saved = PERMITTED_PREFIXES[:]
+    PERMITTED_PREFIXES.clear()
+    try:
+        yield
+    finally:
+        PERMITTED_PREFIXES[:] = saved
 
 
 def _table():

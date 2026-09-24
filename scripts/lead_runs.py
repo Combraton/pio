@@ -53,6 +53,9 @@ it dies on the claim it undermines:
 - `--mutant owner-submits-root` sends the root submits as the owner, with no
   grant, so they are admitted. The refusal is about a grant starting a root,
   not about root runs.
+- `--mutant names-a-subtree` scopes the three plain grants to `x.`, so the
+  submit with no origin is refused. The admission is about the grant naming
+  no subtree, not about grants.
 """
 import argparse
 import hashlib
@@ -499,8 +502,9 @@ def pass_initiator_unknown(out, root, mutant=None):
 
 
 def pass_root_runs_are_the_owners(out, root, mutant=None):
-    """A root run is the owner's act; a grant starts runs only inside a
-    lead's subtree.
+    """A root run is the owner's act; a lead's grant starts runs only inside
+    the lead's subtree. (A grant that names no subtree is not a lead's: see
+    `pass_plain_grants_are_not_leads`.)
 
     Owner decision, 2026-09-24 (review 45). A run naming itself as its
     initiator is a root. Under a grant it is refused `owner_authority_required`,
@@ -553,6 +557,82 @@ def pass_root_runs_are_the_owners(out, root, mutant=None):
         facts['the same root, started by the owner'] = 'admitted, and its child under the grant'
         solo.close()
         subtree.close()
+        owner.close()
+    finally:
+        daemon.kill()
+        daemon.wait(timeout=10)
+        for handle in files:
+            handle.close()
+    return facts
+
+
+def pass_plain_grants_are_not_leads(out, root, mutant=None):
+    """A grant that names no subtree is not a lead's (review 46).
+
+    Three shapes name no run a subtree belongs to: a grant over the whole
+    kind, a bare prefix with no separator (`x`, which covers `x.a` and `xy`
+    alike), and two runs named by id. Each is a plain Protocol submit grant.
+    Under each, a submit **with no origin is admitted** and carries no
+    lineage: the pinned conformance suite issues such a grant
+    (`id_prefix: "a1-"`) and requires exactly that, so refusing it was tried
+    and failed two fixtures. A submit that **claims an origin is refused**
+    `out_of_scope`, so such a grant can neither join a lead's subtree nor
+    spend its budget. The root-run rule is therefore a rule about lead grants,
+    the ones that name a subtree, and this case records where it stops.
+
+    `--mutant names-a-subtree` scopes each of the three grants to `x.`
+    instead, so the submit with no origin is refused: the admission is about
+    the grant naming no subtree, not about grants.
+    """
+    daemon, socket_path, files = start_service(root, out, name='plain',
+                                               credentials=(LEAD_CREDENTIAL,),
+                                               duration_ms=LEAD_ALIVE_MS)
+    facts = {}
+    try:
+        owner = Caller(socket_path, CREDENTIAL, features=FEATURES)
+        # A live lead with one call, so that nothing but the grant can refuse
+        # a submit that names it, and its budget can be read afterwards.
+        assert admitted(start(owner, 'x', origin('x', 0, 1)))
+
+        def grant(resources):
+            if mutant == 'names-a-subtree':
+                resources = [dict(id_prefix='x.')]
+            grant_id = str(uuid.uuid4())
+            issued = owner.call(command(
+                'core.grant.issue', dict(kind='core.grant', id=grant_id),
+                dict(holder='lead', audience=PROVIDER,
+                     rights=['execution.submit', 'execution.read'],
+                     resources=[dict(kind='execution.execution', **r) for r in resources],
+                     delegation=dict(allowed=False, max_depth=0)),
+                command_id=f'grant-{grant_id}'))
+            assert 'result' in issued, issued
+            return Caller(socket_path, LEAD_CREDENTIAL, grant=grant_id, features=FEATURES)
+
+        shapes = (('the whole kind', [{}], 'x.kind', 'x.kind-claimed'),
+                  ('a bare prefix with no separator', [dict(id_prefix='x')],
+                   'x.bare', 'x.bare-claimed'),
+                  ('two runs named by id', [dict(id='x.one'), dict(id='x.two')],
+                   'x.one', 'x.two'))
+        for label, resources, plain, claimed in shapes:
+            holder = grant(resources)
+            answer = start(holder, plain)
+            assert admitted(answer), (
+                f'a plain submit grant over {label} was refused a submit with no '
+                f'origin, which Protocol conformance requires it to admit: {answer}')
+            assert view(owner, plain).get('origin') is None, view(owner, plain)
+            answer = start(holder, claimed, origin('x', 1, 0))
+            data = answer.get('error', {}).get('data', {})
+            assert (data.get('code'), (data.get('details') or {}).get('reason')) == (
+                'permission_denied', 'out_of_scope'), (
+                f'a grant over {label} claimed x as the initiator of {claimed}, '
+                f'and was not refused out_of_scope: {answer}')
+            facts[label] = dict(no_origin='admitted, no lineage',
+                                origin_naming_x='permission_denied / out_of_scope')
+            holder.close()
+        # The lead's one call is still its own.
+        assert admitted(start(owner, 'x.own', origin('x', 1, 0))), \
+            "the lead's call was spent by a plain grant's submits"
+        facts['the lead\'s budget afterwards'] = 'intact: its one call still starts a run'
         owner.close()
     finally:
         daemon.kill()
@@ -697,12 +777,13 @@ def main():
                                              'shallow-ok', 'refused-initiator-ok',
                                              'exited-initiator-ok',
                                              'known-initiator-ok',
-                                             'owner-submits-root'])
+                                             'owner-submits-root',
+                                             'names-a-subtree'])
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     roots = []
     try:
-        for _ in range(6):
+        for _ in range(7):
             root = Path(tempfile.mkdtemp(prefix='pio-lead-', dir='/tmp')).resolve()
             os.chmod(root, 0o700)
             roots.append(root)
@@ -715,6 +796,8 @@ def main():
                                                        args.mutant),
             initiator_unknown=pass_initiator_unknown(args.out, roots[4], args.mutant),
             root_runs=pass_root_runs_are_the_owners(args.out, roots[5], args.mutant),
+            plain_grants_are_not_leads=pass_plain_grants_are_not_leads(
+                args.out, roots[6], args.mutant),
             lead_cannot_answer=pass_lead_cannot_answer(args.out, args.mutant))
         (args.out / 'lead-runs.json').write_text(
             json.dumps(record, indent=2, sort_keys=True) + '\n')
