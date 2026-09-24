@@ -41,7 +41,9 @@
 //! that call's `text`, plus `lead.relay_offset` (a lead that relays wrong
 //! numbers). `ask_in` (`lead` or `led`) limits the permission requests to
 //! sessions with or without servers. A session with **no** servers stands in
-//! for a led run: `led_delay_ms` keeps its turn running for a while, and
+//! for a led run: `led_delay_ms` keeps its turn running for a while (only
+//! where the prompt contains `led_delay_if`, when that is given; `ask_if`
+//! limits the permission requests the same way), and
 //! `answer_line_counts` answers with the real line count of the file its
 //! prompt names, plus `led_offset` (a child that reports wrong).
 //!
@@ -188,20 +190,29 @@ fn first_number(text: &str) -> Option<u64> {
         .and_then(|part| part.parse().ok())
 }
 
+/// A prompt's text blocks, joined.
+fn prompt_text(prompt: &Value) -> String {
+    prompt
+        .as_array()
+        .map(|blocks| {
+            blocks
+                .iter()
+                .filter_map(|block| block["text"].as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_default()
+}
+
 /// Stand in for a led run's model: the line count of the file its prompt
 /// names, read from the session's own working directory.
 fn line_count_answer(prompt: &Value, cwd: &str, offset: i64) -> Option<String> {
-    let text: String = prompt
-        .as_array()?
-        .iter()
-        .filter_map(|block| block["text"].as_str())
-        .collect::<Vec<_>>()
-        .join(" ");
+    let text = prompt_text(prompt);
     let name = text
         .split_whitespace()
         .map(|word| word.trim_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '_'))
         .map(|word| word.trim_end_matches('.'))
-        .find(|word| word.ends_with(".md"))?;
+        .find(|word| word.ends_with(".md") || word.ends_with(".env"))?;
     let lines = std::fs::read_to_string(std::path::Path::new(cwd).join(name))
         .ok()?
         .lines()
@@ -452,11 +463,15 @@ pub fn run() -> Result<()> {
                            "model":&current,
                            "prompt_blocks":message["params"]["prompt"].as_array().map(Vec::len)}),
                 )?;
+                // `led_delay_if` and `ask_if` limit the delay and the asking to
+                // the sessions whose prompt names that text, so one led run
+                // can wait while another asks (L1b).
+                let prompt = prompt_text(&message["params"]["prompt"]);
+                let named = |key: &str| scenario[key].as_str().is_none_or(|t| prompt.contains(t));
                 let delay = scenario["delay_ms"].as_u64().or_else(|| {
                     // A led run stays at work for a while, so it can be
                     // steered while its turn is still running.
-                    servers
-                        .is_empty()
+                    (servers.is_empty() && named("led_delay_if"))
                         .then(|| scenario["led_delay_ms"].as_u64())
                         .flatten()
                 });
@@ -481,11 +496,12 @@ pub fn run() -> Result<()> {
                 let decides_itself = !handshook || scenario["decide_by_rules"] == true;
                 // Which sessions ask: the lead (servers listed), the runs it
                 // led (none), or every session, which is the default.
-                let asks_here = match scenario["ask_in"].as_str() {
-                    Some("lead") => !servers.is_empty(),
-                    Some("led") => servers.is_empty(),
-                    _ => true,
-                };
+                let asks_here = named("ask_if")
+                    && match scenario["ask_in"].as_str() {
+                        Some("lead") => !servers.is_empty(),
+                        Some("led") => servers.is_empty(),
+                        _ => true,
+                    };
                 if !asks_here {
                 } else if !scenario["permission_request"].is_null() && decides_itself {
                     let state = if handshook {

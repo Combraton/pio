@@ -64,6 +64,15 @@ at worst passes the 1,600,000 stop. Replacing a reservation with a figure is
 **the owner's act, dated and recorded in the ledger**, never the runner's
 (review 46).
 
+**`--plan L1b`** is L1's shape, briefed so that what L1 could not show is
+shown: `alpha` works for thirty seconds before it counts, so the lead's
+`read_run` waits for it (a row reads, from the tool's own log, a read that
+took at least 20 s and returned `exited`); and `beta` reads a placeholder
+`beta.env` with OpenCode's read tool, which 2.0.11 asks about by default, so
+the request comes to the desk. Owner approval, 2026-09-24, with review 48's
+amendments. A desk nobody asked, and a history with no session in it, can
+decide nothing: those rows are **inconclusive**, never passed (review 47).
+
 What only the live run can show: that a real model uses the tool at all,
 that what the runs report is what the files say, and what the owner's OpenCode
 does with a permission prompt.
@@ -91,7 +100,10 @@ does with a permission prompt.
   watchdog must have stopped the service;
 - `release-refused` has the cleanup's guard refuse the tree at the end, as it
   refused L1's live tree; the run must fail on it, and the tree is then
-  released for real.
+  released for real;
+- `no-wait` (L1b) has `alpha` finish in a second, so no read waits;
+- `no-ask` (L1b) has nobody ask, so the desk row must be inconclusive, not
+  passed.
 """
 import argparse
 import base64
@@ -123,7 +135,6 @@ from public_api import command
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = ROOT / 'target/debug/pio'
 TOOL = ROOT / 'scripts' / 'lead_tool.py'
-LEAD = 'L1'
 SEQUENCE = 'M4-lead-opencode'
 MODEL = 'minimax-coding-plan/MiniMax-M3'
 PROVIDER = 'conformance-provider'
@@ -132,10 +143,37 @@ SEQUENCE_CAP = 2_000_000
 SEQUENCE_STOP = 1_600_000
 DELIVERY_TIMEOUT = 300
 EXECUTION_DEADLINE = 900
-APPROVALS = dict(
-    model_exception=live.MODEL_EXCEPTION,
-    lead_tool='owner-2026-09-22-m4b-lead-tool',
-    l1='Owner approval, 2026-09-23 — L1, the amended plan (issue #12)')
+
+# --- The plans. L1 is the first live lead run. L1b is the same shape, briefed
+# so that the lead's read waits and a request comes to the desk: owner
+# approval of 2026-09-24, with review 48's amendments. OpenCode 2.0.11's
+# shipped default asks before reading `*.env` (review 48, static; the owner's
+# own configuration overrides no permission, checked 2026-09-24), and PIO
+# relays a request inside the workspace to the desk.
+PLANS = {
+    'L1': dict(
+        approval='Owner approval, 2026-09-23 — L1, the amended plan (issue #12)',
+        files={'alpha.md': 7, 'beta.md': 4},
+        briefs={'alpha.md': 'Report the number of lines in alpha.md. '
+                            'Answer with the number alone.',
+                'beta.md': 'Report the number of lines in beta.md. '
+                           'Answer with the number alone.'},
+        waits=None, asks=None),
+    'L1b': dict(
+        approval='Owner approval, 2026-09-24 — L1b, with the amendments of '
+                 'review 48 (issue #12)',
+        files={'alpha.md': 7, 'beta.env': 4},
+        briefs={'alpha.md': 'First run the shell command sleep 30. Then report the '
+                            'number of lines in alpha.md. Answer with the number '
+                            'alone.',
+                'beta.env': 'Use your file read tool, not a shell command, to read '
+                            'beta.env. Then report the number of lines in beta.env. '
+                            'Answer with the number alone.'},
+        # alpha works for thirty seconds, so a read of it waits; beta reads a
+        # placeholder `.env` file, so OpenCode asks and the desk relays.
+        waits='alpha', asks='beta'),
+}
+WAITED = 20
 
 # --- The bound on what one attempt can spend.
 #
@@ -189,23 +227,39 @@ LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 UNDER_GRANT = 'pio.combraton.dev/under-grant'
 APPROVAL = 'pio.combraton.dev/approval'
 DECISION = 'pio.combraton.dev/decision'
-FILES = {'alpha.md': 7, 'beta.md': 4}
-CHILDREN = {name.split('.')[0]: name for name in FILES}
-RUNS = (LEAD, *[f'{LEAD}.{c}' for c in CHILDREN])
 
 
 def child_brief(name):
-    return f'Report the number of lines in {name}. Answer with the number alone.'
+    return PLAN['briefs'][name]
 
 
-BRIEF = ('There are two files in this workspace, alpha.md and beta.md. Use the '
-         'pio-lead tool, and nothing else, to do this. Call start_run twice: '
-         "name 'alpha' with the brief '" + child_brief('alpha.md') + "', and name "
-         "'beta' with the brief '" + child_brief('beta.md') + "'. Then call "
-         'read_run for alpha and for beta, again until its runtime is exited. Do '
-         'not read the files yourself and do not start any other run. Finish '
-         'with exactly two lines, alpha.md: <number> and beta.md: <number>, using '
-         'the numbers the two runs reported.')
+def lead_brief():
+    a, b = FILES
+    return (f'There are two files in this workspace, {a} and {b}. Use the '
+            'pio-lead tool, and nothing else, to do this. Call start_run twice: '
+            "name 'alpha' with the brief '" + child_brief(a) + "', and name "
+            "'beta' with the brief '" + child_brief(b) + "'. Then call "
+            'read_run for alpha and for beta, again until its runtime is exited. Do '
+            'not read the files yourself and do not start any other run. Finish '
+            f'with exactly two lines, {a}: <number> and {b}: <number>, using '
+            'the numbers the two runs reported.')
+
+
+def select_plan(name):
+    """Bind the names every step reads to one plan's lead, files and briefs."""
+    global PLAN, LEAD, FILES, CHILDREN, RUNS, APPROVALS, BRIEF
+    PLAN = dict(PLANS[name], name=name)
+    LEAD = name
+    FILES = PLAN['files']
+    CHILDREN = {f.split('.')[0]: f for f in FILES}
+    RUNS = (LEAD, *[f'{LEAD}.{c}' for c in CHILDREN])
+    APPROVALS = dict(model_exception=live.MODEL_EXCEPTION,
+                     lead_tool='owner-2026-09-22-m4b-lead-tool',
+                     **{name.lower(): PLAN['approval']})
+    BRIEF = lead_brief()
+
+
+select_plan('L1')
 
 MUTANTS = {
     'no-tool': 'Only the lead got the tool',
@@ -220,7 +274,14 @@ MUTANTS = {
     'interrupted': 'The run finished without an error',
     'runner-killed': 'The ledger holds the reservation',
     'release-refused': 'The service was released, and nothing it started survived',
+    # L1b only.
+    'no-wait': 'A read_run waited for its run, and it had exited',
 }
+# L1b only: a mutant that must leave its row **inconclusive**, not failed. A
+# desk that was never asked has decided nothing, and must not say it has
+# (review 47).
+INCONCLUSIVE_MUTANTS = {'no-ask': 'Every approval was decided at the desk'}
+PLAN_MUTANTS = {'no-wait': 'L1b', 'no-ask': 'L1b'}
 
 
 def sha(data):
@@ -252,8 +313,13 @@ def fixture(root):
     repo = private(root / 'fixtures') / 'lead'
     repo.mkdir()
     for name, lines in FILES.items():
-        (repo / name).write_text(''.join(f'line {n}\n' for n in range(1, lines + 1)))
-    (repo / 'README.md').write_text('L1 fixture. A throwaway repository.\n')
+        # A placeholder `.env` says so on every line and holds nothing that
+        # looks like a setting or a key. It exists only in this fixture.
+        text = 'placeholder line {n}, not a setting' if name.endswith('.env') \
+            else 'line {n}'
+        (repo / name).write_text(''.join(text.format(n=n) + '\n'
+                                         for n in range(1, lines + 1)))
+    (repo / 'README.md').write_text(f'{LEAD} fixture. A throwaway repository.\n')
     git = lambda *a: subprocess.run(['git', '-C', str(repo), *a], check=True,
                                     capture_output=True, text=True).stdout.strip()
     git('init', '-q')
@@ -369,7 +435,8 @@ class Service:
         # In its own session, so nothing that kills the runner kills it.
         self.watchdog = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), '--watch-runner',
-             str(os.getpid()), '--daemon', str(self.daemon.pid), '--root', str(self.root)],
+             str(os.getpid()), '--daemon', str(self.daemon.pid), '--root', str(self.root),
+             '--plan', LEAD],
             stdout=(self.root / 'watchdog.log').open('w'), stderr=subprocess.STDOUT,
             start_new_session=True)
         deadline = time.monotonic() + 180
@@ -469,8 +536,10 @@ def first_number(text):
 
 
 def relayed(text):
-    return {f'{m.group(1)}.md': int(m.group(2))
-            for m in re.finditer(r'\b(alpha|beta)\.md\s*:\s*(\d+)', text or '')}
+    """The counts a lead relayed, `<file>: <number>`, for this plan's files."""
+    names = '|'.join(re.escape(name) for name in FILES)
+    return {m.group(1): int(m.group(2))
+            for m in re.finditer(rf'(?<!\w)({names})\s*:\s*(\d+)', text or '')}
 
 
 def submit(caller, identity, brief, repo, base, origin, extensions):
@@ -768,14 +837,34 @@ def scenario(mutant):
               for short, name in CHILDREN.items()]
     loops = ([dict(tool='read_run', arguments=dict(name='alpha'), repeat=CALL_CEILING * 2)]
              if mutant == 'lead-loops' else [])
+    return {
+        **dict(
+            lead=dict(calls=starts + reads + loops,
+                      relay_offset=1 if mutant == 'wrong-relay' else 0),
+            answer_line_counts=True, led_offset=1 if mutant == 'wrong-child' else 0,
+            # Long enough to be steered while it runs, and asked about one
+            # thing, so the desk has something to relay.
+            led_delay_ms=3000, permission_request=ASKS, ask_in='led',
+            usage_total=4096),
+        # A plan's own play replaces those it names.
+        **plan_scenario(mutant)}
+
+
+def plan_scenario(mutant):
+    """L1b: the waiting child works for thirty seconds and the asking child
+    asks to read its `.env` file; each only where its brief says so. The
+    shape of the fake's read request is OpenCode's read tool's own parameter,
+    not a measured permission request."""
+    if not PLAN['waits']:
+        return {}
+    waits, asks = CHILDREN[PLAN['waits']], CHILDREN[PLAN['asks']]
     return dict(
-        lead=dict(calls=starts + reads + loops,
-                  relay_offset=1 if mutant == 'wrong-relay' else 0),
-        answer_line_counts=True, led_offset=1 if mutant == 'wrong-child' else 0,
-        # Long enough to be steered while it runs, and asked about one thing,
-        # so the desk has something to relay.
-        led_delay_ms=3000, permission_request=ASKS, ask_in='led',
-        usage_total=4096)
+        led_delay_ms=1000 if mutant == 'no-wait' else 30_000,
+        led_delay_if=child_brief(waits),
+        # `no-ask`: text no prompt contains, so nobody asks.
+        ask_if='no prompt names this' if mutant == 'no-ask' else asks,
+        permission_request=dict(title=f'read {asks}', kind='read',
+                                input=dict(filePath=asks)))
 
 
 def on_sigterm(signum, frame):
@@ -823,7 +912,7 @@ def run(args):
                              f'{SEQUENCE_STOP} stop')
         if live.cumulative(book) + WORST_CASE >= live.STOP_AT:
             raise SystemExit('stop: the MiniMax cap would reach its stop')
-        root = live_tree('L1')
+        root = live_tree(LEAD)
     # The cleanup must be able to release the live tree, and that is checked
     # before anything is reserved or started, not found out at the end. A
     # rehearsal checks a probe made the same way, then releases it.
@@ -1375,14 +1464,30 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                   desk={a: i['state'] for a, i in desk.items.items()}),
              'each relayed and answered at the desk, decided by the caller, sent as '
              'the single-use kind, never always, none lapsed',
-             holds=lambda o: not o['lapsed']
+             # Nothing asked, nothing decided: that cannot fail, so it is
+             # not a pass either (review 47).
+             holds=lambda o: None if not o['desk'] and not o['lapsed'] and not o['decisions']
+             else not o['lapsed']
              and all(s == 'answered' for s in o['desk'].values())
              and len(o['desk']) == len(o['decisions'])
              and all(d['decided_by'] == 'caller' and d['applied'] is True
                      and d['option_kind'] == single_use.get(d['desk_decision'])
                      and d['always_option_taken'] is False for d in o['decisions']),
-             note=f'{len(decisions)} approval(s) asked; a lapse is the host\'s single-use '
-                  'reject after the delivery timeout, and it fails L1')
+             note=f'{len(decisions)} approval(s) asked; none asked is inconclusive; a lapse '
+                  f"is the host's single-use reject after the delivery timeout, and it "
+                  f'fails {LEAD}')
+    if PLAN['waits']:
+        waiting = f"{LEAD}.{PLAN['waits']}"
+        reads = [dict(run=e['result'].get('run'), runtime=e['result'].get('runtime'),
+                      seconds=e.get('seconds'))
+                 for e in record['tool_log'] if e.get('event') == 'tool_call'
+                 and e.get('tool') == 'read_run' and isinstance(e.get('result'), dict)]
+        rows.add('A read_run waited for its run, and it had exited',
+                 [r for r in reads if r['run'] == waiting],
+                 f'a read of {waiting} that took at least {WAITED} s and returned exited',
+                 holds=lambda o: any(r['runtime'] == 'exited'
+                                     and (r['seconds'] or 0) >= WAITED for r in o),
+                 note='seconds as the lead tool measured each call')
     rows.record('What OpenCode does with a permission prompt',
                 [dict(run=d['run'], option_kind=d['option_kind'], desk=d['desk'])
                  for d in decisions],
@@ -1426,8 +1531,15 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
              record['owner_service_after'] == record['owner_service_before'], True)
     record['sessions_after'] = live.session_listing(state['repo'], rehearse)
     rows.add('PIO deleted no session',
-             live.deleted_nothing(record['sessions_before'], record['sessions_after']),
-             True, live_only=True)
+             dict(before=(record['sessions_before'] or {}).get('entry_count'),
+                  after=(record['sessions_after'] or {}).get('entry_count'),
+                  deleted_nothing=live.deleted_nothing(record['sessions_before'],
+                                                       record['sessions_after'])),
+             'nothing that was listed before is missing after',
+             # With nothing listed before, nothing could be deleted: that
+             # cannot fail, so it is not a pass either (review 47).
+             holds=lambda o: None if not o['before'] else o['deleted_nothing'] is True,
+             live_only=True)
 
 
 def read_ledger(path):
@@ -1579,7 +1691,8 @@ def runner_killed(args):
     desk has answered. What must be left is the reservation in the ledger,
     no receipt, and a service the watchdog has stopped."""
     command_line = [sys.executable, str(Path(__file__).resolve()), '--rehearse',
-                    '--mutant', 'runner-killed', '--inner', '--out', str(args.out)]
+                    '--mutant', 'runner-killed', '--inner', '--out', str(args.out),
+                    '--plan', LEAD]
     child = subprocess.Popen(command_line, stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, text=True)
     root, answered = None, False
@@ -1622,7 +1735,9 @@ def main():
         watch_args.add_argument('--watch-runner', type=int, required=True)
         watch_args.add_argument('--daemon', type=int, required=True)
         watch_args.add_argument('--root', type=Path, required=True)
+        watch_args.add_argument('--plan', choices=sorted(PLANS), default='L1')
         given = watch_args.parse_args()
+        select_plan(given.plan)
         return watchdog(given.watch_runner, given.daemon, given.root)
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1632,16 +1747,23 @@ def main():
     parser.add_argument('--desk', help="the owner's words confirming they are at the "
                                        'desk; required for a live run, quoted in the receipt')
     parser.add_argument('--attempt', help='a new name for a live run the ledger already holds')
-    parser.add_argument('--mutant', choices=sorted(MUTANTS))
+    parser.add_argument('--plan', choices=sorted(PLANS), default='L1',
+                        help='L1, or L1b: the same shape, with a read that waits '
+                             'and a request that comes to the desk')
+    parser.add_argument('--mutant', choices=sorted({*MUTANTS, *INCONCLUSIVE_MUTANTS}))
     parser.add_argument('--inner', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
+    select_plan(args.plan)
+    if args.mutant and PLAN_MUTANTS.get(args.mutant, args.plan) != args.plan:
+        raise SystemExit(f'mutant {args.mutant} belongs to plan {PLAN_MUTANTS[args.mutant]}')
     if not args.rehearse and not args.desk:
         raise SystemExit('a live run needs --desk: the owner confirms they are at the '
                          'desk, and their words go in the receipt')
     if args.mutant and not args.rehearse:
         raise SystemExit('a mutant is a rehearsal; it never spends a token')
     args.out.mkdir(parents=True, exist_ok=True)
-    name = ('rehearsal' if args.rehearse else (args.attempt or LEAD)) + \
+    rehearsal = 'rehearsal' if LEAD == 'L1' else f'rehearsal-{LEAD}'
+    name = (rehearsal if args.rehearse else (args.attempt or LEAD)) + \
         (f'-mutant-{args.mutant}' if args.mutant else '')
     args.receipt = args.out / f'{name}.json'
     if args.mutant == 'runner-killed' and not args.inner:
@@ -1664,6 +1786,13 @@ def main():
     unproven = [r['row'] for r in record['rows'] if r['holds'] is None and r['kind'] == 'row']
     print(f"\n{len(record['rows'])} rows; not provable here: {unproven}")
     print(f"charged: {json.dumps(record['charge'])[:400]}")
+    if args.mutant in INCONCLUSIVE_MUTANTS:
+        wanted = INCONCLUSIVE_MUTANTS[args.mutant]
+        row = next(r for r in record['rows'] if r['row'] == wanted)
+        assert row['holds'] is None and not row['proven'], (
+            f'mutant {args.mutant} left {wanted!r} at {row["holds"]}, not inconclusive')
+        print(f'mutant {args.mutant}: dies on {wanted!r}: inconclusive, not passed')
+        raise SystemExit(1)
     if args.mutant:
         wanted = MUTANTS[args.mutant]
         assert wanted in record['failed'], (

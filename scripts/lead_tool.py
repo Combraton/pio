@@ -259,14 +259,17 @@ def handle(message):
         if name not in TOOLS:
             return {'isError': True,
                     'content': [{'type': 'text', 'text': f'no tool {name}'}]}
+        began = time.monotonic()
         try:
             result = TOOLS[name][0](**arguments)
         except Exception as error:  # reported, never swallowed
             note({'event': 'tool_failed', 'tool': name, 'error': repr(error)})
             return {'isError': True,
                     'content': [{'type': 'text', 'text': repr(error)}]}
+        # How long the call took, so a read that waited can be shown to have
+        # waited, from the tool's own log (L1b).
         note({'event': 'tool_call', 'tool': name, 'arguments': arguments,
-              'result': result})
+              'result': result, 'seconds': round(time.monotonic() - began, 1)})
         return {'content': [{'type': 'text', 'text': json.dumps(result)}]}
     return {}
 

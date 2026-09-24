@@ -428,4 +428,14 @@ M3b therefore under-charged by **24,643**. Correction lines, one per run with th
 
 29 rows and one record at `703706d`. The runner mutants added since review 44, all in CI: `desk-silent` never answers, and dies on the desk row after the 300-second lapse with its receipt written. `lead-loops` keeps calling `read_run`, and the runner stops it at 17 calls while the tool holds the 17th. `interrupted` raises `KeyboardInterrupt` with every run admitted. All three runs are cancelled on the way out and charged their bounds, and the receipt is written. `runner-killed` is described above. Every other mutant must also leave a receipt that charges each run that ran, with no reservation left.
 
+#### L1b — the desk and a waiting read, live (plan approved 2026-09-24)
+
+L1 held two rows only because nothing could fail them: no approval was asked, and the fixture's session history was empty (review 47). And no read had to wait. **L1b** is L1's shape (`--plan L1b`, lead `L1b`, the `M4-lead-opencode` sequence), briefed so that both happen:
+
+- **The desk.** OpenCode 2.0.11's shipped default asks before reading `*.env` files (review 48, a static reading). The owner's `opencode.jsonc` overrides no permission: checked 2026-09-24, reading only its permission keys. `beta` reads a placeholder `beta.env` with OpenCode's read tool. The file exists only in the fixture, every line says it is a placeholder, and nothing in it looks like a setting. The request is inside the workspace, so PIO relays it to the desk rather than declining it. The owner answers.
+- **The waiting read.** `alpha` runs `sleep 30` before it counts. A shell command inside the workspace runs without a prompt (M3b). A row reads, from the lead tool's own log, a `read_run` of `alpha` that took at least 20 s and returned `exited`. The tool now logs each call's duration.
+- **Review 47, in both plans:** the desk row is inconclusive when nothing was asked, and "no session deleted" is inconclusive when nothing was listed before.
+- **The fake** gained `led_delay_if` and `ask_if`, so only the run whose prompt names it waits or asks. Its line counter now reads `.env` names, and the lead's relay is parsed for the plan's own file names. Checked against L1's live relay, which ran on without a separator.
+- **Mutants:** `no-wait` fails the waiting row; `no-ask` must leave the desk row inconclusive.
+
 **Step 2 order:** ~~G1 and G6 (the events fold)~~ **done**, ~~G2 (the approval walk)~~ **done**, ~~G3 (blocks and the audit)~~ **done**. Each with its own headless case and a mutant. Next: step 3, orchestrate.
