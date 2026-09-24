@@ -29,7 +29,7 @@
     "ledger": "rehearsal ledger",
     "lines": {
       "L1": {
-        "at": "2026-09-23T20:39:53Z",
+        "at": "2026-09-24T10:42:52Z",
         "bound": 20480,
         "charge_basis": "steps_bound",
         "charged": 20480,
@@ -42,7 +42,7 @@
         "steps_at_most": 5
       },
       "L1.alpha": {
-        "at": "2026-09-23T20:39:53Z",
+        "at": "2026-09-24T10:42:52Z",
         "bound": 8192,
         "charge_basis": "steps_bound",
         "charged": 8192,
@@ -55,7 +55,7 @@
         "steps_at_most": 2
       },
       "L1.beta": {
-        "at": "2026-09-23T20:39:53Z",
+        "at": "2026-09-24T10:42:52Z",
         "bound": 8192,
         "charge_basis": "steps_bound",
         "charged": 8192,
@@ -77,21 +77,21 @@
     "sequence_stop": 1600000,
     "stop_reached": false
   },
-  "commit": "217291382ef1ca3eb41baaae33afc316aba83208",
+  "commit": "90b1baaf6d41f9ec0bac3ed7ecd345238252bd32",
   "configured": {
     "read": false,
     "reason": "dry run: the owner's configuration is never read",
     "source": "~/.config/opencode/opencode.jsonc"
   },
   "credential_check": {
-    "id": "d370a49b-b657-4008-8f45-4914f3ae4183",
+    "id": "a0e50bdd-71f0-4c1f-9b95-7ac7c57da5d5",
     "jsonrpc": "2.0",
     "result": {
       "acknowledgment": {
-        "command_digest": "sha256:87e8566ceec6a4afb15744ed3e01b3216a58327cd6c9d1c430f83283d588649d",
+        "command_digest": "sha256:4e3769ecdcb9c119b58ee6a29ecb520b548aa6683b2666745e462860c8b62586",
         "command_id": "credential-check",
         "effect_refs": [],
-        "operation_ref": "0f6cbfbc-6009-4dad-865f-2934aad5e9a6",
+        "operation_ref": "6a393fe5-ea86-42e4-ba33-eb4fdc95013d",
         "revision": 1,
         "subject": {
           "id": "credential-check",
@@ -119,7 +119,7 @@
         "decision": "allow",
         "words": "rehearsal: the runner answers; no owner is asked"
       },
-      "answered_by_desk_at": "2026-09-23T20:40:00Z",
+      "answered_by_desk_at": "2026-09-24T10:42:57Z",
       "approval": {
         "action_id": "L1.alpha.action-1",
         "answer_deadline_seconds": 300,
@@ -164,10 +164,10 @@
             "optionId": "opt_3"
           }
         ],
-        "requested_at": "2026-09-23T20:39:59Z"
+        "requested_at": "2026-09-24T10:42:57Z"
       },
-      "relayed_at": "2026-09-23T20:40:00Z",
-      "requested_at": "2026-09-23T20:39:59Z",
+      "relayed_at": "2026-09-24T10:42:57Z",
+      "requested_at": "2026-09-24T10:42:57Z",
       "run": "L1.alpha",
       "sent": "answered",
       "state": "answered"
@@ -179,7 +179,7 @@
         "decision": "allow",
         "words": "rehearsal: the runner answers; no owner is asked"
       },
-      "answered_by_desk_at": "2026-09-23T20:40:00Z",
+      "answered_by_desk_at": "2026-09-24T10:42:58Z",
       "approval": {
         "action_id": "L1.beta.action-1",
         "answer_deadline_seconds": 300,
@@ -224,10 +224,10 @@
             "optionId": "opt_3"
           }
         ],
-        "requested_at": "2026-09-23T20:39:59Z"
+        "requested_at": "2026-09-24T10:42:57Z"
       },
-      "relayed_at": "2026-09-23T20:40:00Z",
-      "requested_at": "2026-09-23T20:39:59Z",
+      "relayed_at": "2026-09-24T10:42:58Z",
+      "requested_at": "2026-09-24T10:42:57Z",
       "run": "L1.beta",
       "sent": "answered",
       "state": "answered"
@@ -235,10 +235,10 @@
   ],
   "dirty": false,
   "failed": [],
-  "finished_at": "2026-09-23T20:40:04Z",
+  "finished_at": "2026-09-24T10:43:01Z",
   "format": "pio-lead-run/2",
   "grant": {
-    "id": "bf28baa9-05d8-4507-b481-175ffc330510",
+    "id": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
     "terms": {
       "audience": "conformance-provider",
       "delegation": {
@@ -272,7 +272,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "0e113cec-3535-4529-b096-d54d1e37950e",
+    "id": "7cd61025-a16f-4628-b536-c64b8d616949",
     "jsonrpc": "2.0"
   },
   "lead": "L1",
@@ -288,7 +288,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "44480f20-e9c9-486f-92a0-e2d0d4c275d8",
+    "id": "f246d180-1952-46d7-bba3-3e9682e27aa1",
     "jsonrpc": "2.0"
   },
   "lead_reads_itself": {
@@ -303,7 +303,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "1ff23dac-9310-431f-b59e-411d96e474bb",
+    "id": "4333a2ec-d5d3-4b70-876f-ab73f658cde4",
     "jsonrpc": "2.0"
   },
   "lead_submit": {
@@ -313,6 +313,12 @@
       "id": "L1",
       "kind": "execution.execution"
     }
+  },
+  "live_tree": {
+    "probe": true,
+    "releasable": true,
+    "removed": true,
+    "why": null
   },
   "meters": {
     "L1": {
@@ -344,7 +350,7 @@
   "model": "minimax-coding-plan/MiniMax-M3",
   "mutant": null,
   "no_sleep": {
-    "command": "caffeinate -i -s -w 37690",
+    "command": "caffeinate -i -s -w 15408",
     "held": true,
     "held_to_the_end": true,
     "power": "Now drawing from 'AC Power'"
@@ -361,7 +367,7 @@
   },
   "reserved": {
     "L1": {
-      "at": "2026-09-23T20:39:53Z",
+      "at": "2026-09-24T10:42:52Z",
       "charge_basis": "reserved",
       "charged": 951200,
       "model": "minimax-coding-plan/MiniMax-M3",
@@ -369,7 +375,7 @@
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     },
     "L1.alpha": {
-      "at": "2026-09-23T20:39:53Z",
+      "at": "2026-09-24T10:42:52Z",
       "charge_basis": "reserved",
       "charged": 222000,
       "model": "minimax-coding-plan/MiniMax-M3",
@@ -377,7 +383,7 @@
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     },
     "L1.beta": {
-      "at": "2026-09-23T20:39:53Z",
+      "at": "2026-09-24T10:42:52Z",
       "charge_basis": "reserved",
       "charged": 222000,
       "model": "minimax-coding-plan/MiniMax-M3",
@@ -385,7 +391,7 @@
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     }
   },
-  "root": "/private/tmp/pio-l1-plbhb8bx",
+  "root": "/private/tmp/pio-l1-xnzr6ojx",
   "rows": [
     {
       "expected": "admitted",
@@ -565,13 +571,13 @@
     },
     {
       "expected": [
-        "bf28baa9-05d8-4507-b481-175ffc330510"
+        "e33b5c95-3c37-4b23-be0e-96ae3c6554c3"
       ],
       "holds": true,
       "kind": "row",
       "note": "",
       "observed": [
-        "bf28baa9-05d8-4507-b481-175ffc330510"
+        "e33b5c95-3c37-4b23-be0e-96ae3c6554c3"
       ],
       "proven": true,
       "row": "Every tool request carried the grant"
@@ -738,12 +744,12 @@
     {
       "expected": [
         {
-          "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+          "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
           "holder": "lead",
           "recorded_by": "pio"
         },
         {
-          "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+          "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
           "holder": "lead",
           "recorded_by": "pio"
         }
@@ -753,12 +759,12 @@
       "note": "",
       "observed": [
         {
-          "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+          "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
           "holder": "lead",
           "recorded_by": "pio"
         },
         {
-          "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+          "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
           "holder": "lead",
           "recorded_by": "pio"
         }
@@ -953,7 +959,7 @@
       "expected": "every run that ran has its steps there, and the last is the one reported",
       "holds": null,
       "kind": "row",
-      "note": "owner decision 2026-09-24: session_message rows of PIO's sessions, read-only",
+      "note": "owner decision 2026-09-24: session_message rows of PIO's sessions, read-only; measured from the store's recorded steps, not the bill: that the store holds every billed call is not proven",
       "observed": {
         "read": {
           "read": false,
@@ -1010,6 +1016,38 @@
       "observed": null,
       "proven": false,
       "row": "PIO deleted no session"
+    },
+    {
+      "expected": "releasable, and a probe removed",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "probe": true,
+        "releasable": true,
+        "removed": true,
+        "why": null
+      },
+      "proven": true,
+      "row": "The live tree can be released"
+    },
+    {
+      "expected": {},
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {},
+      "proven": true,
+      "row": "The runner's own steps raised no error"
+    },
+    {
+      "expected": "released",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": "released",
+      "proven": true,
+      "row": "The service was released, and nothing it started survived"
     }
   ],
   "sequence": "M4-lead-opencode",
@@ -1028,7 +1066,7 @@
     "beta": "fake turn started4",
     "lead": "alpha.md: 7\nbeta.md: 4"
   },
-  "started_at": "2026-09-23T20:39:53Z",
+  "started_at": "2026-09-24T10:42:52Z",
   "steer_exited": {
     "alternative": "Steering needs an acknowledged, running native turn",
     "delivery_at_steer": "acknowledged",
@@ -1061,27 +1099,27 @@
   "tool_log": [
     {
       "event": "started",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "lead": "L1"
     },
     {
       "event": "request",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "method": "initialize"
     },
     {
       "event": "request",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "method": "notifications/initialized"
     },
     {
       "event": "request",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "method": "tools/list"
     },
     {
       "event": "request",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "method": "tools/call"
     },
     {
@@ -1090,7 +1128,7 @@
         "name": "alpha"
       },
       "event": "tool_call",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "result": {
         "admission": "admitted",
         "run": "L1.alpha",
@@ -1100,7 +1138,7 @@
     },
     {
       "event": "request",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "method": "tools/call"
     },
     {
@@ -1109,7 +1147,7 @@
         "name": "beta"
       },
       "event": "tool_call",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "result": {
         "admission": "admitted",
         "run": "L1.beta",
@@ -1119,7 +1157,7 @@
     },
     {
       "event": "request",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "method": "tools/call"
     },
     {
@@ -1127,7 +1165,7 @@
         "name": "alpha"
       },
       "event": "tool_call",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "result": {
         "exit": {
           "code": 0
@@ -1140,7 +1178,7 @@
     },
     {
       "event": "request",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "method": "tools/call"
     },
     {
@@ -1148,7 +1186,7 @@
         "name": "beta"
       },
       "event": "tool_call",
-      "grant": "bf28baa9-05d8-4507-b481-175ffc330510",
+      "grant": "e33b5c95-3c37-4b23-be0e-96ae3c6554c3",
       "result": {
         "exit": {
           "code": 0
@@ -1201,7 +1239,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L1.delivery-1",
-          "determined_at": "2026-09-23T20:39:56Z",
+          "determined_at": "2026-09-24T10:42:53Z",
           "evidence": {
             "class": "native_session_update",
             "source": "pio-fake-opencode-acp/host"
@@ -1209,7 +1247,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-23T20:39:56Z"
+              "recorded_at": "2026-09-24T10:42:53Z"
             }
           ]
         }
@@ -1231,7 +1269,7 @@
         "generation": 1,
         "id": "opencode-host"
       },
-      "next_cursor": "c0980059-68e0-4242-bb7a-d5ad87a5f5a5:1:27",
+      "next_cursor": "22196034-50cc-4f3c-9d92-15c113d68629:1:27",
       "obligations": [],
       "origin": {
         "call_budget": 2,
@@ -1251,20 +1289,20 @@
           {
             "amount": 4096,
             "basis": "observed",
-            "invocation_id": "04c43bff-7d3c-49cb-95f0-bb9de12e614e",
+            "invocation_id": "c6fe8800-c7f0-406c-b253-52fc3564abeb",
             "measure": "opencode.tokens.total",
-            "recorded_at": "2026-09-23T20:40:01Z"
+            "recorded_at": "2026-09-24T10:42:59Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "3cfabc9c0b6fe8678c3058e658d343c8886434fe",
+          "base": "3804d4242792e289e0fb3b26593f969f7ff76955",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L1.workspace",
-          "repository": "/private/tmp/pio-l1-plbhb8bx/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-xnzr6ojx/fixtures/lead",
           "writer": "owner"
         }
       }
@@ -1273,9 +1311,9 @@
       "actions": [
         {
           "action_id": "L1.alpha.action-1",
-          "answered_at": "2026-09-23T20:40:00Z",
+          "answered_at": "2026-09-24T10:42:57Z",
           "owner": "opencode",
-          "requested_at": "2026-09-23T20:39:59Z",
+          "requested_at": "2026-09-24T10:42:57Z",
           "response_effect": "L1.alpha.response-1",
           "state": "answered"
         }
@@ -1290,7 +1328,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L1.alpha.delivery-1",
-          "determined_at": "2026-09-23T20:39:56Z",
+          "determined_at": "2026-09-24T10:42:54Z",
           "evidence": {
             "class": "native_session_update",
             "source": "pio-fake-opencode-acp/host"
@@ -1298,7 +1336,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-23T20:39:56Z"
+              "recorded_at": "2026-09-24T10:42:54Z"
             }
           ]
         }
@@ -1321,7 +1359,7 @@
         "generation": 1,
         "id": "opencode-host"
       },
-      "next_cursor": "c0980059-68e0-4242-bb7a-d5ad87a5f5a5:1:27",
+      "next_cursor": "22196034-50cc-4f3c-9d92-15c113d68629:1:27",
       "obligations": [
         {
           "deadline": null,
@@ -1345,13 +1383,13 @@
       "steering": [
         {
           "alternative": "Steering needs an acknowledged, running native turn",
-          "recorded_at": "2026-09-23T20:39:56Z",
+          "recorded_at": "2026-09-24T10:42:54Z",
           "request": "not_supported",
           "steer_id": "L1.alpha.steer-1"
         },
         {
           "alternative": "Steering needs an acknowledged, running native turn",
-          "recorded_at": "2026-09-23T20:40:02Z",
+          "recorded_at": "2026-09-24T10:43:00Z",
           "request": "not_supported",
           "steer_id": "L1.alpha.steer-2"
         }
@@ -1362,20 +1400,20 @@
           {
             "amount": 4096,
             "basis": "observed",
-            "invocation_id": "775e857c-559a-41d5-bd0a-d5effebe59c5",
+            "invocation_id": "f5007dc7-3d58-40ac-a40f-41a5645a3625",
             "measure": "opencode.tokens.total",
-            "recorded_at": "2026-09-23T20:40:00Z"
+            "recorded_at": "2026-09-24T10:42:57Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "3cfabc9c0b6fe8678c3058e658d343c8886434fe",
+          "base": "3804d4242792e289e0fb3b26593f969f7ff76955",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L1.alpha.workspace",
-          "repository": "/private/tmp/pio-l1-plbhb8bx/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-xnzr6ojx/fixtures/lead",
           "writer": "lead"
         }
       }
@@ -1384,9 +1422,9 @@
       "actions": [
         {
           "action_id": "L1.beta.action-1",
-          "answered_at": "2026-09-23T20:40:00Z",
+          "answered_at": "2026-09-24T10:42:58Z",
           "owner": "opencode",
-          "requested_at": "2026-09-23T20:39:59Z",
+          "requested_at": "2026-09-24T10:42:57Z",
           "response_effect": "L1.beta.response-1",
           "state": "answered"
         }
@@ -1401,7 +1439,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L1.beta.delivery-1",
-          "determined_at": "2026-09-23T20:39:56Z",
+          "determined_at": "2026-09-24T10:42:54Z",
           "evidence": {
             "class": "native_session_update",
             "source": "pio-fake-opencode-acp/host"
@@ -1409,7 +1447,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-23T20:39:56Z"
+              "recorded_at": "2026-09-24T10:42:54Z"
             }
           ]
         }
@@ -1432,7 +1470,7 @@
         "generation": 1,
         "id": "opencode-host"
       },
-      "next_cursor": "c0980059-68e0-4242-bb7a-d5ad87a5f5a5:1:27",
+      "next_cursor": "22196034-50cc-4f3c-9d92-15c113d68629:1:27",
       "obligations": [
         {
           "deadline": null,
@@ -1459,20 +1497,20 @@
           {
             "amount": 4096,
             "basis": "observed",
-            "invocation_id": "04f5abf7-5556-4d02-b3aa-a7fac34fbf60",
+            "invocation_id": "a3a742a5-2ef7-4e3a-a890-1e7b9e7cecad",
             "measure": "opencode.tokens.total",
-            "recorded_at": "2026-09-23T20:40:00Z"
+            "recorded_at": "2026-09-24T10:42:58Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "3cfabc9c0b6fe8678c3058e658d343c8886434fe",
+          "base": "3804d4242792e289e0fb3b26593f969f7ff76955",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L1.beta.workspace",
-          "repository": "/private/tmp/pio-l1-plbhb8bx/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-xnzr6ojx/fixtures/lead",
           "writer": "lead"
         }
       }
@@ -1493,7 +1531,7 @@
         "generation": 1,
         "id": "opencode-host"
       },
-      "next_cursor": "c0980059-68e0-4242-bb7a-d5ad87a5f5a5:1:27",
+      "next_cursor": "22196034-50cc-4f3c-9d92-15c113d68629:1:27",
       "obligations": [],
       "origin": {
         "call_budget": 0,
@@ -1515,11 +1553,11 @@
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "3cfabc9c0b6fe8678c3058e658d343c8886434fe",
+          "base": "3804d4242792e289e0fb3b26593f969f7ff76955",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L1.third.workspace",
-          "repository": "/private/tmp/pio-l1-plbhb8bx/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-xnzr6ojx/fixtures/lead",
           "writer": "lead"
         }
       }

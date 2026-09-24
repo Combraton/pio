@@ -41,7 +41,7 @@ committed head (`commit` and `dirty: false` are in the record). **Zero
 tokens, no model call.** It is the same code path the live run takes. Only
 the harness binary and its environment differ.
 
-Each of the 29 rows carries what was observed, what was expected, and
+Each of the 32 rows carries what was observed, what was expected, and
 whether they agree, and a disagreement would have failed the run. Two rows are
 marked not provable here: whether PIO deleted a session in the owner's
 history, and whether each run's steps could be read from the owner's store (a
@@ -74,7 +74,12 @@ that the desk exited when nobody answered, that the lead's polling was bounded
 only by its deadline, and that an unknown initiator was admitted under a grant.
 The third (`29ed7a5`, from `d68adde`) was replaced after review 45: a runner
 killed from outside left no ledger line, and the lead's 20-second reads let its
-meter stop it before a slow desk answered. See issue #12.
+meter stop it before a slow desk answered. The fourth (`703706d`, from
+`2172913`) is the one the live run was approved on; it was replaced after
+that run and review 46, which added three rows: the live tree can be released
+(checked through a probe made the same way as the live tree, then removed), the
+runner's own steps raised no error, and the service was released with nothing
+surviving. See issue #12.
 
 ## `L1-live.json`
 
