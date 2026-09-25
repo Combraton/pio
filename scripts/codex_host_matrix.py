@@ -323,7 +323,19 @@ def lead_tool_case(case, name):
         assert other['result']['outcome']['admission'] == 'admitted', other
         exited(case, 'plain')
         sent = sorted((e['names'], e['pre_allowed_tools']) for e in events_of(case, 'mcp_servers_sent'))
-        assert sent == [([], None), (['pio-lead'], ['start_run', 'read_run'])], sent
+        assert sent == [([], None), (['pio-lead'], ['read_run', 'start_run'])], sent
+        # Exactly the lead's two tools, and no server-wide default, as the
+        # host read them back from the request it sent, and as the fake
+        # received them (review of L3, CH-1).
+        want = {'pio-lead': {'tools': {'read_run': {'approval_mode': 'approve'},
+                                       'start_run': {'approval_mode': 'approve'}},
+                             'default_tools_approval_mode': None}}
+        by_json = lambda found: sorted(found, key=lambda s: json.dumps(s, sort_keys=True))
+        servers = [e['servers'] for e in events_of(case, 'mcp_servers_sent')]
+        assert by_json(servers) == by_json([{}, want]), servers
+        received = [m['servers'] for m in case.markers_records()
+                    if m['kind'] == 'thread_config_received']
+        assert by_json(received) == by_json([{}, want]), received
         seen = witnessed(log)
         assert [e.get('method') for e in seen if e['event'] == 'request'] == \
             ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'tools/call'], seen

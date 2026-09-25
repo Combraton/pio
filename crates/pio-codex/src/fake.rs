@@ -247,6 +247,27 @@ pub fn run() -> Result<()> {
                         }
                         let thread_id = format!("fake-thread-{}", std::process::id());
                         thread = Some(thread_id.clone());
+                        // What this thread's config asked of each server's
+                        // tools, as received: an independent witness of what
+                        // PIO put on the wire (review of L3, CH-1). Never the
+                        // command, arguments or environment.
+                        let received: serde_json::Map<String, Value> = params["config"]
+                            ["mcp_servers"]
+                            .as_object()
+                            .into_iter()
+                            .flatten()
+                            .map(|(name, spec)| {
+                                (
+                                    name.clone(),
+                                    json!({"tools":spec["tools"],
+                                           "default_tools_approval_mode":spec["default_tools_approval_mode"]}),
+                                )
+                            })
+                            .collect();
+                        marker(
+                            &markers,
+                            json!({"source":SOURCE,"kind":"thread_config_received","servers":received}),
+                        )?;
                         // The servers this thread's own config names, launched
                         // and listed before the answer, as the M4b probe saw.
                         for (name, spec) in params["config"]["mcp_servers"]

@@ -2216,12 +2216,17 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                              if d.get('method') == ELICITATION
                              and d.get('server') in (LEAD_SERVER, None)])
         held = not asked['surfaced'] and not asked['declined_by_pio']
+        # What each thread's config carried on the wire, as the host read it
+        # back from the request it sent: exactly the lead's two tools at
+        # `approve`, and no server-wide default (review of L3, CH-1).
         rows.add("The lead's own two tools were pre-allowed, and nothing else",
-                 dict(pre_allowed={run: [e.get('pre_allowed_tools') for e in host.get(run, [])
+                 dict(pre_allowed={run: [e.get('servers') for e in host.get(run, [])
                                          if e['kind'] == 'mcp_servers_sent'] for run in RUNS},
                       asked_about_the_tool=asked),
-                 dict(pre_allowed={LEAD: [list(PRE_ALLOWED)],
-                                   **{f'{LEAD}.{c}': [None] for c in CHILDREN}},
+                 dict(pre_allowed={LEAD: [{LEAD_SERVER: dict(
+                     tools={tool: dict(approval_mode='approve') for tool in PRE_ALLOWED},
+                     default_tools_approval_mode=None)}],
+                     **{f'{LEAD}.{c}': [{}] for c in CHILDREN}},
                       asked_about_the_tool=dict(surfaced=[], declined_by_pio=[])),
                  note="in the lead's thread config only; never written to the owner's"
                       + ('' if held else

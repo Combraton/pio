@@ -336,8 +336,6 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
     // set those tools' approval mode to `approve`, on this server only, so
     // Codex does not ask before calling them; nothing else is pre-allowed,
     // and nothing is written to the owner's configuration.
-    let mut sent = Vec::new();
-    let mut pre_allowed = Value::Null;
     if let Some(tool) = life.spec.get("lead_tool").filter(|t| t.is_object()) {
         let name = tool["name"].as_str().context("lead tool name")?.to_owned();
         let env: serde_json::Map<String, Value> = tool["env"]
@@ -359,12 +357,45 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                 .map(|n| (n.to_owned(), json!({"approval_mode":"approve"})))
                 .collect();
             server["tools"] = Value::Object(tools);
-            pre_allowed = tool["pre_allowed_tools"].clone();
         }
         params["config"]["mcp_servers"][&name] = server;
-        sent.push(name);
     }
-    life.event(json!({"kind":"mcp_servers_sent","names":sent,"pre_allowed_tools":pre_allowed}))?;
+    // What goes on the wire, read back from the request itself rather than
+    // from the spec: every server's name, its per-tool approval modes, and
+    // any server-wide default mode. The spec said what was meant; this says
+    // what was sent (review of L3, CH-1).
+    let written = params["config"]["mcp_servers"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    let names: Vec<&String> = written.keys().collect();
+    let servers: serde_json::Map<String, Value> = written
+        .iter()
+        .map(|(name, server)| {
+            (
+                name.clone(),
+                json!({"tools":server["tools"],
+                       "default_tools_approval_mode":server["default_tools_approval_mode"]}),
+            )
+        })
+        .collect();
+    let pre_allowed: Value = written
+        .values()
+        .find_map(|server| server["tools"].as_object())
+        .map(|tools| {
+            json!(
+                tools
+                    .iter()
+                    .filter(|(_, mode)| mode["approval_mode"] == "approve")
+                    .map(|(tool, _)| tool)
+                    .collect::<Vec<_>>()
+            )
+        })
+        .unwrap_or(Value::Null);
+    life.event(
+        json!({"kind":"mcp_servers_sent","names":names,"servers":servers,
+                      "pre_allowed_tools":pre_allowed}),
+    )?;
     let thread = app.request("thread/start", params)?;
     let thread = app.wait_response(thread, Duration::from_secs(120), |_| Ok(()))?;
     if let Some(error) = response_error(&thread) {
