@@ -92,6 +92,9 @@ does with a permission prompt.
 - `wrong-relay` has the lead relay one line too many;
 - `lead-without-brief` sends the lead's brief without its bytes, which is how
   the first rehearsal's lead came to be refused;
+- `third-admitted` gives the lead a budget of three, so the third start the
+  runner probes is admitted: it must be charged its share on a ledger line
+  of its own, since nothing reserved it;
 - `lead-submit-invalid` sends the lead's brief with bytes that do not match
   its digest, so the service refuses the envelope and no execution exists:
   the lead is charged nothing, not its share;
@@ -467,6 +470,9 @@ MUTANTS = {
     # The lead's submit is answered with an error, so no execution exists:
     # it is charged nothing, not its share (review of L3, round 2, SB-6).
     'lead-submit-invalid': 'The lead was admitted',
+    # A budget of three, so the probe the lead's budget should refuse is
+    # admitted: it must be charged its share, off no reservation (SB-5).
+    'third-admitted': 'A third start is refused by PIO',
     'desk-silent': 'Every approval was decided at the desk',
     'lead-loops': 'Every run stayed within its ceilings',
     'interrupted': 'The run finished without an error',
@@ -1737,7 +1743,8 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
         record['failed'] = rows.failed()
         record['charge'] = charge(book_path, names, record.get('usage', {}), started_at,
                                   authoritative=observed is not None,
-                                  lead_submitted=LEAD in state['submitted'])
+                                  lead_submitted=LEAD in state['submitted'],
+                                  probes=record.get('probes_admitted'))
         record['finished_at'] = now()
         args.receipt.write_text(json.dumps(scrub(record), indent=2, sort_keys=True) + '\n')
         if root.exists():
@@ -1840,7 +1847,8 @@ def watch(args, record, service, desk, meters, state):
     state['submitted'].add(LEAD)
     record['lead_submit'] = submit(owner, LEAD, BRIEF, repo, base,
                                    dict(initiator=dict(kind='execution.execution', id=LEAD),
-                                        depth=0, call_budget=BUDGET),
+                                        depth=0, call_budget=BUDGET + (
+                                            1 if args.mutant == 'third-admitted' else 0)),
                                    extensions).get('result', {}).get('outcome')
 
     # Watch until every run is over: relay approvals, meter every run, steer a
@@ -2063,6 +2071,19 @@ def settle(record, service, meters, state, root):
                     for i in stopped):
                 time.sleep(0.5)
         views = {i: view(owner, i) or {} for i in (*RUNS, f'{LEAD}.third')}
+        # The runner's own probes, each expected to be refused. One the
+        # service admitted is a real run with no reservation: cancelled
+        # here, and charged its share (review of L3, round 2, SB-5).
+        admitted = {}
+        for probe, share in ((f'{LEAD}.third', CHILD_SHARE), (f'{LEAD}.attached', LEAD_SHARE),
+                             ('credential-check', LEAD_SHARE)):
+            current = view(owner, probe) or {}
+            if current.get('admission') == 'admitted':
+                admitted[probe] = dict(
+                    charged=share, basis=PROBE_BASIS, runtime=current.get('runtime'),
+                    cancel=cancel(owner, probe, 'probe')
+                    if current.get('runtime') != 'exited' else None)
+        record['probes_admitted'] = admitted
         # A submit the service answered with an error made nothing: that run
         # is charged nothing, not its share (review of L3, round 2, SB-6).
         record['no_such_execution'] = sorted(i for i in RUNS if not views[i]
@@ -2152,6 +2173,8 @@ def store_steps(home, sessions):
 
 
 NO_SUCH_EXECUTION = 'no such execution: the service, asked, holds none, so nothing ran'
+PROBE_BASIS = ('admitted though it should have been refused: a run with no reservation, '
+               'charged its whole share')
 
 
 def usage_of(views, meters, submitted, steps=None, stopped=(), mutant=None, absent=()):
@@ -2888,6 +2911,11 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
              live_only=True)
 
 
+def names_of(record):
+    """The ledger name of the lead in a receipt: its attempt's, if any."""
+    return f"{record['attempt']}/{LEAD}" if record.get('attempt') else LEAD
+
+
 def read_ledger(path):
     if path.exists():
         return json.loads(path.read_text())
@@ -2931,7 +2959,7 @@ def reserve(path, names, at):
     return lines
 
 
-def charge(path, names, usage, at, authoritative, lead_submitted=True):
+def charge(path, names, usage, at, authoritative, lead_submitted=True, probes=None):
     """Replace every reservation with its charge, and report the sequence
     total and whether a stop fired. Charged, never observed; unknown is never
     zero. A run the service says was refused, or never submitted, is charged
@@ -2979,6 +3007,14 @@ def charge(path, names, usage, at, authoritative, lead_submitted=True):
         line = ledger_line(**line)
         book['runs'][names[identity]] = line
         lines[names[identity]] = line
+    # A probe the service should have refused and admitted instead ran off
+    # the ledger: it gets a line of its own, at its share (review of L3,
+    # round 2, SB-5).
+    for probe, entry in (probes or {}).items():
+        line = ledger_line(sequence=SEQUENCE, model=MODEL, at=at, charged=entry['charged'],
+                           charge_basis=entry['basis'])
+        book['runs'][f'{names[LEAD]}:{probe}'] = line
+        lines[f'{names[LEAD]}:{probe}'] = line
     write_ledger(path, book)
     total = sequence_charged(book)
     ledger = CODEX['ledger'] if HARNESS == 'codex' else 'MiniMax ledger'
@@ -3278,6 +3314,12 @@ def main():
                 row = next(r for r in record['rows'] if r['row'] == name)
                 assert row['holds'] is True, row
             assert record['usage'][LEAD]['reported_total'] <= LEAD_SHARE, record['usage'][LEAD]
+        if args.mutant == 'third-admitted':
+            probe = record['probes_admitted'].get(f'{LEAD}.third')
+            assert probe and probe['basis'] == PROBE_BASIS and probe['charged'] == CHILD_SHARE, \
+                record['probes_admitted']
+            assert record['charge']['lines'][f'{names_of(record)}:{LEAD}.third']['charged'] \
+                == CHILD_SHARE, record['charge']['lines']
         if args.mutant == 'lead-submit-invalid':
             lead = record['usage'][LEAD]
             assert (lead['charged'], lead['basis']) == (0, NO_SUCH_EXECUTION), lead
