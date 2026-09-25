@@ -199,6 +199,8 @@ pub(crate) struct Turn {
     /// reports the step an interrupt cut short (M2 R1, R3: a usage after
     /// `turn/interrupt` was sent).
     usage: Mutex<(u64, u64)>,
+    /// A mutant's Codex that reports no usage at all.
+    pub(crate) quiet: AtomicBool,
 }
 
 /// `thread/tokenUsage/updated` as Codex sends it: the thread's running total
@@ -218,6 +220,7 @@ impl Turn {
             interrupted: AtomicBool::new(false),
             finished: AtomicBool::new(false),
             usage: Mutex::new((0, 0)),
+            quiet: AtomicBool::new(false),
         })
     }
 
@@ -233,7 +236,9 @@ impl Turn {
             self.interrupted.store(true, Ordering::SeqCst);
             if !self.finished() && usage.1 > 0 {
                 usage.0 += usage.1;
-                usage_report(&self.thread, &self.id, usage.0, usage.1)?;
+                if !self.quiet.load(Ordering::SeqCst) {
+                    usage_report(&self.thread, &self.id, usage.0, usage.1)?;
+                }
                 usage.1 = 0;
             }
         }
@@ -288,7 +293,9 @@ impl Play {
         }
         let last = usage.1;
         usage.0 += last;
-        usage_report(&self.turn.thread, &self.turn.id, usage.0, last)?;
+        if !self.turn.quiet.load(Ordering::SeqCst) {
+            usage_report(&self.turn.thread, &self.turn.id, usage.0, last)?;
+        }
         usage.1 = if more { self.step } else { 0 };
         Ok(())
     }

@@ -134,7 +134,10 @@ does with a permission prompt.
   `child-overspends` with the runner changed: its meter decides the stop and
   never sends it, so the row that reads the host's own interrupt fails; or it
   charges a stopped run only what it reported, so the charge row fails.
-  `child-overspends` itself must hold both of those rows.
+  `child-overspends` itself must hold both of those rows;
+- `usage-suppressed` (L3) has Codex report no usage at all, and `alpha` work
+  past the silence bound: the meter must stop the lead and `alpha` for their
+  silence, and every run is charged its whole share.
 """
 import argparse
 import base64
@@ -263,6 +266,13 @@ CODEX = dict(
                       'which sends the request, changed (analytics on a refused answer), and so '
                       'did the persistence helpers PIO never triggers'))
 WAITED = 20
+# Never run unmetered (review of L3, F9): a Codex run that has been active
+# this long, all told, since its reported total last rose is stopped and
+# charged its whole share. Time waiting at the desk does not count. Codex
+# reports a step once its tool has finished (M2 R5, R6), so a lead's longest
+# honest silence is a model step plus a 55 s read_run, and a child's a model
+# step plus its command (30 s for alpha).
+USAGE_SILENCE = 150
 
 # --- The bound on what one attempt can spend.
 #
@@ -369,6 +379,7 @@ def select_plan(name):
             estimate="Codex's own running total for the thread, reported after every step",
             lead='at most its ceiling, plus the one step in flight when it is interrupted',
             child='at most its ceiling, plus the one step in flight when it is interrupted',
+            usage_silence=USAGE_SILENCE,
             assumes=["Codex's reported total covers every step of a turn (review 48)",
                      'a step on this harness and model is at most 30,000 tokens '
                      '(measured about 22,000 to 24,500, M2 R4 to R6)',
@@ -428,6 +439,9 @@ MUTANTS = {
     # what the run reported (F2).
     'ceiling-cancel-never-sent': 'Every stop the runner made reached Codex',
     'stop-charged-reported': "Every run's charge covers what it could have spent, within its share",
+    # Codex reports no usage at all: nothing can stop a run at its ceiling,
+    # so the meter must stop it for its silence (review of L3, F9).
+    'usage-suppressed': 'Every run stayed within its ceilings',
     # The runner reads every message a child said, as it did, not its
     # answer: a preamble that quotes the command is taken for the count.
     'first-number-of-all': 'Each child reported the true count',
@@ -447,7 +461,8 @@ PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
                 'child-overspends': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
                 'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'},
-                'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'}}
+                'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'},
+                'usage-suppressed': {'L3'}}
 
 
 def sha(data):
@@ -923,9 +938,13 @@ class CodexMeter(Meter):
         super().__init__(identity, ceiling)
         self.total = 0
         # What the event stream said last: the run's runtime and how many
-        # usage reports it has made.
+        # usage reports it has made; how long it has been active since its
+        # total last rose, and when the meter last looked.
         self.runtime = None
         self.reports = 0
+        self.silent = 0.0
+        self.looked = None
+        self.silenced = False
 
     def read(self, caller):
         raw, self.offset = spool(caller, self.identity, self.offset)
@@ -952,6 +971,8 @@ class CodexMeter(Meter):
         """One event from the run's stream."""
         payload = event.get('payload') or {}
         if event['type'] == 'execution.usage.observed' and isinstance(payload.get('amount'), int):
+            if payload['amount'] > self.total:
+                self.silent = 0.0
             self.total = max(self.total, payload['amount'])
             self.reports += 1
         elif event['type'] == 'execution.runtime.changed' and payload.get('runtime'):
@@ -1274,6 +1295,10 @@ def codex_scenario(mutant, calls):
         play.update(lead_asks_in_mode='openai/form', lead_asks_for='read_run')
     if mutant == 'child-asks-permissions':
         play['led_permissions_if'] = beta
+    if mutant == 'usage-suppressed':
+        # No run reports anything, and alpha works past the silence bound,
+        # so the lead waiting on it and alpha itself must be stopped.
+        play.update(usage_suppressed=True, led_delay_ms=(USAGE_SILENCE + 30) * 1000)
     return play
 
 
@@ -1655,7 +1680,11 @@ def codex_meter(owner, meters, root, record):
     lead past its call ceiling. The totals come from the event stream
     (`CodexMetering`)."""
     calls = lead_calls(root)
+    at = time.monotonic()
     for identity, gauge in meters.items():
+        if gauge.looked is not None and gauge.runtime == 'active':
+            gauge.silent += at - gauge.looked
+        gauge.looked = at
         if gauge.stopped or gauge.runtime == 'exited':
             continue
         over = []
@@ -1663,6 +1692,12 @@ def codex_meter(owner, meters, root, record):
             over.append(f'{calls} tool calls, past {CALL_CEILING}')
         if gauge.total >= gauge.ceiling:
             over.append(f'{gauge.total} tokens reported, past {gauge.ceiling}')
+        if gauge.silent >= USAGE_SILENCE:
+            # Nothing reported, so nothing can stop it at its ceiling: stop
+            # it now, loudly, and charge it its whole share.
+            gauge.silenced = True
+            over.append(f'no usage reported in {USAGE_SILENCE} s of activity; stopped '
+                        'rather than run unmetered')
         if over:
             stop_run(owner, identity, gauge, over, root, record)
 
@@ -1857,6 +1892,8 @@ def usage_of(views, meters, submitted, steps=None, stopped=(), mutant=None):
 STOPPED_BASIS = ('stopped by the runner: its reported total plus one step in flight, '
                  'capped at its share, never less than it reported')
 NOT_EXITED_BASIS = 'not seen exited when its usage was read: its whole share'
+SILENT_BASIS = (f'stopped by the runner after {USAGE_SILENCE} s of activity with no usage '
+                'reported: its whole share')
 
 
 def codex_usage(views, meters, submitted, stopped=(), mutant=None):
@@ -1888,6 +1925,8 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None):
                      stopped_by_the_runner=identity in stopped)
         if current.get('runtime') != 'exited':
             entry.update(charged=share, basis=NOT_EXITED_BASIS)
+        elif gauge.silenced:
+            entry.update(charged=share, basis=SILENT_BASIS)
         elif isinstance(reported, int) and reported > 0:
             total = max(reported, gauge.total)
             if identity in stopped and mutant != 'stop-charged-reported':
@@ -2294,7 +2333,7 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                 continue
             share = LEAD_SHARE if run == LEAD else CHILD_SHARE
             reported = u.get('reported_total') or 0
-            if u['basis'] in ('allowance', NOT_EXITED_BASIS):
+            if u['basis'] in ('allowance', NOT_EXITED_BASIS, SILENT_BASIS):
                 floor = share
             elif run in stops:
                 floor = max(reported, min(reported + CODEX['in_flight'], share))
@@ -2708,6 +2747,12 @@ def main():
                          "Every run's charge covers what it could have spent, within its share"):
                 row = next(r for r in record['rows'] if r['row'] == name)
                 assert row['holds'] is True, row
+        if args.mutant == 'usage-suppressed':
+            silenced = {s['run'] for s in record.get('ceiling_stops', [])
+                        if any('no usage reported' in w for w in s['why'])}
+            assert {LEAD, f'{LEAD}.alpha'} <= silenced, record.get('ceiling_stops')
+            assert all(record['usage'][i]['charged'] == (LEAD_SHARE if i == LEAD else CHILD_SHARE)
+                       for i in RUNS), record['usage']
         if args.mutant == 'service-never-ready':
             # Found at once, not after the readiness wait; nothing reserved,
             # nothing charged, and the next attempt not blocked.

@@ -27,7 +27,8 @@
 //! model step takes `model_step_ms` (default 1,500), or `led_step_ms` in a led
 //! run, before it says or calls anything. Usage is reported as Codex was measured reporting it: once a
 //! step and its tool have finished, and, for the step an interrupt cuts
-//! short, after the interrupt (M2 R1, R3, R5, R6). Shapes PIO declines by itself, for the runner's
+//! short, after the interrupt (M2 R1, R3, R5, R6); `usage_suppressed` reports
+//! none at all. Shapes PIO declines by itself, for the runner's
 //! mutants: `lead_asks_in_mode` has the lead ask before every tool call (or
 //! only calls to `lead_asks_for`), in that elicitation mode, whatever the
 //! approval mode says; a led run whose
@@ -309,6 +310,10 @@ pub fn run() -> Result<()> {
                             && scenario["lead"]["calls"].is_array();
                         if lead || scenario["answer_line_counts"] == true {
                             let playing = Turn::new(turn.clone(), thread_id.clone());
+                            playing.quiet.store(
+                                scenario["usage_suppressed"] == true,
+                                std::sync::atomic::Ordering::SeqCst,
+                            );
                             scripted = Some(playing.clone());
                             let (script, queue, marks) =
                                 (scenario.clone(), waiting.clone(), markers.clone());
