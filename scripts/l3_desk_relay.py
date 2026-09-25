@@ -32,13 +32,18 @@ subprocess. The cleanup kills every process group whose command line names
 the tree (L1).
 
 `--selftest` runs the decision against requests it must answer and
-requests it must leave to the owner.
+requests it must leave to the owner, then runs the relay itself over a desk
+holding an empty pending file beside a valid one: it must answer the valid
+one and leave the other to be read again.
 """
 import argparse
 import datetime
 import json
 import os
+import subprocess
 import sys
+import tempfile
+import threading
 import time
 
 DECIDED = ('Owner decision, 2026-09-25 (after review 53), item {item}, quoted: "{quote}". '
@@ -113,7 +118,15 @@ def relay(here):
                 action = name[len('pending-'):-len('.json')]
                 if action in seen or f'answer-{action}.json' in names:
                     continue
-                item = json.load(open(os.path.join(desk, name)))
+                try:
+                    with open(os.path.join(desk, name)) as handle:
+                        item = json.load(handle)
+                except (OSError, ValueError):
+                    # Not whole yet (the runner now writes it whole, but a
+                    # relay must not die on one): read it again next pass,
+                    # and never let it hold up another request (review of
+                    # L3, F8).
+                    continue
                 seen.add(action)
                 with open(done_path, 'a') as out:
                     out.write(action + '\n')
@@ -197,6 +210,41 @@ def selftest():
     assert 'did not hold' in decided_in_advance(answered[3])
     print(f'l3 desk relay: {len(answered)} answered in advance, '
           f'{len(for_the_owner)} left for the owner')
+    half_written()
+
+
+def half_written():
+    """The relay over a desk with an empty pending file beside a valid one:
+    it answers the valid one, does not die, and leaves the empty one unseen
+    so it is read again (review of L3, F8)."""
+    with tempfile.TemporaryDirectory(prefix='l3-relay-selftest-') as here:
+        tree = os.path.join(here, 'tree')
+        desk = os.path.join(tree, 'desk')
+        os.makedirs(desk)
+        runner = subprocess.Popen(['sleep', '3'])
+        with open(os.path.join(here, 'runner.pid'), 'w') as out:
+            out.write(str(runner.pid))
+        with open(os.path.join(here, 'runner.log'), 'w') as out:
+            out.write(f'ROOT {tree}\n')
+        open(os.path.join(desk, 'pending-L3.alpha.action-1.json'), 'w').close()
+        beta = dict(run='L3.beta', approval=dict(
+            method='item/commandExecution/requestApproval', approval_kind='command',
+            command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'", network_approval=False,
+            classification=dict(subject='cwd', placement='inside_fixture',
+                                target_label='<fixture>/')))
+        with open(os.path.join(desk, 'pending-L3.beta.action-1.json'), 'w') as out:
+            json.dump(beta, out)
+        watching = threading.Thread(target=relay, args=(here,), daemon=True)
+        watching.start()
+        runner.wait()
+        watching.join(timeout=10)
+        assert not watching.is_alive(), 'the relay did not see the runner exit'
+        answered = sorted(n for n in os.listdir(desk) if n.startswith('answer-'))
+        assert answered == ['answer-L3.beta.action-1.json'], answered
+        with open(os.path.join(here, 'answered.txt')) as handle:
+            assert handle.read().split() == ['L3.beta.action-1']
+    print('l3 desk relay: an empty pending file was left to be read again, and the valid '
+          'one beside it was answered')
 
 
 def main():

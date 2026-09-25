@@ -1180,7 +1180,12 @@ class Desk:
                                 approval=approval, state='waiting')
                     self.items[action_id] = item
                     pending = self.directory / f'pending-{action_id}.json'
-                    pending.write_text(json.dumps(scrub(item), indent=2) + '\n')
+                    # Whole or not at all: a relay reading the directory
+                    # never finds it half written (review of L3, F8). The
+                    # temporary name does not end in `.json`.
+                    temporary = pending.with_name(pending.name + '.tmp')
+                    temporary.write_text(json.dumps(scrub(item), indent=2) + '\n')
+                    os.replace(temporary, pending)
                     print(f'DESK pending {identity} {action_id} {pending}', flush=True)
                 if item is None or item['state'] != 'waiting':
                     continue
