@@ -49,9 +49,12 @@ compaction) whose calls a session's steps may not hold, so that the store
 holds every billed call is not proven, and the owner reconciles each live run
 against the MiniMax console (review 46).
 
-**Reserved before anything can spend.** Before the service starts, each run's
-worst-case share is written to the ledger as a `reserved` line, and the exit
-path replaces each with its charge. A runner killed from outside, which no
+**Reserved before anything can spend.** Immediately before the lead's submit,
+the first thing that can spend, each run's worst-case share is written to the
+ledger as a `reserved` line, and the exit path replaces each with its charge.
+The service starts first: starting it qualifies the harness and spends
+nothing, and one that never becomes ready leaves no reservation behind
+(review of L3, F4). A runner killed from outside, which no
 exit path survives, leaves its reservation standing, and a watchdog in its own
 session cancels whatever still runs and stops the service (review 45). Run the
 live runner detached, never under a tool's timeout.
@@ -120,7 +123,10 @@ does with a permission prompt.
   mode PIO does not recognise, so PIO declines it by itself: the
   pre-allowance row must fail and say so;
 - `child-asks-permissions` (L3) has `beta` ask a permission grant, which PIO
-  declines by itself: the desk row must fail, because PIO decided it.
+  declines by itself: the desk row must fail, because PIO decided it;
+- `service-never-ready` has the service refuse its configuration at start: the
+  runner must say so at once, and leave no reservation and nothing charged,
+  since nothing was submitted.
 """
 import argparse
 import base64
@@ -405,6 +411,9 @@ MUTANTS = {
     # permission grant.
     'lead-asked-in-openai-form': "The lead's own two tools were pre-allowed, and nothing else",
     'child-asks-permissions': 'Every approval was decided at the desk',
+    # The service refuses to start: nothing was submitted, so no reservation
+    # may stand and the sequence may not be blocked (review of L3, F4).
+    'service-never-ready': 'The run finished without an error',
 }
 # L1b only: a mutant that must leave its row **inconclusive**, not failed. A
 # desk that was never asked has decided nothing, and must not say it has
@@ -560,7 +569,7 @@ class Service:
     """One service for the lead and its children, rehearsed or live:
     `serve-opencode` for L1 and L1b, `serve-codex` for L3."""
 
-    def __init__(self, root, rehearse, scenario):
+    def __init__(self, root, rehearse, scenario, mutant=None):
         self.root = root
         self.rehearse = rehearse
         self.store = root / 'store'
@@ -579,6 +588,10 @@ class Service:
                                codex=self.codex(root, rehearse, scenario))
         else:
             self.config = self.opencode(root, rehearse, scenario, protocol)
+        if mutant == 'service-never-ready':
+            # A setting the service refuses at start, as serve-codex refuses
+            # a Codex it cannot qualify: it exits before it is ever ready.
+            self.config[HARNESS]['refused_at_start_by_the_mutant'] = True
         self.config_path = root / 'service.json'
         self.config_path.write_text(json.dumps(self.config))
         os.chmod(self.config_path, 0o600)
@@ -654,6 +667,14 @@ class Service:
             start_new_session=True)
         deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
+            # A service that refused to start (an unqualified Codex, a
+            # setting it does not accept) has exited: say so now, not after
+            # the whole wait (review of L3, F4).
+            code = self.daemon.poll()
+            if code is not None:
+                tail = (self.root / 'daemon.stderr').read_text(errors='replace')[-400:]
+                raise SystemExit(f'the service exited with code {code} before it became '
+                                 f'ready; daemon.stderr ends: {redact(tail)}')
             try:
                 owner = self.owner()
                 owner.close()
@@ -1215,7 +1236,9 @@ def run(args):
     try:
         return run_in(args, record, rehearse, root, names, book_path, started_at)
     except BaseException:
-        if 'reserved' in record:
+        if 'exit_path' in record:
+            # The exit path wrote the receipt and charged the ledger; the
+            # tree holds what explains it (daemon.stderr among it).
             raise
         # Nothing was reserved and nothing started, so the tree holds nothing
         # worth keeping. A rehearsal that failed here left its tree in /tmp,
@@ -1249,7 +1272,7 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
     awake = NoSleep(required=not rehearse)
     record['no_sleep'] = awake.record
     rows = Rows(rehearse)
-    service = Service(root, rehearse, scenario(args.mutant))
+    service = Service(root, rehearse, scenario(args.mutant), args.mutant)
     if HARNESS == 'opencode':
         config_dir = Path(service.config['opencode']['config_dir'])
         if args.mutant == 'helper-elsewhere':
@@ -1272,12 +1295,17 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
     gauge = CodexMeter if HARNESS == 'codex' else Meter
     meters = {LEAD: gauge(LEAD, LEAD_CEILING),
               **{f'{LEAD}.{c}': gauge(f'{LEAD}.{c}', CHILD_CEILING) for c in CHILDREN}}
-    state = dict(submitted=set(), grant_id=None, spec=None, repo=None)
-    # Before anything can spend: each run's worst case, held in the ledger
-    # until the exit path replaces it with what the run is charged.
-    record['reserved'] = reserve(book_path, names, started_at)
+    # Each run's worst case is reserved in the ledger immediately before the
+    # lead's submit, the first thing that can spend, and not before the
+    # service starts: starting it qualifies Codex and spends nothing, and a
+    # service that never became ready must not leave every share reserved
+    # and the sequence blocked with nothing run (review of L3, F4).
+    state = dict(submitted=set(), grant_id=None, spec=None, repo=None,
+                 reserve=lambda: reserve(book_path, names, started_at))
     previous = signal.signal(signal.SIGTERM, on_sigterm)
     error = None
+    # From here every exit writes the receipt and charges the ledger.
+    record['exit_path'] = True
     try:
         watch(args, record, service, desk, meters, state)
     except BaseException as caught:  # SystemExit and KeyboardInterrupt too
@@ -1334,7 +1362,8 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
         record['rows'] = rows.rows
         record['failed'] = rows.failed()
         record['charge'] = charge(book_path, names, record.get('usage', {}), started_at,
-                                  authoritative=observed is not None)
+                                  authoritative=observed is not None,
+                                  lead_submitted=LEAD in state['submitted'])
         record['finished_at'] = now()
         args.receipt.write_text(json.dumps(scrub(record), indent=2, sort_keys=True) + '\n')
         if root.exists():
@@ -1402,6 +1431,9 @@ def watch(args, record, service, desk, meters, state):
         extensions = {}
     if args.mutant != 'no-tool':
         extensions[LEAD_TOOL] = spec
+    # Before anything can spend: each run's worst case, held in the ledger
+    # until the exit path replaces it with what the run is charged.
+    record['reserved'] = state['reserve']()
     state['submitted'].add(LEAD)
     record['lead_submit'] = submit(owner, LEAD, BRIEF, repo, base,
                                    dict(initiator=dict(kind='execution.execution', id=LEAD),
@@ -2125,20 +2157,29 @@ def reserve(path, names, at):
     return lines
 
 
-def charge(path, names, usage, at, authoritative):
+def charge(path, names, usage, at, authoritative, lead_submitted=True):
     """Replace every reservation with its charge, and report the sequence
     total and whether a stop fired. Charged, never observed; unknown is never
     zero. A run the service says was refused, or never submitted, is charged
     nothing; where the service could not be asked, a run with no usage keeps
-    its reservation."""
+    its reservation — unless the lead was never submitted, so nothing could
+    have spent: then a reservation is replaced with nothing (review of L3,
+    F4). A name with no reservation gets no line at all, so a run that never
+    started leaves its name free."""
     book = read_ledger(path)
     lines = {}
     for identity in RUNS:
         entry = usage.get(identity)
         base = dict(sequence=SEQUENCE, model=MODEL, at=at)
-        if entry is None and not authoritative:
+        reserved = (book['runs'].get(names[identity]) or {}).get('charge_basis') == 'reserved'
+        if entry is None and not reserved:
             continue
-        if entry is None:
+        if entry is None and not authoritative and lead_submitted:
+            continue
+        if entry is None and not authoritative:
+            line = dict(base, charged=0, charge_basis='never submitted: the lead was never '
+                                                      'submitted, so nothing could spend')
+        elif entry is None:
             line = dict(base, charged=0, charge_basis='never submitted')
         elif entry['basis'] == 'refused before any model call':
             line = dict(base, charged=0, charge_basis=entry['basis'])
@@ -2404,6 +2445,12 @@ def main():
         if args.mutant == 'interrupted':
             assert record['error']['type'] == 'KeyboardInterrupt', record.get('error')
             assert record.get('stopped_on_exit'), 'nothing was stopped on the way out'
+        if args.mutant == 'service-never-ready':
+            # Found at once, not after the readiness wait; nothing reserved,
+            # nothing charged, and the next attempt not blocked.
+            assert 'exited with code' in record['error']['message'], record['error']
+            assert 'reserved' not in record and not record['charge']['lines'], record['charge']
+            assert record['charge']['sequence_charged'] == 0, record['charge']
         print(f'mutant {args.mutant}: dies on {wanted!r}, receipt and charge written')
         raise SystemExit(1)
     if record['failed']:
