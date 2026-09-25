@@ -157,6 +157,7 @@ jobs:
           # cases, then the relay itself beside a rehearsal whose desk waits
           # for answer files, as a live one does.
           python3 scripts/l3_desk_relay.py --selftest
+          python3 scripts/lead_tool.py --selftest
           mkdir -p target/l3-relay
           PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --relay \
             --out target/l3-relay/out > target/l3-relay/runner.log 2>&1 &

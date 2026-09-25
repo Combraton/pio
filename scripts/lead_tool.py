@@ -379,7 +379,48 @@ def handle(message):
     return {}
 
 
+def selftest():
+    """withheld() judges a response only on a meter pass that began at least
+    FRESH seconds after the call arrived (review of L3, round 2, SB-7): a
+    stale reading under the hold must not be accepted while a fresh one
+    past it is on its way, and a fresh one under the hold hands back."""
+    import tempfile
+    import threading
+    global METER, STOP
+    with tempfile.TemporaryDirectory(prefix='lead-tool-selftest-') as here:
+        METER, STOP = os.path.join(here, 'lead-meter.json'), ''
+
+        def write(total, started):
+            with open(METER + '.tmp', 'w') as out:
+                json.dump(dict(total=total, hold_above=95000, reports=1,
+                               pass_started=started), out)
+            os.replace(METER + '.tmp', METER)
+
+        arrived = time.time()
+        write(90000, arrived - 5)          # stale, and under the hold
+
+        def fresh():
+            while time.time() < arrived + FRESH + 0.05:
+                time.sleep(0.05)
+            write(120000, time.time())     # the report that came after it
+        writer = threading.Thread(target=fresh)
+        writer.start()
+        why, seen = withheld(arrived)
+        writer.join()
+        assert seen and seen['total'] == 120000 and why, (why, seen)
+        assert time.time() >= arrived + FRESH, 'judged before a fresh pass could exist'
+        # A fresh pass under the hold hands the response back.
+        arrived = time.time()
+        write(90000, arrived + FRESH)
+        why, seen = withheld(arrived)
+        assert why == [] and seen['total'] == 90000, (why, seen)
+    print('lead tool selftest: a stale meter reading was not taken; the fresh one past the '
+          'hold withheld the response, and a fresh one under it handed it back')
+
+
 def main():
+    if '--selftest' in sys.argv[1:]:
+        return selftest()
     note({'event': 'started', 'lead': LEAD})
     for line in sys.stdin:
         line = line.strip()
