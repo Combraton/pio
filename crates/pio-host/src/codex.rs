@@ -130,6 +130,156 @@ pub fn native_decline(method: &str, params: &Value) -> Value {
     record
 }
 
+/// The threads an item on the run's own thread names as agents it started
+/// or spoke to: a V2 `subAgentActivity`'s `agentThreadId`, and a V1
+/// `collabAgentToolCall`'s `receiverThreadIds` (0.157.0's `ThreadItem`;
+/// `core/src/tools/handlers/multi_agents*/spawn.rs` at rust-v0.157.0).
+pub fn named_threads(item: &Value) -> Vec<String> {
+    match item["type"].as_str() {
+        Some("subAgentActivity") => item["agentThreadId"]
+            .as_str()
+            .map(|id| vec![id.to_owned()])
+            .unwrap_or_default(),
+        Some("collabAgentToolCall") => item["receiverThreadIds"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect(),
+        _ => vec![],
+    }
+}
+
+/// The threads a run's session reported on that the run did not start: a
+/// sub-agent it spawned, or anything else (review of L3, round 3, SPEND-2).
+/// Each is recorded once, the first time the host hears of it, with how it
+/// appeared and nothing it said; its usage is kept apart and added to the
+/// run's; its running turn is known, so it can be interrupted with the run's.
+#[derive(Default)]
+struct OtherThreads {
+    seen: BTreeMap<String, Value>,
+    totals: BTreeMap<String, u64>,
+    turns: BTreeMap<String, String>,
+    interrupted: std::collections::BTreeSet<String>,
+}
+
+impl OtherThreads {
+    fn note(&mut self, life: &mut Lifecycle, thread: &str, how: Value) -> Result<()> {
+        if self.seen.contains_key(thread) {
+            return Ok(());
+        }
+        let record = json!({"thread_id":thread,"how":how});
+        self.seen.insert(thread.to_owned(), record.clone());
+        let mut event = record;
+        event["kind"] = json!("other_thread");
+        life.event(event)
+    }
+
+    /// The run's total: the sum of every thread's last reported total.
+    fn run_total(&self) -> u64 {
+        self.totals.values().sum()
+    }
+
+    /// One message from another thread. A request is declined by PIO and
+    /// never put to the caller as the run's; a notification counts only for
+    /// its usage and its turn.
+    fn handle(
+        &mut self,
+        life: &mut Lifecycle,
+        app: &mut AppServer,
+        message: &Value,
+        other: &str,
+    ) -> Result<()> {
+        let method = message["method"].as_str().unwrap_or("");
+        let params = &message["params"];
+        if message.get("id").is_some() {
+            self.note(
+                life,
+                other,
+                json!({"by":"a request from a thread this run did not start","method":method}),
+            )?;
+            let mut record = native_decline(method, params);
+            record["reason"] =
+                json!("declined by PIO: a request from a thread this run did not start");
+            record["thread_id"] = json!(other);
+            app.send(&json!({"id":message["id"],"error":{"code":-32000,
+                             "message":record["reason"]}}))?;
+            record["kind"] = json!("native_request_declined");
+            record["request_id"] = message["id"].clone();
+            record["phase"] = json!("turn");
+            return life.event(record);
+        }
+        self.note(
+            life,
+            other,
+            json!({"by":"a notification from a thread this run did not start","method":method}),
+        )?;
+        match method {
+            "thread/tokenUsage/updated" => {
+                if let Some(total) = params["tokenUsage"]["total"]["totalTokens"].as_u64() {
+                    self.totals.insert(other.to_owned(), total);
+                }
+                life.event(json!({"kind":"usage","thread_id":other,"own_thread":false,
+                                  "turn_id":params["turnId"],
+                                  "total":params["tokenUsage"]["total"],
+                                  "last":params["tokenUsage"]["last"],
+                                  "run_total":self.run_total()}))?;
+            }
+            "turn/started" => {
+                if let Some(turn) = params["turn"]["id"].as_str() {
+                    self.turns.insert(other.to_owned(), turn.to_owned());
+                }
+                life.event(json!({"kind":"other_thread_turn","thread_id":other,
+                                  "turn_id":params["turn"]["id"],"state":"started"}))?;
+            }
+            "turn/completed" => {
+                self.turns.remove(other);
+                life.event(json!({"kind":"other_thread_turn","thread_id":other,
+                                  "turn_id":params["turn"]["id"],
+                                  "state":params["turn"]["status"]}))?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Interrupt every other thread's running turn not yet interrupted, as
+    /// part of `control`.
+    fn interrupt(
+        &mut self,
+        life: &mut Lifecycle,
+        app: &mut AppServer,
+        requests: &mut BTreeMap<u64, String>,
+        control: &str,
+    ) -> Result<()> {
+        for (other, turn) in &self.turns {
+            if !self.interrupted.insert(other.clone()) {
+                continue;
+            }
+            let request = app.request("turn/interrupt", json!({"threadId":other,"turnId":turn}))?;
+            requests.insert(request, control.to_owned());
+            life.event(json!({"kind":"control_sent","control_id":control,
+                              "method":"turn/interrupt","thread_id":other}))?;
+        }
+        Ok(())
+    }
+
+    /// Every thread, with how it appeared and what it reported, for the
+    /// exit to carry.
+    fn list(&self) -> Vec<Value> {
+        self.seen
+            .values()
+            .map(|record| {
+                let mut record = record.clone();
+                let id = record["thread_id"].as_str().unwrap_or_default().to_owned();
+                record["usage_total"] = json!(self.totals.get(&id));
+                record
+            })
+            .collect()
+    }
+}
+
 /// Where a command approval's working directory lands against the run's
 /// workspace, by the classifier the other hosts use: a label and a digest,
 /// never the path. A command with no cwd, or a run with no absolute
@@ -544,6 +694,16 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         .unwrap_or(Duration::from_secs(120));
     // Request id, whether it is an MCP tool-call elicitation, and its lapse.
     let mut pending_actions: BTreeMap<u64, (Value, bool, Instant)> = BTreeMap::new();
+    // Every notification is the run's only if it names the run's own thread
+    // (review of L3, round 3, SPEND-2). Codex 0.157.0 attaches every thread
+    // it creates to every initialized connection
+    // (`app-server/src/lib.rs`, `try_attach_thread_listener`), so a
+    // sub-agent a run spawns reports here too. Each other thread is
+    // recorded once, with how it appeared; its usage is kept apart and
+    // added to the run's, which is the sum over its threads; its turn is
+    // interrupted with the run's; and it never ends the run's turn,
+    // speaks in its output, or asks the caller anything.
+    let mut others = OtherThreads::default();
     let mut action_seq = 0u64;
     let mut requests: BTreeMap<u64, String> = BTreeMap::new();
     while turn_status.is_none() {
@@ -568,6 +728,11 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                     life.event(json!({"kind":"control_response","control_id":control,"result":message.get("result"),"error":response_error(&message)}),
                         )?;
                 }
+                continue;
+            }
+            let from = message["params"]["threadId"].as_str().map(str::to_owned);
+            if let Some(other) = from.as_deref().filter(|t| *t != thread_id) {
+                others.handle(life, app, &message, other)?;
                 continue;
             }
             if has_id {
@@ -651,43 +816,79 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                 continue;
             }
             match method {
-                    "turn/started" => life.event(json!({"kind":"turn_started","turn_id":message["params"]["turn"]["id"]}),
-                    )?,
-                    "item/agentMessage/delta"
-                    | "item/commandExecution/outputDelta"
-                    | "item/completed"
-                    | "turn/diff/updated" => {
-                        let mut line = serde_json::to_vec(
-                            &json!({"method":method,"params":message["params"]}),
-                        )?;
-                        line.push(b'\n');
-                        let digest = spool.put(&line)?;
-                        append_json(
-                            &refs,
-                            &json!({"digest":digest,"offset":output_offset,"length":line.len()}),
-                        )?;
-                        output_offset += line.len() as u64;
-                        all_output.extend_from_slice(&line);
-                        if method == "item/completed" {
-                            let item = &message["params"]["item"];
-                            life.event(json!({"kind":"item_completed","item_type":item["type"],"item_id":item["id"],"status":item["status"],"server":item["server"]}),
+                "turn/started" => life.event(
+                    json!({"kind":"turn_started","turn_id":message["params"]["turn"]["id"]}),
+                )?,
+                "item/agentMessage/delta"
+                | "item/commandExecution/outputDelta"
+                | "item/completed"
+                | "turn/diff/updated" => {
+                    let mut line =
+                        serde_json::to_vec(&json!({"method":method,"params":message["params"]}))?;
+                    line.push(b'\n');
+                    let digest = spool.put(&line)?;
+                    append_json(
+                        &refs,
+                        &json!({"digest":digest,"offset":output_offset,"length":line.len()}),
+                    )?;
+                    output_offset += line.len() as u64;
+                    all_output.extend_from_slice(&line);
+                    if method == "item/completed" {
+                        let item = &message["params"]["item"];
+                        life.event(json!({"kind":"item_completed","item_type":item["type"],"item_id":item["id"],"status":item["status"],"server":item["server"]}),
+                            )?;
+                        for named in named_threads(item) {
+                            others.note(
+                                life,
+                                &named,
+                                json!({"by":"named by this run's own thread",
+                                           "item_type":item["type"],
+                                           "tool":item["tool"],"activity":item["kind"]}),
                             )?;
                         }
                     }
-                    "thread/tokenUsage/updated" => life.event(json!({"kind":"usage","turn_id":message["params"]["turnId"],"total":message["params"]["tokenUsage"]["total"],"last":message["params"]["tokenUsage"]["last"]}),
-                    )?,
-                    "serverRequest/resolved" => life.event(json!({"kind":"request_resolved","request_id":message["params"]["requestId"]}),
-                    )?,
-                    "turn/completed" => {
-                        let turn = &message["params"]["turn"];
-                        life.event(json!({"kind":"turn_completed","turn_id":turn["id"],"status":turn["status"],"error":turn["error"]}),
-                        )?;
-                        turn_status = Some(turn["status"].clone());
-                    }
-                    "error" => life.event(json!({"kind":"native_error","error":message["params"]["error"]}),
-                    )?,
-                    _ => {}
                 }
+                "item/started" => {
+                    // A spawn names its agent as it starts, before the
+                    // agent's own thread says anything.
+                    let item = &message["params"]["item"];
+                    for named in named_threads(item) {
+                        others.note(
+                            life,
+                            &named,
+                            json!({"by":"named by this run's own thread",
+                                       "item_type":item["type"],
+                                       "tool":item["tool"],"activity":item["kind"]}),
+                        )?;
+                    }
+                }
+                "thread/tokenUsage/updated" => {
+                    let params = &message["params"];
+                    if let Some(total) = params["tokenUsage"]["total"]["totalTokens"].as_u64() {
+                        others.totals.insert(thread_id.clone(), total);
+                    }
+                    life.event(
+                        json!({"kind":"usage","thread_id":thread_id,"own_thread":true,
+                                          "turn_id":params["turnId"],
+                                          "total":params["tokenUsage"]["total"],
+                                          "last":params["tokenUsage"]["last"],
+                                          "run_total":others.run_total()}),
+                    )?;
+                }
+                "serverRequest/resolved" => life.event(
+                    json!({"kind":"request_resolved","request_id":message["params"]["requestId"]}),
+                )?,
+                "turn/completed" => {
+                    let turn = &message["params"]["turn"];
+                    life.event(json!({"kind":"turn_completed","turn_id":turn["id"],"status":turn["status"],"error":turn["error"]}),
+                        )?;
+                    turn_status = Some(turn["status"].clone());
+                }
+                "error" => {
+                    life.event(json!({"kind":"native_error","error":message["params"]["error"]}))?
+                }
+                _ => {}
+            }
         }
         // A request nobody answered in time: one decline, recorded as PIO's.
         let overdue: Vec<u64> = pending_actions
@@ -735,6 +936,9 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                             requests.insert(request, id.clone());
                             life.event(json!({"kind":"control_sent","control_id":id,"method":"turn/interrupt"}),
                             )?;
+                            // And every other thread's turn still running: a
+                            // sub-agent is part of the run's spend.
+                            others.interrupt(life, app, &mut requests, &id)?;
                         }
                         None => life.event(json!({"kind":"control_rejected","control_id":id,"reason":"no acknowledged turn"}),
                         )?,
@@ -760,6 +964,29 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                 }
         }
     }
+    // Every thread this run did not start, with how it appeared and what it
+    // reported, for the exit to carry.
+    // The run's own turn is over. Another thread's turn still running is
+    // interrupted, and its end waited for, up to ten seconds, so its last
+    // report (Codex reports a step an interrupt cut short, if its response
+    // had completed) is counted; nothing else is read now.
+    if !others.turns.is_empty() {
+        others.interrupt(life, app, &mut requests, "run-ended")?;
+        let until = Instant::now() + Duration::from_secs(10);
+        while !others.turns.is_empty() && Instant::now() < until {
+            let Some(message) = app.receive(Duration::from_millis(25))? else {
+                continue;
+            };
+            if let Some(other) = message["params"]["threadId"]
+                .as_str()
+                .filter(|t| *t != thread_id)
+                .map(str::to_owned)
+            {
+                others.handle(life, app, &message, &other)?;
+            }
+        }
+    }
+    life.event(json!({"kind":"other_threads","threads":others.list()}))?;
     app.close_stdin();
     let exit = life.stop(&mut app.child)?;
     let after = pio_codex::config_snapshot(&codex_home)?;

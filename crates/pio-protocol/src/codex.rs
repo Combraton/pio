@@ -15,6 +15,11 @@ pub const CONTENT_EXTENSION: &str = "pio.combraton.dev/content";
 pub const LEAD_TOOL_EXTENSION: &str = "pio.combraton.dev/lead-tool";
 /// The requests a run's host declined by itself, on `execution.exit.observed`.
 pub const NATIVE_DECLINES: &str = "pio.combraton.dev/native-declines";
+/// The threads a run's harness session reported on that the run did not
+/// start (a sub-agent it spawned, or any other), with how each appeared and
+/// its own usage, on `execution.exit.observed` (review of L3, round 3,
+/// SPEND-2).
+pub const OTHER_THREADS: &str = "pio.combraton.dev/other-threads";
 const CONTENT_PATH: &str = "/extensions/pio.combraton.dev~1content";
 pub const FEATURES: &[&str] = &[
     "execution.controller",
@@ -955,7 +960,12 @@ impl Provider {
                 }
             }
             "usage" => {
-                if let Some(total) = event["total"]["totalTokens"].as_u64() {
+                // The run's total is the sum over its threads, where the host
+                // says so; a host that knows one thread reports that one.
+                if let Some(total) = event["run_total"]
+                    .as_u64()
+                    .or_else(|| event["total"]["totalTokens"].as_u64())
+                {
                     let invocation = e[&ns]["invocation_id"]
                         .as_str()
                         .map(str::to_owned)
@@ -1033,7 +1043,32 @@ impl Provider {
                     Value::Array(list) => Value::Array(list.clone()),
                     _ => json!([]),
                 };
+                // Every thread the run did not start, the same way (Codex
+                // only, the one host that tells threads apart): the
+                // host's final list, or what it had recorded as each thread
+                // appeared, and none only when none appeared.
+                if ns == "codex" {
+                    payload[OTHER_THREADS] =
+                        match (&e[&ns]["other_threads"], &e[&ns]["other_threads_seen"]) {
+                            (Value::Array(list), _) | (_, Value::Array(list)) => {
+                                Value::Array(list.clone())
+                            }
+                            _ => json!([]),
+                        };
+                }
                 self.execution_event(e, "execution.exit.observed", payload, None);
+            }
+            // A thread the run did not start, as the host first heard of it,
+            // and the host's list at the end with each thread's usage.
+            "other_thread" => {
+                let mut record = event.clone();
+                if let Some(fields) = record.as_object_mut() {
+                    fields.remove("kind");
+                }
+                push(&mut e[&ns]["other_threads_seen"], record);
+            }
+            "other_threads" => {
+                e[&ns]["other_threads"] = event["threads"].clone();
             }
             // A request the host answered with an error by itself: never a
             // caller's decision, and never on the stream until now.

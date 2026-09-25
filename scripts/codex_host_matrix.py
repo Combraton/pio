@@ -34,7 +34,8 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses', 'other_elicitation_declined',
          'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused',
          'command_approval_lapses', 'form_elicitation_declined', 'approval_cwd_through_a_link',
-         'approval_cwd_past_path_max',
+         'approval_cwd_past_path_max', 'subagent_thread_attributed',
+         'subagent_interrupted_with_the_run',
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
          'file_change_grant_root']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
@@ -268,6 +269,7 @@ def events_of(case, kind):
 
 
 NATIVE = 'pio.combraton.dev/native-declines'
+OTHER_THREADS = 'pio.combraton.dev/other-threads'
 
 
 def answered_once(case):
@@ -280,9 +282,10 @@ def answered_once(case):
     return [m for m in markers if m['kind'] == 'response_received']
 
 
-def carried_declines(case, identity='work'):
+def carried_declines(case, identity='work', key=NATIVE):
     """The run's native declines as a caller reads them: off the stream, on
-    the run's own exit event, and nowhere else (review of L3, CH-2/F1)."""
+    the run's own exit event, and nowhere else (review of L3, CH-2/F1). Or,
+    with `key`, another list the exit carries."""
     with case.client() as c:
         result = c.query('core.events.read', {'limit': 1000, 'from': 'start',
                                               'kinds': ['execution.execution']})['result']
@@ -290,8 +293,70 @@ def carried_declines(case, identity='work'):
              and i['event']['type'] == 'execution.exit.observed'
              and i['event']['subject']['id'] == identity]
     assert len(exits) == 1, exits
-    assert NATIVE in exits[0]['payload'], exits[0]
-    return exits[0]['payload'][NATIVE]
+    assert key in exits[0]['payload'], exits[0]
+    return exits[0]['payload'][key]
+
+
+def subagent_case(case, name):
+    """A run whose thread spawns a sub-agent, as Codex 0.157.0 sends it: the
+    parent's `subAgentActivity` item, then the agent's own thread on the same
+    connection, its turn, its usage, a command approval it asks and its own
+    words (review of L3, round 3, SPEND-2). None of it is the run's: the
+    agent's turn/completed does not end the run's turn, its words are not
+    the run's output, its request is declined by PIO and never put to the
+    caller, and its usage is added to the run's, which is the sum over the
+    run's threads. The exit carries the thread, how it appeared and its
+    usage. Interrupting the run interrupts the agent's turn too."""
+    response, _ = case.submit()
+    assert response['result']['outcome']['admission'] == 'admitted', response
+    sub = 'fake-sub-thread-1'
+    if name == 'subagent_interrupted_with_the_run':
+        poll(lambda: events_of(case, 'other_thread_turn'),
+             lambda turns: any(e['state'] == 'started' for e in turns))
+        case.execution_command('execution.cancel', 'work', {}, 'cancel-sub')
+        final = exited(case)
+        sent = [e for e in events_of(case, 'control_sent') if e.get('method') == 'turn/interrupt']
+        assert sorted(e.get('thread_id') or 'own' for e in sent) == ['fake-sub-thread-1', 'own'], sent
+        interrupted = [m for m in case.markers_records() if m['kind'] == 'sub_agent_interrupted']
+        assert [m['thread'] for m in interrupted] == [sub], interrupted
+        turns = events_of(case, 'other_thread_turn')
+        assert [e['state'] for e in turns] == ['started', 'interrupted'], turns
+        assert final['cancellation'].get('outcome') == 'cancelled', final
+        return dict(outcome='pass', interrupted=[sub])
+    final = exited(case)
+    assert final['exit'] == {'code': 0}, final
+    # The run's own turn ended the run, once, and the agent's did not.
+    completed = events_of(case, 'turn_completed')
+    own_turn = events_of(case, 'turn_acknowledged')[0]['turn_id']
+    assert [e['turn_id'] for e in completed] == [own_turn], completed
+    assert [e['state'] for e in events_of(case, 'other_thread_turn')] == ['started', 'completed']
+    # How it appeared: named by the run's own thread, before it said anything.
+    seen = events_of(case, 'other_thread')
+    assert [(e['thread_id'], e['how']['by'], e['how']['item_type']) for e in seen] == \
+        [(sub, "named by this run's own thread", 'subAgentActivity')], seen
+    # Its request: declined by PIO, recorded as another thread's, never an action.
+    assert events_of(case, 'action_requested') == [], 'surfaced a sub-agent request'
+    declined = events_of(case, 'native_request_declined')
+    assert [(d['method'], d['thread_id'], d['reason']) for d in declined] == [
+        ('item/commandExecution/requestApproval', sub,
+         'declined by PIO: a request from a thread this run did not start')], declined
+    asked = [m for m in case.markers_records() if m['kind'] == 'sub_agent_asked']
+    assert len(asked) == 1 and asked[0]['refused'], asked
+    # Its usage, apart and summed: 5,000 and 10,000 on its thread, 42 on the run's.
+    usage = events_of(case, 'usage')
+    assert [(e['own_thread'], e['total']['totalTokens'], e['run_total']) for e in usage] == [
+        (False, 5000, 5000), (False, 10000, 10000), (True, 42, 10042)], usage
+    assert final['usage']['observations'][0]['amount'] == 10042, final['usage']
+    # Its words are not the run's.
+    with case.client() as c:
+        output = c.query('execution.output.read', {'execution': 'work', 'offset': 0})['result']
+    import base64
+    text = base64.b64decode(output['data_base64']).decode()
+    assert 'fake agent reply' in text and 'SENTINEL-sub' not in text, text
+    carried = carried_declines(case, key=OTHER_THREADS)
+    assert [(o['thread_id'], o['how']['by'], o['usage_total']) for o in carried] == \
+        [(sub, "named by this run's own thread", 10000)], carried
+    return dict(outcome='pass', other_threads=carried, run_total=10042)
 
 
 def model_case(case, name):
@@ -532,6 +597,11 @@ def run_case(out, name):
                                    'delay_ms': 100},
         approval_cwd_through_a_link={'approval': 'command', 'delay_ms': 100},
         approval_cwd_past_path_max={'approval': 'command', 'delay_ms': 100},
+        subagent_thread_attributed={'spawn_agent': True, 'subagent_steps': 2, 'subagent_step': 5000,
+                                    'subagent_step_ms': 300, 'subagent_asks': True,
+                                    'delay_ms': 4000, 'usage_total': 42},
+        subagent_interrupted_with_the_run={'spawn_agent': True, 'subagent_steps': 2,
+                                           'subagent_step_ms': 60000, 'delay_ms': 60000},
         early_elicitation_declined={'elicit_during_thread_start': True, 'delay_ms': 100},
         user_input_declined={'approval': 'user_input', 'delay_ms': 100},
         file_change_grant_root={'approval': 'fileChange', 'delay_ms': 100, 'approval_grant_root': '/'},
@@ -549,6 +619,9 @@ def run_case(out, name):
     try:
         if name in ('approval_cwd_through_a_link', 'approval_cwd_past_path_max'):
             return link_case(case, name)
+        if name in ('subagent_thread_attributed', 'subagent_interrupted_with_the_run'):
+            case.start()
+            return subagent_case(case, name)
         if name == 'unqualified_executable_refused':
             daemon = case.start(expect_ready=False)
             code = daemon.wait(timeout=60)

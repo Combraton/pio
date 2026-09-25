@@ -181,6 +181,114 @@ impl Drop for McpServer {
     }
 }
 
+/// The sub-agent turns the fake is playing, so `turn/interrupt` can reach
+/// them by thread and turn; and whether the thread's own config turned
+/// agents off, so no spawn is offered (review of L3, round 3, SPEND-2).
+pub(crate) static SUB_TURNS: Mutex<Vec<Arc<Turn>>> = Mutex::new(Vec::new());
+pub(crate) static AGENTS_OFF: AtomicBool = AtomicBool::new(false);
+
+/// Codex 0.157.0 spawning a sub-agent, as it reaches the client, read from
+/// its source at `rust-v0.157.0` and not measured. On the parent's own
+/// thread, a `subAgentActivity` item, `kind: started`, naming the agent's
+/// thread and path (V2, `core/src/tools/handlers/multi_agents_v2/spawn.rs`,
+/// `emit_sub_agent_activity`; `gpt-5.6-terra`'s bundled catalog entry says
+/// `multi_agent_version: v2`), started and completed. Then the agent's own
+/// thread on this same connection, since the app-server attaches every
+/// thread it creates to every initialized connection
+/// (`app-server/src/lib.rs`, `try_attach_thread_listener`): its turn starts,
+/// it takes `subagent_steps` model steps of `subagent_step` tokens, each
+/// `subagent_step_ms` long and reported with its thread's own total, and
+/// its turn completes, unless interrupted. With `subagent_asks` its first
+/// step asks a command approval on its own thread. False, and nothing sent,
+/// when the thread's config turned agents off.
+pub(crate) fn spawn_agent(
+    parent_thread: &str,
+    parent_turn: &str,
+    scenario: &Value,
+    waiting: Waiting,
+    markers: Option<PathBuf>,
+) -> Result<bool> {
+    if AGENTS_OFF.load(Ordering::SeqCst) {
+        super::fake::marker(
+            &markers,
+            json!({"source":super::fake::SOURCE,"kind":"spawn_not_offered"}),
+        )?;
+        return Ok(false);
+    }
+    let n = SUB_TURNS.lock().expect("sub turns lock").len() + 1;
+    let (thread, turn) = (format!("fake-sub-thread-{n}"), format!("fake-sub-turn-{n}"));
+    let item = json!({"type":"subAgentActivity","id":format!("call_spawn_{n}"),"kind":"started",
+                      "agentThreadId":thread,"agentPath":format!("/root/helper_{n}")});
+    for (method, stamp) in [
+        ("item/started", "startedAtMs"),
+        ("item/completed", "completedAtMs"),
+    ] {
+        emit(
+            &json!({"method":method,"params":{"threadId":parent_thread,"turnId":parent_turn,
+                                               "item":&item,stamp:now_ms()}}),
+        )?;
+    }
+    let sub = Turn::new(turn.clone(), thread.clone());
+    SUB_TURNS.lock().expect("sub turns lock").push(sub.clone());
+    emit(&json!({"method":"turn/started","params":{"threadId":thread,
+        "turn":{"id":turn,"status":"inProgress","items":[],"error":null}}}))?;
+    super::fake::marker(
+        &markers,
+        json!({"source":super::fake::SOURCE,"kind":"sub_agent_spawned","thread":thread}),
+    )?;
+    let play = Play {
+        turn: sub,
+        waiting,
+        markers,
+        step: scenario["subagent_step"].as_u64().unwrap_or(4096),
+        first: None,
+        think: Duration::from_millis(scenario["subagent_step_ms"].as_u64().unwrap_or(1500)),
+        answer: Duration::from_millis(scenario["subagent_step_ms"].as_u64().unwrap_or(1500)),
+        requests: AtomicU64::new(0),
+        messages: AtomicU64::new(0),
+    };
+    let (steps, asks) = (
+        scenario["subagent_steps"].as_u64().unwrap_or(2),
+        scenario["subagent_asks"] == true,
+    );
+    std::thread::spawn(move || {
+        if let Err(error) = play_sub_agent(&play, steps, asks) {
+            let _ = play.marker(json!({"kind":"sub_agent_failed","error":format!("{error:#}")}));
+            let _ = play.turn.complete("failed");
+        }
+    });
+    Ok(true)
+}
+
+fn play_sub_agent(play: &Play, steps: u64, asks: bool) -> Result<()> {
+    play.begin();
+    for n in 0..steps {
+        if !play.think() {
+            return Ok(());
+        }
+        // Its own words, on its own thread: never the run's.
+        play.say(&format!("sub-agent step {} SENTINEL-sub", n + 1))?;
+        play.responded();
+        if asks && n == 0 {
+            let answer = play.ask(
+                "item/commandExecution/requestApproval",
+                json!({"threadId":play.turn.thread,"turnId":play.turn.id,"itemId":"item-sub-command",
+                       "command":"/bin/zsh -lc 'ls'","cwd":"/","reason":null,
+                       "kind":"command","startedAtMs":now_ms()}),
+            )?;
+            let Some(answer) = answer else {
+                return Ok(());
+            };
+            play.marker(
+                json!({"kind":"sub_agent_asked","refused":answer["error"]["message"],
+                               "decision":answer["result"]["decision"]}),
+            )?;
+        }
+        play.step(n + 1 < steps)?;
+    }
+    play.turn.complete("completed")
+}
+
 /// Replies to the requests a scripted turn sent the client, keyed by request
 /// id, routed back by the main loop to the turn that waits for them.
 pub(crate) type Waiting = Arc<Mutex<HashMap<String, Sender<Value>>>>;
@@ -709,7 +817,10 @@ pub(crate) fn led(
     turn.deaf
         .store(named("led_ignores_interrupt_if"), Ordering::SeqCst);
     let offset = scenario["led_offset"].as_i64().unwrap_or(0);
-    if let Err(error) = play_led(&play, &cwd, &prompt, delay, asks, grant, offset) {
+    let spawns = named("spawn_agent_if");
+    if let Err(error) = play_led(
+        &play, &cwd, &prompt, delay, asks, grant, offset, spawns, &scenario,
+    ) {
         let _ = play.marker(json!({"kind":"led_script_failed","error":format!("{error:#}")}));
         let _ = turn.complete("failed");
     }
@@ -724,6 +835,8 @@ fn play_led(
     asks: bool,
     grant: bool,
     offset: i64,
+    spawns: bool,
+    scenario: &Value,
 ) -> Result<()> {
     let file = named_file(prompt).unwrap_or_default();
     // How Codex named a command it asked about, measured in M2 R5 at 0.155.1:
@@ -740,6 +853,16 @@ fn play_led(
     // numbers and all, so only its last message is its answer.
     play.say(&format!("Running `{asked_for}`."))?;
     play.responded();
+    if spawns {
+        // The same step also spawns a sub-agent, where Codex offers one.
+        spawn_agent(
+            &play.turn.thread,
+            &play.turn.id,
+            scenario,
+            play.waiting.clone(),
+            play.markers.clone(),
+        )?;
+    }
     if grant {
         // A request PIO declines by itself: a permission grant, which asks
         // for a profile rather than a decision (0.157.0's

@@ -39,6 +39,11 @@
 //! in Codex's own shell tool instead of an MCP call. A led run whose prompt
 //! contains `led_ignores_interrupt_if` acknowledges `turn/interrupt` and goes
 //! on; `led_answer_ms` is how long a led run's answering step takes.
+//! `spawn_agent_if` (a led run's prompt) or `spawn_agent` (the plain turn)
+//! spawns a sub-agent as Codex 0.157.0 does (`fake_turn::spawn_agent`):
+//! `subagent_steps`, `subagent_step`, `subagent_step_ms` and
+//! `subagent_asks`; none is spawned when the thread's config sets
+//! `agents.enabled = false` and does not turn `features.multi_agent_v2` on.
 use crate::fake_turn::{self, McpServer, Turn, Waiting, emit};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
@@ -290,9 +295,28 @@ pub fn run() -> Result<()> {
                                 )
                             })
                             .collect();
+                        // And what it said of agents, by the dotted keys a
+                        // request override takes: with `agents.enabled`
+                        // false and `multi_agent_v2` not on, Codex offers no
+                        // collaboration tools whatever the model's catalog
+                        // says (`Config::multi_agent_version_override`,
+                        // rust-v0.157.0), so this fake spawns none.
+                        let config = &params["config"];
+                        let agents = config["agents.enabled"]
+                            .as_bool()
+                            .or(config["agents"]["enabled"].as_bool());
+                        let v2 = config["features.multi_agent_v2"]
+                            .as_bool()
+                            .or(config["features"]["multi_agent_v2"].as_bool());
+                        fake_turn::AGENTS_OFF.store(
+                            agents == Some(false) && v2 != Some(true),
+                            std::sync::atomic::Ordering::SeqCst,
+                        );
                         marker(
                             &markers,
-                            json!({"source":SOURCE,"kind":"thread_config_received","servers":received}),
+                            json!({"source":SOURCE,"kind":"thread_config_received","servers":received,
+                                   "agents_enabled":agents,"multi_agent":config["features.multi_agent"],
+                                   "multi_agent_v2":v2}),
                         )?;
                         // The servers this thread's own config names, launched
                         // and listed before the answer, as the M4b probe saw.
@@ -397,6 +421,15 @@ pub fn run() -> Result<()> {
                         send(
                             json!({"method":"item/agentMessage/delta","params":{"threadId":thread_id,"turnId":turn,"itemId":"item-agent","delta":agent}}),
                         )?;
+                        if scenario["spawn_agent"] == true {
+                            fake_turn::spawn_agent(
+                                &thread_id,
+                                &turn,
+                                &scenario,
+                                waiting.clone(),
+                                markers.clone(),
+                            )?;
+                        }
                         let delay = scenario["delay_ms"].as_u64().unwrap_or(200);
                         let pending = match scenario["approval"].as_str() {
                             Some(kind) => {
@@ -503,6 +536,32 @@ pub fn run() -> Result<()> {
                         };
                         active =
                             Some((turn, Instant::now() + Duration::from_millis(delay), pending));
+                    }
+                    // A sub-agent's turn, by its own thread and turn.
+                    "turn/interrupt"
+                        if fake_turn::SUB_TURNS
+                            .lock()
+                            .expect("sub turns lock")
+                            .iter()
+                            .any(|sub| {
+                                message["params"]["turnId"] == sub.id.as_str()
+                                    && message["params"]["threadId"] == sub.thread.as_str()
+                            }) =>
+                    {
+                        send(json!({"id":id,"result":{}}))?;
+                        let sub = fake_turn::SUB_TURNS
+                            .lock()
+                            .expect("sub turns lock")
+                            .iter()
+                            .find(|sub| message["params"]["turnId"] == sub.id.as_str())
+                            .cloned();
+                        if let Some(sub) = sub {
+                            marker(
+                                &markers,
+                                json!({"source":SOURCE,"kind":"sub_agent_interrupted","thread":sub.thread}),
+                            )?;
+                            sub.interrupt()?;
+                        }
                     }
                     "turn/interrupt" if scripted.is_some() => {
                         send(json!({"id":id,"result":{}}))?;
