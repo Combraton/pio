@@ -33,7 +33,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'widening_decisions_refused', 'deadline_stop_interrupts', 'thread_settings_broader_refused', 'permission_grant_refused',
          'lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses', 'other_elicitation_declined',
          'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused',
-         'command_approval_lapses']
+         'command_approval_lapses', 'form_elicitation_declined']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
@@ -431,6 +431,8 @@ def run_case(out, name):
         mcp_approval_lapses={'lead': {'calls': [{'tool': 'start_run', 'arguments': {}}]}},
         other_elicitation_declined={'approval': 'elicitation', 'delay_ms': 100},
         command_approval_lapses={'approval': 'command', 'delay_ms': 100},
+        form_elicitation_declined={'approval': 'elicitation', 'elicitation_mode': 'form',
+                                   'delay_ms': 100},
         model_checked_before_turn={'model_provider': 'openai', 'delay_ms': 100},
         model_mismatch_refused={'model_provider': 'openai', 'model_reported': 'another-model'},
         provider_mismatch_refused={'delay_ms': 100},
@@ -536,6 +538,27 @@ def run_case(out, name):
             assert [(d['decided_by'], d['decision'], d['basis']) for d in decided] == \
                 [('pio', 'decline', 'deadline_lapsed')], decided
             return dict(outcome='pass', lapsed=denied[0], native_answers=answers, item='declined')
+        if name == 'form_elicitation_declined':
+            # A form asking for data: the mode of a tool-call approval, but
+            # not one (no `_meta.codex_approval_kind`). Declined by PIO,
+            # never surfaced, never answered `accept` with empty content.
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            poll(lambda: case.inspect()['result'],
+                 lambda v: v['runtime'] in ('exited', 'requires_action'), 30)
+            assert events_of(case, 'action_requested') == [], 'surfaced a form that asks for data'
+            final = exited(case)
+            declined = events_of(case, 'native_request_declined')
+            assert [(d['method'], d['server'], d['mode'], d['approval_kind']) for d in declined] == \
+                [('mcpServer/elicitation/request', 'someone', 'form', None)], declined
+            assert 'region' not in json.dumps(declined), declined
+            carried = carried_declines(case)
+            assert [(d['method'], d['mode']) for d in carried] == \
+                [('mcpServer/elicitation/request', 'form')], carried
+            wire = answered_once(case)
+            assert [m['error']['code'] for m in wire] == [-32000] and \
+                all(m['result'] is None for m in wire), wire
+            return dict(outcome='pass', declined=declined[0]['mode'], actions=0, exit=final['exit'])
         if name == 'other_elicitation_declined':
             response, _ = case.submit()
             assert response['result']['outcome']['admission'] == 'admitted', response

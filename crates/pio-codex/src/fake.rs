@@ -402,8 +402,17 @@ pub fn run() -> Result<()> {
                                 if kind == "elicitation" {
                                     // An elicitation that is not an MCP
                                     // tool-call approval: a server asking for
-                                    // a login, which PIO never supplies.
-                                    params = json!({"threadId":thread_id,"turnId":turn,"serverName":"someone","mode":"url","elicitationId":"fake-elicitation","url":"https://example.invalid/login","message":"Sign in to continue"});
+                                    // a login, which PIO never supplies; or,
+                                    // with `elicitation_mode: "form"`, a form
+                                    // asking for data, in the same mode as a
+                                    // tool-call approval but without its
+                                    // `_meta.codex_approval_kind` (review of
+                                    // L3, CH-5).
+                                    params = if scenario["elicitation_mode"] == "form" {
+                                        json!({"threadId":thread_id,"turnId":turn,"serverName":"someone","mode":"form","message":"Which region should I use?","requestedSchema":{"type":"object","properties":{"region":{"type":"string"}},"required":["region"]},"_meta":{}})
+                                    } else {
+                                        json!({"threadId":thread_id,"turnId":turn,"serverName":"someone","mode":"url","elicitationId":"fake-elicitation","url":"https://example.invalid/login","message":"Sign in to continue"})
+                                    };
                                 }
                                 // Only command approvals carry `kind` at
                                 // 0.155.1 and 0.157.0, and it is optional there too, so
