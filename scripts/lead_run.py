@@ -141,6 +141,12 @@ does with a permission prompt.
 - `lead-heavy` (L3) has each of the lead's steps cost a whole step in flight
   (30,000) and the lead read once more: its tool must withhold that result,
   the runner stop the lead, and the lead end within its share;
+- `lead-tool-error-past-hold` and `lead-shell-past-hold` (L3) have the lead,
+  past its hold, get a lead-tool error (an argument `read_run` does not take)
+  or a result from Codex's own shell: the error must be held like any result,
+  the shell's result met by a stop; `tool-error-ungated` (errors skip the
+  gate) and `meter-ignores-items` (the meter blind to such results) must each
+  fail the row that checks every result against the hold;
 - `qualified-elsewhere` (L3) puts in the store the qualification serve-codex
   would write for a Codex whose native binary changed: the row that compares
   it with the committed record must fail; `qualified-as-committed` plants the
@@ -382,13 +388,17 @@ def select_plan(name):
         # report that crosses a ceiling arrives with the next step already
         # begun: the crossing step and the one in flight when the stop lands
         # (review of L3, A7). A child has no tool of PIO's to hold, so that
-        # is its ceiling plus two steps. The lead's tool hands back no result
-        # once the lead has reported more than its ceiling less one step, so
-        # the last result it gets comes at most one step under its ceiling,
-        # and the step that made that call and the one the result starts
-        # bring it to its ceiling plus one step.
+        # is its ceiling plus two steps. So is the lead (review of L3, round
+        # 2, SB-1). Its tool withholds any response once the lead has
+        # reported more than its ceiling less one step, which keeps a lead
+        # that uses only its tool within its ceiling plus one step; and the
+        # meter stops it when a result its tool never saw comes back past
+        # that. But such a result (Codex's own shell, another MCP server, a
+        # refused approval) is back, and the next step begun, before
+        # anything can see it, when the lead may be just under its ceiling:
+        # the ceiling plus two steps is the bound.
         HOLD_ABOVE = LEAD_CEILING - step
-        LEAD_SHARE = HOLD_ABOVE + 2 * step
+        LEAD_SHARE = LEAD_CEILING + 2 * step
         CHILD_SHARE = CHILD_CEILING + 2 * step
         WORST_CASE = LEAD_SHARE + 2 * CHILD_SHARE
         BOUND = dict(
@@ -396,9 +406,12 @@ def select_plan(name):
             child_ceiling=CHILD_CEILING, in_flight=step, hold_above=HOLD_ABOVE,
             lead_share=LEAD_SHARE, child_share=CHILD_SHARE, worst_case=WORST_CASE,
             estimate="Codex's own running total for the thread, reported after every step",
-            lead=f'its tool hands back no result once it has reported more than '
-                 f'{HOLD_ABOVE} (its ceiling less one step), so at most that, plus the step '
-                 'that made the last call and the step its result starts',
+            lead='at most its ceiling, plus the step that crossed it (reported only after '
+                 'its tool) and the step in flight when the stop lands. Its tool withholds '
+                 f'any response once it has reported more than {HOLD_ABOVE}, and the meter '
+                 f'stops it when a result its tool never saw comes back past {HOLD_ABOVE}: '
+                 'that keeps a lead using only its tool within its ceiling plus one step, but '
+                 'a result its tool never sees starts a step before anything can stop it',
             child='at most its ceiling, plus the step that crossed it (reported only after '
                   'its command) and the step in flight when the stop lands',
             usage_silence=USAGE_SILENCE,
@@ -477,6 +490,15 @@ MUTANTS = {
     # The store holds a qualification whose native binary is not the one
     # the committed record qualified (review of L3, REPIN-2).
     'qualified-elsewhere': 'Codex qualified at the pinned identity',
+    # A lead step past the hold that ends in a lead-tool error, or in
+    # Codex's own shell: the error must be held like any result, and the
+    # shell's result met by a stop (review of L3, round 2, SB-1). With the
+    # gate skipped for errors, or the meter blind to such items, the row that
+    # checks every result against the hold fails.
+    'lead-tool-error-past-hold': 'Every run stayed within its ceilings',
+    'lead-shell-past-hold': 'Every run stayed within its ceilings',
+    'tool-error-ungated': 'Every result the lead got was checked against its hold',
+    'meter-ignores-items': 'Every result the lead got was checked against its hold',
     # The runner reads every message a child said, as it did, not its
     # answer: a preamble that quotes the command is taken for the count.
     'first-number-of-all': 'Each child reported the true count',
@@ -501,7 +523,9 @@ PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {
                 'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'},
                 'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'},
                 'usage-suppressed': {'L3'}, 'lead-heavy': {'L3'},
-                'qualified-elsewhere': {'L3'}, 'qualified-as-committed': {'L3'}}
+                'qualified-elsewhere': {'L3'}, 'qualified-as-committed': {'L3'},
+                'lead-tool-error-past-hold': {'L3'}, 'lead-shell-past-hold': {'L3'},
+                'tool-error-ungated': {'L3'}, 'meter-ignores-items': {'L3'}}
 
 
 def sha(data):
@@ -984,6 +1008,8 @@ class CodexMeter(Meter):
         self.silent = 0.0
         self.looked = None
         self.silenced = False
+        # The lead only: results its tool never saw, with its total then.
+        self.untooled = []
 
     def read(self, caller):
         raw, self.offset = spool(caller, self.identity, self.offset)
@@ -1042,6 +1068,40 @@ class CodexMetering(threading.Thread):
         self.error = None
         self.passes = 0
         self.seconds = 0.0
+        # The lead's own host events, followed in the order the host wrote
+        # them, for results the lead's tool never sees (review of L3, round
+        # 2, SB-1).
+        self.lead_events = None
+        self.lead_offset = 0
+        self.lead_host_total = 0
+
+    def watch_lead_items(self):
+        """A result the lead tool never sees (Codex's own shell, another MCP
+        server, a refused approval) starts the lead's next step before
+        anything can hold it. Each one that comes back while the lead's total
+        in the host's own order is past the hold is marked on its gauge, and
+        the meter stops the lead. Read from the host's events file, where each
+        usage report and each completed item sit in the order they came."""
+        if self.lead_events is None:
+            self.lead_events = lead_events_path(self.service)
+        if self.lead_events is None or not self.lead_events.exists():
+            return
+        with open(self.lead_events, 'rb') as handle:
+            handle.seek(self.lead_offset)
+            data = handle.read()
+        whole = data[:data.rfind(b'\n') + 1]
+        self.lead_offset += len(whole)
+        gauge = self.meters[LEAD]
+        for line in whole.splitlines():
+            event = json.loads(line)
+            if event.get('kind') == 'usage':
+                total = (event.get('total') or {}).get('totalTokens')
+                if isinstance(total, int):
+                    self.lead_host_total = max(self.lead_host_total, total)
+            elif untooled(event):
+                entry = dict(item_type=event.get('item_type'), status=event.get('status'),
+                             server=event.get('server'), total=self.lead_host_total)
+                gauge.untooled.append(entry)
 
     def run(self):
         began = time.monotonic()
@@ -1081,6 +1141,7 @@ class CodexMetering(threading.Thread):
                     if len(result['items']) < payload['limit']:
                         break
                 self.passes += 1
+                self.watch_lead_items()
                 codex_meter(owner, self.meters, self.root, self.record)
                 # What the lead's tool reads before it hands back a result.
                 lead = self.meters[LEAD]
@@ -1277,13 +1338,21 @@ class NoSleep:
         self.process.wait(timeout=10)
 
 
-def mutated_tool(root):
-    """The lead tool with the bug the first rehearsal caught put back."""
+def mutated_tool(root, mutant='reports-refused-as-started'):
+    """The lead tool with a bug put back: the one the first rehearsal caught
+    (a refused admission reported as a start), or, for `tool-error-ungated`,
+    an error handed back without passing the gate (review of L3, round 2,
+    SB-1)."""
     text = TOOL.read_text()
-    fix = "    if outcome.get('admission') == 'refused':\n"
+    if mutant == 'tool-error-ungated':
+        fix = "        held, seen = withheld(arrived)\n"
+        bug = "        if response.get('isError'):\n            return response\n" + fix
+    else:
+        fix = "    if outcome.get('admission') == 'refused':\n"
+        bug = "    if False:\n"
     assert text.count(fix) == 1, 'the mutant no longer matches the tool'
     path = root / 'lead_tool_mutant.py'
-    path.write_text(text.replace(fix, "    if False:\n"))
+    path.write_text(text.replace(fix, bug))
     return path
 
 
@@ -1299,8 +1368,15 @@ def scenario(mutant):
     loops = ([dict(tool='read_run', arguments=dict(name='alpha'), repeat=CALL_CEILING * 2)]
              if mutant == 'lead-loops' else [])
     if HARNESS == 'codex':
-        extra = ([dict(tool='read_run', arguments=dict(name='alpha'))]
-                 if mutant == 'lead-heavy' else [])
+        extra = {
+            'lead-heavy': [dict(tool='read_run', arguments=dict(name='alpha'))],
+            # An argument read_run does not take: the tool raises TypeError.
+            'lead-tool-error-past-hold': [dict(tool='read_run',
+                                               arguments=dict(name='alpha', wait=True))],
+            'tool-error-ungated': [dict(tool='read_run', arguments=dict(name='alpha', wait=True))],
+            'lead-shell-past-hold': [dict(tool='!shell', command='wc -l alpha.md')],
+            'meter-ignores-items': [dict(tool='!shell', command='wc -l alpha.md')],
+        }.get(mutant, [])
         return codex_scenario(mutant, starts + reads + loops + extra)
     return {
         **dict(
@@ -1350,7 +1426,8 @@ def codex_scenario(mutant, calls):
         play.update(lead_asks_in_mode='openai/form', lead_asks_for='read_run')
     if mutant == 'child-asks-permissions':
         play['led_permissions_if'] = beta
-    if mutant == 'lead-heavy':
+    if mutant in ('lead-heavy', 'lead-tool-error-past-hold', 'tool-error-ungated',
+                  'lead-shell-past-hold', 'meter-ignores-items'):
         play['lead_usage_step'] = CODEX['in_flight']
     if mutant == 'usage-suppressed':
         # No run reports anything, and alpha works past the silence bound,
@@ -1620,7 +1697,8 @@ def watch(args, record, service, desk, meters, state):
     credential_file = root / 'lead.credential'
     credential_file.write_text(service.lead_credential + '\n')
     os.chmod(credential_file, 0o600)
-    tool = mutated_tool(root) if args.mutant == 'reports-refused-as-started' else TOOL
+    tool = mutated_tool(root, args.mutant) \
+        if args.mutant in ('reports-refused-as-started', 'tool-error-ungated') else TOOL
     spec = dict(name=LEAD_SERVER, command=sys.executable,
                 args=[str(tool), '--credential-file', str(credential_file)],
                 env=[dict(name='PIO_LEAD_SOCKET', value=str(service.socket)),
@@ -1722,6 +1800,35 @@ def watch(args, record, service, desk, meters, state):
     owner.close()
 
 
+# Items that are the model's own output, not a tool's result.
+MODEL_ITEMS = ('agentMessage', 'reasoning', 'userMessage', 'plan')
+
+
+def untooled(event):
+    """A completed item on the lead's thread whose result the lead's tool
+    did not hand back: anything but the model's own output and a completed
+    call to the lead's own server."""
+    if event.get('kind') != 'item_completed' or event.get('item_type') in MODEL_ITEMS:
+        return False
+    return not (event.get('item_type') == 'mcpToolCall' and event.get('server') == LEAD_SERVER
+                and event.get('status') == 'completed')
+
+
+def lead_events_path(service):
+    """The lead's own host events file: its invocation, found in the journal
+    by the lead brief's digest, as host_events finds it. None until the lead
+    has one."""
+    journal = service.store / 'journal.sqlite3'
+    if not journal.exists():
+        return None
+    digest = 'sha256:' + sha(BRIEF)
+    with contextlib.closing(sqlite3.connect(f'file:{journal}?mode=ro', uri=True)) as db:
+        states = [json.loads(r[0]) for r in db.execute('select state from invocations')]
+    invocation = next((s['invocation_id'] for s in states
+                       if (s.get('payload') or {}).get('brief', {}).get('digest') == digest), None)
+    return service.store / f'{HARNESS}-{invocation}.events.jsonl' if invocation else None
+
+
 def lead_calls(root):
     return len([e for e in tool_log(root) if e.get('event') == 'request'
                 and e.get('method') == 'tools/call'])
@@ -1772,6 +1879,12 @@ def codex_meter(owner, meters, root, record):
             # rather than let the held call run out and start a step.
             over.append(f'its tool withheld a result: {gauge.total} tokens reported, past '
                         f'{HOLD_ABOVE}')
+        past = [u for u in getattr(gauge, 'untooled', []) if u['total'] > HOLD_ABOVE]
+        if identity == LEAD and past and record.get('mutant') != 'meter-ignores-items':
+            # A result the tool never saw came back past the hold: its step has
+            # begun, and nothing but a stop ends the next one.
+            over.append(f"a result its tool never saw ({past[0]['item_type']}) came back "
+                        f"with {past[0]['total']} tokens reported, past {HOLD_ABOVE}")
         if gauge.total >= gauge.ceiling:
             over.append(f'{gauge.total} tokens reported, past {gauge.ceiling}')
         if gauge.silent >= USAGE_SILENCE:
@@ -2472,6 +2585,38 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                 turn=next((e.get('status') for e in events_of_run
                            if e['kind'] == 'turn_completed'), None),
                 cancellation=((views.get(run) or {}).get('cancellation') or {}).get('outcome'))
+        # Every result the lead got was held to its hold: each response its
+        # tool gave passed the tool's gate, and each result its tool never
+        # saw that came back past the hold was met by a stop (review of L3,
+        # round 2, SB-1).
+        responded = [e for e in log if e.get('event') in ('tool_call', 'tool_failed')]
+        gates = {e.get('call'): e for e in log if e.get('event') == 'gate'}
+        host_total, came_back = 0, []
+        for event in host.get(LEAD, []):
+            if event['kind'] == 'usage':
+                total = (event.get('total') or {}).get('totalTokens')
+                host_total = max(host_total, total if isinstance(total, int) else 0)
+            elif untooled(event):
+                came_back.append(dict(item_type=event.get('item_type'), status=event.get('status'),
+                                      server=event.get('server'), total=host_total))
+        checked = dict(
+            responses=len(responded),
+            ungated=[e.get('call') for e in responded if e.get('call') not in gates],
+            handed_back_past_hold=[g for g in gates.values() if isinstance(g.get('total'), int)
+                                   and g['total'] > g['hold_above'] and not g['held']],
+            untooled=came_back,
+            stopped_for_one=any('never saw' in w for s in record.get('ceiling_stops', [])
+                                if s['run'] == LEAD for w in s['why']))
+        rows.add('Every result the lead got was checked against its hold', checked,
+                 f'every response of its tool passed the gate, none was handed back past '
+                 f'{HOLD_ABOVE}, and a result its tool never saw that came back past '
+                 f'{HOLD_ABOVE} was met by a stop',
+                 holds=lambda o: None if not o['responses'] and not o['untooled'] else
+                 not o['ungated'] and not o['handed_back_past_hold']
+                 and (o['stopped_for_one'] or not any(u['total'] > HOLD_ABOVE
+                                                       for u in o['untooled'])),
+                 note="the lead tool's own gate records, and the lead's host events in the "
+                      'order the host wrote them')
         rows.add('Every stop the runner made reached Codex', reached,
                  'for each run the runner stopped: the host sent turn/interrupt, Codex '
                  'acknowledged it, and the turn ended interrupted (cancellation cancelled)',
@@ -2922,7 +3067,21 @@ def main():
             assert {LEAD, f'{LEAD}.alpha'} <= silenced, record.get('ceiling_stops')
             assert all(record['usage'][i]['charged'] == (LEAD_SHARE if i == LEAD else CHILD_SHARE)
                        for i in RUNS), record['usage']
+        if args.mutant in ('lead-tool-error-past-hold', 'lead-shell-past-hold'):
+            # Stopped for the right reason, and every result it got was
+            # checked against its hold: the error was held like a result, the
+            # shell's result met by a stop. Within its ceiling plus one step.
+            why = 'withheld' if args.mutant == 'lead-tool-error-past-hold' else 'never saw'
+            stops = [s for s in record.get('ceiling_stops', []) if s['run'] == LEAD]
+            assert stops and any(why in w for w in stops[0]['why']), stops
+            row = next(r for r in record['rows'] if r['row'] ==
+                       'Every result the lead got was checked against its hold')
+            assert row['holds'] is True, row
+            assert record['usage'][LEAD]['reported_total'] <= HOLD_ABOVE + 2 * CODEX['in_flight'], \
+                record['usage'][LEAD]
         if args.mutant == 'lead-heavy':
+            assert record['usage'][LEAD]['reported_total'] <= HOLD_ABOVE + 2 * CODEX['in_flight'], \
+                record['usage'][LEAD]
             # Stopped because its tool withheld a result, and within its
             # share: 120,000 reported at the withheld call, the step that
             # made it in flight, and no step after.

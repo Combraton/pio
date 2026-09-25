@@ -34,7 +34,8 @@
 //! approval mode says; a led run whose
 //! prompt contains `led_permissions_if` first asks a permission grant;
 //! `elicit_during_thread_start` sends an url-mode elicitation before it answers
-//! `thread/start`.
+//! `thread/start`. A lead call whose `tool` is `!shell` plays a step that ends
+//! in Codex's own shell tool instead of an MCP call.
 use crate::fake_turn::{self, McpServer, Turn, Waiting, emit};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};

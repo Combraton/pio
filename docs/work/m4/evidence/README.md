@@ -371,11 +371,18 @@ holds only because of what the fake does (review of L3, F13):
   qualification, say) now leaves no reservation (`service-never-ready`).
 - **The sizing.** Codex reports a step once its tool has finished (M2 R5,
   R6), so a report that crosses a ceiling arrives with the next step begun.
-  From the code: the lead's tool withholds any result once the lead has
-  reported more than 95,000, so the lead ends within 155,000; a child, with
-  no tool of PIO's to hold, within 110,000. The worst case is **375,000**,
-  past the 320,000 stop, so **the live runner refuses to start L3** until
-  the owner decides the sizing. The limits are the owner's and are
+  From the code, each run can reach its ceiling plus two steps: a child
+  50,000 + 2 x 30,000 = 110,000, and the lead 125,000 + 2 x 30,000 =
+  185,000. The lead's tool withholds any response (a result, an error or an
+  unknown tool) once the lead has reported more than 95,000, and the meter
+  stops the lead when a result its tool never saw comes back past 95,000;
+  that keeps a lead that uses only its tool within 155,000. But a result
+  the tool never sees (Codex's own shell, another MCP server, a refused
+  approval) is back, with the next step begun, before anything can see it,
+  when the lead may be just under 125,000 (review of L3, round 2, SB-1).
+  The worst case is **405,000** (185,000 + 2 x 110,000), past the 320,000
+  stop and the 400,000 cap, so **the live runner refuses to start L3**
+  until the owner decides the sizing. The limits are the owner's and are
   unchanged.
 - **The pre-allowance.** Whether Codex honours the per-thread
   `tools.<name>.approval_mode: approve` and asks nothing before the lead's

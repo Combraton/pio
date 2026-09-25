@@ -616,7 +616,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                         all_output.extend_from_slice(&line);
                         if method == "item/completed" {
                             let item = &message["params"]["item"];
-                            life.event(json!({"kind":"item_completed","item_type":item["type"],"item_id":item["id"],"status":item["status"]}),
+                            life.event(json!({"kind":"item_completed","item_type":item["type"],"item_id":item["id"],"status":item["status"],"server":item["server"]}),
                             )?;
                         }
                     }

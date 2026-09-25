@@ -464,6 +464,25 @@ fn play_lead(play: &Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> 
                 return Ok(());
             }
             play.responded();
+            if tool == "!shell" {
+                // Codex's own shell tool, on the lead's thread: a result the
+                // lead tool never sees (review of L3, round 2, SB-1). A
+                // read-only command in a writable sandbox under on-request
+                // runs without asking.
+                let command = call["command"].as_str().unwrap_or("ls");
+                let item = json!({"type":"commandExecution","id":format!("call_shell_{index}"),
+                                  "command":format!("/bin/zsh -lc '{command}'"),
+                                  "cwd":null,"commandActions":[]});
+                let mut started = item.clone();
+                started["status"] = json!("inProgress");
+                play.item("item/started", started)?;
+                let mut done = item;
+                done["status"] = json!("completed");
+                done["exitCode"] = json!(0);
+                play.item("item/completed", done)?;
+                play.step(true)?;
+                break (String::new(), false);
+            }
             let item_id = format!("call_mcp_{index}_{tries}");
             tries += 1;
             let forced = forced_mode.filter(|_| forced_for.is_none_or(|only| only == tool));

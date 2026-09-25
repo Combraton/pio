@@ -290,10 +290,11 @@ TOOLS = {
 
 
 def withheld(arrived):
-    """Why a result that is ready must not be handed back, if it must not."""
+    """Why a response that is ready must not be handed back, if it must not,
+    and the meter reading it was judged on (None without a meter)."""
     why = ['the runner stopped this lead'] if STOP and os.path.exists(STOP) else []
     if not METER:
-        return why
+        return why, None
     until = time.monotonic() + METER_WAIT
     seen = None
     while seen is None:
@@ -306,13 +307,13 @@ def withheld(arrived):
             seen = None
         if seen is None and time.monotonic() >= until:
             return why + [f"the runner's meter has not read the lead's usage in the "
-                          f'{METER_WAIT} s since this call arrived']
+                          f'{METER_WAIT} s since this call arrived'], None
         if seen is None:
             time.sleep(0.1)
     if seen['total'] > seen['hold_above']:
         why.append(f"the lead has reported {seen['total']} tokens, past "
                    f"{seen['hold_above']}: this result would start a step past its share")
-    return why
+    return why, seen
 
 
 def handle(message):
@@ -339,21 +340,34 @@ def handle(message):
             time.sleep(HOLD)
             return {'isError': True,
                     'content': [{'type': 'text', 'text': 'stopped: ' + '; '.join(why)}]}
-        if name not in TOOLS:
-            return {'isError': True,
-                    'content': [{'type': 'text', 'text': f'no tool {name}'}]}
         began = time.monotonic()
-        try:
-            result = TOOLS[name][0](**arguments)
-        except Exception as error:  # reported, never swallowed
-            note({'event': 'tool_failed', 'tool': name, 'error': repr(error)})
-            return {'isError': True,
-                    'content': [{'type': 'text', 'text': repr(error)}]}
-        # How long the call took, so a read that waited can be shown to have
-        # waited, from the tool's own log (L1b).
-        note({'event': 'tool_call', 'tool': name, 'arguments': arguments,
-              'result': result, 'seconds': round(time.monotonic() - began, 1)})
-        held = withheld(arrived)
+        if name not in TOOLS:
+            note({'event': 'tool_failed', 'tool': name, 'call': len(CALLS),
+                  'error': 'no such tool'})
+            response = {'isError': True,
+                        'content': [{'type': 'text', 'text': f'no tool {name}'}]}
+        else:
+            try:
+                result = TOOLS[name][0](**arguments)
+            except Exception as error:  # reported, never swallowed
+                note({'event': 'tool_failed', 'tool': name, 'call': len(CALLS),
+                      'error': repr(error)})
+                response = {'isError': True,
+                            'content': [{'type': 'text', 'text': repr(error)}]}
+            else:
+                # How long the call took, so a read that waited can be shown
+                # to have waited, from the tool's own log (L1b).
+                note({'event': 'tool_call', 'tool': name, 'call': len(CALLS),
+                      'arguments': arguments, 'result': result,
+                      'seconds': round(time.monotonic() - began, 1)})
+                response = {'content': [{'type': 'text', 'text': json.dumps(result)}]}
+        # **Every** response passes the gate: a result, an error or an
+        # unknown tool starts the lead's next step alike (review of L3, round
+        # 2, SB-1). What the gate saw is logged for each, so a row can show it
+        # ran on every one.
+        held, seen = withheld(arrived)
+        note({'event': 'gate', 'tool': name, 'call': len(CALLS), 'held': bool(held),
+              'total': (seen or {}).get('total'), 'hold_above': (seen or {}).get('hold_above')})
         if held:
             # Done, and not handed back: the lead takes no step on it.
             note({'event': 'held', 'tool': name, 'call': len(CALLS), 'why': held,
@@ -361,7 +375,7 @@ def handle(message):
             time.sleep(HOLD)
             return {'isError': True,
                     'content': [{'type': 'text', 'text': 'stopped: ' + '; '.join(held)}]}
-        return {'content': [{'type': 'text', 'text': json.dumps(result)}]}
+        return response
     return {}
 
 

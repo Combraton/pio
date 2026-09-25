@@ -135,7 +135,8 @@ jobs:
                    first-number-of-all ceiling-cancel-never-sent stop-charged-reported \
                    usage-suppressed lead-heavy qualified-elsewhere \
                    no-tool reports-refused-as-started grant-may-answer lead-without-brief \
-                   interrupted release-refused setup-fails; do
+                   interrupted release-refused setup-fails lead-tool-error-past-hold \
+                   lead-shell-past-hold tool-error-ungated meter-ignores-items; do
             if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant "$m" \
                  --out target/lead-run-l3-mutants > "target/lead-run-l3-mutant-$m.log" 2>&1; then
               echo "mutant $m survived"; exit 1
