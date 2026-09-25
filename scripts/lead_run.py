@@ -147,6 +147,11 @@ does with a permission prompt.
   the shell's result met by a stop; `tool-error-ungated` (errors skip the
   gate) and `meter-ignores-items` (the meter blind to such results) must each
   fail the row that checks every result against the hold;
+- `stop-ignored` (L3) has `alpha`, past its share, acknowledge the interrupt
+  and go on, and the runner interrupted: `alpha` is still running when its
+  usage is read, is charged what it reported plus a step, and the share row
+  fails; `not-exited-charged-share` charges it only its share, and the floor
+  row fails;
 - `qualified-elsewhere` (L3) puts in the store the qualification serve-codex
   would write for a Codex whose native binary changed: the row that compares
   it with the committed record must fail; `qualified-as-committed` plants the
@@ -479,7 +484,14 @@ MUTANTS = {
     # stop and never sends it (F3), or its charge for a stopped run is only
     # what the run reported (F2).
     'ceiling-cancel-never-sent': 'Every stop the runner made reached Codex',
-    'stop-charged-reported': "Every run's charge covers what it could have spent, within its share",
+    'stop-charged-reported': "Every run's charge covers what it could have spent",
+    # A child that ignores turn/interrupt, stopped past its share, and the
+    # runner interrupted: the run is still going when its usage is read.
+    # Charged what it reported plus a step, past its share, so the share
+    # row fails; charged only its share, the floor row fails (review of L3,
+    # round 2, SB-2).
+    'stop-ignored': "Every run's charge stayed within its reserved share",
+    'not-exited-charged-share': "Every run's charge covers what it could have spent",
     # Codex reports no usage at all: nothing can stop a run at its ceiling,
     # so the meter must stop it for its silence (review of L3, F9).
     'usage-suppressed': 'Every run stayed within its ceilings',
@@ -525,7 +537,8 @@ PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {
                 'usage-suppressed': {'L3'}, 'lead-heavy': {'L3'},
                 'qualified-elsewhere': {'L3'}, 'qualified-as-committed': {'L3'},
                 'lead-tool-error-past-hold': {'L3'}, 'lead-shell-past-hold': {'L3'},
-                'tool-error-ungated': {'L3'}, 'meter-ignores-items': {'L3'}}
+                'tool-error-ungated': {'L3'}, 'meter-ignores-items': {'L3'},
+                'stop-ignored': {'L3'}, 'not-exited-charged-share': {'L3'}}
 
 
 def sha(data):
@@ -984,7 +997,8 @@ class Meter:
 
     def summary(self, tool_calls=None):
         return dict(calls=len(self.calls), tool_log_calls=tool_calls, bytes=self.bytes,
-                    estimate=self.estimate(), ceiling=self.ceiling, stopped=self.stopped)
+                    estimate=self.estimate(), ceiling=self.ceiling, stopped=self.stopped,
+                    silenced=getattr(self, 'silenced', False))
 
 
 class CodexMeter(Meter):
@@ -1418,6 +1432,12 @@ def codex_scenario(mutant, calls):
         # step does.
         play.update(led_heavy_if=alpha, led_heavy_step=CHILD_CEILING + 10_000,
                     led_step_ms=6000)
+    if mutant in ('stop-ignored', 'not-exited-charged-share'):
+        # alpha's first step alone is 90,000, past its ceiling; it
+        # acknowledges the interrupt and goes on, answering two and a half
+        # minutes later, so it is still running when its usage is read.
+        play.update(led_heavy_if=alpha, led_heavy_step=90_000, led_ignores_interrupt_if=alpha,
+                    led_answer_ms=150_000)
     if mutant == 'lead-asked-in-openai-form':
         # The lead's tool approval in a mode the 0.157.0 schema allows and
         # PIO does not recognise, asked despite the pre-allowance, and only
@@ -1759,6 +1779,9 @@ def watch(args, record, service, desk, meters, state):
         both = all(views[f'{LEAD}.{c}'] and views[f'{LEAD}.{c}']['admission'] == 'admitted'
                    for c in CHILDREN)
         lead_view = views[LEAD] or {}
+        if args.mutant in ('stop-ignored', 'not-exited-charged-share') and any(
+                s['run'] == f'{LEAD}.alpha' for s in record.get('ceiling_stops', [])):
+            raise KeyboardInterrupt('the runner interrupted after a stop Codex ignored')
         if record['third'] is None and both and lead_view.get('runtime') != 'exited':
             if args.mutant == 'interrupted':
                 raise KeyboardInterrupt('the interrupted mutant, with every run admitted')
@@ -2082,24 +2105,27 @@ def usage_of(views, meters, submitted, steps=None, stopped=(), mutant=None):
     return usage
 
 
-STOPPED_BASIS = ('stopped by the runner: its reported total plus one step in flight, '
-                 'capped at its share, never less than it reported')
-NOT_EXITED_BASIS = 'not seen exited when its usage was read: its whole share'
+STOPPED_BASIS = 'stopped by the runner: what it reported, plus one step in flight'
+NOT_EXITED_BASIS = ('not seen exited when its usage was read: its whole share, or what it '
+                    'reported or its meter saw plus one step in flight, if more')
 SILENT_BASIS = (f'stopped by the runner after {USAGE_SILENCE} s of activity with no usage '
-                'reported: its whole share')
+                'reported: its whole share, or what it reported, if more')
 
 
 def codex_usage(views, meters, submitted, stopped=(), mutant=None):
     """Codex's reported total for each run, which covers every step of its
     turn (review 48), so it is what a run that ended by itself is charged.
 
-    A run the runner stopped (at a ceiling, for silence, or on the way out)
-    may have had a step in flight that Codex bills and that the report the
-    runner read does not hold, so it is charged its reported total plus one
-    step in flight, capped at its share and never less than it reported. A
-    run still not exited when its usage was read, or one that reported
-    nothing, is charged its whole share: never nothing, and never less than
-    it could have spent (review of L3, F2)."""
+    A run the runner stopped (at a ceiling or on the way out) may have had a
+    step in flight that Codex bills and that the report the runner read
+    does not hold, so it is charged what it reported plus one step in
+    flight, **not capped at its share**: a run that spent past its share is
+    charged past it, and the row that checks the share fails (review of L3,
+    round 2, SB-2). A run still not exited when its usage was read is
+    charged its whole share, or what it reported or its own meter saw plus a
+    step, if that is more; one stopped for silence, or that reported
+    nothing, its whole share or what it reported, if more. Never below what
+    was reported or observed, and never nothing (F2)."""
     usage = {}
     in_flight = CODEX['in_flight']
     for identity in RUNS:
@@ -2116,19 +2142,21 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None):
         entry = dict(reported_total=reported if isinstance(reported, int) else None,
                      meter_estimate=gauge.estimate(), share=share,
                      stopped_by_the_runner=identity in stopped)
+        # What PIO saw it spend: its report, or its own meter's total if
+        # higher (the meter is all there is when the service cannot be asked).
+        seen = max(reported if isinstance(reported, int) else 0, gauge.total)
         if current.get('runtime') != 'exited':
-            entry.update(charged=share, basis=NOT_EXITED_BASIS)
+            entry.update(charged=share if mutant == 'not-exited-charged-share'
+                         else max(share, seen + in_flight), basis=NOT_EXITED_BASIS)
         elif gauge.silenced:
-            entry.update(charged=share, basis=SILENT_BASIS)
+            entry.update(charged=max(share, seen), basis=SILENT_BASIS)
         elif isinstance(reported, int) and reported > 0:
-            total = max(reported, gauge.total)
             if identity in stopped and mutant != 'stop-charged-reported':
-                entry.update(charged=max(total, min(total + in_flight, share)),
-                             basis=STOPPED_BASIS, in_flight=in_flight)
+                entry.update(charged=seen + in_flight, basis=STOPPED_BASIS, in_flight=in_flight)
             else:
-                entry.update(charged=total, basis='reported_total')
+                entry.update(charged=seen, basis='reported_total')
         else:
-            entry.update(usage='unknown', charged=share, basis='allowance')
+            entry.update(usage='unknown', charged=max(share, seen), basis='allowance')
         usage[identity] = entry
     return usage
 
@@ -2630,30 +2658,48 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
         # reported, one the runner stopped at least that plus a step in
         # flight (up to its share), one not seen exited its whole share, and
         # none more than its share (review of L3, F2 and F3).
-        judged = {}
+        # Two rows, so that undercharging and overspending fail apart (review
+        # of L3, round 2, SB-2). The floor is worked out here from what was
+        # observed (each run's own view, its meter, whether the runner
+        # stopped it, whether it was still running), not from the charge's
+        # own basis or formula: what it reported or its meter saw, plus a
+        # step in flight if the runner stopped it or it still ran, and at
+        # least its whole share if it still ran, reported nothing, or was
+        # stopped for silence.
+        step, floors, within = CODEX['in_flight'], {}, {}
         for run, u in usage.items():
             if u['basis'] == 'refused before any model call':
                 continue
+            current = views.get(run) or {}
             share = LEAD_SHARE if run == LEAD else CHILD_SHARE
-            reported = u.get('reported_total') or 0
-            if u['basis'] in ('allowance', NOT_EXITED_BASIS, SILENT_BASIS):
-                floor = share
-            elif run in stops:
-                floor = max(reported, min(reported + CODEX['in_flight'], share))
-            else:
-                floor = reported
-            judged[run] = dict(charged=u['charged'], at_least=floor, share=share,
-                               reported=u.get('reported_total'), stopped=run in stops,
-                               basis=u['basis'])
-        rows.add("Every run's charge covers what it could have spent, within its share",
-                 dict(runs=judged, total=sum(r['charged'] for r in judged.values()),
+            reported = ((current.get('usage') or {}).get('observations') or [{}])[0].get('amount')
+            gauge = record['meters'].get(run) or {}
+            seen = max(reported if isinstance(reported, int) else 0, gauge.get('estimate') or 0)
+            running = current.get('runtime') != 'exited'
+            floor = seen + (step if run in stops or running else 0)
+            if running or not isinstance(reported, int) or reported <= 0 or gauge.get('silenced'):
+                floor = max(floor, share)
+            floors[run] = dict(charged=u['charged'], at_least=floor, reported=reported,
+                               meter=gauge.get('estimate'), stopped=run in stops,
+                               running=running, silenced=bool(gauge.get('silenced')))
+            within[run] = dict(charged=u['charged'], share=share)
+        rows.add("Every run's charge covers what it could have spent", dict(runs=floors),
+                 'for every run that ran: at least what it reported or its meter saw, plus a '
+                 'step in flight if it was stopped or still ran, and its whole share if it '
+                 'still ran, reported nothing or went silent',
+                 holds=lambda o: bool(o['runs']) and all(
+                     r['charged'] >= r['at_least'] for r in o['runs'].values()),
+                 note=f'in flight: {step} a step; worked out from the views and meters, not '
+                      'from the charge')
+        rows.add("Every run's charge stayed within its reserved share",
+                 dict(runs=within, total=sum(r['charged'] for r in within.values()),
                       worst_case=WORST_CASE),
-                 'for every run that ran: at least what it could have spent, and at most '
-                 'the share reserved for it; in all, at most the worst case',
+                 'every run charged at most the share reserved for it, and all of them at '
+                 'most the worst case',
                  holds=lambda o: bool(o['runs']) and o['total'] <= o['worst_case'] and all(
-                     r['at_least'] <= r['charged'] <= r['share'] for r in o['runs'].values()),
-                 note=f"in flight: {CODEX['in_flight']} a step; lead share {LEAD_SHARE}, "
-                      f'child share {CHILD_SHARE}, worst case {WORST_CASE}')
+                     r['charged'] <= r['share'] for r in o['runs'].values()),
+                 note=f'lead share {LEAD_SHARE}, child share {CHILD_SHARE}, worst case '
+                      f'{WORST_CASE}')
     ran = {i: u for i, u in usage.items() if u['basis'] != 'refused before any model call'}
     if HARNESS == 'opencode':
         rows.add("Each run's steps were read from the owner's store",
@@ -3044,6 +3090,12 @@ def main():
             assert stops and any('tool calls' in w for w in stops[0]['why']), stops
             held = [e for e in record['tool_log'] if e.get('event') == 'held']
             assert held, 'the tool did not hold the call past its ceiling'
+        if args.mutant == 'stop-ignored':
+            # Still running when its usage was read, and charged what it
+            # reported plus a step: past its share, which the receipt says.
+            alpha = record['usage'][f'{LEAD}.alpha']
+            assert alpha['basis'] == NOT_EXITED_BASIS, alpha
+            assert alpha['charged'] >= alpha['reported_total'] + CODEX['in_flight'] > CHILD_SHARE, alpha
         if args.mutant == 'interrupted':
             assert record['error']['type'] == 'KeyboardInterrupt', record.get('error')
             assert record.get('stopped_on_exit'), 'nothing was stopped on the way out'
@@ -3058,7 +3110,8 @@ def main():
             # The stop is proven here, where one is made: it reached Codex,
             # and the run was charged its step in flight, within its share.
             for name in ('Every stop the runner made reached Codex',
-                         "Every run's charge covers what it could have spent, within its share"):
+                         "Every run's charge covers what it could have spent",
+                         "Every run's charge stayed within its reserved share"):
                 row = next(r for r in record['rows'] if r['row'] == name)
                 assert row['holds'] is True, row
         if args.mutant == 'usage-suppressed':
@@ -3088,9 +3141,10 @@ def main():
             stops = [s for s in record.get('ceiling_stops', []) if s['run'] == LEAD]
             assert stops and any('withheld' in w for w in stops[0]['why']), stops
             assert [e for e in record['tool_log'] if e.get('result_withheld')], 'nothing withheld'
-            row = next(r for r in record['rows'] if r['row'] ==
-                       "Every run's charge covers what it could have spent, within its share")
-            assert row['holds'] is True, row
+            for name in ("Every run's charge covers what it could have spent",
+                         "Every run's charge stayed within its reserved share"):
+                row = next(r for r in record['rows'] if r['row'] == name)
+                assert row['holds'] is True, row
             assert record['usage'][LEAD]['reported_total'] <= LEAD_SHARE, record['usage'][LEAD]
         if args.mutant == 'service-never-ready':
             # Found at once, not after the readiness wait; nothing reserved,

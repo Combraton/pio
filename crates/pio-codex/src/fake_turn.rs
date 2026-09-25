@@ -204,6 +204,8 @@ pub(crate) struct Turn {
     usage: Mutex<(u64, u64, bool)>,
     /// A mutant's Codex that reports no usage at all.
     pub(crate) quiet: AtomicBool,
+    /// A mutant's Codex that acknowledges `turn/interrupt` and goes on.
+    pub(crate) deaf: AtomicBool,
 }
 
 /// `thread/tokenUsage/updated` as Codex sends it: the thread's running total
@@ -224,6 +226,7 @@ impl Turn {
             finished: AtomicBool::new(false),
             usage: Mutex::new((0, 0, false)),
             quiet: AtomicBool::new(false),
+            deaf: AtomicBool::new(false),
         })
     }
 
@@ -267,8 +270,10 @@ struct Play {
     /// A model step's tokens, and the first step's where it differs.
     step: u64,
     first: Option<u64>,
-    /// How long a model step takes before it says or calls anything.
+    /// How long a model step takes before it says or calls anything, and a
+    /// led run's answering step, where it differs.
     think: Duration,
+    answer: Duration,
     requests: AtomicU64,
     messages: AtomicU64,
 }
@@ -430,6 +435,7 @@ pub(crate) fn lead(
             .unwrap_or(4096),
         first: None,
         think: think_time(&scenario),
+        answer: think_time(&scenario),
         requests: AtomicU64::new(0),
         messages: AtomicU64::new(0),
     };
@@ -657,6 +663,11 @@ pub(crate) fn led(
             .as_u64()
             .map(Duration::from_millis)
             .unwrap_or_else(|| think_time(&scenario)),
+        answer: scenario["led_answer_ms"]
+            .as_u64()
+            .or(scenario["led_step_ms"].as_u64())
+            .map(Duration::from_millis)
+            .unwrap_or_else(|| think_time(&scenario)),
         requests: AtomicU64::new(0),
         messages: AtomicU64::new(0),
     };
@@ -667,6 +678,9 @@ pub(crate) fn led(
     };
     let asks = named("command_approval_if");
     let grant = named("led_permissions_if");
+    // A Codex that does not honour turn/interrupt, for this run.
+    turn.deaf
+        .store(named("led_ignores_interrupt_if"), Ordering::SeqCst);
     let offset = scenario["led_offset"].as_i64().unwrap_or(0);
     if let Err(error) = play_led(&play, &cwd, &prompt, delay, asks, grant, offset) {
         let _ = play.marker(json!({"kind":"led_script_failed","error":format!("{error:#}")}));
@@ -771,7 +785,7 @@ fn play_led(
     // The first step's usage, now that its command has finished (M2 R5,
     // R6); the step that answers begins.
     play.step(true)?;
-    if !play.think() {
+    if !play.wait(play.answer) {
         return Ok(());
     }
     play.say(&match lines {

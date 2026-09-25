@@ -35,7 +35,9 @@
 //! prompt contains `led_permissions_if` first asks a permission grant;
 //! `elicit_during_thread_start` sends an url-mode elicitation before it answers
 //! `thread/start`. A lead call whose `tool` is `!shell` plays a step that ends
-//! in Codex's own shell tool instead of an MCP call.
+//! in Codex's own shell tool instead of an MCP call. A led run whose prompt
+//! contains `led_ignores_interrupt_if` acknowledges `turn/interrupt` and goes
+//! on; `led_answer_ms` is how long a led run's answering step takes.
 use crate::fake_turn::{self, McpServer, Turn, Waiting, emit};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
@@ -459,7 +461,16 @@ pub fn run() -> Result<()> {
                         // Codex honours an interrupt (M2); the script stops
                         // at its next step, the step in flight is reported,
                         // and the turn ends now.
-                        if let Some(turn) = scripted.take() {
+                        if scripted
+                            .as_ref()
+                            .is_some_and(|turn| turn.deaf.load(std::sync::atomic::Ordering::SeqCst))
+                        {
+                            // Acknowledged, and ignored: the turn goes on.
+                            marker(
+                                &markers,
+                                json!({"source":SOURCE,"kind":"interrupt_ignored"}),
+                            )?;
+                        } else if let Some(turn) = scripted.take() {
                             turn.interrupt()?;
                         }
                     }
