@@ -131,7 +131,8 @@ jobs:
           PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --out target/lead-run-l3
           for m in wrong-model reviewer-elsewhere no-pre-allow child-overspends no-wait \
                    grant-no-steer wrong-child wrong-relay lead-loops runner-killed \
-                   lead-asked-in-openai-form child-asks-permissions service-never-ready \
+                   lead-asked-in-openai-form lead-asked-by-user-input child-asks-permissions \
+                   service-never-ready \
                    first-number-of-all ceiling-cancel-never-sent stop-charged-reported \
                    usage-suppressed lead-heavy qualified-elsewhere \
                    no-tool reports-refused-as-started grant-may-answer lead-without-brief \

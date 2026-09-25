@@ -31,7 +31,8 @@
 //! none at all. Shapes PIO declines by itself, for the runner's
 //! mutants: `lead_asks_in_mode` has the lead ask before every tool call (or
 //! only calls to `lead_asks_for`), in that elicitation mode, whatever the
-//! approval mode says; a led run whose
+//! approval mode says, and `lead_asks_by: "requestUserInput"` has it ask by
+//! `item/tool/requestUserInput` instead; a led run whose
 //! prompt contains `led_permissions_if` first asks a permission grant;
 //! `elicit_during_thread_start` sends an url-mode elicitation before it answers
 //! `thread/start`. A lead call whose `tool` is `!shell` plays a step that ends

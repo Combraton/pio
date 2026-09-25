@@ -458,6 +458,9 @@ fn play_lead(play: &Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> 
     // only before calls to `lead_asks_for`.
     let forced_mode = scenario["lead_asks_in_mode"].as_str();
     let forced_for = scenario["lead_asks_for"].as_str();
+    // Or by Codex's other route, `item/tool/requestUserInput`, which it takes
+    // when its elicitation route is off (0.157.0, review of L3, round 2).
+    let forced_by = scenario["lead_asks_by"].as_str();
     let mut relay = Vec::new();
     play.begin();
     for (index, call) in calls.iter().enumerate() {
@@ -491,15 +494,39 @@ fn play_lead(play: &Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> 
             }
             let item_id = format!("call_mcp_{index}_{tries}");
             tries += 1;
-            let forced = forced_mode.filter(|_| forced_for.is_none_or(|only| only == tool));
+            let applies = forced_for.is_none_or(|only| only == tool);
+            let forced = forced_mode.filter(|_| applies);
+            let by_user_input = forced_by == Some("requestUserInput") && applies;
             let (asks, server_name) = {
                 let servers = servers.lock().expect("servers lock");
                 let server = servers.first().context("no MCP server")?;
                 (
-                    forced.is_some() || server.asks_before(tool),
+                    forced.is_some() || by_user_input || server.asks_before(tool),
                     server.name.clone(),
                 )
             };
+            if by_user_input {
+                // The question as Codex builds it for this route: its id
+                // begins with `mcp_tool_call_approval`, and its text names the
+                // tool, which PIO must never record.
+                let answer = play.ask(
+                    "item/tool/requestUserInput",
+                    json!({"threadId":play.turn.thread,"turnId":play.turn.id,"itemId":item_id,
+                           "questions":[{"id":format!("mcp_tool_call_approval_{item_id}"),
+                                         "header":"Approve app tool call?",
+                                         "question":format!("Allow the {server_name} MCP server to run tool \"{tool}\"? SENTINEL-question"),
+                                         "isOther":false,"isSecret":false,
+                                         "options":[{"label":"Allow","description":"SENTINEL-option"},
+                                                    {"label":"Cancel","description":"no"}]}]}),
+                )?;
+                let Some(answer) = answer else {
+                    return Ok(());
+                };
+                play.marker(json!({"kind":"user_input_answered","tool":tool,
+                                   "refused":answer["error"]["message"]}))?;
+                play.turn.interrupt()?;
+                return Ok(());
+            }
             if asks {
                 // The request Codex builds (`build_mcp_tool_approval_elicitation_request`):
                 // a form with no fields, and what it offers to remember in

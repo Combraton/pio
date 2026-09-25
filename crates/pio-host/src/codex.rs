@@ -95,6 +95,22 @@ pub fn native_decline(method: &str, params: &Value) -> Value {
             record["tool"] = text_of(&params["tool"]);
             "declined by PIO: a tool call PIO does not run on the user's behalf"
         }
+        "item/tool/requestUserInput" => {
+            // Codex's other way to ask about an MCP tool call, when its
+            // elicitation route is off: questions whose ids begin with
+            // `mcp_tool_call_approval` (0.157.0, mcp_tool_call.rs). Only
+            // how many questions, and whether any is that one; never a
+            // question's text or options (review of L3, round 2, HR-2).
+            let questions = params["questions"].as_array();
+            record["questions"] = json!(questions.map(Vec::len));
+            record["mcp_tool_call_approval"] =
+                json!(questions.is_some_and(|q| q.iter().any(|question| {
+                    question["id"]
+                        .as_str()
+                        .is_some_and(|id| id.starts_with("mcp_tool_call_approval"))
+                })));
+            "declined by PIO: a request for the user's own input, which PIO never supplies"
+        }
         _ => {
             "declined by PIO: not a request PIO answers; it answers only command, \
              file-change and MCP tool-call approvals"

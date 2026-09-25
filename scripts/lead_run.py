@@ -128,6 +128,8 @@ does with a permission prompt.
 - `lead-asked-in-openai-form` (L3) has Codex ask about the lead's tool in a
   mode PIO does not recognise, so PIO declines it by itself: the
   pre-allowance row must fail and say so;
+- `lead-asked-by-user-input` (L3) asks it by `item/tool/requestUserInput`,
+  Codex's route when its elicitation route is off: the row must fail too;
 - `child-asks-permissions` (L3) has `beta` ask a permission grant, which PIO
   declines by itself: the desk row must fail, because PIO decided it;
 - `service-never-ready` has the service refuse its configuration at start: the
@@ -498,6 +500,7 @@ MUTANTS = {
     # approval asked in a mode PIO does not recognise, and a child's
     # permission grant.
     'lead-asked-in-openai-form': "The lead's own two tools were pre-allowed, and nothing else",
+    'lead-asked-by-user-input': "The lead's own two tools were pre-allowed, and nothing else",
     'child-asks-permissions': 'Every approval was decided at the desk',
     # The service refuses to start: nothing was submitted, so no reservation
     # may stand and the sequence may not be blocked (review of L3, F4).
@@ -559,6 +562,7 @@ PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
                 'child-overspends': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
                 'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'},
+                'lead-asked-by-user-input': {'L3'},
                 'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'},
                 'usage-suppressed': {'L3'}, 'lead-heavy': {'L3'},
                 'qualified-elsewhere': {'L3'}, 'qualified-as-committed': {'L3'},
@@ -1514,6 +1518,9 @@ def codex_scenario(mutant, calls):
         # before `read_run`: both children are started by then, so nothing
         # but the ask itself can fail the pre-allowance row.
         play.update(lead_asks_in_mode='openai/form', lead_asks_for='read_run')
+    if mutant == 'lead-asked-by-user-input':
+        # The same ask by Codex's other route (review of L3, round 2, HR-2).
+        play.update(lead_asks_by='requestUserInput', lead_asks_for='read_run')
     if mutant == 'child-asks-permissions':
         play['led_permissions_if'] = beta
     if mutant in ('lead-heavy', 'lead-tool-error-past-hold', 'tool-error-ungated',
@@ -2509,10 +2516,20 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
             surfaced=[e.get('message') for e in host.get(LEAD, [])
                       if e['kind'] == 'action_requested'
                       and e.get('approval_kind') == 'mcp_tool_call'],
-            declined_by_pio=[{k: d.get(k) for k in ('mode', 'approval_kind', 'server', 'tool')}
+            # By either route Codex has: an elicitation from the lead's own
+            # server (or one it did not name), or a request for the user's
+            # input whose question is Codex's MCP tool-call approval (review
+            # of L3, round 2, HR-2). An exit that carried no list says
+            # nothing, and is not taken for 'nothing asked'.
+            declined_by_pio=[{k: d.get(k) for k in ('method', 'mode', 'approval_kind', 'server',
+                                                    'tool', 'mcp_tool_call_approval')}
                              for d in declined.get(LEAD) or []
-                             if d.get('method') == ELICITATION
-                             and d.get('server') in (LEAD_SERVER, None)])
+                             if (d.get('method') == ELICITATION
+                                 and d.get('server') in (LEAD_SERVER, None))
+                             or (d.get('method') == 'item/tool/requestUserInput'
+                                 and d.get('mcp_tool_call_approval') is True)]
+            if declined.get(LEAD) is not None or lead_view.get('runtime') != 'exited'
+            else 'not carried: the lead exited with no list of what PIO declined')
         held = not asked['surfaced'] and not asked['declined_by_pio']
         # What each thread's config carried on the wire, as the host read it
         # back from the request it sent: exactly the lead's two tools at
