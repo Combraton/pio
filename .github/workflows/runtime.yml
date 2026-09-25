@@ -4,7 +4,9 @@ permissions:
   contents: read
 jobs:
   runtime:
-    timeout-minutes: 30
+    # The macOS job on main alone takes about 27 minutes, and both runs on the
+    # L3 pull request were cancelled at 30, in the Protocol runner's step.
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
