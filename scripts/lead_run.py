@@ -103,6 +103,10 @@ does with a permission prompt.
   released for real;
 - `setup-fails` makes the scenario fail after the tree exists and before
   anything is reserved: the tree must be gone, and there is no receipt;
+- `helper-elsewhere` puts `small_model` on another provider in the
+  rehearsal's own OpenCode configuration: the runner must refuse to start,
+  before anything is reserved, and leave no tree and no receipt (owner
+  decision, 2026-09-25);
 - `no-wait` (L1b) has `alpha` finish in a second, so no read waits;
 - `no-ask` (L1b) has nobody ask, so the desk row must be inconclusive, not
   passed;
@@ -282,6 +286,9 @@ MUTANTS = {
     # Not a row: the run fails before it has any. What must hold is that the
     # tree it made is gone.
     'setup-fails': 'A setup that fails leaves no tree behind',
+    # Not a row either: the runner refuses to start (owner decision,
+    # 2026-09-25), before anything is reserved.
+    'helper-elsewhere': "The runner refuses a helper model outside the plan's provider",
     # L1b only.
     'no-wait': 'A read_run waited for its run: until it exited, or to the wait limit',
 }
@@ -345,6 +352,45 @@ def fixture(root):
 def wc_l(repo):
     """What the files say, counted by the runner and nobody else."""
     return {name: len((repo / name).read_text().splitlines()) for name in FILES}
+
+
+def helper_models(config_dir):
+    """Every model the OpenCode configuration names outside a session's own.
+
+    Review 52, a static reading of OpenCode 2.0.11, not measured: its title
+    and compaction helpers use the session's own provider and model, unless
+    `small_model` or a model override on a helper says otherwise. So this
+    reads `small_model` and the `model` of every `agent` and `mode` entry,
+    from the non-secret configuration files only, and nothing else in them.
+    """
+    models, read = {}, []
+    for name in ('opencode.json', 'opencode.jsonc'):
+        path = Path(config_dir) / name
+        if not path.exists():
+            continue
+        body = ''.join(line for line in path.read_text().splitlines(keepends=True)
+                       if not line.strip().startswith('//'))
+        try:
+            config = json.loads(body)
+        except ValueError as error:
+            raise SystemExit(f'refusing to start: {name} is unreadable, so its helper '
+                             f'models cannot be checked: {error}')
+        read.append(name)
+        if config.get('small_model'):
+            models[f'{name}: small_model'] = config['small_model']
+        for section in ('agent', 'mode'):
+            for entry, settings in (config.get(section) or {}).items():
+                if isinstance(settings, dict) and settings.get('model'):
+                    models[f'{name}: {section}.{entry}.model'] = settings['model']
+    return dict(read=read, models=models)
+
+
+def helpers_elsewhere(helpers):
+    """The helper models whose provider is not the plan's (owner decision,
+    2026-09-25: the runner refuses to start on any)."""
+    provider = MODEL.split('/', 1)[0]
+    return {k: m for k, m in helpers['models'].items()
+            if str(m).split('/', 1)[0] != provider}
 
 
 def fresh_credential(principal):
@@ -969,6 +1015,19 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
     record['no_sleep'] = awake.record
     rows = Rows(rehearse)
     service = Service(root, rehearse, scenario(args.mutant))
+    config_dir = Path(service.config['opencode']['config_dir'])
+    if args.mutant == 'helper-elsewhere':
+        # The case the check exists for, in the rehearsal's own config.
+        (config_dir / 'opencode.jsonc').write_text(
+            json.dumps({'small_model': 'another-provider/helper-model'}))
+    # Before anything is reserved or started: a helper on another provider
+    # would spend there, and nothing in the receipt would show it.
+    record['helpers'] = helper_models(config_dir)
+    elsewhere = helpers_elsewhere(record['helpers'])
+    if elsewhere:
+        raise SystemExit('refusing to start: the OpenCode configuration points a helper at a '
+                         f"provider other than the plan's ({MODEL.split('/', 1)[0]}): "
+                         f'{sorted(elsewhere)}')
     desk = Desk(root / 'desk', rehearse, silent=args.mutant == 'desk-silent')
     meters = {LEAD: Meter(LEAD, LEAD_CEILING),
               **{f'{LEAD}.{c}': Meter(f'{LEAD}.{c}', CHILD_CEILING) for c in CHILDREN}}
@@ -1815,12 +1874,15 @@ def main():
     try:
         record = run(args)
     except BaseException as error:
-        if args.mutant == 'setup-fails':
+        if args.mutant in ('setup-fails', 'helper-elsewhere'):
             root = getattr(args, 'root', None)
             assert root is not None and not Path(root).exists(), (
                 f'the setup failed and left its tree behind: {root}')
             assert not args.receipt.exists(), 'a receipt for a run that never started'
-            print(f"mutant setup-fails: dies on {MUTANTS['setup-fails']!r}: "
+            if args.mutant == 'helper-elsewhere':
+                assert "points a helper at a provider other than the plan's" in str(error) \
+                    and 'small_model' in str(error), error
+            print(f'mutant {args.mutant}: dies on {MUTANTS[args.mutant]!r}: '
                   f'{type(error).__name__}, and the tree is gone')
             raise SystemExit(1)
         if not args.mutant or not args.receipt.exists():
