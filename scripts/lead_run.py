@@ -2154,9 +2154,14 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
     rows.add('The lead was admitted', lead_view.get('admission'), 'admitted')
     rows.add("The lead's delivery was acknowledged", lead_view.get('delivery'),
              'acknowledged')
+    # An app-server exits 0 after a turn that was interrupted too, so the
+    # exit code alone would call a stopped run normal: a cancel on the view
+    # fails it (review of L3, F11).
     rows.add('The lead exited normally',
-             dict(runtime=lead_view.get('runtime'), exit=lead_view.get('exit')),
-             dict(runtime='exited', exit={'code': 0}))
+             dict(runtime=lead_view.get('runtime'), exit=lead_view.get('exit'),
+                  cancellation=lead_view.get('cancellation')),
+             dict(runtime='exited', exit={'code': 0}, cancellation=None),
+             note='no cancel: a turn that was interrupted did not exit normally')
 
     # --- The model every session was on, before its turn began. From the
     # host's own record of the harness's answer, not from what PIO asked.
@@ -2258,9 +2263,11 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                       call_budget=0) for i in children})
     rows.add('The children ran',
              {i: dict(delivery=v.get('delivery'), runtime=v.get('runtime'),
-                      exit=v.get('exit')) for i, v in children.items()},
-             {i: dict(delivery='acknowledged', runtime='exited', exit={'code': 0})
-              for i in children})
+                      exit=v.get('exit'), cancellation=v.get('cancellation'))
+              for i, v in children.items()},
+             {i: dict(delivery='acknowledged', runtime='exited', exit={'code': 0},
+                      cancellation=None) for i in children},
+             note='to the end of their turns: a child that was cancelled did not')
     third = record.get('third')
     rows.add('A third start is refused by PIO',
              third and dict(started=third['result'].get('started'),
