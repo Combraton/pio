@@ -35,7 +35,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused',
          'command_approval_lapses', 'form_elicitation_declined', 'approval_cwd_through_a_link',
          'approval_cwd_past_path_max', 'subagent_thread_attributed',
-         'subagent_interrupted_with_the_run',
+         'subagent_interrupted_with_the_run', 'agents_off_decision_sent',
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
          'file_change_grant_root']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
@@ -307,9 +307,29 @@ def subagent_case(case, name):
     caller, and its usage is added to the run's, which is the sum over the
     run's threads. The exit carries the thread, how it appeared and its
     usage. Interrupting the run interrupts the agent's turn too."""
+    if name == 'agents_off_decision_sent':
+        # The rehearsal's own token, beside a labeled fake: every thread's
+        # config turns agents off, by the three dotted keys, read back from
+        # the request and witnessed by the fake, and no agent is spawned.
+        case.configure(agents_off_decision='rehearsal-only-agents-off')
+    case.start()
     response, _ = case.submit()
     assert response['result']['outcome']['admission'] == 'admitted', response
     sub = 'fake-sub-thread-1'
+    if name == 'agents_off_decision_sent':
+        final = exited(case)
+        sent = events_of(case, 'agents_off_sent')
+        assert [(e['decision'], e['sent']) for e in sent] == [
+            ('rehearsal-only-agents-off', {'agents.enabled': False, 'features.multi_agent': False,
+                                           'features.multi_agent_v2': False})], sent
+        received = [m for m in case.markers_records() if m['kind'] == 'thread_config_received']
+        assert [(m['agents_enabled'], m['multi_agent'], m['multi_agent_v2']) for m in received] \
+            == [(False, False, False)], received
+        kinds = [m['kind'] for m in case.markers_records()]
+        assert 'spawn_not_offered' in kinds and 'sub_agent_spawned' not in kinds, kinds
+        assert events_of(case, 'other_thread') == [] and carried_declines(case, key=OTHER_THREADS) == []
+        assert final['exit'] == {'code': 0}, final
+        return dict(outcome='pass', sent=sent[0]['sent'])
     if name == 'subagent_interrupted_with_the_run':
         poll(lambda: events_of(case, 'other_thread_turn'),
              lambda turns: any(e['state'] == 'started' for e in turns))
@@ -600,6 +620,7 @@ def run_case(out, name):
         subagent_thread_attributed={'spawn_agent': True, 'subagent_steps': 2, 'subagent_step': 5000,
                                     'subagent_step_ms': 300, 'subagent_asks': True,
                                     'delay_ms': 4000, 'usage_total': 42},
+        agents_off_decision_sent={'spawn_agent': True, 'delay_ms': 500},
         subagent_interrupted_with_the_run={'spawn_agent': True, 'subagent_steps': 2,
                                            'subagent_step_ms': 60000, 'delay_ms': 60000},
         early_elicitation_declined={'elicit_during_thread_start': True, 'delay_ms': 100},
@@ -619,8 +640,8 @@ def run_case(out, name):
     try:
         if name in ('approval_cwd_through_a_link', 'approval_cwd_past_path_max'):
             return link_case(case, name)
-        if name in ('subagent_thread_attributed', 'subagent_interrupted_with_the_run'):
-            case.start()
+        if name in ('subagent_thread_attributed', 'subagent_interrupted_with_the_run',
+                    'agents_off_decision_sent'):
             return subagent_case(case, name)
         if name == 'unqualified_executable_refused':
             daemon = case.start(expect_ready=False)

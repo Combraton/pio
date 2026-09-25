@@ -23,6 +23,18 @@ use tokio::{
 /// the product still never selects a model. See ADR 003.
 pub const MODEL_EXCEPTION: &str = "owner-2026-09-19-m2-fixture-runs";
 
+/// The owner's dated decisions that PIO may turn Codex's sub-agents off per
+/// launch: `agents.enabled = false`, `features.multi_agent = false` and
+/// `features.multi_agent_v2 = false` in every thread's `thread/start`
+/// config, never in the owner's files (review of L3, round 3, SPEND-2).
+/// **None is recorded**: the owner decides whether L3 runs with this or
+/// with their own configuration turning agents off, and records the
+/// decision here by its date. Until then a real Codex refuses the setting.
+pub const AGENTS_OFF_DECISIONS: &[&str] = &[];
+/// The same setting for a labeled fake only, so the rehearsal and the
+/// matrix exercise what would go on the wire. Refused beside a real Codex.
+pub const AGENTS_OFF_REHEARSAL: &str = "rehearsal-only-agents-off";
+
 pub fn serve(root: &Path, config: &Path, socket: &Path) -> Result<()> {
     serve_mode(root, config, socket, Mode::Conformance)
 }
@@ -61,7 +73,8 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
                 "thread",
                 "labeled_fake",
                 "test_only_model_exception",
-                "expected_model_provider"
+                "expected_model_provider",
+                "agents_off_decision"
             ]
             .contains(&name.as_str()),
             "unsupported codex setting: {name}"
@@ -114,6 +127,16 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
         anyhow::ensure!(
             provider.as_str().is_some_and(|p| !p.is_empty()) && model.is_some(),
             "codex.expected_model_provider must be a non-empty string beside codex.thread.model"
+        );
+    }
+    // Sub-agents off per launch, only under a recorded owner decision, or
+    // the rehearsal's own token beside a labeled fake.
+    if let Some(decision) = codex.get("agents_off_decision") {
+        let decision = decision.as_str().unwrap_or_default();
+        let rehearsal = codex["labeled_fake"] == true && decision == AGENTS_OFF_REHEARSAL;
+        anyhow::ensure!(
+            rehearsal || AGENTS_OFF_DECISIONS.contains(&decision),
+            "codex.agents_off_decision is not a recorded owner decision: {decision:?}"
         );
     }
     let mut host = codex.clone();
@@ -625,6 +648,51 @@ mod tests {
             codex_host_config(dir.path(), &codex_config(dir.path(), plan, Value::Null)).unwrap();
         assert_eq!(plain["thread"]["model"], Value::Null);
     }
+    /// Sub-agents off per launch (review of L3, round 3, SPEND-2): only a
+    /// recorded owner decision, of which there is none yet, or the
+    /// rehearsal's own token beside a labeled fake.
+    #[test]
+    fn agents_off_needs_a_recorded_decision() {
+        let dir = tempfile::tempdir().unwrap();
+        let plan = json!({"sandbox":"workspace-write","approvalPolicy":"on-request"});
+        let mut fake = codex_config(dir.path(), plan.clone(), Value::Null);
+        assert!(
+            codex_host_config(dir.path(), &fake).unwrap()["agents_off_decision"].is_null(),
+            "absent unless asked for"
+        );
+        fake["agents_off_decision"] = json!(AGENTS_OFF_REHEARSAL);
+        assert_eq!(
+            codex_host_config(dir.path(), &fake).unwrap()["agents_off_decision"],
+            AGENTS_OFF_REHEARSAL
+        );
+        for decision in [
+            json!("owner-2026-09-26-l3-agents-off"),
+            json!(""),
+            json!(true),
+        ] {
+            fake["agents_off_decision"] = decision.clone();
+            let error = codex_host_config(dir.path(), &fake).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("not a recorded owner decision"),
+                "{error:#} for {decision}"
+            );
+        }
+        // The rehearsal's token is refused beside a real Codex, before any
+        // qualification is attempted.
+        let mut real = codex_config(dir.path(), plan, Value::Null);
+        real["labeled_fake"] = json!(false);
+        real["agents_off_decision"] = json!(AGENTS_OFF_REHEARSAL);
+        let error = codex_host_config(dir.path(), &real).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("not a recorded owner decision"),
+            "{error:#}"
+        );
+        assert!(
+            AGENTS_OFF_DECISIONS.is_empty(),
+            "no owner decision is recorded yet"
+        );
+    }
+
     #[tokio::test]
     async fn non_json_whitespace_is_a_fatal_parse_error() {
         for byte in [0x0b, 0x0c] {

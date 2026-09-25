@@ -342,6 +342,12 @@ impl Provider {
                 // What Codex must answer for the thread's model and provider
                 // before its first turn, when the operator names it.
                 spec["expected_model_provider"] = host["expected_model_provider"].clone();
+                // Sub-agents off on every thread, under the owner's recorded
+                // decision the service configuration was admitted with
+                // (review of L3, round 3, SPEND-2); absent otherwise.
+                if host["agents_off_decision"].is_string() {
+                    spec["agents_off_decision"] = host["agents_off_decision"].clone();
+                }
                 // The lead tool, for this run's thread alone, validated above.
                 if let Some(tool) = lead_tool {
                     spec["lead_tool"] = tool.clone();

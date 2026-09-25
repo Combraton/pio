@@ -568,6 +568,32 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         }
         params["config"]["mcp_servers"][&name] = server;
     }
+    // Sub-agents off, on every thread, when the service carries a recorded
+    // owner decision (review of L3, round 3, SPEND-2). `agents.enabled =
+    // false` is what turns them off whatever the model's catalog says
+    // (0.157.0, Config::multi_agent_version_override: `Disabled` unless
+    // `multi_agent_v2` is on); `features.multi_agent = false` alone does not
+    // for a model whose catalog names a version (gpt-5.6-terra's bundled
+    // entry says v2), and `features.multi_agent_v2 = false` keeps the
+    // override from being V2. Dotted keys, as a request override takes them,
+    // so nothing else of the owner's `[agents]` or `[features]` is replaced.
+    if let Some(decision) = life.spec["agents_off_decision"].as_str() {
+        for key in [
+            "agents.enabled",
+            "features.multi_agent",
+            "features.multi_agent_v2",
+        ] {
+            params["config"][key] = json!(false);
+        }
+        let sent: serde_json::Map<String, Value> = params["config"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(key, _)| key.starts_with("agents") || key.starts_with("features."))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        life.event(json!({"kind":"agents_off_sent","decision":decision,"sent":sent}))?;
+    }
     // What goes on the wire, read back from the request itself rather than
     // from the spec: every server's name, its per-tool approval modes, and
     // any server-wide default mode. The spec said what was meant; this says
