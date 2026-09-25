@@ -989,6 +989,24 @@ pub fn tool_use_records(
     })
 }
 
+/// Where one path lands relative to the fixture workspace, by the same
+/// classifier a tool use's target goes through: `inside_fixture`,
+/// `outside_fixture`, or `not_classifiable` when there is no path. Named by
+/// a fixture-relative label and a digest, never by the path itself. The
+/// Codex host classifies the working directory of a command approval with it
+/// (review of L3, CH-6/F6).
+pub fn classify_path(path: Option<&str>, workspace: &Path, cwd: &Path) -> Value {
+    let workspace = std::fs::canonicalize(workspace).unwrap_or_else(|_| workspace.to_path_buf());
+    let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let input = path.map(|p| json!({"path":p})).unwrap_or(json!({}));
+    let (resolved, placement) = classify_target(&input, &workspace, &cwd);
+    json!({
+        "placement":placement,
+        "target_label":target_label(&resolved, &workspace, placement),
+        "target_sha256":resolved.as_ref().map(|r| sha256_hex(r.as_bytes())),
+    })
+}
+
 /// Decide what PIO does with one `can_use_tool` request.
 ///
 /// A path-bearing input that resolves outside the fixture is **declined**, with

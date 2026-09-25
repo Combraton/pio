@@ -847,7 +847,12 @@ impl Provider {
                                "command":event["command"],
                                "server":event["server"],
                                "message":event["message"],
-                               "persist_offered":event["persist_offered"]}}),
+                               "persist_offered":event["persist_offered"],
+                               // Why the harness says it asks, and, for a
+                               // Codex command, whether it asks for network
+                               // access. The placement is `classification`.
+                               "reason":event["reason"],
+                               "network_approval":event["network_approval"]}}),
                     None,
                 );
             }

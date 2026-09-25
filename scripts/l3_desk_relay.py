@@ -5,8 +5,12 @@ Owner decisions of 2026-09-25 (after review 53), item 3. By itself the relay
 answers only:
 
 (a) `L3.alpha`'s command approval for exactly `sleep 30 && wc -l alpha.md`,
-    and `L3.beta`'s for exactly `sleep 5 && wc -l beta.md`: allow, which the
-    runner sends as Codex's `accept`, a single use;
+    and `L3.beta`'s for exactly `sleep 5 && wc -l beta.md`, **inside the
+    run's fixture** and asking for no network access: allow, which the runner
+    sends as Codex's `accept`, a single use. The owner's rule is a request
+    inside the fixture that the plan predicted, so the placement PIO
+    classified (`inside_fixture`, from the command's working directory) is
+    required as well as the exact command (review of L3, F6/CH-6);
 (b) if Codex asks despite the pre-allowance, `L3`'s own `mcp_tool_call`
     approvals for `pio-lead` `start_run` and `read_run`: allow, a single
     use, with words that say the pre-allowance did not hold (the runner's
@@ -62,7 +66,9 @@ def decided_in_advance(item):
     if approval.get('method') == 'item/commandExecution/requestApproval' \
             and approval.get('approval_kind') == 'command' \
             and run in COMMANDS \
-            and approval.get('command') in as_codex_names_it(COMMANDS[run]):
+            and approval.get('command') in as_codex_names_it(COMMANDS[run]) \
+            and (approval.get('classification') or {}).get('placement') == 'inside_fixture' \
+            and approval.get('network_approval') is False:
         return DECIDED.format(item='3(a)', quote=QUOTE_A)
     if run == 'L3' and approval.get('method') == 'mcpServer/elicitation/request' \
             and approval.get('approval_kind') == 'mcp_tool_call' \
@@ -131,32 +137,49 @@ def selftest():
     command = 'item/commandExecution/requestApproval'
     mcp = 'mcpServer/elicitation/request'
     ask = 'Allow the pio-lead MCP server to run tool "{}"?'
+    inside = dict(classification=dict(subject='cwd', placement='inside_fixture',
+                                      target_label='<fixture>/'), network_approval=False)
     answered = [
         item('L3.alpha', method=command, approval_kind='command',
-             command='sleep 30 && wc -l alpha.md'),
+             command='sleep 30 && wc -l alpha.md', **inside),
         item('L3.alpha', method=command, approval_kind='command',
-             command="/bin/zsh -lc 'sleep 30 && wc -l alpha.md'"),
+             command="/bin/zsh -lc 'sleep 30 && wc -l alpha.md'", **inside),
         item('L3.beta', method=command, approval_kind='command',
-             command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'"),
+             command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'", **inside),
         item('L3', method=mcp, approval_kind='mcp_tool_call', server='pio-lead',
              message=ask.format('start_run')),
         item('L3', method=mcp, approval_kind='mcp_tool_call', server='pio-lead',
              message=ask.format('read_run')),
     ]
+    outside = dict(inside, classification=dict(subject='cwd', placement='outside_fixture',
+                                               target_label='<outside>'))
+    unplaced = dict(inside, classification=dict(subject='cwd', placement='not_classifiable',
+                                                 target_label=None))
     for_the_owner = [
+        # The exact command, run outside the fixture, or where PIO could not
+        # place it, or with no placement at all, or asking for the network.
+        item('L3.alpha', method=command, approval_kind='command',
+             command="/bin/zsh -lc 'sleep 30 && wc -l alpha.md'", **outside),
+        item('L3.beta', method=command, approval_kind='command',
+             command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'", **unplaced),
+        item('L3.beta', method=command, approval_kind='command',
+             command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'"),
+        item('L3.beta', method=command, approval_kind='command',
+             command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'",
+             **dict(inside, network_approval=True)),
         # Another run's command, a longer command, another shell, a
         # terminal write, a file change.
         item('L3.alpha', method=command, approval_kind='command',
-             command='sleep 5 && wc -l beta.md'),
+             command='sleep 5 && wc -l beta.md', **inside),
         item('L3.alpha', method=command, approval_kind='command',
-             command="/bin/zsh -lc 'sleep 30 && wc -l alpha.md; rm -f alpha.md'"),
+             command="/bin/zsh -lc 'sleep 30 && wc -l alpha.md; rm -f alpha.md'", **inside),
         item('L3.alpha', method=command, approval_kind='command',
-             command="/bin/bash -lc 'sleep 30 && wc -l alpha.md'"),
+             command="/bin/bash -lc 'sleep 30 && wc -l alpha.md'", **inside),
         item('L3.alpha', method=command, approval_kind='writeStdin',
-             command='sleep 30 && wc -l alpha.md'),
+             command='sleep 30 && wc -l alpha.md', **inside),
         item('L3.beta', method='item/fileChange/requestApproval', approval_kind=None),
         item('L3', method=command, approval_kind='command',
-             command='sleep 30 && wc -l alpha.md'),
+             command='sleep 30 && wc -l alpha.md', **inside),
         # Another tool, another server, a child asking about the lead's tool.
         item('L3', method=mcp, approval_kind='mcp_tool_call', server='pio-lead',
              message=ask.format('stop_run')),

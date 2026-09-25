@@ -379,7 +379,9 @@ def run_case(out, name):
                                         'approvals_reviewer': 'guardian_subagent'},
         approvals_reviewer_absent_refused={'approval': 'command', 'delay_ms': 100,
                                            'approvals_reviewer': None},
-        approval_decline={'approval': 'command', 'approval_kind': 'writeStdin', 'delay_ms': 100},
+        # Asked from outside the fixture: surfaced, and classified so.
+        approval_decline={'approval': 'command', 'approval_kind': 'writeStdin', 'delay_ms': 100,
+                          'approval_cwd': '/'},
         approval_accept={'approval': 'command', 'delay_ms': 100},
         interrupt_cancels_turn={'delay_ms': 60000},
         steer_acknowledged={'delay_ms': 60000},
@@ -641,6 +643,22 @@ def run_case(out, name):
             requested = events_of(case, 'action_requested')
             expected_kind = 'writeStdin' if decision == 'decline' else 'command'
             assert [e['approval_kind'] for e in requested] == [expected_kind], requested
+            # Where the command would run, classified against the workspace:
+            # a label and a digest, never the path (review of L3, CH-6/F6).
+            placement = requested[0]['classification']
+            expected = ('outside_fixture', '<outside>') if decision == 'decline' \
+                else ('inside_fixture', '<fixture>/')
+            assert (placement['subject'], placement['placement'], placement['target_label']) \
+                == ('cwd', *expected), placement
+            assert str(case.root) not in json.dumps(placement), placement
+            assert requested[0]['network_approval'] is False, requested
+            with case.client() as c:
+                stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                      'kinds': ['execution.execution']})['result']
+            approval = [i['event']['payload']['pio.combraton.dev/approval'] for i in stream['items']
+                        if 'event' in i and 'pio.combraton.dev/approval' in i['event']['payload']]
+            assert [(a['classification']['placement'], a['reason'], a['network_approval'])
+                    for a in approval] == [(expected[0], 'labeled fake approval request', False)], approval
             with case.client() as c:
                 record = c.query('core.effects.get', {'effect': effect})['result']
             assert record['status'] == 'succeeded' and record['observations'][-1]['evidence']['class'] == 'native_request_resolved', record

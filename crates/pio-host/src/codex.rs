@@ -510,6 +510,21 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                         event["message"] = params["message"].clone();
                         event["persist_offered"] = params["_meta"]["persist"].clone();
                     }
+                    if method == "item/commandExecution/requestApproval" {
+                        // Where the command would run, against this run's
+                        // workspace, by the classifier the other hosts use:
+                        // a label and a digest, never the path. And whether
+                        // Codex is asking for network access, which is a
+                        // different thing from running a command (review
+                        // of L3, CH-6/F6).
+                        let workspace = Path::new(life.spec["cwd"].as_str().unwrap_or_default());
+                        let mut placement =
+                            pio_claude::classify_path(params["cwd"].as_str(), workspace, workspace);
+                        placement["subject"] = json!("cwd");
+                        event["classification"] = placement;
+                        event["network_approval"] =
+                            json!(!params["networkApprovalContext"].is_null());
+                    }
                     life.event(event)?;
                 } else {
                     // PIO never answers user input, elicitations, tool calls

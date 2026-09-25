@@ -348,7 +348,11 @@ pub fn run() -> Result<()> {
                                     "elicitation" => "mcpServer/elicitation/request",
                                     _ => "item/commandExecution/requestApproval",
                                 };
-                                let mut params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","command":"echo fixture","cwd":cwd,"reason":"labeled fake approval request"});
+                                // Where the command would run: the thread's
+                                // directory unless the scenario names another.
+                                let approval_cwd =
+                                    scenario["approval_cwd"].as_str().unwrap_or(&cwd);
+                                let mut params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","command":"echo fixture","cwd":approval_cwd,"reason":"labeled fake approval request"});
                                 if permissions {
                                     // The real request asks for a profile, not a
                                     // decision.
