@@ -130,7 +130,7 @@ jobs:
                    grant-no-steer wrong-child wrong-relay lead-loops runner-killed \
                    lead-asked-in-openai-form child-asks-permissions service-never-ready \
                    first-number-of-all ceiling-cancel-never-sent stop-charged-reported \
-                   usage-suppressed lead-heavy; do
+                   usage-suppressed lead-heavy qualified-elsewhere; do
             if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant "$m" \
                  --out target/lead-run-l3-mutants > "target/lead-run-l3-mutant-$m.log" 2>&1; then
               echo "mutant $m survived"; exit 1
@@ -138,6 +138,13 @@ jobs:
             grep -q "mutant $m: dies on" "target/lead-run-l3-mutant-$m.log" \
               || { cat "target/lead-run-l3-mutant-$m.log"; exit 1; }
           done
+          # `qualified-as-committed` must **hold**: the committed record,
+          # planted as serve-codex would write it, passes the pin row.
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant qualified-as-committed \
+            --out target/lead-run-l3-mutants > target/lead-run-l3-mutant-qualified-as-committed.log 2>&1 \
+            || { cat target/lead-run-l3-mutant-qualified-as-committed.log; exit 1; }
+          grep -q "mutant qualified-as-committed: holds on" target/lead-run-l3-mutant-qualified-as-committed.log \
+            || { cat target/lead-run-l3-mutant-qualified-as-committed.log; exit 1; }
           # The live relay (owner decision of 2026-09-25, item 3): its own
           # cases, then the relay itself beside a rehearsal whose desk waits
           # for answer files, as a live one does.

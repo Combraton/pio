@@ -140,7 +140,11 @@ does with a permission prompt.
   silence, and every run is charged its whole share;
 - `lead-heavy` (L3) has each of the lead's steps cost a whole step in flight
   (30,000) and the lead read once more: its tool must withhold that result,
-  the runner stop the lead, and the lead end within its share.
+  the runner stop the lead, and the lead end within its share;
+- `qualified-elsewhere` (L3) puts in the store the qualification serve-codex
+  would write for a Codex whose native binary changed: the row that compares
+  it with the committed record must fail; `qualified-as-committed` plants the
+  committed record itself, and that row must **hold**.
 """
 import argparse
 import base64
@@ -253,7 +257,6 @@ CODEX = dict(
     # Where the rehearsal's Codex comes from, in the receipt (owner decision
     # for L3, 2026-09-25: the record says so).
     record=dict(
-        pinned='0.157.0',
         shapes="0.157.0's generated app-server schema: ThreadItem mcpToolCall and "
                'commandExecution, McpServerElicitationRequestParams; the labeled fake '
                'follows it',
@@ -269,6 +272,8 @@ CODEX = dict(
                       'which sends the request, changed (analytics on a refused answer), and so '
                       'did the persistence helpers PIO never triggers'))
 WAITED = 20
+# The committed qualification records, one per pin (M2 and its re-pins).
+QUALIFICATIONS = ROOT / 'docs/work/m2/codex-qualification'
 # Never run unmetered (review of L3, F9): a Codex run that has been active
 # this long, all told, since its reported total last rose is stopped and
 # charged its whole share. Time waiting at the desk does not count. Codex
@@ -469,6 +474,9 @@ MUTANTS = {
     # more: its tool must withhold that result and the runner stop it, so
     # it ends within its share (review of L3, A7).
     'lead-heavy': 'Every run stayed within its ceilings',
+    # The store holds a qualification whose native binary is not the one
+    # the committed record qualified (review of L3, REPIN-2).
+    'qualified-elsewhere': 'Codex qualified at the pinned identity',
     # The runner reads every message a child said, as it did, not its
     # answer: a preamble that quotes the command is taken for the count.
     'first-number-of-all': 'Each child reported the true count',
@@ -481,7 +489,10 @@ INCONCLUSIVE_MUTANTS = {'no-ask': 'Every approval was decided at the desk'}
 # tool's wait, so its first read comes back still running at the limit, and
 # its second comes back `exited` too soon to count. Only the limit can hold
 # the row.
-HOLDING_MUTANTS = {'alpha-outlasts': 'A read_run waited for its run: until it exited, or to the wait limit'}
+HOLDING_MUTANTS = {'alpha-outlasts': 'A read_run waited for its run: until it exited, or to the wait limit',
+                   # L3: the committed record itself, planted: the row must
+                   # hold, so it is not a row that can only fail.
+                   'qualified-as-committed': 'Codex qualified at the pinned identity'}
 # The plans a mutant belongs to; any other mutant belongs to every plan.
 PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
@@ -489,7 +500,8 @@ PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {
                 'child-overspends': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
                 'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'},
                 'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'},
-                'usage-suppressed': {'L3'}, 'lead-heavy': {'L3'}}
+                'usage-suppressed': {'L3'}, 'lead-heavy': {'L3'},
+                'qualified-elsewhere': {'L3'}, 'qualified-as-committed': {'L3'}}
 
 
 def sha(data):
@@ -1573,6 +1585,17 @@ def watch(args, record, service, desk, meters, state):
         record['sessions_before'] = live.session_listing(repo, rehearse)
         record['configured'] = live.configured_model(rehearse)
     service.start()
+    if args.mutant in ('qualified-elsewhere', 'qualified-as-committed'):
+        # What serve-codex writes for the owner's Codex: the committed record
+        # for the pin the binary carries, as it stands, or with its native
+        # binary changed.
+        pin = re.search(r'PINNED_VERSION: &str = "([^"]+)"',
+                        (ROOT / 'crates/pio-codex/src/lib.rs').read_text()).group(1)
+        planted = json.loads((QUALIFICATIONS / f'qualification-{pin}.json').read_text())['record']
+        if args.mutant == 'qualified-elsewhere':
+            planted['resolution']['native']['sha256'] = '0' * 64
+        planted['service_node_resolution'] = dict(applicable=True, matches_qualification=True)
+        (service.store / 'qualification.json').write_text(json.dumps(planted))
     owner = service.owner()
     if HARNESS == 'codex':
         state['metering'] = CodexMetering(service, meters, root, record)
@@ -1833,16 +1856,14 @@ def settle(record, service, meters, state, root):
             record['store_read'] = dict(
                 read=False, reason="Codex's own total covers every step (review 48); "
                                    'no store is read')
-            # The qualification serve-codex made before any native work: a
-            # labeled fake has none.
+            # The qualification serve-codex made before any native work: what
+            # ran, from its own record, never a literal of ours (review of L3,
+            # REPIN-2). A labeled fake has none.
             qualified = service.store / 'qualification.json'
             if qualified.exists():
-                q = json.loads(qualified.read_text())
-                record['harness']['qualification'] = dict(
-                    qualified=q.get('qualified'), version=(q.get('version') or {}).get('native'),
-                    native_sha256=((q.get('resolution') or {}).get('native') or {}).get('sha256'),
-                    schema_listing=(q.get('schema') or {}).get('canonical_listing_sha256'),
-                    drift=(q.get('schema') or {}).get('drift_count'))
+                record['harness']['qualification'] = qualification_block(
+                    json.loads(qualified.read_text()))
+                record['harness']['pinned'] = record['harness']['qualification']['pinned']
             else:
                 record['harness']['qualification'] = dict(
                     qualified=None, reason='labeled fake: no qualification')
@@ -2039,6 +2060,61 @@ def codex_model(records):
                 and kinds.index('model_checked') < turn)
 
 
+def qualification_block(q):
+    """The Codex that ran, from serve-codex's own qualification record: the
+    npm wrapper, the native binary and the Node that ran the wrapper, each by
+    label and sha256, and the pin, version, schema and drift it was
+    qualified against."""
+    resolution = q.get('resolution') or {}
+
+    def part(name, *extra):
+        found = resolution.get(name) or {}
+        return dict(label=found.get('path'), sha256=found.get('sha256'),
+                    **{field: found.get(field) for field in extra})
+    return dict(qualified=q.get('qualified'), pinned=q.get('pinned'),
+                version=(q.get('version') or {}).get('native'),
+                wrapper=part('wrapper', 'package_version'), native=part('native'),
+                node=part('node', 'version'),
+                schema_listing=(q.get('schema') or {}).get('canonical_listing_sha256'),
+                drift=(q.get('schema') or {}).get('drift_count'),
+                service_node_matches=(q.get('service_node_resolution') or {})
+                .get('matches_qualification'))
+
+
+def committed_qualification(pinned):
+    """The committed record for the pin a service qualified against, or None
+    if there is none."""
+    version = (pinned or {}).get('version')
+    path = QUALIFICATIONS / f'qualification-{version}.json'
+    if not version or not path.exists():
+        return None
+    return qualification_block(json.loads(path.read_text())['record'])
+
+
+# What must equal the committed record: every identity digest, the pin, the
+# version and the schema. Labels are paths, and are not compared.
+PINNED_FIELDS = (('pinned',), ('version',), ('wrapper', 'sha256'),
+                 ('wrapper', 'package_version'), ('native', 'sha256'), ('node', 'sha256'),
+                 ('node', 'version'), ('schema_listing',))
+
+
+def qualified_at_pin(o):
+    """Qualified, with no drift, the service's Node the qualified one, and
+    every digest the committed record's for that pin. A rehearsal's labeled
+    fake has no record: that decides nothing."""
+    ran, committed = o['ran'], o['committed']
+    if ran.get('qualified') is None and o['rehearsal']:
+        return None
+    if committed is None or ran.get('qualified') is not True or ran.get('drift') != 0:
+        return False
+    if ran['node']['sha256'] is not None and ran.get('service_node_matches') is not True:
+        return False
+    pick = lambda block, path: block.get(path[0]) if len(path) == 1 \
+        else (block.get(path[0]) or {}).get(path[1])
+    return all(pick(ran, f) is not None and pick(ran, f) == pick(committed, f)
+               for f in PINNED_FIELDS)
+
+
 def native_declines(stream):
     """What each run's host declined by itself, read from the run's own
     `execution.exit.observed` on the public stream: a list, empty for none,
@@ -2092,6 +2168,17 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                  note="model_checked: thread/start's own answer, before turn_start_sent; the "
                       'host refuses a mismatch before the first turn'
                       + ('; the fake answers what its scenario says' if rehearse else ''))
+        ran = record['harness'].get('qualification') or {}
+        rows.add('Codex qualified at the pinned identity',
+                 dict(ran=ran, committed=committed_qualification(ran.get('pinned')),
+                      rehearsal=rehearse),
+                 "qualified, no schema drift, the service's Node the qualified one, and "
+                 'the wrapper, native binary and Node digests, version, pin and schema '
+                 "listing equal to the committed record for serve-codex's pin",
+                 holds=qualified_at_pin,
+                 note="from serve-codex's own qualification record in the store; a labeled "
+                      'fake has none, so a rehearsal decides nothing here unless a record '
+                      'is there')
         rows.add('Every run asserted that approvals go to the user',
                  {i: next((e.get('approvals_reviewer') for e in host.get(i, [])
                            if e['kind'] == 'thread_started'), None) for i in RUNS},
@@ -2762,13 +2849,17 @@ def main():
         wanted = HOLDING_MUTANTS[args.mutant]
         row = next(r for r in record['rows'] if r['row'] == wanted)
         assert row['holds'] is True, f'mutant {args.mutant}: {wanted!r} did not hold: {row}'
+        assert not record['failed'], record['failed']
+        if args.mutant == 'qualified-as-committed':
+            print(f'mutant {args.mutant}: holds on {wanted!r}, against the committed record '
+                  f"for {row['observed']['ran']['pinned']['version']}")
+            return
         at_limit = [r for r in row['observed'] if r['runtime'] not in ('exited', None)
                     and (r['seconds'] or 0) >= READ_WAIT]
         exited_long = [r for r in row['observed'] if r['runtime'] == 'exited'
                        and (r['seconds'] or 0) >= WAITED]
         # Held by the limit and by nothing else, or it proves nothing.
         assert at_limit and not exited_long, row['observed']
-        assert not record['failed'], record['failed']
         print(f'mutant {args.mutant}: holds on {wanted!r}, through a read that came back '
               f"{at_limit[0]['runtime']} after {at_limit[0]['seconds']} s")
         return
