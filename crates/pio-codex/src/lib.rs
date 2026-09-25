@@ -659,6 +659,7 @@ pub fn inherited_path() -> Option<OsString> {
 }
 
 pub mod fake;
+mod fake_turn;
 pub mod rpc;
 
 #[cfg(test)]

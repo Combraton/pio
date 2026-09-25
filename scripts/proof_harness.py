@@ -144,10 +144,7 @@ class Service:
 
     def submit(self, identity='work', delivery_timeout=120):
         if self.harness.name == 'codex':
-            # This case class takes no delivery timeout: it fixes 120, which
-            # is what a live Codex submit carries. Nothing here needs a
-            # shorter one, because a Codex action never lapses.
-            return self.case.submit(identity=identity)[0]
+            return self.case.submit(identity=identity, delivery=delivery_timeout)[0]
         return self.case.submit(identity=identity, delivery_timeout=delivery_timeout)
 
     def inspect(self, identity='work'):
@@ -225,8 +222,10 @@ def load(name):
             ask={'approval': 'command', 'delay_ms': 100},
             # This harness has no decline path of PIO's own in the matrix's
             # scenarios: it asks, and PIO surfaces. Stated rather than faked.
+            # Since 2026-09-25 (owner decision) an action nobody answers
+            # lapses to one decline of PIO's, as on the other two.
             decline=None,
-            allow='accept', deny='decline', lapses=False, offers_options=False,
+            allow='accept', deny='decline', lapses=True, offers_options=False,
             suggests=False, block_kind='item', audits=False, work={'delay_ms': 400})
     raise SystemExit(f'unknown harness {name!r}')
 

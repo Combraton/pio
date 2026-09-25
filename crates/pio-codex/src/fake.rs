@@ -10,16 +10,32 @@
 //! `delay_ms` before completion (default 200), `usage_total` (default 42;
 //! `null` sends no usage), `agent_text`, `steer` (default true),
 //! `markers` (directory for independent spawn and turn markers).
+//!
+//! For lead runs (M4, L3): `model_reported` and `model_provider` are what
+//! `thread/start` answers (default: the model asked for, else
+//! `pio-fake-model`, on `pio-fake`), so the host's check of Codex's own answer
+//! has something to refuse. A thread whose `config.mcp_servers` names servers
+//! launches them and lists their tools. `lead.calls` (with `until`, `repeat`,
+//! `report_as`, and `lead.relay_offset`) plays a lead through its first
+//! server, asking by `mcpServer/elicitation/request` wherever Codex would
+//! (`fake_turn.rs`). `answer_line_counts` plays a led run instead: the one
+//! command its prompt quotes, `led_delay_ms` long where the prompt contains
+//! `led_delay_if`, then the line count (`led_offset`), asking a command
+//! approval first where it contains `command_approval_if`. `usage_step` is
+//! each model step's tokens; `led_heavy_step` replaces it where the prompt
+//! contains `led_heavy_if`.
+use crate::fake_turn::{self, McpServer, Turn, Waiting, emit};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{RecvTimeoutError, channel};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 pub const SOURCE: &str = "pio-fake-app-server";
 
-fn marker(dir: &Option<PathBuf>, record: Value) -> Result<()> {
+pub(crate) fn marker(dir: &Option<PathBuf>, record: Value) -> Result<()> {
     let Some(dir) = dir else { return Ok(()) };
     let mut file = std::fs::OpenOptions::new()
         .create(true)
@@ -86,14 +102,12 @@ pub fn run() -> Result<()> {
         }
         let _ = sender.send(None);
     });
-    let out = std::io::stdout();
-    let send = |message: Value| -> Result<()> {
-        let mut lock = out.lock();
-        lock.write_all(&serde_json::to_vec(&message)?)?;
-        lock.write_all(b"\n")?;
-        lock.flush()?;
-        Ok(())
-    };
+    let send = |message: Value| -> Result<()> { emit(&message) };
+    // Lead runs: the thread's MCP servers, the turn a script is playing, and
+    // the requests it is waiting on the client for.
+    let servers: Arc<Mutex<Vec<McpServer>>> = Arc::new(Mutex::new(Vec::new()));
+    let waiting: Waiting = Arc::new(Mutex::new(Default::default()));
+    let mut scripted: Option<Arc<Turn>> = None;
     let mut initialized = false;
     let mut thread: Option<String> = None;
     let mut sandbox = "read-only".to_owned();
@@ -102,6 +116,9 @@ pub fn run() -> Result<()> {
     let mut active: Option<(String, Instant, Option<String>)> = None;
     let mut turns = 0u64;
     loop {
+        if scripted.as_ref().is_some_and(|turn| turn.finished()) {
+            scripted = None;
+        }
         let timeout = active
             .as_ref()
             .filter(|(_, _, pending)| pending.is_none())
@@ -136,6 +153,13 @@ pub fn run() -> Result<()> {
                 let id = message.get("id").cloned();
                 let method = message["method"].as_str().unwrap_or("").to_owned();
                 if method.is_empty() {
+                    // A reply a scripted turn is waiting for.
+                    let key = id.as_ref().and_then(Value::as_str).map(str::to_owned);
+                    let waiter = key.and_then(|k| waiting.lock().expect("waiting lock").remove(&k));
+                    if let Some(waiter) = waiter {
+                        let _ = waiter.send(message.clone());
+                        continue;
+                    }
                     // A response to our server request.
                     if let (Some(id), Some((turn, deadline, pending))) =
                         (id.clone(), active.as_mut())
@@ -214,9 +238,30 @@ pub fn run() -> Result<()> {
                         }
                         let thread_id = format!("fake-thread-{}", std::process::id());
                         thread = Some(thread_id.clone());
+                        // The servers this thread's own config names, launched
+                        // and listed before the answer, as the M4b probe saw.
+                        for (name, spec) in params["config"]["mcp_servers"]
+                            .as_object()
+                            .into_iter()
+                            .flatten()
+                        {
+                            let server = McpServer::launch(name, spec)?;
+                            marker(
+                                &markers,
+                                json!({"source":SOURCE,"kind":"mcp_server_launched","name":name}),
+                            )?;
+                            servers.lock().expect("servers lock").push(server);
+                        }
+                        // What Codex answers, which is not always what was
+                        // asked; the scenario can make it differ.
+                        let model = scenario["model_reported"]
+                            .as_str()
+                            .or(params["model"].as_str())
+                            .unwrap_or("pio-fake-model");
+                        let provider = scenario["model_provider"].as_str().unwrap_or("pio-fake");
                         let thread_value =
-                            json!({"id":thread_id,"modelProvider":"pio-fake","preview":""});
-                        let mut result = json!({"thread":thread_value,"model":"pio-fake-model","modelProvider":"pio-fake","cwd":cwd,"sandbox":sandbox_projection(&sandbox),"approvalPolicy":params["approvalPolicy"].as_str().unwrap_or("on-request"),
+                            json!({"id":thread_id,"modelProvider":provider,"preview":""});
+                        let mut result = json!({"thread":thread_value,"model":model,"modelProvider":provider,"cwd":cwd,"sandbox":sandbox_projection(&sandbox),"approvalPolicy":params["approvalPolicy"].as_str().unwrap_or("on-request"),
                         // Measured from the app-server's own schema: the
                         // enum is `user | auto_review | guardian_subagent`,
                         // and a thread nobody redirected answers `user`.
@@ -252,6 +297,26 @@ pub fn run() -> Result<()> {
                                 json!({"method":"turn/started","params":{"threadId":thread_id,"turn":{"id":turn,"status":"inProgress","items":[],"error":null}}}),
                             )?;
                         }
+                        let lead = !servers.lock().expect("servers lock").is_empty()
+                            && scenario["lead"]["calls"].is_array();
+                        if lead || scenario["answer_line_counts"] == true {
+                            let playing = Turn::new(turn.clone(), thread_id.clone());
+                            scripted = Some(playing.clone());
+                            let (script, queue, marks) =
+                                (scenario.clone(), waiting.clone(), markers.clone());
+                            if lead {
+                                let servers = servers.clone();
+                                std::thread::spawn(move || {
+                                    fake_turn::lead(playing, servers, script, queue, marks)
+                                });
+                            } else {
+                                let (dir, prompt) = (cwd.clone(), text.to_owned());
+                                std::thread::spawn(move || {
+                                    fake_turn::led(playing, script, queue, marks, dir, prompt)
+                                });
+                            }
+                            continue;
+                        }
                         let agent = scenario["agent_text"]
                             .as_str()
                             .unwrap_or("fake agent reply");
@@ -267,6 +332,7 @@ pub fn run() -> Result<()> {
                                 let method = match kind {
                                     "fileChange" => "item/fileChange/requestApproval",
                                     "permissions" => "item/permissions/requestApproval",
+                                    "elicitation" => "mcpServer/elicitation/request",
                                     _ => "item/commandExecution/requestApproval",
                                 };
                                 let mut params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","command":"echo fixture","cwd":cwd,"reason":"labeled fake approval request"});
@@ -275,13 +341,23 @@ pub fn run() -> Result<()> {
                                     // decision.
                                     params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","cwd":cwd,"startedAtMs":0,"reason":"labeled fake permission grant request","permissions":{"filesystem":{"write":[cwd]}}});
                                 }
+                                if kind == "elicitation" {
+                                    // An elicitation that is not an MCP
+                                    // tool-call approval: a server asking for
+                                    // a login, which PIO never supplies.
+                                    params = json!({"threadId":thread_id,"turnId":turn,"serverName":"someone","mode":"url","elicitationId":"fake-elicitation","url":"https://example.invalid/login","message":"Sign in to continue"});
+                                }
                                 // Only command approvals carry `kind` at
                                 // 0.155.1 and 0.157.0, and it is optional there too, so
                                 // `absent` omits it and the client must read
                                 // that as `command`.
                                 let approval_kind =
                                     scenario["approval_kind"].as_str().unwrap_or("command");
-                                if !file_change && !permissions && approval_kind != "absent" {
+                                if !file_change
+                                    && !permissions
+                                    && kind != "elicitation"
+                                    && approval_kind != "absent"
+                                {
                                     params["kind"] = json!(approval_kind);
                                 }
                                 send(json!({"method":method,"id":request,"params":params}))?;
@@ -292,12 +368,37 @@ pub fn run() -> Result<()> {
                         active =
                             Some((turn, Instant::now() + Duration::from_millis(delay), pending));
                     }
+                    "turn/interrupt" if scripted.is_some() => {
+                        send(json!({"id":id,"result":{}}))?;
+                        // Codex honours an interrupt (M2); the script stops
+                        // at its next step and the turn ends now.
+                        if let Some(turn) = scripted.take() {
+                            turn.interrupted
+                                .store(true, std::sync::atomic::Ordering::SeqCst);
+                            turn.complete("interrupted")?;
+                        }
+                    }
                     "turn/interrupt" => {
                         send(json!({"id":id,"result":{}}))?;
                         if let Some((turn, _, _)) = active.take() {
                             send(
                                 json!({"method":"turn/completed","params":{"threadId":thread.clone().unwrap_or_default(),"turn":{"id":turn,"status":"interrupted","items":[],"error":null}}}),
                             )?;
+                        }
+                    }
+                    "turn/steer" if scripted.is_some() => {
+                        let expected = message["params"]["expectedTurnId"].as_str();
+                        match (&scripted, scenario["steer"] != false) {
+                            (Some(turn), true) if Some(turn.id.as_str()) == expected => {
+                                send(json!({"id":id,"result":{"turnId":turn.id}}))?;
+                                marker(
+                                    &markers,
+                                    json!({"source":SOURCE,"kind":"steer_received","turn":turn.id}),
+                                )?;
+                            }
+                            _ => send(
+                                json!({"id":id,"error":{"code":-32600,"message":"invalid request: no matching steerable turn"}}),
+                            )?,
                         }
                     }
                     "turn/steer" => {

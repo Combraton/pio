@@ -161,12 +161,12 @@ The pass now tells the two apart: if `execution.timeout.passed` is present for t
 
 | | Codex | Claude Code | OpenCode |
 | --- | --- | --- | --- |
-| Answer deadline | **none** — `answer_deadline_seconds` is null | the caller's own `timeouts.delivery` | the same |
-| If nobody answers | **nothing.** No default deny exists in this host at all | a single-use `deny` | a `reject_once` chosen by kind |
+| Answer deadline | the caller's own `timeouts.delivery` (since 2026-09-25; before, none) | the caller's own `timeouts.delivery` | the same |
+| If nobody answers | a single `decline` of PIO's (since 2026-09-25; before, nothing) | a single-use `deny` | a `reject_once` chosen by kind |
 | Option list | none | none | `once` / `always` / `reject`, measured live |
 | Also carries | `method`, `approval_kind` | `suggestions_offered`, `widening_fields_sent` | the offered list and what PIO will send |
 
-**Codex waits until it is answered.** Left alone for 45 seconds — long past any deadline the other two would have hit — the action is still `pending`, nothing has decided it, and it is still on the walk. So the screen shows **no countdown** for a Codex approval, because a countdown there would promise a decision PIO will never make. `--mutant assume-countdown` substitutes a default for the missing deadline and fails on exactly that.
+**Codex now lapses like the other two** (owner decision, 2026-09-25, for L3: "if I don't answer, it lapses"). Until then a Codex approval waited until it was answered: left alone for 45 seconds it was still `pending`, so the walk showed no countdown, and `--mutant assume-countdown` failed on inventing one. Now the host carries the caller's delivery timeout as the deadline and, when it passes, sends one `decline` recorded as PIO's (`request_denied_by_default`), so the walk shows a countdown to a decision PIO will make. The mutant and the 45-second wait are retired, because no release harness is without a deadline now. The Codex matrix's `mcp_approval_lapses` proves the lapse.
 
 **Claude Code offers a rule update with every request.** Acting on one widens a permission beyond the request. What PIO will send is built by `permission_decision`, which cannot encode one, so the walk shows `suggestions_offered: 1` and `widening_fields_sent: []` — and the fake's own marker confirms `widening_fields_received: []`, which is the harness's record rather than PIO's.
 

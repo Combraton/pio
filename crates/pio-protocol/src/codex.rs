@@ -31,6 +31,43 @@ pub(crate) fn push(v: &mut Value, x: Value) {
     v.as_array_mut().unwrap().push(x);
 }
 
+/// Why a lead-tool spec for the Codex host is refused, if it is.
+///
+/// The same stdio shape and the same refusals as OpenCode's, plus one field
+/// only this host can honour: `pre_allowed_tools`, the names of the lead
+/// server's own tools whose approval mode the lead's thread config sets to
+/// `approve`, so Codex does not ask before calling them (owner decision,
+/// 2026-09-25, for L3's lead: its two tools, passed per launch, never written
+/// to the owner's configuration). Every other request still comes to the
+/// caller. OpenCode has no such setting, so its validator refuses the field.
+pub(crate) fn codex_lead_tool_refusals(tool: &Value) -> Vec<Value> {
+    let mut common = tool.clone();
+    let allowed = common
+        .as_object_mut()
+        .and_then(|o| o.remove("pre_allowed_tools"));
+    let mut refusals = pio_opencode::lead_tool_refusals(&common);
+    if let Some(allowed) = allowed {
+        let names = allowed.as_array().filter(|names| {
+            !names.is_empty()
+                && names.len() <= 8
+                && names.iter().all(|n| {
+                    n.as_str().is_some_and(|n| {
+                        !n.is_empty()
+                            && n.chars()
+                                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                    })
+                })
+        });
+        if names.is_none() {
+            refusals.push(
+                json!({"reason":"lead_tool_pre_allowed_tools_must_be_tool_names",
+                                 "detail":allowed}),
+            );
+        }
+    }
+    refusals
+}
+
 /// Digest-referenced content a command carries, if any.
 fn content_reference<'a>(method: &str, p: &'a Value) -> Option<&'a Value> {
     match method {
@@ -236,15 +273,20 @@ impl Provider {
         }
         let lead_tool = p["extensions"].get(LEAD_TOOL_EXTENSION);
         if let Some(tool) = lead_tool {
-            // Only the OpenCode host sends `mcpServers` on the run's own
-            // session. Anywhere else the tool would be silently dropped, and
-            // a lead that has no tool is a lead that cannot do its job.
-            if ns != "opencode" {
+            // The OpenCode host sends `mcpServers` on the run's own session,
+            // and the Codex host puts the server in the run's own
+            // `thread/start` config. Anywhere else the tool would be silently
+            // dropped, and a lead that has no tool cannot do its job.
+            if !matches!(ns.as_str(), "opencode" | "codex") {
                 e["view"]["alternative"] =
-                    "The lead tool is attached only through serve-opencode".into();
+                    "The lead tool is attached only through serve-opencode or serve-codex".into();
                 return Some("capability_unavailable");
             }
-            let refusals = pio_opencode::lead_tool_refusals(tool);
+            let refusals = if ns == "codex" {
+                codex_lead_tool_refusals(tool)
+            } else {
+                pio_opencode::lead_tool_refusals(tool)
+            };
             if !refusals.is_empty() {
                 e["view"]["alternative"] = format!("Lead tool refused: {}", json!(refusals)).into();
                 return Some("capability_unavailable");
@@ -290,6 +332,13 @@ impl Provider {
             _ => {
                 spec["codex_home"] = host["codex_home"].clone();
                 spec["thread"] = host["thread"].clone();
+                // What Codex must answer for the thread's model and provider
+                // before its first turn, when the operator names it.
+                spec["expected_model_provider"] = host["expected_model_provider"].clone();
+                // The lead tool, for this run's thread alone, validated above.
+                if let Some(tool) = lead_tool {
+                    spec["lead_tool"] = tool.clone();
+                }
                 // Codex alone uses this, to label which projects it recorded
                 // trust for. It is never a containment boundary: the boundary
                 // is the workspace repository, which `cwd` already carries.

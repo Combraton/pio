@@ -60,7 +60,8 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
                 "fixture_root",
                 "thread",
                 "labeled_fake",
-                "test_only_model_exception"
+                "test_only_model_exception",
+                "expected_model_provider"
             ]
             .contains(&name.as_str()),
             "unsupported codex setting: {name}"
@@ -106,6 +107,15 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
         model.is_some() == exception.is_some_and(|e| e == MODEL_EXCEPTION),
         "codex.thread.model requires test_only_model_exception = \"{MODEL_EXCEPTION}\" and that exception requires a model"
     );
+    // The provider Codex must report for the thread before its first turn.
+    // A check, never a selection: PIO sends no `modelProvider`. It exists
+    // only beside a requested model, so both are checked together.
+    if let Some(provider) = codex.get("expected_model_provider") {
+        anyhow::ensure!(
+            provider.as_str().is_some_and(|p| !p.is_empty()) && model.is_some(),
+            "codex.expected_model_provider must be a non-empty string beside codex.thread.model"
+        );
+    }
     let mut host = codex.clone();
     host["adapter"] = "codex".into();
     if codex["labeled_fake"] == true {
@@ -543,6 +553,31 @@ mod tests {
             codex["test_only_model_exception"] = exception;
         }
         codex
+    }
+
+    /// L3 (owner decision, 2026-09-25): the provider Codex must report is a
+    /// check the operator names, never a selection, and only beside a model.
+    #[test]
+    fn an_expected_provider_is_only_accepted_beside_a_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let plan = json!({"sandbox":"workspace-write","approvalPolicy":"on-request"});
+        let with_model = json!({"sandbox":"workspace-write","approvalPolicy":"on-request","model":"gpt-5.6-terra"});
+        let mut alone = codex_config(dir.path(), plan, Value::Null);
+        alone["expected_model_provider"] = json!("openai");
+        let error = codex_host_config(dir.path(), &alone).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("beside codex.thread.model"),
+            "{error:#}"
+        );
+        let mut empty = codex_config(dir.path(), with_model.clone(), json!(MODEL_EXCEPTION));
+        empty["expected_model_provider"] = json!("");
+        assert!(codex_host_config(dir.path(), &empty).is_err());
+        let mut checked = codex_config(dir.path(), with_model, json!(MODEL_EXCEPTION));
+        checked["expected_model_provider"] = json!("openai");
+        let host = codex_host_config(dir.path(), &checked).unwrap();
+        assert_eq!(host["expected_model_provider"], "openai");
+        // Checked, never sent: the thread's own settings carry no provider.
+        assert!(host["thread"].get("modelProvider").is_none());
     }
 
     #[test]

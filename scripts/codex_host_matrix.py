@@ -9,6 +9,7 @@ file read-only, and the OS process table. Every execution is labeled
 """
 import argparse
 from collections import Counter
+import sys
 import hashlib
 import json
 import os
@@ -29,7 +30,57 @@ CONTENT = 'pio.combraton.dev/content'
 FEATURES = ['execution.controller', 'execution.output', 'execution.discovery', 'execution.workspaces', 'execution.usage', 'execution.actions', 'execution.steering']
 CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_reviewer_absent_refused', 'approval_decline', 'approval_accept', 'interrupt_cancels_turn', 'steer_acknowledged', 'suppressed_ack_negative_control',
          'missing_content_refused', 'content_digest_mismatch', 'outside_fixture_refused', 'unqualified_executable_refused', 'restart_reattach_no_duplicate', 'host_lost_no_respawn', 'discovery_reports_observed_authentication',
-         'widening_decisions_refused', 'deadline_stop_interrupts', 'thread_settings_broader_refused', 'permission_grant_refused']
+         'widening_decisions_refused', 'deadline_stop_interrupts', 'thread_settings_broader_refused', 'permission_grant_refused',
+         'lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses', 'other_elicitation_declined',
+         'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused']
+LEAD_TOOL = 'pio.combraton.dev/lead-tool'
+# Owner decision for L3, 2026-09-25: the model is asked for under the dated
+# exception, and the provider is checked from Codex's answer, never sent.
+MODEL_CASES = {'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused'}
+WITNESS = '''import json, os, sys
+log = open(os.environ['PIO_WITNESS_LOG'], 'a')
+def note(record):
+    log.write(json.dumps(record) + '\\n')
+    log.flush()
+note({'event': 'started'})
+for line in sys.stdin:
+    message = json.loads(line)
+    note({'event': 'request', 'method': message.get('method'),
+          'name': (message.get('params') or {}).get('name')})
+    if 'id' not in message:
+        continue
+    method = message.get('method')
+    if method == 'initialize':
+        result = {'protocolVersion': '2025-06-18', 'capabilities': {'tools': {}},
+                  'serverInfo': {'name': 'witness', 'version': '0'}}
+    elif method == 'tools/list':
+        result = {'tools': [{'name': 'start_run', 'inputSchema': {'type': 'object'}},
+                            {'name': 'read_run', 'inputSchema': {'type': 'object'}}]}
+    elif method == 'tools/call':
+        result = {'content': [{'type': 'text', 'text': json.dumps(
+            {'called': message['params']['name']})}]}
+    else:
+        result = {}
+    sys.stdout.write(json.dumps({'jsonrpc': '2.0', 'id': message['id'], 'result': result}) + '\\n')
+    sys.stdout.flush()
+'''
+
+
+def witness(case, pre_allowed=False):
+    """An MCP server that writes down every request it receives: the only
+    witness that a harness launched it. The lead tool's own spec shape."""
+    script = case.root / 'witness.py'
+    script.write_text(WITNESS)
+    log = case.root / 'witness.jsonl'
+    spec = dict(name='pio-lead', command=sys.executable, args=[str(script)],
+                env=[dict(name='PIO_WITNESS_LOG', value=str(log))])
+    if pre_allowed:
+        spec['pre_allowed_tools'] = ['start_run', 'read_run']
+    return spec, log
+
+
+def witnessed(log):
+    return [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
 
 
 def poll(action, predicate, seconds=20):
@@ -122,18 +173,27 @@ class Case:
         run('-c', 'user.email=pio@example.invalid', '-c', 'user.name=pio', 'commit', '-q', '-m', 'fixture')
         return repo, run('rev-parse', 'HEAD').stdout.strip()
 
-    def submit(self, identity='work', brief=b'Fixture task: reply with one line.', content=True, repository=None, tamper=False, deadline=600):
+    def submit(self, identity='work', brief=b'Fixture task: reply with one line.', content=True, repository=None, tamper=False, deadline=600, delivery=120, extensions=None):
         repo, base = self.fixture(identity) if repository is None else (repository, 'unused')
         # Live submits carry a 2 minute delivery timeout and 10 minute deadline.
+        # The delivery timeout is also how long an approval may wait for its
+        # caller before PIO declines it once (owner decision, 2026-09-25).
         payload = dict(brief=dict(digest=digest(brief), media_type='text/plain'),
                        workspace=dict(repository=str(repo), base=base, cleanup='retain'),
-                       timeouts=dict(delivery=120, execution_deadline=deadline))
+                       timeouts=dict(delivery=delivery, execution_deadline=deadline))
         envelope = command('execution.submit', dict(kind='execution.execution', id=identity), payload, command_id=identity)
         if content:
             text = brief.decode() + (' tampered' if tamper else '')
             envelope['extensions'] = {CONTENT: dict(media_type='text/plain', text=text)}
+        if extensions:
+            envelope['extensions'] = dict(envelope.get('extensions') or {}, **extensions)
         with self.client() as c:
             return c.call(envelope), repo
+
+    def configure(self, **codex):
+        """Change the service's codex settings before it starts."""
+        self.config['codex'].update(codex)
+        self.config_path.write_text(json.dumps(self.config))
 
     def execution_command(self, operation, identity, payload, command_id, content_bytes=None, media_type=None):
         with self.client() as c:
@@ -203,6 +263,99 @@ def events_of(case, kind):
     return records
 
 
+def model_case(case, name):
+    """The thread's model and provider, from Codex's own answer, before its
+    first turn: a mismatch in either ends the run with no turn sent."""
+    response, _ = case.submit()
+    assert response['result']['outcome']['admission'] == 'admitted', response
+    final = poll(lambda: case.inspect()['result'], lambda v: v['runtime'] == 'exited', 60)
+    checked = events_of(case, 'model_checked')
+    assert len(checked) == 1, checked
+    checked = checked[0]
+    assert checked['requested_model'] == 'gpt-5.6-terra' and \
+        checked['expected_model_provider'] == 'openai', checked
+    received = [m for m in case.markers_records() if m['kind'] == 'turn_received']
+    if name == 'model_checked_before_turn':
+        assert checked['matches'] is True and checked['model'] == 'gpt-5.6-terra' and \
+            checked['model_provider'] == 'openai', checked
+        order = [json.loads(l)['kind'] for f in case.store.glob('codex-*.events.jsonl')
+                 for l in f.read_text().splitlines()]
+        assert order.index('model_checked') < order.index('turn_start_sent'), order
+        assert len(received) == 1 and final['delivery'] == 'acknowledged', final
+        return dict(outcome='pass', checked=checked, before_turn=True)
+    assert checked['matches'] is False, checked
+    assert received == [], 'a turn reached Codex on a thread whose model did not match'
+    invocations = poll(lambda: case.journal()[1],
+                       lambda i: i and i[0]['phase'] == 'known_not_released')
+    assert 'thread_model_mismatch' in str(invocations[0]['receipt']['reason']), invocations[0]
+    return dict(outcome='pass', checked=checked, turns_sent=0, delivery=final['delivery'])
+
+
+def lead_tool_case(case, name):
+    """The lead tool on its own thread, and what Codex asks before calling
+    it: a single `accept`, a `decline`, or one decline of PIO's when nobody
+    answers. Never `persist`."""
+    spec, log = witness(case, pre_allowed=name == 'lead_tool_on_the_thread')
+    response, _ = case.submit(extensions={LEAD_TOOL: spec},
+                              delivery=2 if name == 'mcp_approval_lapses' else 120)
+    assert response['result']['outcome']['admission'] == 'admitted', response
+    if name == 'lead_tool_on_the_thread':
+        exited(case)
+        # A second run, with no tool, gets none.
+        other, _ = case.submit(identity='plain')
+        assert other['result']['outcome']['admission'] == 'admitted', other
+        exited(case, 'plain')
+        sent = sorted((e['names'], e['pre_allowed_tools']) for e in events_of(case, 'mcp_servers_sent'))
+        assert sent == [([], None), (['pio-lead'], ['start_run', 'read_run'])], sent
+        seen = witnessed(log)
+        assert [e.get('method') for e in seen if e['event'] == 'request'] == \
+            ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'tools/call'], seen
+        assert events_of(case, 'action_requested') == [], 'Codex asked about a pre-allowed tool'
+        return dict(outcome='pass', sent=sent, launches=len([e for e in seen if e['event'] == 'started']))
+    # Either way it settles: surfaced to the caller or, wrongly, declined.
+    poll(lambda: case.inspect()['result'],
+         lambda v: v['runtime'] in ('requires_action', 'exited'), 30)
+    requested = events_of(case, 'action_requested')
+    assert requested, ('the MCP tool-call approval was not surfaced: '
+                       f"{events_of(case, 'native_request_declined')}")
+    requested = requested[0]
+    assert requested['method'] == 'mcpServer/elicitation/request' and \
+        requested['approval_kind'] == 'mcp_tool_call' and requested['server'] == 'pio-lead', requested
+    assert requested['persist_offered'] == ['session', 'always'], requested
+    assert requested['answer_deadline_seconds'] == (2 if name == 'mcp_approval_lapses' else 120), requested
+    if name == 'mcp_approval_lapses':
+        # Two seconds of delivery timeout, then PIO's decline, or nothing.
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline and not events_of(case, 'request_denied_by_default'):
+            time.sleep(0.2)
+        denied = events_of(case, 'request_denied_by_default')
+        assert denied, 'nobody answered and nothing lapsed: the approval waits for ever'
+        final = exited(case, seconds=30)
+        assert [(d['decision'], d['decided_by'], d['sent']) for d in denied] == \
+            [('decline', 'pio', {'action': 'decline'})], denied
+        assert [a['state'] for a in final['actions']] == ['answered'], final['actions']
+        calls = [e for e in witnessed(log) if e.get('method') == 'tools/call']
+        assert calls == [], 'the tool ran although nobody allowed it'
+        return dict(outcome='pass', lapsed=denied[0], tool_calls=0)
+    sent = []
+    for decision in ('accept', 'decline'):
+        view = poll(lambda: case.inspect()['result'],
+                    lambda v: any(a['state'] == 'pending' for a in v.get('actions') or []), 30)
+        action = next(a for a in view['actions'] if a['state'] == 'pending')
+        body = json.dumps({'decision': decision}).encode()
+        answer = case.execution_command('execution.respond_action', 'work',
+                                        dict(action_id=action['action_id'],
+                                             response=dict(digest=digest(body), media_type='application/json')),
+                                        f"answer-{action['action_id']}", body, 'application/json')
+        assert answer['result']['outcome']['state'] == 'answered', answer
+    final = exited(case)
+    applied = events_of(case, 'control_applied')
+    assert [a['sent'] for a in applied] == [{'action': 'accept', 'content': {}}, {'action': 'decline'}], applied
+    calls = [e['name'] for e in witnessed(log) if e.get('method') == 'tools/call']
+    assert calls == ['start_run'], calls
+    return dict(outcome='pass', sent=[a['sent'] for a in applied], tool_calls=calls, exit=final['exit'])
+
+
 def run_case(out, name):
     scenario = dict(
         approvals_reviewer_must_be_user={'approval': 'command', 'delay_ms': 100,
@@ -219,8 +372,21 @@ def run_case(out, name):
         widening_decisions_refused={'approval': 'command', 'approval_kind': 'absent', 'delay_ms': 100},
         permission_grant_refused={'approval': 'permissions', 'delay_ms': 100},
         deadline_stop_interrupts={'delay_ms': 60000},
+        lead_tool_on_the_thread={'lead': {'calls': [{'tool': 'start_run', 'arguments': {}},
+                                                    {'tool': 'read_run', 'arguments': {}}]}},
+        mcp_approval_to_the_caller={'lead': {'calls': [{'tool': 'start_run', 'arguments': {}},
+                                                       {'tool': 'read_run', 'arguments': {}}]}},
+        mcp_approval_lapses={'lead': {'calls': [{'tool': 'start_run', 'arguments': {}}]}},
+        other_elicitation_declined={'approval': 'elicitation', 'delay_ms': 100},
+        model_checked_before_turn={'model_provider': 'openai', 'delay_ms': 100},
+        model_mismatch_refused={'model_provider': 'openai', 'model_reported': 'another-model'},
+        provider_mismatch_refused={'delay_ms': 100},
     ).get(name, {'delay_ms': 100})
     case = Case(out, name, scenario, fake=(name != 'unqualified_executable_refused'))
+    if name in MODEL_CASES:
+        case.configure(thread=dict(case.config['codex']['thread'], model='gpt-5.6-terra'),
+                       test_only_model_exception='owner-2026-09-19-m2-fixture-runs',
+                       expected_model_provider='openai')
     try:
         if name == 'unqualified_executable_refused':
             daemon = case.start(expect_ready=False)
@@ -283,6 +449,23 @@ def run_case(out, name):
             assert final['exit'] == 'unavailable', final
             return dict(outcome='pass', guard=guard, delivery=final['delivery'],
                         runtime=final['runtime'], exit=final['exit'], app_server_spawned=False)
+        if name in MODEL_CASES:
+            return model_case(case, name)
+        if name in ('lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses'):
+            return lead_tool_case(case, name)
+        if name == 'other_elicitation_declined':
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            # Either way it settles: declined (exited) or, wrongly, surfaced.
+            poll(lambda: case.inspect()['result'],
+                 lambda v: v['runtime'] in ('exited', 'requires_action'), 30)
+            assert events_of(case, 'action_requested') == [], 'surfaced an elicitation that asks for a login'
+            final = exited(case)
+            declined = events_of(case, 'native_request_declined')
+            assert [d['method'] for d in declined] == ['mcpServer/elicitation/request'], declined
+            refused = [m for m in case.markers_records() if m['kind'] == 'approval_refused']
+            assert len(refused) == 1, case.markers_records()
+            return dict(outcome='pass', declined=declined[0]['method'], actions=0, exit=final['exit'])
         brief = b'Fixture task: reply with one line.'
         response, repo = case.submit(brief=brief, deadline=3 if name == 'deadline_stop_interrupts' else 600)
         assert response['result']['outcome']['admission'] == 'admitted', response

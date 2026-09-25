@@ -127,7 +127,7 @@ Cargo tests (with labeled fake executables, so CI needs no Codex) cover canonica
 
 `target/debug/pio serve-codex --data-dir DIR --config FILE --socket PATH` serves the public Unix API with the ADR 003 Codex adapter. A `pio-codex-service/1` configuration names the selected executable, its explicit environment, the Codex home, the fixture root, and optional thread settings (`danger-full-access` and approval policy `never` are refused). For a real executable, startup qualifies it and refuses with `codex_not_qualified` before any native work. `labeled_fake: true` runs the labeled test double `pio codex fake-app-server` instead; its evidence is labeled `pio-fake-app-server`, and discovery reports it as not Codex and never usable.
 
-`python3 scripts/codex_host_matrix.py --out target/codex-host --repetitions 3` runs 19 cases × 3 (57 attempts) against the fake app-server, with independent markers written by the fake, read-only journal and host events, and the process table:
+`python3 scripts/codex_host_matrix.py --out target/codex-host --repetitions 3` runs 26 cases × 3 (78 attempts) against the fake app-server, with independent markers written by the fake, read-only journal and host events, and the process table:
 
 - a J1-shaped turn: `provider_ack_id` delivery from the `turn/start` response, spooled output, observed token usage, exit 0, fixture trust-entry disclosure, and brief bytes kept out of the journal; and `config_after` written **before** `app_server_exited`, the event that makes the view `exited`, as the Claude and OpenCode hosts write theirs (review 47: the other order raised `IndexError` whenever a reader won the race);
 - approval decline and accept delivered natively, with a repeat answer `not_found`;
@@ -145,6 +145,13 @@ Cargo tests (with labeled fake executables, so CI needs no Codex) cover canonica
 - a 3-second execution deadline stopping the turn with a real `turn/interrupt`, recorded `deadline_stop` outcome `interrupted` and a clean app-server exit;
 - a configured `read-only` sandbox making a `workspace-write` request refuse before any app-server starts.
 - `approvalsReviewer` never sent, and the harness's answer asserted `user` on every run: a `guardian_subagent` answer and an **absent** one both end the run `approvals_reviewer_not_user` before any turn starts, because 0.155.1's `ThreadStartResponse` makes the field required and silence is not `user`.
+- For L3 (owner decisions of 2026-09-25), seven more:
+  - **The lead tool is on the lead's thread only.** A witness MCP server named in `thread/start`'s own `config.mcp_servers` records `initialize`, `notifications/initialized`, `tools/list` and both `tools/call`s. `mcp_servers_sent` names it for that run and names nothing for a second run without it. Its `pre_allowed_tools` (`start_run`, `read_run`) mean Codex asks nothing.
+  - **An MCP tool-call approval comes to the caller.** It surfaces as an action with `approval_kind: mcp_tool_call`, the server, and what Codex offered to remember (`persist`). `accept` is sent as `{"action":"accept","content":{}}` with no `persist`, and `decline` as `{"action":"decline"}`. Only the accepted call reaches the server.
+  - **An MCP approval nobody answers lapses.** After the caller's delivery timeout, PIO sends one decline, recorded `request_denied_by_default`, and the tool never runs.
+  - **An elicitation that is not a tool-call approval** (a URL-mode login) is still declined natively, with no action.
+  - **Model and provider come from Codex's own answer before the first turn.** With `gpt-5.6-terra` asked for on `openai`, `model_checked` holds before `turn_start_sent`. A different model, or a different provider, ends the run `thread_model_mismatch` with no turn sent.
+  - When Codex asks before an MCP tool call, and how it reads an answer, is **read from its source** at `rust-v0.157.0`, not measured: the fake mirrors it (`crates/pio-codex/src/fake_turn.rs`).
 
 A `harness_or_assertion_failure` in this matrix records `failed_at`, the file, line and source of the frame that raised, beside the exception.
 

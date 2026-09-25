@@ -26,6 +26,30 @@ pub const REFUSED_PERMISSION_GRANT: &str = "item/permissions/requestApproval";
 /// Decisions PIO may forward. Session-wide or policy-amending approvals widen
 /// standing permissions and are never sent.
 pub const ALLOWED_DECISIONS: &[&str] = &["accept", "decline", "cancel"];
+/// The server request that carries an MCP tool-call approval at 0.155.1 and
+/// 0.157.0 (read from source at both tags, not measured): a form-mode
+/// elicitation whose `_meta.codex_approval_kind` is `mcp_tool_call`. Any
+/// other elicitation asks for data or a login, which PIO never supplies.
+pub const MCP_APPROVAL_METHOD: &str = "mcpServer/elicitation/request";
+
+fn is_mcp_tool_approval(method: &str, params: &Value) -> bool {
+    method == MCP_APPROVAL_METHOD
+        && params["mode"] == "form"
+        && params["_meta"]["codex_approval_kind"] == "mcp_tool_call"
+}
+
+/// What a decision is sent as. A command or file-change approval takes the
+/// decision itself. An MCP tool-call approval is an elicitation: `accept`
+/// with no `persist` in `_meta` is a single use, `decline` refuses the call,
+/// and `cancel` aborts it. PIO never sends `persist`, so nothing is
+/// remembered for the session or for good.
+fn answer_body(elicitation: bool, decision: &str) -> Value {
+    match (elicitation, decision) {
+        (true, "accept") => json!({"action":"accept","content":{}}),
+        (true, other) => json!({"action":other}),
+        (false, other) => json!({"decision":other}),
+    }
+}
 
 /// The adapter label. It prefixes this host's event and control files, so the
 /// shared lifecycle produces exactly the paths the service already reads.
@@ -252,6 +276,42 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         params.get("approvalsReviewer").is_none(),
         "approvals_reviewer_never_set: PIO does not route approvals away from the user"
     );
+    // The lead tool, on this thread alone: a per-thread `config` that
+    // overrides what would be read from `config.toml`, the route the M4b
+    // probe saw Codex launch. Every other run's thread gets none. Its
+    // `pre_allowed_tools` (the owner's decision for L3's lead, 2026-09-25)
+    // set those tools' approval mode to `approve`, on this server only, so
+    // Codex does not ask before calling them; nothing else is pre-allowed,
+    // and nothing is written to the owner's configuration.
+    let mut sent = Vec::new();
+    let mut pre_allowed = Value::Null;
+    if let Some(tool) = life.spec.get("lead_tool").filter(|t| t.is_object()) {
+        let name = tool["name"].as_str().context("lead tool name")?.to_owned();
+        let env: serde_json::Map<String, Value> = tool["env"]
+            .as_array()
+            .context("lead tool env")?
+            .iter()
+            .map(|v| {
+                (
+                    v["name"].as_str().unwrap_or_default().to_owned(),
+                    v["value"].clone(),
+                )
+            })
+            .collect();
+        let mut server = json!({"command":tool["command"],"args":tool["args"],"env":env});
+        if let Some(names) = tool["pre_allowed_tools"].as_array() {
+            let tools: serde_json::Map<String, Value> = names
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|n| (n.to_owned(), json!({"approval_mode":"approve"})))
+                .collect();
+            server["tools"] = Value::Object(tools);
+            pre_allowed = tool["pre_allowed_tools"].clone();
+        }
+        params["config"]["mcp_servers"][&name] = server;
+        sent.push(name);
+    }
+    life.event(json!({"kind":"mcp_servers_sent","names":sent,"pre_allowed_tools":pre_allowed}))?;
     let thread = app.request("thread/start", params)?;
     let thread = app.wait_response(thread, Duration::from_secs(120), |_| Ok(()))?;
     if let Some(error) = response_error(&thread) {
@@ -284,6 +344,23 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         ) && sandbox["networkAccess"] != true,
         "restricted_sandbox_required: effective sandbox {sandbox}"
     );
+    // The model and provider the thread is on, from Codex's own answer and
+    // before its first turn (owner decision for L3, 2026-09-25). What was
+    // asked for is not evidence of what was selected; a run whose answer
+    // differs ends here, having spent nothing.
+    let requested = life.spec["thread"]["model"].as_str();
+    let provider = life.spec["expected_model_provider"].as_str();
+    let matches = requested.is_none_or(|m| result["model"].as_str() == Some(m))
+        && provider.is_none_or(|p| result["modelProvider"].as_str() == Some(p));
+    life.event(json!({"kind":"model_checked","requested_model":requested,
+                      "expected_model_provider":provider,"model":result["model"],
+                      "model_provider":result["modelProvider"],"matches":matches}))?;
+    ensure!(
+        matches,
+        "thread_model_mismatch: asked for {requested:?} on {provider:?}, Codex answered {} on {}",
+        result["model"],
+        result["modelProvider"]
+    );
     life.park(child_identity)?;
     let brief = pio_core::spool::Spool::open(&life.root)?.read(
         life.spec["brief"]["digest"]
@@ -310,7 +387,16 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
     let mut all_output = Vec::new();
     let mut turn_id: Option<String> = None;
     let mut turn_status: Option<Value> = None;
-    let mut pending_actions: BTreeMap<u64, Value> = BTreeMap::new();
+    // The caller's own delivery timeout is how long their decision may take.
+    // A request nobody answers holds the turn open for ever, so, as on the
+    // other two hosts, the default is a single decline, recorded as PIO's
+    // (owner decision, 2026-09-25: "if I don't answer, it lapses").
+    let answer_timeout = life.spec["action_answer_timeout_seconds"]
+        .as_u64()
+        .map(Duration::from_secs)
+        .unwrap_or(Duration::from_secs(120));
+    // Request id, whether it is an MCP tool-call elicitation, and its lapse.
+    let mut pending_actions: BTreeMap<u64, (Value, bool, Instant)> = BTreeMap::new();
     let mut action_seq = 0u64;
     let mut requests: BTreeMap<u64, String> = BTreeMap::new();
     while turn_status.is_none() {
@@ -338,18 +424,40 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                 continue;
             }
             if has_id {
-                if APPROVAL_METHODS.contains(&method) {
+                let params = &message["params"];
+                let elicitation = is_mcp_tool_approval(method, params);
+                if APPROVAL_METHODS.contains(&method) || elicitation {
                     action_seq += 1;
-                    let params = &message["params"];
                     // 0.155.1 added `kind` to command approvals: `command`,
                     // the default when absent, or `writeStdin`, which is
                     // input to a terminal that is already running. A
                     // decision must record which one it answered.
-                    let approval_kind = (method == "item/commandExecution/requestApproval")
-                        .then(|| params["kind"].as_str().unwrap_or("command").to_owned());
-                    pending_actions.insert(action_seq, message["id"].clone());
-                    life.event(json!({"kind":"action_requested","action_seq":action_seq,"request_id":message["id"],"method":method,"approval_kind":approval_kind,"turn_id":params["turnId"],"item_id":params["itemId"],"command":params["command"],"cwd_digest":params["cwd"].as_str().map(|c|pio_codex::sha256_hex(c.as_bytes())),"reason":params["reason"]}),
-                        )?;
+                    let approval_kind = if elicitation {
+                        Some("mcp_tool_call".to_owned())
+                    } else {
+                        (method == "item/commandExecution/requestApproval")
+                            .then(|| params["kind"].as_str().unwrap_or("command").to_owned())
+                    };
+                    pending_actions.insert(
+                        action_seq,
+                        (
+                            message["id"].clone(),
+                            elicitation,
+                            Instant::now() + answer_timeout,
+                        ),
+                    );
+                    let mut event = json!({"kind":"action_requested","action_seq":action_seq,"request_id":message["id"],"method":method,"approval_kind":approval_kind,"turn_id":params["turnId"],"item_id":params["itemId"],"command":params["command"],"cwd_digest":params["cwd"].as_str().map(|c|pio_codex::sha256_hex(c.as_bytes())),"reason":params["reason"],
+                        "answer_deadline_seconds":answer_timeout.as_secs(),
+                        "if_nobody_answers":{"decision":"decline","decided_by":"pio","always_option_taken":false}});
+                    if elicitation {
+                        // Which server and tool, in the harness's own words,
+                        // and what it offered to remember, which PIO never
+                        // sends.
+                        event["server"] = params["serverName"].clone();
+                        event["message"] = params["message"].clone();
+                        event["persist_offered"] = params["_meta"]["persist"].clone();
+                    }
+                    life.event(event)?;
                 } else {
                     // PIO never answers user input, elicitations, tool calls
                     // or attestation on the user's behalf, and never grants
@@ -407,6 +515,23 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                     _ => {}
                 }
         }
+        // A request nobody answered in time: one decline, recorded as PIO's.
+        let overdue: Vec<u64> = pending_actions
+            .iter()
+            .filter(|(_, (_, _, lapses))| Instant::now() >= *lapses)
+            .map(|(seq, _)| *seq)
+            .collect();
+        for seq in overdue {
+            let Some((rpc, elicitation, _)) = pending_actions.remove(&seq) else {
+                continue;
+            };
+            let body = answer_body(elicitation, "decline");
+            app.respond(&rpc, body.clone())?;
+            life.event(json!({"kind":"request_denied_by_default","action_seq":seq,
+                "decision":"decline","decided_by":"pio",
+                "after_seconds":answer_timeout.as_secs(),"sent":body,
+                "always_option_taken":false}))?;
+        }
         // Controls are deduplicated by the lifecycle; each arrives once.
         for control in life.controls()? {
             let id = control["id"].as_str().unwrap_or_default().to_owned();
@@ -417,9 +542,10 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                             .as_u64()
                             .and_then(|seq| pending_actions.remove(&seq));
                         match rpc {
-                            Some(rpc) if ALLOWED_DECISIONS.contains(&decision) => {
-                                app.respond(&rpc, json!({"decision":decision}))?;
-                                life.event(json!({"kind":"control_applied","control_id":id,"action_seq":control["action_seq"],"decision":decision}),
+                            Some((rpc, elicitation, _)) if ALLOWED_DECISIONS.contains(&decision) => {
+                                let body = answer_body(elicitation, decision);
+                                app.respond(&rpc, body.clone())?;
+                                life.event(json!({"kind":"control_applied","control_id":id,"action_seq":control["action_seq"],"decision":decision,"sent":body,"always_option_taken":false}),
                                 )?;
                             }
                             _ => life.event(json!({"kind":"control_rejected","control_id":id,"reason":"no pending action or decision not allowed"}),
