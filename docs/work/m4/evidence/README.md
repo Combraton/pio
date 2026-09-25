@@ -303,32 +303,54 @@ prints it and exits, so the request goes to the owner live. It exited on
 ## `L3-rehearsal.json`
 
 L3 rehearsed against the labeled Codex fake by `scripts/lead_run.py --rehearse
---plan L3` at clean head `f3693c1` (`dirty: false`). **Zero tokens, no model
-call.** The fake is `pio codex fake-app-server` (`pio-fake-app-server`): it
-speaks 0.157.0's app-server shapes and runs no model, tool or command, and
-`serve-codex` does not qualify a labeled fake. Plan: owner approval of
-2026-09-24 (sequence cap 400,000, stop 320,000) and the decisions of
-2026-09-25 (issue #12).
+--plan L3` at clean head `baa4e50` (`dirty: false`), after the fixes of the
+review of L3. **Zero tokens, no model call.** The fake is
+`pio codex fake-app-server` (`pio-fake-app-server`): it speaks 0.157.0's
+app-server shapes and runs no model, tool or command, and `serve-codex` does
+not qualify a labeled fake. Plan: owner approval of 2026-09-24 (sequence cap
+400,000, stop 320,000) and the decisions of 2026-09-25 (issue #12).
 
-**Every row holds: 34 rows and one record, none failed, none inconclusive.**
-No L3 row is live-only (the two live-only rows are OpenCode's), so every row
-here holds against the fake. What L3 adds, as the fake plays it:
+**37 rows and two records: 35 rows hold, none failed, and two are
+inconclusive**, the two this rehearsal cannot observe:
 
-- The lead tool is on the lead's thread only, with `start_run` and `read_run`
-  sent as `approval_mode: approve` on that thread, and nothing was asked
-  about either.
+- **Codex qualified at the pinned identity**: the labeled fake has no
+  qualification record. Live, a missing or different record fails it; the
+  mutants `qualified-elsewhere` (fails) and `qualified-as-committed` (holds)
+  exercise it on a planted record.
+- **Every stop the runner made reached Codex**: no run is stopped here. The
+  mutant `child-overspends` must hold it (alpha's interrupt sent,
+  acknowledged, its turn interrupted) and `ceiling-cancel-never-sent` fails
+  it.
+
+What L3 shows, as the fake plays it:
+
+- The lead tool is on the lead's thread only. The host read back from its
+  own `thread/start` request exactly `start_run` and `read_run` at
+  `approval_mode: approve` and no server-wide default; the children's
+  threads carried no server. Nothing was asked about the lead's tool, by
+  any path, and PIO declined nothing by itself (record: empty for all
+  three runs).
 - Each thread's model and provider (`gpt-5.6-terra`, `openai`) were checked
   from `thread/start`'s answer before its first turn. `approvalsReviewer` is
   `user` on all three.
 - The lead's steer on `L3.alpha` was recorded under its grant while the turn
   was `active` and `acknowledged`, and acknowledged with `provider_ack_id`.
   Behavior is `not_observed`.
-- The lead's `read_run` of `alpha` took 30.3 s and returned `exited`.
-- `beta`'s command approval came to the desk, was answered `allow` by the
-  rehearsal, and was sent as `{"decision": "accept"}`.
+- The lead's `read_run` of `alpha` took 27.1 s and returned `exited`.
+- Each child said what it was about to run before its command, as measured
+  on this model (``Running `sleep 30 && wc -l alpha.md`.``), then answered;
+  the count row read each child's last message: 7 and 4. The lead's answer
+  came one message per file and was read as two lines.
+- `beta`'s command approval came to the desk with its placement
+  (`inside_fixture`, `<fixture>/`), no network ask and Codex's reason, was
+  answered `allow` by the rehearsal, and was sent as
+  `{"decision": "accept"}`.
+- Codex's runs were metered on the event stream by a thread of their own:
+  279 passes in 46.3 s. No stop and no silence.
 - The charge is Codex's reported totals, 20,480 + 8,192 + 8,192 = 36,864,
-  on the rehearsal's own ledger. The reservations (155,000 + 80,000 + 80,000)
-  were replaced and none is left.
+  on the rehearsal's own ledger, each within its share. The reservations,
+  written immediately before the lead's submit (155,000 + 110,000 +
+  110,000 = 375,000), were replaced and none is left.
 
 **What only the live run can show.** These are the places where
 `lead_run.py` takes a different branch live, or where a row that holds here
