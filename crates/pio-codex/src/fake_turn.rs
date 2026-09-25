@@ -274,7 +274,10 @@ impl Play {
         self.turn.interrupted.load(Ordering::SeqCst)
     }
 
-    fn marker(&self, record: Value) -> Result<()> {
+    /// A marker keyed `kind` and labeled with the fake's source, as every
+    /// other marker the fake writes is, so one reader reads them all.
+    fn marker(&self, mut record: Value) -> Result<()> {
+        record["source"] = json!(super::fake::SOURCE);
         super::fake::marker(&self.markers, record)
     }
 
@@ -419,7 +422,7 @@ pub(crate) fn lead(
         messages: AtomicU64::new(0),
     };
     if let Err(error) = play_lead(&play, &servers, &scenario) {
-        let _ = play.marker(json!({"event":"lead_script_failed","error":format!("{error:#}")}));
+        let _ = play.marker(json!({"kind":"lead_script_failed","error":format!("{error:#}")}));
         let _ = turn.complete("failed");
     }
 }
@@ -478,7 +481,7 @@ fn play_lead(play: &Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> 
                 };
                 let action = answer["result"]["action"].as_str().unwrap_or("cancel");
                 let persist = answer["result"]["_meta"]["persist"].as_str();
-                play.marker(json!({"event":"mcp_approval_answered","tool":tool,
+                play.marker(json!({"kind":"mcp_approval_answered","tool":tool,
                                    "action":action,"persist":persist,
                                    "refused":answer["error"]["message"]}))?;
                 // How Codex reads it (`parse_mcp_tool_approval_elicitation_response`).
@@ -556,7 +559,7 @@ fn play_lead(play: &Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> 
             }
         };
         play.marker(
-            json!({"event":"mcp_tool_called","tool":tool,"arguments":&call["arguments"],
+            json!({"kind":"mcp_tool_called","tool":tool,"arguments":&call["arguments"],
                            "tries":tries,"failed":failed,"result":&text}),
         )?;
         if let Some(label) = call["report_as"].as_str() {
@@ -633,7 +636,7 @@ pub(crate) fn led(
     let grant = named("led_permissions_if");
     let offset = scenario["led_offset"].as_i64().unwrap_or(0);
     if let Err(error) = play_led(&play, &cwd, &prompt, delay, asks, grant, offset) {
-        let _ = play.marker(json!({"event":"led_script_failed","error":format!("{error:#}")}));
+        let _ = play.marker(json!({"kind":"led_script_failed","error":format!("{error:#}")}));
         let _ = turn.complete("failed");
     }
 }
@@ -677,7 +680,7 @@ fn play_led(
             return Ok(());
         };
         play.marker(
-            json!({"event":"permissions_answered","result":answer["result"],
+            json!({"kind":"permissions_answered","result":answer["result"],
                            "refused":answer["error"]["message"]}),
         )?;
     }
@@ -692,7 +695,7 @@ fn play_led(
             return Ok(());
         };
         let decision = answer["result"]["decision"].as_str().unwrap_or("cancel");
-        play.marker(json!({"event":"command_approval_answered","decision":decision}))?;
+        play.marker(json!({"kind":"command_approval_answered","decision":decision}))?;
         if decision != "accept" {
             play.item(
                 "item/completed",
