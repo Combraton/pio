@@ -128,7 +128,8 @@ jobs:
           PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --out target/lead-run-l3
           for m in wrong-model reviewer-elsewhere no-pre-allow child-overspends no-wait \
                    grant-no-steer wrong-child wrong-relay lead-loops runner-killed \
-                   lead-asked-in-openai-form child-asks-permissions service-never-ready; do
+                   lead-asked-in-openai-form child-asks-permissions service-never-ready \
+                   first-number-of-all; do
             if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant "$m" \
                  --out target/lead-run-l3-mutants > "target/lead-run-l3-mutant-$m.log" 2>&1; then
               echo "mutant $m survived"; exit 1

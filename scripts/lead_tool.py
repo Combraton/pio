@@ -176,17 +176,21 @@ def start_run(name, brief):
     return dict(run=identity, started=True, admission=outcome.get('admission'))
 
 
-def message_text(raw):
-    """What a run said, from its spooled records.
+def messages(raw):
+    """Each message a run said, in order, from its spooled records, and
+    which of them were completed.
 
-    OpenCode spools one record per `session/update`; the words are the
-    `agent_message_chunk`s. Codex spools its app-server notifications; the
-    words are the `item/agentMessage/delta`s, or, where no delta was spooled,
-    the text of each completed `agentMessage` item (never both, which would
-    say everything twice). Handing the lead raw JSON would spend its tokens on
-    framing, and it is the same decoding a screen does.
+    OpenCode spools one record per `session/update`; its words are the
+    `agent_message_chunk`s, one message. Codex spools its app-server
+    notifications, and a turn can say more than one thing: on this model a
+    run says what it is about to do before its command, then answers (M2 R5
+    and R6: `agentMessage`, `commandExecution`, ..., `agentMessage`). So each
+    `agentMessage` item is its own message: the text of the completed item
+    where there is one, else its `item/agentMessage/delta`s (never both,
+    which would say it twice). Handing the lead raw JSON would spend its
+    tokens on framing, and it is the same decoding a screen does.
     """
-    words, finished = [], []
+    order, deltas, finished, chunks = [], {}, {}, []
     for line in raw.splitlines():
         try:
             record = json.loads(line)
@@ -196,14 +200,35 @@ def message_text(raw):
             continue
         update = record.get('update') or {}
         if update.get('sessionUpdate') == 'agent_message_chunk':
-            words.append(update.get('content', {}).get('text', ''))
+            chunks.append(update.get('content', {}).get('text', ''))
         params = record.get('params') or {}
+        item = params.get('item') or {}
         if record.get('method') == 'item/agentMessage/delta':
-            words.append(params.get('delta', ''))
-        elif record.get('method') == 'item/completed' \
-                and (params.get('item') or {}).get('type') == 'agentMessage':
-            finished.append(params['item'].get('text', ''))
-    return ''.join(words) or ''.join(finished)
+            key = params.get('itemId') or ''
+            order += [] if key in deltas or key in finished else [key]
+            deltas.setdefault(key, []).append(params.get('delta', ''))
+        elif record.get('method') == 'item/completed' and item.get('type') == 'agentMessage':
+            key = item.get('id') or ''
+            order += [] if key in deltas or key in finished else [key]
+            finished[key] = item.get('text', '')
+    said = [dict(text=finished[k], completed=True) if k in finished
+            else dict(text=''.join(deltas[k]), completed=False) for k in order]
+    if chunks:
+        said.insert(0, dict(text=''.join(chunks), completed=True))
+    return said
+
+
+def message_text(raw):
+    """Everything a run said, one message to a line, so an answer split
+    across two messages still reads as two lines (review of L3, F5)."""
+    return '\n'.join(m['text'] for m in messages(raw))
+
+
+def final_answer(raw):
+    """The last message a run completed: its answer, not its preamble. None
+    when it completed none."""
+    done = [m['text'] for m in messages(raw) if m['completed']]
+    return done[-1] if done else None
 
 
 def read_run(name):

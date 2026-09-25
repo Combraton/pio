@@ -226,6 +226,7 @@ struct Play {
     step: u64,
     used: u64,
     requests: AtomicU64,
+    messages: AtomicU64,
 }
 
 impl Play {
@@ -259,14 +260,20 @@ impl Play {
         )
     }
 
+    /// One agent message, its own item: Codex gives every message an id of
+    /// its own, and a turn can say more than one thing.
     fn say(&self, text: &str) -> Result<()> {
+        let id = format!(
+            "item-agent-{}",
+            self.messages.fetch_add(1, Ordering::SeqCst) + 1
+        );
         emit(
             &json!({"method":"item/agentMessage/delta","params":{"threadId":self.turn.thread,
-            "turnId":self.turn.id,"itemId":"item-agent","delta":text}}),
+            "turnId":self.turn.id,"itemId":id,"delta":text}}),
         )?;
         self.item(
             "item/completed",
-            json!({"type":"agentMessage","id":"item-agent","text":text}),
+            json!({"type":"agentMessage","id":id,"text":text}),
         )
     }
 
@@ -347,6 +354,7 @@ pub(crate) fn lead(
         step: scenario["usage_step"].as_u64().unwrap_or(4096),
         used: 0,
         requests: AtomicU64::new(0),
+        messages: AtomicU64::new(0),
     };
     if let Err(error) = play_lead(&mut play, &servers, &scenario) {
         let _ = play.marker(json!({"event":"lead_script_failed","error":format!("{error:#}")}));
@@ -490,9 +498,14 @@ fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value)
                            "tries":tries,"failed":failed,"result":&text}),
         )?;
         if let Some(label) = call["report_as"].as_str() {
-            let said = serde_json::from_str::<Value>(&text)
-                .ok()
-                .and_then(|v| v["text"].as_str().and_then(first_number));
+            // The child's answer is its last message, one to a line: its
+            // first message says what it is about to run, numbers and all.
+            let said = serde_json::from_str::<Value>(&text).ok().and_then(|v| {
+                v["text"]
+                    .as_str()
+                    .and_then(|t| t.lines().last())
+                    .and_then(first_number)
+            });
             relay.push(match said {
                 Some(n) => format!("{label}: {}", n as i64 + offset),
                 None => format!("{label}: unknown"),
@@ -502,7 +515,11 @@ fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value)
     if play.stopped() {
         return Ok(());
     }
-    play.say(&relay.join("\n"))?;
+    // One message per file: not measured, a shape a model may send, so that
+    // an answer split across messages is what the runner reads.
+    for line in &relay {
+        play.say(line)?;
+    }
     play.turn.complete("completed")
 }
 
@@ -533,6 +550,7 @@ pub(crate) fn led(
         },
         used: 0,
         requests: AtomicU64::new(0),
+        messages: AtomicU64::new(0),
     };
     let delay = if named("led_delay_if") {
         scenario["led_delay_ms"].as_u64().unwrap_or(3000)
@@ -562,11 +580,13 @@ fn play_led(
     // How Codex named a command it asked about, measured in M2 R5 at 0.155.1:
     // the user's login shell wrapping it (`/bin/zsh -lc 'python3 -m unittest
     // -q'`).
-    let command = format!(
-        "/bin/zsh -lc '{}'",
-        quoted_command(prompt).unwrap_or_else(|| format!("wc -l {file}")),
-    );
+    let asked_for = quoted_command(prompt).unwrap_or_else(|| format!("wc -l {file}"));
+    let command = format!("/bin/zsh -lc '{asked_for}'");
     play.step()?;
+    // Measured on this model (M2 R5, R6): a run says what it is about to do
+    // before its command, and then answers. Its preamble quotes the command,
+    // numbers and all, so only its last message is its answer.
+    play.say(&format!("Running `{asked_for}`."))?;
     if grant {
         // A request PIO declines by itself: a permission grant, which asks
         // for a profile rather than a decision (0.157.0's

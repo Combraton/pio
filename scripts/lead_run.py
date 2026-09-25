@@ -126,7 +126,10 @@ does with a permission prompt.
   declines by itself: the desk row must fail, because PIO decided it;
 - `service-never-ready` has the service refuse its configuration at start: the
   runner must say so at once, and leave no reservation and nothing charged,
-  since nothing was submitted.
+  since nothing was submitted;
+- `first-number-of-all` (L3) has the runner read every message a child said,
+  as it did, instead of its answer: the fake's children say what they are
+  about to run first, as Codex was measured doing, so the count row fails.
 """
 import argparse
 import base64
@@ -154,7 +157,7 @@ import opencode_live_run as live
 from approval_desk import ASKS
 from board_fold import Caller
 from check_private_paths import redact
-from lead_tool import READ_WAIT, message_text
+from lead_tool import READ_WAIT, final_answer, message_text
 from public_api import command
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -414,6 +417,9 @@ MUTANTS = {
     # The service refuses to start: nothing was submitted, so no reservation
     # may stand and the sequence may not be blocked (review of L3, F4).
     'service-never-ready': 'The run finished without an error',
+    # The runner reads every message a child said, as it did, not its
+    # answer: a preamble that quotes the command is taken for the count.
+    'first-number-of-all': 'Each child reported the true count',
 }
 # L1b only: a mutant that must leave its row **inconclusive**, not failed. A
 # desk that was never asked has decided nothing, and must not say it has
@@ -429,7 +435,7 @@ PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
                 'child-overspends': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
-                'child-asks-permissions': {'L3'}}
+                'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'}}
 
 
 def sha(data):
@@ -760,8 +766,10 @@ def spool(caller, identity, offset=0):
 
 
 def spoken(caller, identity):
-    """What a run said, decoded from its spool the way the lead tool does."""
-    return message_text(spool(caller, identity)[0].decode('utf-8', 'replace'))
+    """What a run said, decoded from its spool the way the lead tool does:
+    every message, one to a line, and the last one it completed."""
+    raw = spool(caller, identity)[0].decode('utf-8', 'replace')
+    return message_text(raw), final_answer(raw)
 
 
 def first_number(text):
@@ -1585,17 +1593,20 @@ def settle(record, service, meters, state, root):
             else:
                 record['harness']['qualification'] = dict(
                     qualified=None, reason='labeled fake: no qualification')
-        said = {c: spoken(owner, f'{LEAD}.{c}') for c in CHILDREN}
-        relay = spoken(owner, LEAD)
+        heard = {c: spoken(owner, f'{LEAD}.{c}') for c in CHILDREN}
+        said = {c: text for c, (text, _) in heard.items()}
+        answered = {c: last for c, (_, last) in heard.items()}
+        relay = spoken(owner, LEAD)[0]
     finally:
         owner.close()
     calls = len([e for e in log if e.get('event') == 'request'
                  and e.get('method') == 'tools/call'])
     record['meters'] = {i: g.summary(calls if i == LEAD else None) for i, g in meters.items()}
     record['usage'] = usage_of(views, meters, state['submitted'] | started_runs(root), steps)
-    record.update(views=views, tool_log=log, spoken=dict(said, lead=relay))
+    record.update(views=views, tool_log=log, spoken=dict(said, lead=relay),
+                  answered=answered)
     return dict(views=views, stream=stream, log=log, host=host, said=said, relay=relay,
-                steps=steps)
+                answered=answered, steps=steps)
 
 
 def store_steps(home, sessions):
@@ -1777,7 +1788,7 @@ def codex_running_steer(o):
 def judge(rows, record, observed, desk, meters, state, rehearse):
     views, stream, log, host = (observed['views'], observed['stream'], observed['log'],
                                 observed['host'])
-    said, relay = observed['said'], observed['relay']
+    said, relay, answered = observed['said'], observed['relay'], observed['answered']
     grant_id = state['grant_id']
     truth = record['wc_l']
 
@@ -1944,9 +1955,15 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
     # and `wrong-relay` — and not that a model got anything right.
     compares = ('rehearsal: the fake counted, so this shows the runner compares'
                 if rehearse else '')
+    # Each child's **answer**: the last message it completed. On this model
+    # a run says what it is about to do first, and a preamble that quotes
+    # `sleep 30 && wc -l alpha.md` holds a number that is not the count (M2
+    # R5, R6; review of L3, F5).
+    final = said if record.get('mutant') == 'first-number-of-all' else answered
     rows.add('Each child reported the true count',
-             {CHILDREN[c]: first_number(said[c]) for c in CHILDREN}, truth,
-             note=compares)
+             {CHILDREN[c]: first_number(final[c]) for c in CHILDREN}, truth,
+             note=(compares + '; ' if compares else '') + 'the last message each child '
+                  'completed, not its preamble')
     rows.add('The lead relayed the true counts', relayed(relay), truth, note=compares)
 
     # --- Approvals: the desk, never PIO by default, never "always".
