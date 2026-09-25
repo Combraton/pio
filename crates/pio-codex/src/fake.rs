@@ -32,7 +32,9 @@
 //! mutants: `lead_asks_in_mode` has the lead ask before every tool call (or
 //! only calls to `lead_asks_for`), in that elicitation mode, whatever the
 //! approval mode says; a led run whose
-//! prompt contains `led_permissions_if` first asks a permission grant.
+//! prompt contains `led_permissions_if` first asks a permission grant;
+//! `elicit_during_thread_start` sends an url-mode elicitation before it answers
+//! `thread/start`.
 use crate::fake_turn::{self, McpServer, Turn, Waiting, emit};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
@@ -326,6 +328,20 @@ pub fn run() -> Result<()> {
                                 .as_object_mut()
                                 .context("thread/start result")?
                                 .remove("approvalsReviewer");
+                        }
+                        if scenario["elicit_during_thread_start"] == true {
+                            // A server asking something before the thread is
+                            // answered: Codex attaches the thread's listener
+                            // first, and MCP elicitations need no turn
+                            // (`turnId` is nullable at 0.157.0).
+                            send(
+                                json!({"method":"mcpServer/elicitation/request","id":"fake-early-1",
+                                        "params":{"threadId":thread_id,"turnId":null,
+                                                  "serverName":"someone","mode":"url",
+                                                  "elicitationId":"fake-early",
+                                                  "url":"https://example.invalid/early",
+                                                  "message":"Sign in before we start"}}),
+                            )?;
                         }
                         send(json!({"id":id,"result":result}))?;
                         send(json!({"method":"thread/started","params":{"thread":thread_value}}))?;

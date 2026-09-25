@@ -33,7 +33,8 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'widening_decisions_refused', 'deadline_stop_interrupts', 'thread_settings_broader_refused', 'permission_grant_refused',
          'lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses', 'other_elicitation_declined',
          'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused',
-         'command_approval_lapses', 'form_elicitation_declined', 'approval_cwd_through_a_link']
+         'command_approval_lapses', 'form_elicitation_declined', 'approval_cwd_through_a_link',
+         'early_elicitation_declined']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
@@ -481,6 +482,7 @@ def run_case(out, name):
         form_elicitation_declined={'approval': 'elicitation', 'elicitation_mode': 'form',
                                    'delay_ms': 100},
         approval_cwd_through_a_link={'approval': 'command', 'delay_ms': 100},
+        early_elicitation_declined={'elicit_during_thread_start': True, 'delay_ms': 100},
         model_checked_before_turn={'model_provider': 'openai', 'delay_ms': 100},
         model_mismatch_refused={'model_provider': 'openai', 'model_reported': 'another-model'},
         provider_mismatch_refused={'delay_ms': 100},
@@ -558,6 +560,25 @@ def run_case(out, name):
             return model_case(case, name)
         if name in ('lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses'):
             return lead_tool_case(case, name)
+        if name == 'early_elicitation_declined':
+            # A request that arrives while the host waits for thread/start:
+            # answered at once with PIO's decline, recorded with its phase,
+            # and carried on the exit (review of L3, round 2, V-2/HR-6).
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = exited(case)
+            declined = events_of(case, 'native_request_declined')
+            assert [(d['method'], d['phase'], d['server'], d['mode']) for d in declined] == \
+                [('mcpServer/elicitation/request', 'before_turn', 'someone', 'url')], declined
+            assert 'example.invalid' not in json.dumps(declined), declined
+            carried = carried_declines(case)
+            assert [(d['method'], d['phase']) for d in carried] == \
+                [('mcpServer/elicitation/request', 'before_turn')], carried
+            wire = answered_once(case)
+            assert [(m['id'], m['error']['code']) for m in wire] == [('fake-early-1', -32000)], wire
+            received = [m for m in case.markers_records() if m['kind'] == 'turn_received']
+            assert len(received) == 1 and final['exit'] == {'code': 0}, final
+            return dict(outcome='pass', declined=declined[0]['phase'], exit=final['exit'])
         if name == 'command_approval_lapses':
             # A command approval nobody answers: after the caller's two
             # seconds, one decline of PIO's, and the command never runs. In

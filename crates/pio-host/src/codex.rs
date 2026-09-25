@@ -232,6 +232,18 @@ fn recheck_executable(spec: &Value) -> Result<()> {
     Ok(())
 }
 
+/// The requests the host declined while it waited for `initialize`,
+/// `account/read` or `thread/start`, recorded like any other native decline
+/// and so carried on the run's exit (review of L3, round 2, V-2/HR-6).
+fn record_early_declines(life: &mut Lifecycle, declined: Vec<Value>) -> Result<()> {
+    for mut record in declined {
+        record["kind"] = json!("native_request_declined");
+        record["phase"] = json!("before_turn");
+        life.event(record)?;
+    }
+    Ok(())
+}
+
 fn response_error(message: &Value) -> Option<Value> {
     message.get("error").cloned()
 }
@@ -302,13 +314,17 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
             "initialize",
             json!({"clientInfo":{"name":"pio","title":"PIO standalone execution host","version":env!("CARGO_PKG_VERSION")}}),
         )?;
-    let init = app.wait_response(init, Duration::from_secs(60), |_| Ok(()))?;
+    let (init, early) =
+        app.wait_response_declining(init, Duration::from_secs(60), native_decline)?;
+    record_early_declines(life, early)?;
     if let Some(error) = response_error(&init) {
         bail!("initialize refused: {error}");
     }
     app.notify("initialized")?;
     let account = app.request("account/read", json!({"refreshToken":false}))?;
-    let account = app.wait_response(account, Duration::from_secs(60), |_| Ok(()))?;
+    let (account, early) =
+        app.wait_response_declining(account, Duration::from_secs(60), native_decline)?;
+    record_early_declines(life, early)?;
     // Only the authentication type; never email, plan or tokens.
     life.event(json!({"kind":"account","authentication_type":account["result"]["account"]["type"],"requires_openai_auth":account["result"]["requiresOpenaiAuth"],"error":response_error(&account)}),
         )?;
@@ -397,7 +413,12 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                       "pre_allowed_tools":pre_allowed}),
     )?;
     let thread = app.request("thread/start", params)?;
-    let thread = app.wait_response(thread, Duration::from_secs(120), |_| Ok(()))?;
+    // Codex attaches the thread's listener before it answers thread/start,
+    // and launches the thread's MCP servers then: a request can arrive
+    // before the answer does.
+    let (thread, early) =
+        app.wait_response_declining(thread, Duration::from_secs(120), native_decline)?;
+    record_early_declines(life, early)?;
     if let Some(error) = response_error(&thread) {
         bail!("thread_start_refused: {error}");
     }
@@ -570,6 +591,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                     let mut event = record;
                     event["kind"] = json!("native_request_declined");
                     event["request_id"] = message["id"].clone();
+                    event["phase"] = json!("turn");
                     life.event(event)?;
                 }
                 continue;

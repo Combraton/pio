@@ -146,6 +146,45 @@ impl AppServer {
         }
     }
 
+    /// Wait for the response to `id`, answering at once, with a JSON-RPC
+    /// error, every server request that arrives meanwhile. `decline` builds
+    /// the record of each (its `reason` is the error's message), and the
+    /// records are returned with the response for the caller to keep. A
+    /// request that arrived during a wait used to be handed to a closure that
+    /// dropped it: never answered, never recorded (review of L3, round 2,
+    /// V-2/HR-6).
+    pub fn wait_response_declining(
+        &mut self,
+        id: u64,
+        timeout: Duration,
+        mut decline: impl FnMut(&str, &Value) -> Value,
+    ) -> Result<(Value, Vec<Value>)> {
+        let deadline = Instant::now() + timeout;
+        let mut declined = Vec::new();
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                bail!("no app-server response to request {id}");
+            }
+            if let Some(message) = self.receive(remaining.min(Duration::from_millis(50)))? {
+                if message.get("id") == Some(&json!(id))
+                    && (message.get("result").is_some() || message.get("error").is_some())
+                {
+                    return Ok((message, declined));
+                }
+                if let (Some(request), Some(method)) =
+                    (message.get("id").cloned(), message["method"].as_str())
+                {
+                    let mut record = decline(method, &message["params"]);
+                    self.send(&json!({"id":request,"error":{"code":-32000,
+                                      "message":record["reason"]}}))?;
+                    record["request_id"] = request;
+                    declined.push(record);
+                }
+            }
+        }
+    }
+
     /// Close stdin so the server can exit cleanly.
     pub fn close_stdin(&mut self) {
         self.stdin = None;
