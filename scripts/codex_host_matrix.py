@@ -32,7 +32,8 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'missing_content_refused', 'content_digest_mismatch', 'outside_fixture_refused', 'unqualified_executable_refused', 'restart_reattach_no_duplicate', 'host_lost_no_respawn', 'discovery_reports_observed_authentication',
          'widening_decisions_refused', 'deadline_stop_interrupts', 'thread_settings_broader_refused', 'permission_grant_refused',
          'lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses', 'other_elicitation_declined',
-         'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused']
+         'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused',
+         'command_approval_lapses']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
@@ -429,6 +430,7 @@ def run_case(out, name):
                                                        {'tool': 'read_run', 'arguments': {}}]}},
         mcp_approval_lapses={'lead': {'calls': [{'tool': 'start_run', 'arguments': {}}]}},
         other_elicitation_declined={'approval': 'elicitation', 'delay_ms': 100},
+        command_approval_lapses={'approval': 'command', 'delay_ms': 100},
         model_checked_before_turn={'model_provider': 'openai', 'delay_ms': 100},
         model_mismatch_refused={'model_provider': 'openai', 'model_reported': 'another-model'},
         provider_mismatch_refused={'delay_ms': 100},
@@ -504,6 +506,36 @@ def run_case(out, name):
             return model_case(case, name)
         if name in ('lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses'):
             return lead_tool_case(case, name)
+        if name == 'command_approval_lapses':
+            # A command approval nobody answers: after the caller's two
+            # seconds, one decline of PIO's, and the command never runs. In
+            # L3 every unexpected child command reaches exactly this path
+            # (review of L3, CH-4).
+            response, _ = case.submit(delivery=2)
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = exited(case, seconds=30)
+            requested = events_of(case, 'action_requested')
+            assert [(r['method'], r['approval_kind'], r['command'], r['answer_deadline_seconds'])
+                    for r in requested] == [('item/commandExecution/requestApproval', 'command',
+                                             'echo fixture', 2)], requested
+            denied = events_of(case, 'request_denied_by_default')
+            assert [(d['decision'], d['decided_by'], d['sent']) for d in denied] == \
+                [('decline', 'pio', {'decision': 'decline'})], denied
+            wire = answered_once(case)
+            assert [m['result'] for m in wire] == [{'decision': 'decline'}], wire
+            answers = [m['decision'] for m in case.markers_records() if m['kind'] == 'approval_answered']
+            assert answers == ['decline'], answers
+            items = [e for e in events_of(case, 'item_completed') if e['item_id'] == 'item-approval']
+            assert [i['status'] for i in items] == ['declined'], 'the command ran although nobody allowed it'
+            assert [a['state'] for a in final['actions']] == ['answered'], final['actions']
+            with case.client() as c:
+                stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                      'kinds': ['execution.execution']})['result']
+            decided = [i['event']['payload'].get('pio.combraton.dev/decision') for i in stream['items']
+                       if 'event' in i and i['event']['type'] == 'execution.action.answered']
+            assert [(d['decided_by'], d['decision'], d['basis']) for d in decided] == \
+                [('pio', 'decline', 'deadline_lapsed')], decided
+            return dict(outcome='pass', lapsed=denied[0], native_answers=answers, item='declined')
         if name == 'other_elicitation_declined':
             response, _ = case.submit()
             assert response['result']['outcome']['admission'] == 'admitted', response
