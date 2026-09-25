@@ -349,7 +349,67 @@ impl StdioChild {
         }
     }
 
+    /// What the child wrote before it exited that the host has not read yet.
+    ///
+    /// A pass that reads nothing does not mean the child has nothing left:
+    /// its last lines can still be in the pipe, not yet handed over by the
+    /// reader thread. That thread ends at end of file, which closes the
+    /// channel, so this reads until then. It is bounded, because another
+    /// process holding the child's stdout open must not hang the host.
+    pub fn drain(&self, limit: Duration) -> Result<Vec<Value>> {
+        let end = std::time::Instant::now() + limit;
+        let mut rest = Vec::new();
+        loop {
+            let left = end.saturating_duration_since(std::time::Instant::now());
+            match self.incoming.recv_timeout(left) {
+                Ok(Ok(message)) => rest.push(message),
+                Ok(Err(error)) => anyhow::bail!("{error}"),
+                Err(_) => return Ok(rest),
+            }
+        }
+    }
+
     pub fn close_stdin(&mut self) {
         self.stdin.take();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A child that writes and exits at once: the exit is seen before its
+    /// last lines are read, and `drain` must still return every one. Without
+    /// it a host reads `None`, sees the exit, and ends the turn with the
+    /// `result` unread.
+    #[test]
+    fn drain_returns_what_an_exited_child_wrote() {
+        let dir = std::env::temp_dir();
+        let stderr = tempfile_in(&dir);
+        let script = (0..50)
+            .map(|n| format!("printf '{{\"n\":{n}}}\\n'; "))
+            .collect::<String>()
+            + "exit 0";
+        let mut child = StdioChild::spawn(
+            Path::new("/bin/sh"),
+            &["-c".to_owned(), script],
+            &[],
+            &dir,
+            stderr,
+        )
+        .unwrap();
+        while child.child.try_wait().unwrap().is_none() {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let rest = child.drain(Duration::from_secs(2)).unwrap();
+        let numbers: Vec<u64> = rest.iter().filter_map(|m| m["n"].as_u64()).collect();
+        assert_eq!(numbers, (0..50).collect::<Vec<u64>>());
+    }
+
+    fn tempfile_in(dir: &Path) -> std::fs::File {
+        let path = dir.join(format!("pio-drain-test-{}.stderr", std::process::id()));
+        let file = std::fs::File::create(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        file
     }
 }
