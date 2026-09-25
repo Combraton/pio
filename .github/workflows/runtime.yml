@@ -115,6 +115,25 @@ jobs:
             || { cat target/lead-run-l1b-mutant-alpha-outlasts.log; exit 1; }
           grep -q "mutant alpha-outlasts: holds on" target/lead-run-l1b-mutant-alpha-outlasts.log \
             || { cat target/lead-run-l1b-mutant-alpha-outlasts.log; exit 1; }
+      - name: The L3 lead run on Codex, rehearsed, with its mutants
+        # L3 against the labeled Codex fake: the lead tool on the lead's thread
+        # alone, its own two tools pre-allowed there, each thread's model and
+        # provider checked from Codex's answer before its first turn, a steer
+        # under the lead's grant delivered to a running child, and the charge
+        # from Codex's own total. Each mutant must fail its named row. The
+        # host's lapse on Codex is the matrix's `mcp_approval_lapses`, so
+        # `desk-silent` (five minutes) runs in the local gates only.
+        run: |
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --out target/lead-run-l3
+          for m in wrong-model reviewer-elsewhere no-pre-allow child-overspends no-wait \
+                   grant-no-steer wrong-child wrong-relay lead-loops runner-killed; do
+            if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant "$m" \
+                 --out target/lead-run-l3-mutants > "target/lead-run-l3-mutant-$m.log" 2>&1; then
+              echo "mutant $m survived"; exit 1
+            fi
+            grep -q "mutant $m: dies on" "target/lead-run-l3-mutant-$m.log" \
+              || { cat "target/lead-run-l3-mutant-$m.log"; exit 1; }
+          done
       - name: No private paths in any committed file
         run: |
           python3 scripts/check_private_paths.py --selftest

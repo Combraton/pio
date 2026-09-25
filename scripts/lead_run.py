@@ -133,7 +133,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import case_cleanup
+import codex_live_run
 import opencode_host_matrix as matrix
+import opencode_live_run
 import opencode_live_run as live
 from approval_desk import ASKS
 from board_fold import Caller
@@ -144,12 +146,12 @@ from public_api import command
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = ROOT / 'target/debug/pio'
 TOOL = ROOT / 'scripts' / 'lead_tool.py'
-SEQUENCE = 'M4-lead-opencode'
-MODEL = 'minimax-coding-plan/MiniMax-M3'
+OPENCODE_SEQUENCE = 'M4-lead-opencode'
+OPENCODE_MODEL = 'minimax-coding-plan/MiniMax-M3'
 PROVIDER = 'conformance-provider'
 BUDGET = 2
-SEQUENCE_CAP = 2_000_000
-SEQUENCE_STOP = 1_600_000
+OPENCODE_SEQUENCE_CAP = 2_000_000
+OPENCODE_SEQUENCE_STOP = 1_600_000
 DELIVERY_TIMEOUT = 300
 EXECUTION_DEADLINE = 900
 
@@ -181,7 +183,44 @@ PLANS = {
         # alpha works for thirty seconds, so a read of it waits; beta reads a
         # placeholder `.env` file, so OpenCode asks and the desk relays.
         waits='alpha', asks='beta'),
+    # Owner approval, 2026-09-24 (L3 on Codex, sequence cap 400,000, stop
+    # 320,000), and the decisions of 2026-09-25: `gpt-5.6-terra`; each child
+    # runs one command, `sleep N && wc -l`; the lead's own two tools are
+    # pre-allowed per launch; Codex re-pinned to 0.157.0. `alpha` sleeps long
+    # enough to be steered while it runs, which is L3's claim: a steer under
+    # the lead's grant, delivered to a running Codex turn.
+    'L3': dict(
+        harness='codex',
+        approval='Owner approval, 2026-09-24 — L3, sequence cap 400,000 and stop '
+                 '320,000; owner decisions of 2026-09-25 (issue #12)',
+        files={'alpha.md': 7, 'beta.md': 4},
+        briefs={'alpha.md': 'Run the shell command `sleep 30 && wc -l alpha.md`. Then '
+                            'report the number of lines in alpha.md. Answer with the '
+                            'number alone.',
+                'beta.md': 'Run the shell command `sleep 5 && wc -l beta.md`. Then '
+                           'report the number of lines in beta.md. Answer with the '
+                           'number alone.'},
+        waits='alpha', asks=None),
 }
+# Every plan names its harness; L1 and L1b are OpenCode's.
+for _plan in PLANS.values():
+    _plan.setdefault('harness', 'opencode')
+
+# --- What differs between the two harnesses a lead runs on, in one place.
+#
+# Codex (L3): the owner's sizing of 2026-09-24 and 2026-09-25. Codex's
+# reported total covers every step of a turn (review 48, from M2's host
+# events), so it is what a run is charged, and it arrives after every step,
+# so the runner can stop a run by it. A step on this harness and model was
+# measured at about 22,000 to 24,500 tokens (M2 R4 to R6); a run stopped at
+# its ceiling can finish at most the one step in flight, at most 30,000.
+# The lead makes five steps, one at a time; each child runs one command,
+# in two steps.
+CODEX = dict(
+    model='gpt-5.6-terra', model_provider='openai', sequence='M4-lead-codex',
+    sequence_cap=400_000, sequence_stop=320_000, lead_ceiling=125_000,
+    child_ceiling=50_000, in_flight=30_000, ledger='Codex ledger',
+    live=codex_live_run)
 WAITED = 20
 
 # --- The bound on what one attempt can spend.
@@ -195,8 +234,8 @@ CALL_CEILING = 16
 # tokens before the brief said anything; the lead adds its tool's schema and
 # a longer brief. Rounded up.
 STEP_BASE = 10_000
-LEAD_CEILING = 450_000
-CHILD_CEILING = 90_000
+OPENCODE_LEAD_CEILING = 450_000
+OPENCODE_CHILD_CEILING = 90_000
 # The lead's last step: the one in flight when it is stopped. Its next call
 # through the tool is held until the kill, so there is no step after it. It
 # holds at most its context at the stop plus one tool result: OpenCode's own
@@ -210,13 +249,13 @@ LAST_STEP = 51_200
 # enforced — PIO cannot bound the size of a child's step.
 KILL_STEPS = 11
 CHILD_STEP = 12_000
-LEAD_SHARE = 2 * LEAD_CEILING + LAST_STEP
-CHILD_SHARE = CHILD_CEILING + KILL_STEPS * CHILD_STEP
-WORST_CASE = LEAD_SHARE + 2 * CHILD_SHARE
-BOUND = dict(
-    call_ceiling=CALL_CEILING, step_base=STEP_BASE, lead_ceiling=LEAD_CEILING,
-    child_ceiling=CHILD_CEILING, last_step=LAST_STEP, kill_steps=KILL_STEPS,
-    child_step=CHILD_STEP, worst_case=WORST_CASE,
+OPENCODE_LEAD_SHARE = 2 * OPENCODE_LEAD_CEILING + LAST_STEP
+OPENCODE_CHILD_SHARE = OPENCODE_CHILD_CEILING + KILL_STEPS * CHILD_STEP
+OPENCODE_WORST_CASE = OPENCODE_LEAD_SHARE + 2 * OPENCODE_CHILD_SHARE
+OPENCODE_BOUND = dict(
+    call_ceiling=CALL_CEILING, step_base=STEP_BASE, lead_ceiling=OPENCODE_LEAD_CEILING,
+    child_ceiling=OPENCODE_CHILD_CEILING, last_step=LAST_STEP, kill_steps=KILL_STEPS,
+    child_step=CHILD_STEP, worst_case=OPENCODE_WORST_CASE,
     estimate='(tool calls + 1) x (step base + bytes the session has sent)',
     lead='at most its ceiling, plus the step in flight at the stop '
          '(at most its ceiling again, plus one tool result)',
@@ -233,6 +272,8 @@ FEATURES = ('core.events', 'core.capabilities', 'core.effects', 'core.grants')
 EXECUTION_FEATURES = (*matrix.FEATURES, 'execution.steering')
 CONTENT = 'pio.combraton.dev/content'
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
+# The lead's own two tools, pre-allowed on Codex (owner decision, 2026-09-25).
+PRE_ALLOWED = ('start_run', 'read_run')
 UNDER_GRANT = 'pio.combraton.dev/under-grant'
 APPROVAL = 'pio.combraton.dev/approval'
 DECISION = 'pio.combraton.dev/decision'
@@ -255,13 +296,44 @@ def lead_brief():
 
 
 def select_plan(name):
-    """Bind the names every step reads to one plan's lead, files and briefs."""
-    global PLAN, LEAD, FILES, CHILDREN, RUNS, APPROVALS, BRIEF
+    """Bind the names every step reads to one plan's lead, files, briefs and
+    harness."""
+    global PLAN, LEAD, FILES, CHILDREN, RUNS, APPROVALS, BRIEF, HARNESS, live
+    global MODEL, SEQUENCE, SEQUENCE_CAP, SEQUENCE_STOP, LEAD_CEILING, CHILD_CEILING
+    global LEAD_SHARE, CHILD_SHARE, WORST_CASE, BOUND
     PLAN = dict(PLANS[name], name=name)
     LEAD = name
     FILES = PLAN['files']
     CHILDREN = {f.split('.')[0]: f for f in FILES}
     RUNS = (LEAD, *[f'{LEAD}.{c}' for c in CHILDREN])
+    HARNESS = PLAN['harness']
+    if HARNESS == 'codex':
+        live = CODEX['live']
+        MODEL, SEQUENCE = CODEX['model'], CODEX['sequence']
+        SEQUENCE_CAP, SEQUENCE_STOP = CODEX['sequence_cap'], CODEX['sequence_stop']
+        LEAD_CEILING, CHILD_CEILING = CODEX['lead_ceiling'], CODEX['child_ceiling']
+        LEAD_SHARE = LEAD_CEILING + CODEX['in_flight']
+        CHILD_SHARE = CHILD_CEILING + CODEX['in_flight']
+        WORST_CASE = LEAD_SHARE + 2 * CHILD_SHARE
+        BOUND = dict(
+            call_ceiling=CALL_CEILING, lead_ceiling=LEAD_CEILING,
+            child_ceiling=CHILD_CEILING, in_flight=CODEX['in_flight'],
+            worst_case=WORST_CASE,
+            estimate="Codex's own running total for the thread, reported after every step",
+            lead='at most its ceiling, plus the one step in flight when it is interrupted',
+            child='at most its ceiling, plus the one step in flight when it is interrupted',
+            assumes=["Codex's reported total covers every step of a turn (review 48)",
+                     'a step on this harness and model is at most 30,000 tokens '
+                     '(measured about 22,000 to 24,500, M2 R4 to R6)',
+                     'Codex honours turn/interrupt (M2)'])
+    else:
+        live = opencode_live_run
+        MODEL, SEQUENCE = OPENCODE_MODEL, OPENCODE_SEQUENCE
+        SEQUENCE_CAP, SEQUENCE_STOP = OPENCODE_SEQUENCE_CAP, OPENCODE_SEQUENCE_STOP
+        LEAD_CEILING, CHILD_CEILING = OPENCODE_LEAD_CEILING, OPENCODE_CHILD_CEILING
+        LEAD_SHARE, CHILD_SHARE, WORST_CASE = (OPENCODE_LEAD_SHARE, OPENCODE_CHILD_SHARE,
+                                               OPENCODE_WORST_CASE)
+        BOUND = OPENCODE_BOUND
     APPROVALS = dict(model_exception=live.MODEL_EXCEPTION,
                      lead_tool='owner-2026-09-22-m4b-lead-tool',
                      **{name.lower(): PLAN['approval']})
@@ -289,8 +361,13 @@ MUTANTS = {
     # Not a row either: the runner refuses to start (owner decision,
     # 2026-09-25), before anything is reserved.
     'helper-elsewhere': "The runner refuses a helper model outside the plan's provider",
-    # L1b only.
+    # L1b and L3.
     'no-wait': 'A read_run waited for its run: until it exited, or to the wait limit',
+    # L3 only.
+    'wrong-model': "Each run was on the plan's model before its turn started",
+    'reviewer-elsewhere': 'Every run asserted that approvals go to the user',
+    'no-pre-allow': "The lead's own two tools were pre-allowed, and nothing else",
+    'child-overspends': 'Every run stayed within its ceilings',
 }
 # L1b only: a mutant that must leave its row **inconclusive**, not failed. A
 # desk that was never asked has decided nothing, and must not say it has
@@ -301,7 +378,11 @@ INCONCLUSIVE_MUTANTS = {'no-ask': 'Every approval was decided at the desk'}
 # its second comes back `exited` too soon to count. Only the limit can hold
 # the row.
 HOLDING_MUTANTS = {'alpha-outlasts': 'A read_run waited for its run: until it exited, or to the wait limit'}
-PLAN_MUTANTS = {'no-wait': 'L1b', 'no-ask': 'L1b', 'alpha-outlasts': 'L1b'}
+# The plans a mutant belongs to; any other mutant belongs to every plan.
+PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
+                'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
+                'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
+                'child-overspends': {'L3'}}
 
 
 def sha(data):
@@ -438,7 +519,8 @@ class Rows:
 
 
 class Service:
-    """One `serve-opencode` for the lead and its children, rehearsed or live."""
+    """One service for the lead and its children, rehearsed or live:
+    `serve-opencode` for L1 and L1b, `serve-codex` for L3."""
 
     def __init__(self, root, rehearse, scenario):
         self.root = root
@@ -449,6 +531,49 @@ class Service:
             raise SystemExit(f'socket path too long for the platform: {self.socket}')
         self.owner_credential = fresh_credential('owner')
         self.lead_credential = fresh_credential('lead')
+        protocol = dict(format='combraton-conformance-config/1', principal='owner',
+                        provider_id=PROVIDER,
+                        credentials=[dict(credential=self.owner_credential),
+                                     dict(credential=self.lead_credential)],
+                        executor=dict(host_id=f'{HARNESS}-host'))
+        if HARNESS == 'codex':
+            self.config = dict(format='pio-codex-service/1', protocol=protocol,
+                               codex=self.codex(root, rehearse, scenario))
+        else:
+            self.config = self.opencode(root, rehearse, scenario, protocol)
+        self.config_path = root / 'service.json'
+        self.config_path.write_text(json.dumps(self.config))
+        os.chmod(self.config_path, 0o600)
+        self.daemon = None
+
+    @staticmethod
+    def codex(root, rehearse, scenario):
+        """The owner's Codex, as installed and configured, or the labeled
+        fake. The model is asked for under the dated exception, and the
+        provider is only ever checked, never sent (owner, 2026-09-25)."""
+        if rehearse:
+            executable = root / 'fake-codex'
+            executable.write_text(f"#!/bin/sh\nexec '{BINARY}' codex fake-app-server \"$@\"\n")
+            executable.chmod(0o755)
+            home = root
+            env = {'PATH': '/usr/bin:/bin', 'HOME': str(home),
+                   'PIO_CODEX_FAKE_SCENARIO': json.dumps(scenario)}
+        else:
+            # Exactly M2's live environment. PIO passes no key: Codex
+            # authenticates itself from its own home.
+            home = live.HOME
+            executable = home / '.local/bin/codex'
+            env = {'PATH': f'{home}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
+                   'HOME': str(home), 'USER': os.environ.get('USER', ''),
+                   'LANG': 'en_US.UTF-8'}
+        return dict(executable=str(executable), env=env, codex_home=str(home / '.codex'),
+                    fixture_root=str(root / 'fixtures'),
+                    thread=dict(sandbox='workspace-write', approvalPolicy='on-request',
+                                model=MODEL),
+                    labeled_fake=rehearse, test_only_model_exception=live.MODEL_EXCEPTION,
+                    expected_model_provider=CODEX['model_provider'])
+
+    def opencode(self, root, rehearse, scenario, protocol):
         if rehearse:
             home = root
             executable = root / 'fake-opencode'
@@ -467,28 +592,19 @@ class Service:
             config_dir = home / '.config/opencode'
             env = {'PATH': f'{home}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
                    'HOME': str(home), 'USER': os.environ.get('USER', '')}
-        self.config = dict(
-            format='pio-opencode-service/1',
-            protocol=dict(format='combraton-conformance-config/1', principal='owner',
-                          provider_id=PROVIDER,
-                          credentials=[dict(credential=self.owner_credential),
-                                       dict(credential=self.lead_credential)],
-                          executor=dict(host_id='opencode-host')),
+        return dict(
+            format='pio-opencode-service/1', protocol=protocol,
             opencode=dict(executable=str(executable), env=env,
                           config_dir=str(config_dir), home=str(home),
                           fixture_root=str(root / 'fixtures'),
                           labeled_fake=rehearse, model=MODEL,
                           test_only_model_exception=live.MODEL_EXCEPTION))
-        self.config_path = root / 'service.json'
-        self.config_path.write_text(json.dumps(self.config))
-        os.chmod(self.config_path, 0o600)
-        self.daemon = None
 
     def start(self):
         out = (self.root / 'daemon.stdout').open('w')
         err = (self.root / 'daemon.stderr').open('w')
         self.daemon = subprocess.Popen(
-            [str(BINARY), 'serve-opencode', '--data-dir', str(self.store),
+            [str(BINARY), f'serve-{HARNESS}', '--data-dir', str(self.store),
              '--config', str(self.config_path), '--socket', str(self.socket)],
             stdout=out, stderr=err)
         # In its own session, so nothing that kills the runner kills it.
@@ -540,7 +656,7 @@ class Service:
                 invocation = next((s['invocation_id'] for s in states
                                    if (s.get('payload') or {}).get('brief', {}).get('digest')
                                    == digest), None)
-            path = self.store / f'opencode-{invocation}.events.jsonl'
+            path = self.store / f'{HARNESS}-{invocation}.events.jsonl'
             if invocation and path.exists():
                 by_run[identity] = [json.loads(l) for l in path.read_text().splitlines()
                                     if l.strip()]
@@ -633,10 +749,18 @@ def steer(caller, identity):
     if 'error' in answer:
         return dict(at, refused=answer['error']['data'].get('code'))
     outcome = answer['result'].get('outcome', {})
-    return dict(at, request=outcome.get('request'), alternative=outcome.get('alternative'))
+    return dict(at, request=outcome.get('request'), alternative=outcome.get('alternative'),
+                delivery_id=outcome.get('delivery_id'))
+
+
+# What the desk's two decisions are on the wire: OpenCode and Claude take
+# `allow` and `deny`; Codex takes `accept` and `decline`, and PIO sends each
+# as a single use.
+WIRE = {'codex': {'allow': 'accept', 'deny': 'decline'}}
 
 
 def respond(caller, identity, action_id, decision, revision):
+    decision = WIRE.get(HARNESS, {}).get(decision, decision)
     body = json.dumps({'decision': decision}).encode()
     envelope = command('execution.respond_action',
                        dict(kind='execution.execution', id=identity),
@@ -701,6 +825,42 @@ class Meter:
     def summary(self, tool_calls=None):
         return dict(calls=len(self.calls), tool_log_calls=tool_calls, bytes=self.bytes,
                     estimate=self.estimate(), ceiling=self.ceiling, stopped=self.stopped)
+
+
+class CodexMeter(Meter):
+    """What one Codex run has spent so far, from Codex itself.
+
+    Codex reports the thread's running total after every model step
+    (`thread/tokenUsage/updated`), and that total covers every step (review
+    48), so the view's usage is the spend, not a bound on it. A run stopped
+    at its ceiling can finish the one step in flight, which the worst case
+    allows for. Tool calls are counted from the run's own spooled items.
+    """
+
+    def __init__(self, identity, ceiling):
+        super().__init__(identity, ceiling)
+        self.total = 0
+
+    def read(self, caller):
+        raw, self.offset = spool(caller, self.identity, self.offset)
+        self.bytes += len(raw)
+        lines = (self.partial + raw).split(b'\n')
+        self.partial = lines.pop()
+        for line in lines:
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            item = (record.get('params') or {}).get('item') or {}
+            if record.get('method') == 'item/completed' and item.get('type') == 'mcpToolCall':
+                self.calls.add(item.get('id'))
+        observations = ((view(caller, self.identity) or {}).get('usage') or {}) \
+            .get('observations') or []
+        if observations and isinstance(observations[0].get('amount'), int):
+            self.total = max(self.total, observations[0]['amount'])
+
+    def estimate(self):
+        return self.total
 
 
 def tool_log(root):
@@ -898,6 +1058,8 @@ def scenario(mutant):
               for short, name in CHILDREN.items()]
     loops = ([dict(tool='read_run', arguments=dict(name='alpha'), repeat=CALL_CEILING * 2)]
              if mutant == 'lead-loops' else [])
+    if HARNESS == 'codex':
+        return codex_scenario(mutant, starts + reads + loops)
     return {
         **dict(
             lead=dict(calls=starts + reads + loops,
@@ -909,6 +1071,30 @@ def scenario(mutant):
             usage_total=4096),
         # A plan's own play replaces those it names.
         **plan_scenario(mutant)}
+
+
+def codex_scenario(mutant, calls):
+    """What the labeled Codex fake plays for L3. The lead's calls go through
+    its MCP server; each child runs the one command its brief quotes, then
+    counts. `alpha` sleeps thirty seconds, so the lead's read waits and the
+    steer lands on a running turn; `beta` asks a command approval, so the
+    desk has something to relay (live, `on-request` in a writable sandbox
+    need not ask at all). The fake answers the model and provider it was
+    asked for on `openai`, unless a mutant says otherwise."""
+    alpha, beta = child_brief(CHILDREN['alpha']), child_brief(CHILDREN['beta'])
+    play = dict(
+        lead=dict(calls=calls, relay_offset=1 if mutant == 'wrong-relay' else 0),
+        answer_line_counts=True, led_offset=1 if mutant == 'wrong-child' else 0,
+        led_delay_ms=1000 if mutant == 'no-wait' else 30_000, led_delay_if=alpha,
+        command_approval_if=beta, model_provider=CODEX['model_provider'], usage_step=4096)
+    if mutant == 'wrong-model':
+        play['model_reported'] = 'another-model'
+    if mutant == 'reviewer-elsewhere':
+        play['approvals_reviewer'] = 'auto_review'
+    if mutant == 'child-overspends':
+        # One step past the child's ceiling, while it sleeps.
+        play.update(led_heavy_if=alpha, led_heavy_step=CHILD_CEILING + 10_000)
+    return play
 
 
 def plan_scenario(mutant):
@@ -959,7 +1145,7 @@ def run(args):
         # A clean tree, a binary built from it, and its digest. The build is
         # the runner's own, so "built from HEAD" is not an inference.
         subprocess.run(['cargo', 'build', '--locked', '--workspace'], cwd=ROOT, check=True)
-        record['preflight'] = live.preflight(False, root=ROOT, binary=BINARY)
+        record['preflight'] = opencode_live_run.preflight(False, root=ROOT, binary=BINARY)
         book_path = live.ledger_path()
         book = read_ledger(book_path)
         for key in names.values():
@@ -974,7 +1160,7 @@ def run(args):
                              f'attempt could spend {WORST_CASE}, past the '
                              f'{SEQUENCE_STOP} stop')
         if live.cumulative(book) + WORST_CASE >= live.STOP_AT:
-            raise SystemExit('stop: the MiniMax cap would reach its stop')
+            raise SystemExit(f"stop: the {PLAN['harness']} cap would reach its stop")
         root = live_tree(LEAD)
     args.root = root
     try:
@@ -1015,22 +1201,24 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
     record['no_sleep'] = awake.record
     rows = Rows(rehearse)
     service = Service(root, rehearse, scenario(args.mutant))
-    config_dir = Path(service.config['opencode']['config_dir'])
-    if args.mutant == 'helper-elsewhere':
-        # The case the check exists for, in the rehearsal's own config.
-        (config_dir / 'opencode.jsonc').write_text(
-            json.dumps({'small_model': 'another-provider/helper-model'}))
-    # Before anything is reserved or started: a helper on another provider
-    # would spend there, and nothing in the receipt would show it.
-    record['helpers'] = helper_models(config_dir)
-    elsewhere = helpers_elsewhere(record['helpers'])
-    if elsewhere:
-        raise SystemExit('refusing to start: the OpenCode configuration points a helper at a '
-                         f"provider other than the plan's ({MODEL.split('/', 1)[0]}): "
-                         f'{sorted(elsewhere)}')
+    if HARNESS == 'opencode':
+        config_dir = Path(service.config['opencode']['config_dir'])
+        if args.mutant == 'helper-elsewhere':
+            # The case the check exists for, in the rehearsal's own config.
+            (config_dir / 'opencode.jsonc').write_text(
+                json.dumps({'small_model': 'another-provider/helper-model'}))
+        # Before anything is reserved or started: a helper on another
+        # provider would spend there, and nothing in the receipt would show it.
+        record['helpers'] = helper_models(config_dir)
+        elsewhere = helpers_elsewhere(record['helpers'])
+        if elsewhere:
+            raise SystemExit('refusing to start: the OpenCode configuration points a helper '
+                             f"at a provider other than the plan's ({MODEL.split('/', 1)[0]}): "
+                             f'{sorted(elsewhere)}')
     desk = Desk(root / 'desk', rehearse, silent=args.mutant == 'desk-silent')
-    meters = {LEAD: Meter(LEAD, LEAD_CEILING),
-              **{f'{LEAD}.{c}': Meter(f'{LEAD}.{c}', CHILD_CEILING) for c in CHILDREN}}
+    gauge = CodexMeter if HARNESS == 'codex' else Meter
+    meters = {LEAD: gauge(LEAD, LEAD_CEILING),
+              **{f'{LEAD}.{c}': gauge(f'{LEAD}.{c}', CHILD_CEILING) for c in CHILDREN}}
     state = dict(submitted=set(), grant_id=None, spec=None, repo=None)
     # Before anything can spend: each run's worst case, held in the ledger
     # until the exit path replaces it with what the run is charged.
@@ -1112,9 +1300,12 @@ def watch(args, record, service, desk, meters, state):
     repo, base = fixture(root)
     state['repo'] = repo
     record['wc_l'] = wc_l(repo)
-    record['owner_service_before'] = live.owner_service()
-    record['sessions_before'] = live.session_listing(repo, rehearse)
-    record['configured'] = live.configured_model(rehearse)
+    # The owner's OpenCode service is asserted untouched on every run, on
+    # either harness (the owner's standing rule).
+    record['owner_service_before'] = opencode_live_run.owner_service()
+    if HARNESS == 'opencode':
+        record['sessions_before'] = live.session_listing(repo, rehearse)
+        record['configured'] = live.configured_model(rehearse)
     service.start()
     owner = service.owner()
 
@@ -1148,6 +1339,10 @@ def watch(args, record, service, desk, meters, state):
                      dict(name='PIO_LEAD_LOG', value=str(root / 'lead-tool.jsonl')),
                      dict(name='PIO_LEAD_CALL_CEILING', value=str(CALL_CEILING)),
                      dict(name='PIO_LEAD_STOP', value=str(root / 'lead-stop'))])
+    if HARNESS == 'codex' and args.mutant != 'no-pre-allow':
+        # Owner decision, 2026-09-25: the lead's own two tools are
+        # pre-allowed, per launch, in the lead's thread config alone.
+        spec['pre_allowed_tools'] = list(PRE_ALLOWED)
     state['spec'] = spec
     extensions = {CONTENT: dict(media_type='text/plain', text=BRIEF)}
     if args.mutant == 'lead-without-brief':
@@ -1282,9 +1477,16 @@ def settle(record, service, meters, state, root):
                        for e in log if e.get('event') == 'tool_call'
                        and e.get('tool') == 'start_run'})
         host = service.host_events(views, briefs)
-        sessions = {i: next((e.get('session_id') for e in host.get(i, [])
-                             if e['kind'] == 'session_created'), None) for i in RUNS}
-        steps, record['store_read'] = store_steps(service.config['opencode']['home'], sessions)
+        if HARNESS == 'opencode':
+            sessions = {i: next((e.get('session_id') for e in host.get(i, [])
+                                 if e['kind'] == 'session_created'), None) for i in RUNS}
+            steps, record['store_read'] = store_steps(service.config['opencode']['home'],
+                                                      sessions)
+        else:
+            steps = {}
+            record['store_read'] = dict(
+                read=False, reason="Codex's own total covers every step (review 48); "
+                                   'no store is read')
         said = {c: spoken(owner, f'{LEAD}.{c}') for c in CHILDREN}
         relay = spoken(owner, LEAD)
     finally:
@@ -1342,6 +1544,8 @@ def usage_of(views, meters, submitted, steps=None):
     nothing is charged its meter's bound, never less than the M3b allowance,
     and never less than the steps the store holds.
     """
+    if HARNESS == 'codex':
+        return codex_usage(views, meters, submitted)
     steps = steps or {}
     usage = {}
     for identity in RUNS:
@@ -1379,6 +1583,32 @@ def usage_of(views, meters, submitted, steps=None):
     return usage
 
 
+def codex_usage(views, meters, submitted):
+    """Codex's reported total for each run, which covers every step of its
+    turn (review 48), so it is what the run is charged. A run that reported
+    nothing is charged its whole share: never nothing, and never less than it
+    could have spent."""
+    usage = {}
+    for identity in RUNS:
+        current = views.get(identity) or {}
+        if current.get('admission') == 'refused':
+            usage[identity] = dict(charged=0, basis='refused before any model call')
+            continue
+        if not current and identity not in submitted:
+            continue
+        observations = (current.get('usage') or {}).get('observations') or []
+        reported = observations[0]['amount'] if observations else None
+        gauge = meters[identity]
+        if isinstance(reported, int) and reported > 0:
+            usage[identity] = dict(reported_total=reported, charged=max(reported, gauge.total),
+                                   basis='reported_total', meter_estimate=gauge.estimate())
+        else:
+            usage[identity] = dict(reported_total=None, usage='unknown', basis='allowance',
+                                   charged=LEAD_SHARE if identity == LEAD else CHILD_SHARE,
+                                   meter_estimate=gauge.estimate())
+    return usage
+
+
 def running_steer(s):
     """The running steer holds only against a turn that was running and
     delivered when it was sent, and still running just after. A turn that
@@ -1407,6 +1637,34 @@ def host_model(records):
         and kinds.index('model_selected') < turn and kinds.index('session_created') < turn)
 
 
+def codex_model(records):
+    """The model and provider a Codex thread was on, from the host's record
+    of `thread/start`'s own answer, and whether that came before the turn."""
+    kinds = [r['kind'] for r in records]
+    checked = next((r for r in records if r['kind'] == 'model_checked'), None) or {}
+    turn = kinds.index('turn_start_sent') if 'turn_start_sent' in kinds else None
+    return dict(requested=checked.get('requested_model'), reported=checked.get('model'),
+                provider=checked.get('model_provider'), matches=checked.get('matches'),
+                before_turn=turn is not None and 'model_checked' in kinds
+                and kinds.index('model_checked') < turn)
+
+
+def codex_running_steer(o):
+    """L3's claim: a steer under the lead's grant, recorded while the turn
+    was running and delivered, and then acknowledged by Codex with the id it
+    returned. What the model did with it is not observed, and says so. A
+    turn that ended inside the steer's round trip decides nothing."""
+    s, entry = o['steer'] or {}, o['delivery'] or {}
+    if not (s.get('request') == 'recorded' and s.get('runtime_at_steer') == 'active'
+            and s.get('delivery_at_steer') == 'acknowledged'):
+        return False
+    if s.get('runtime_after_steer') == 'exited' and entry.get('delivery') != 'acknowledged':
+        return None
+    return entry.get('delivery') == 'acknowledged' \
+        and entry.get('proof_class') == 'provider_ack_id' \
+        and entry.get('behavior') == 'not_observed'
+
+
 def judge(rows, record, observed, desk, meters, state, rehearse):
     views, stream, log, host = (observed['views'], observed['stream'], observed['log'],
                                 observed['host'])
@@ -1425,19 +1683,47 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
 
     # --- The model every session was on, before its turn began. From the
     # host's own record of the harness's answer, not from what PIO asked.
-    rows.add("Each run was on the plan's model before its turn started",
-             {i: host_model(host.get(i, [])) for i in RUNS},
-             {i: dict(requested=MODEL, selection_error=None, reported=MODEL, matches=True,
-                      before_turn=True) for i in RUNS},
-             note='model_selected, then session_created (reported_model, '
-                  'model_matches_requested), both before turn_start_sent'
-                  + ('; the fake reports what it was asked for' if rehearse else ''))
+    if HARNESS == 'codex':
+        rows.add("Each run was on the plan's model before its turn started",
+                 {i: codex_model(host.get(i, [])) for i in RUNS},
+                 {i: dict(requested=MODEL, reported=MODEL, provider=CODEX['model_provider'],
+                          matches=True, before_turn=True) for i in RUNS},
+                 note="model_checked: thread/start's own answer, before turn_start_sent; the "
+                      'host refuses a mismatch before the first turn'
+                      + ('; the fake answers what its scenario says' if rehearse else ''))
+        rows.add('Every run asserted that approvals go to the user',
+                 {i: next((e.get('approvals_reviewer') for e in host.get(i, [])
+                           if e['kind'] == 'thread_started'), None) for i in RUNS},
+                 {i: 'user' for i in RUNS},
+                 note='approvalsReviewer is never set; any other answer ends the run '
+                      'before its first turn')
+    else:
+        rows.add("Each run was on the plan's model before its turn started",
+                 {i: host_model(host.get(i, [])) for i in RUNS},
+                 {i: dict(requested=MODEL, selection_error=None, reported=MODEL, matches=True,
+                          before_turn=True) for i in RUNS},
+                 note='model_selected, then session_created (reported_model, '
+                      'model_matches_requested), both before turn_start_sent'
+                      + ('; the fake reports what it was asked for' if rehearse else ''))
 
     # --- The tool, the lead's session and nobody else's.
     sent = {run: [e.get('names') for e in host.get(run, [])
                   if e['kind'] == 'mcp_servers_sent'] for run in RUNS}
     rows.add('Only the lead got the tool', sent,
              {LEAD: [['pio-lead']], **{f'{LEAD}.{c}': [[]] for c in CHILDREN}})
+    if HARNESS == 'codex':
+        # Owner decision, 2026-09-25: the lead's own two tools, per launch,
+        # and nothing else; so Codex asked nothing about them.
+        rows.add("The lead's own two tools were pre-allowed, and nothing else",
+                 dict(pre_allowed={run: [e.get('pre_allowed_tools') for e in host.get(run, [])
+                                         if e['kind'] == 'mcp_servers_sent'] for run in RUNS},
+                      asked_about_the_tool=[e.get('message') for e in host.get(LEAD, [])
+                                            if e['kind'] == 'action_requested'
+                                            and e.get('approval_kind') == 'mcp_tool_call']),
+                 dict(pre_allowed={LEAD: [list(PRE_ALLOWED)],
+                                   **{f'{LEAD}.{c}': [None] for c in CHILDREN}},
+                      asked_about_the_tool=[]),
+                 note="in the lead's thread config only; never written to the owner's")
     # The tool's own witness, not the host's account of itself: each
     # launch writes `started`. One is the lead's session; none means the
     # lead never had it, and three means the children did too.
@@ -1481,12 +1767,23 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
     under = [e['payload'].get(UNDER_GRANT) for e in stream
              if e['type'] == 'execution.steer.requested'
              and e['subject']['id'] == f'{LEAD}.alpha']
-    rows.add('A steer while the child runs', record.get('steer_running'),
-             'not_supported, sent while the turn was active and delivered, and '
-             'before it exited',
-             holds=running_steer,
-             note="OpenCode's own negative: its turn was running and delivered, and "
-                  'the host never sets a turn id')
+    if HARNESS == 'codex':
+        steered = record.get('steer_running') or {}
+        entry = next((d for d in (views[f'{LEAD}.alpha'].get('steering') or [])
+                      if steered.get('delivery_id')
+                      and d.get('delivery_id') == steered.get('delivery_id')), None)
+        rows.add('A steer while the child runs', dict(steer=steered or None, delivery=entry),
+                 'recorded under the grant while the turn was active and delivered, then '
+                 'acknowledged by Codex (provider_ack_id); behavior not observed',
+                 holds=codex_running_steer,
+                 note="L3's claim: delivery under the lead's authority, not obedience")
+    else:
+        rows.add('A steer while the child runs', record.get('steer_running'),
+                 'not_supported, sent while the turn was active and delivered, and '
+                 'before it exited',
+                 holds=running_steer,
+                 note="OpenCode's own negative: its turn was running and delivered, and "
+                      'the host never sets a turn id')
     rows.add('A steer on an exited run', record.get('steer_exited'),
              'not_supported on any harness, once the turn is over',
              holds=lambda s: bool(s) and s.get('request') == 'not_supported'
@@ -1545,12 +1842,23 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
             desk_decision=(item.get('answer') or {}).get('decision'),
             decided_by=e['payload'].get(DECISION, {}).get('decided_by'),
             applied=applied.get('applied'), option_kind=applied.get('option_kind'),
-            always_option_taken=applied.get('always_option_taken')))
+            always_option_taken=applied.get('always_option_taken'),
+            approval_kind=next((r.get('approval_kind') for r in host.get(run_id, [])
+                                if r['kind'] == 'action_requested'
+                                and r.get('action_seq') == seq), None),
+            sent=applied.get('sent')))
     lapsed = [dict(run=run_id, action_seq=r.get('action_seq'),
                    after_seconds=r.get('after_seconds'), option_kind=r.get('option_kind'))
               for run_id, records in host.items() for r in records
               if r['kind'] == 'request_denied_by_default']
     single_use = {'allow': 'allow_once', 'deny': 'reject_once'}
+    # On Codex the host records the response it wrote: a decision, or an
+    # elicitation action with no `persist`. Nothing else is single-use.
+    sent_once = {'allow': [{'decision': 'accept'}, {'action': 'accept', 'content': {}}],
+                 'deny': [{'decision': 'decline'}, {'action': 'decline'}]}
+    once = (lambda d: d['sent'] in sent_once.get(d['desk_decision'], [])) \
+        if HARNESS == 'codex' else \
+        (lambda d: d['applied'] is True and d['option_kind'] == single_use.get(d['desk_decision']))
     rows.add('Every approval was decided at the desk',
              dict(decisions=decisions, lapsed=lapsed,
                   desk={a: i['state'] for a, i in desk.items.items()}),
@@ -1562,8 +1870,7 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
              else not o['lapsed']
              and all(s == 'answered' for s in o['desk'].values())
              and len(o['desk']) == len(o['decisions'])
-             and all(d['decided_by'] == 'caller' and d['applied'] is True
-                     and d['option_kind'] == single_use.get(d['desk_decision'])
+             and all(d['decided_by'] == 'caller' and once(d)
                      and d['always_option_taken'] is False for d in o['decisions']),
              note=f'{len(decisions)} approval(s) asked; none asked is inconclusive; a lapse '
                   f"is the host's single-use reject after the delivery timeout, and it "
@@ -1588,10 +1895,16 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                      or (r['runtime'] not in ('exited', None)
                          and (r['seconds'] or 0) >= READ_WAIT) for r in o),
                  note='seconds as the lead tool measured each call')
-    rows.record('What OpenCode does with a permission prompt',
-                [dict(run=d['run'], option_kind=d['option_kind'], desk=d['desk'])
-                 for d in decisions],
-                note='the fake in a rehearsal; the owner\'s OpenCode live')
+    if HARNESS == 'codex':
+        rows.record('What Codex asked, and what was sent',
+                    [dict(run=d['run'], approval_kind=d['approval_kind'], desk=d['desk'],
+                          sent=d['sent']) for d in decisions],
+                    note="the fake in a rehearsal; the owner's Codex live")
+    else:
+        rows.record('What OpenCode does with a permission prompt',
+                    [dict(run=d['run'], option_kind=d['option_kind'], desk=d['desk'])
+                     for d in decisions],
+                    note='the fake in a rehearsal; the owner\'s OpenCode live')
 
     # --- Spend: bounded while it ran, and reported at the end.
     summary = record['meters']
@@ -1604,31 +1917,50 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
              note=f"estimate {BOUND['estimate']}")
     usage = record['usage']
     ran = {i: u for i, u in usage.items() if u['basis'] != 'refused before any model call'}
-    rows.add("Each run's steps were read from the owner's store",
-             dict(read=record.get('store_read'),
-                  runs={i: dict(steps=u.get('measured_steps'),
-                                reported_last_step=u.get('reported_last_step'),
-                                basis=u['basis']) for i, u in ran.items()}),
-             'every run that ran has its steps there, and the last is the one reported',
-             holds=lambda o: bool((o['read'] or {}).get('read')) and bool(o['runs'])
-             and all(r['steps'] and (r['reported_last_step'] is None
-                                     or r['steps'][-1] == r['reported_last_step'])
-                     for r in o['runs'].values()),
-             live_only=True,
-             note="owner decision 2026-09-24: session_message rows of PIO's sessions, "
-                  "read-only; measured from the store's recorded steps, not the bill: "
-                  'that the store holds every billed call is not proven')
+    if HARNESS == 'opencode':
+        rows.add("Each run's steps were read from the owner's store",
+                 dict(read=record.get('store_read'),
+                      runs={i: dict(steps=u.get('measured_steps'),
+                                    reported_last_step=u.get('reported_last_step'),
+                                    basis=u['basis']) for i, u in ran.items()}),
+                 'every run that ran has its steps there, and the last is the one reported',
+                 holds=lambda o: bool((o['read'] or {}).get('read')) and bool(o['runs'])
+                 and all(r['steps'] and (r['reported_last_step'] is None
+                                         or r['steps'][-1] == r['reported_last_step'])
+                         for r in o['runs'].values()),
+                 live_only=True,
+                 note="owner decision 2026-09-24: session_message rows of PIO's sessions, "
+                      "read-only; measured from the store's recorded steps, not the bill: "
+                      'that the store holds every billed call is not proven')
     rows.add('Every run reported its usage',
-             {i: u.get('reported_last_step') for i, u in usage.items()
+             {i: u.get('reported_total', u.get('reported_last_step')) for i, u in usage.items()
               if u['basis'] != 'refused before any model call'},
              'a positive amount per run that ran',
              holds=lambda u: bool(u) and all(isinstance(a, int) and a > 0
                                              for a in u.values()),
-             note="OpenCode's last model step; charged times the steps it could have taken")
+             note="Codex's own total, which covers every step, and is what is charged"
+             if HARNESS == 'codex' else
+             "OpenCode's last model step; charged times the steps it could have taken")
 
-    record['owner_service_after'] = live.owner_service()
+    record['owner_service_after'] = opencode_live_run.owner_service()
     rows.add("The owner's OpenCode service was untouched",
              record['owner_service_after'] == record['owner_service_before'], True)
+    if HARNESS == 'codex':
+        # Every run's own before and after of the owner's config.toml. A
+        # thread in a writable workspace trusts that project, which every run
+        # discloses (M2); anything else would be a change nobody asked for.
+        diffs = {i: next((e.get('diff') for e in host.get(i, [])
+                          if e['kind'] == 'config_after'), None) for i in RUNS}
+        rows.add("The owner's Codex configuration changed only by the fixture's trust entry",
+                 diffs,
+                 'for every run, nothing removed or changed, nothing outside the project '
+                 'tables, and any project added is under the fixture root',
+                 holds=lambda d: all(
+                     x is not None and not x['projects_removed'] and not x['projects_changed']
+                     and x['other_changes'] is False
+                     and all(a['location'] == 'fixture' for a in x['projects_added'])
+                     for x in d.values()))
+        return
     record['sessions_after'] = live.session_listing(state['repo'], rehearse)
     rows.add('PIO deleted no session',
              dict(before=(record['sessions_before'] or {}).get('entry_count'),
@@ -1654,6 +1986,15 @@ def sequence_charged(book):
                if e.get('sequence') == SEQUENCE)
 
 
+def ledger_line(**line):
+    """One ledger line. Codex's ledger totals its lines' `tokens`, so each
+    of this runner's Codex lines carries what it charges there too, and the
+    cap check M2 made counts L3."""
+    if HARNESS == 'codex':
+        line['tokens'] = line.get('charged') or 0
+    return line
+
+
 def write_ledger(path, book):
     temporary = path.with_name(path.name + '.tmp')
     temporary.write_text(json.dumps(book, indent=2) + '\n')
@@ -1666,10 +2007,10 @@ def reserve(path, names, at):
     book = read_ledger(path)
     lines = {}
     for identity in RUNS:
-        line = dict(sequence=SEQUENCE, model=MODEL, at=at, charge_basis='reserved',
-                    charged=LEAD_SHARE if identity == LEAD else CHILD_SHARE,
-                    why='the worst case this run could spend; the exit path replaces it '
-                        'with the charge, and a runner killed from outside leaves it')
+        line = ledger_line(sequence=SEQUENCE, model=MODEL, at=at, charge_basis='reserved',
+                           charged=LEAD_SHARE if identity == LEAD else CHILD_SHARE,
+                           why='the worst case this run could spend; the exit path replaces '
+                               'it with the charge, and a runner killed from outside leaves it')
         book['runs'][names[identity]] = line
         lines[names[identity]] = line
     write_ledger(path, book)
@@ -1693,6 +2034,11 @@ def charge(path, names, usage, at, authoritative):
             line = dict(base, charged=0, charge_basis='never submitted')
         elif entry['basis'] == 'refused before any model call':
             line = dict(base, charged=0, charge_basis=entry['basis'])
+        elif HARNESS == 'codex':
+            line = dict(base, charged=entry['charged'], charge_basis=entry['basis'],
+                        observed_total_tokens=entry.get('reported_total'),
+                        observed_is="the thread's total, which covers every step",
+                        meter_estimate=entry.get('meter_estimate'))
         else:
             line = dict(base, charged=entry['charged'], charge_basis=entry['basis'],
                         observed_total_tokens=entry.get('reported_last_step'),
@@ -1703,20 +2049,25 @@ def charge(path, names, usage, at, authoritative):
             if entry.get('why'):
                 line['why'] = entry['why']
             if entry['basis'] == 'allowance':
-                line.update(usage='unknown', why='no usage reported; charged the run\'s '
-                            f'meter bound, and never less than {live.CANCEL_ALLOWANCE}')
+                line.update(usage='unknown', why=(
+                    "no usage reported; charged the run's whole share" if HARNESS == 'codex'
+                    else "no usage reported; charged the run's meter bound, and never less "
+                         f'than {opencode_live_run.CANCEL_ALLOWANCE}'))
+        line = ledger_line(**line)
         book['runs'][names[identity]] = line
         lines[names[identity]] = line
     write_ledger(path, book)
     total = sequence_charged(book)
-    return dict(ledger='rehearsal ledger' if 'rehearsal' in path.name else 'MiniMax ledger',
-                lines=lines, reservations_left=sorted(
-                    k for k, v in book['runs'].items()
-                    if k in names.values() and v.get('charge_basis') == 'reserved'),
-                sequence_charged=total, sequence_cap=SEQUENCE_CAP,
-                sequence_stop=SEQUENCE_STOP, stop_reached=total >= SEQUENCE_STOP,
-                minimax_charged=live.cumulative(book), minimax_cap=live.CAP,
-                measured_against='charged')
+    ledger = CODEX['ledger'] if HARNESS == 'codex' else 'MiniMax ledger'
+    cap = 'codex' if HARNESS == 'codex' else 'minimax'
+    return {'ledger': 'rehearsal ledger' if 'rehearsal' in path.name else ledger,
+            'lines': lines, 'reservations_left': sorted(
+                k for k, v in book['runs'].items()
+                if k in names.values() and v.get('charge_basis') == 'reserved'),
+            'sequence_charged': total, 'sequence_cap': SEQUENCE_CAP,
+            'sequence_stop': SEQUENCE_STOP, 'stop_reached': total >= SEQUENCE_STOP,
+            f'{cap}_charged': live.cumulative(book), f'{cap}_cap': live.CAP,
+            'measured_against': 'charged'}
 
 
 def alive(pid):
@@ -1849,14 +2200,15 @@ def main():
     parser.add_argument('--attempt', help='a new name for a live run the ledger already holds')
     parser.add_argument('--plan', choices=sorted(PLANS), default='L1',
                         help='L1, or L1b: the same shape, with a read that waits '
-                             'and a request that comes to the desk')
+                             'and a request that comes to the desk; or L3, on Codex')
     parser.add_argument('--mutant', choices=sorted({*MUTANTS, *INCONCLUSIVE_MUTANTS,
                                                     *HOLDING_MUTANTS}))
     parser.add_argument('--inner', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     select_plan(args.plan)
-    if args.mutant and PLAN_MUTANTS.get(args.mutant, args.plan) != args.plan:
-        raise SystemExit(f'mutant {args.mutant} belongs to plan {PLAN_MUTANTS[args.mutant]}')
+    if args.mutant and args.plan not in PLAN_MUTANTS.get(args.mutant, {args.plan}):
+        raise SystemExit(f'mutant {args.mutant} belongs to plans '
+                         f'{sorted(PLAN_MUTANTS[args.mutant])}')
     if not args.rehearse and not args.desk:
         raise SystemExit('a live run needs --desk: the owner confirms they are at the '
                          'desk, and their words go in the receipt')

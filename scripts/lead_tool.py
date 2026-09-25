@@ -180,18 +180,30 @@ def message_text(raw):
     """What a run said, from its spooled records.
 
     OpenCode spools one record per `session/update`; the words are the
-    `agent_message_chunk`s. Handing the lead raw JSON would spend its tokens
-    on framing, and it is the same decoding a screen does.
+    `agent_message_chunk`s. Codex spools its app-server notifications; the
+    words are the `item/agentMessage/delta`s, or, where no delta was spooled,
+    the text of each completed `agentMessage` item (never both, which would
+    say everything twice). Handing the lead raw JSON would spend its tokens on
+    framing, and it is the same decoding a screen does.
     """
-    words = []
+    words, finished = [], []
     for line in raw.splitlines():
         try:
-            update = json.loads(line).get('update', {})
+            record = json.loads(line)
         except ValueError:
             continue
+        if not isinstance(record, dict):
+            continue
+        update = record.get('update') or {}
         if update.get('sessionUpdate') == 'agent_message_chunk':
             words.append(update.get('content', {}).get('text', ''))
-    return ''.join(words)
+        params = record.get('params') or {}
+        if record.get('method') == 'item/agentMessage/delta':
+            words.append(params.get('delta', ''))
+        elif record.get('method') == 'item/completed' \
+                and (params.get('item') or {}).get('type') == 'agentMessage':
+            finished.append(params['item'].get('text', ''))
+    return ''.join(words) or ''.join(finished)
 
 
 def read_run(name):
