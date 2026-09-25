@@ -147,6 +147,9 @@ does with a permission prompt.
   the shell's result met by a stop; `tool-error-ungated` (errors skip the
   gate) and `meter-ignores-items` (the meter blind to such results) must each
   fail the row that checks every result against the hold;
+- `experimental-feature-on` (L3) turns on `features.exec_permission_approvals`
+  in the rehearsal's own Codex configuration: the runner must refuse to
+  start, before anything is reserved, and leave no tree and no receipt;
 - `stop-ignored` (L3) has `alpha`, past its share, acknowledge the interrupt
   and go on, and the runner interrupted: `alpha` is still running when its
   usage is read, is charged what it reported plus a step, and the share row
@@ -172,6 +175,7 @@ import sys
 import tempfile
 import threading
 import time
+import tomllib
 import uuid
 from pathlib import Path
 
@@ -465,6 +469,9 @@ MUTANTS = {
     # Not a row either: the runner refuses to start (owner decision,
     # 2026-09-25), before anything is reserved.
     'helper-elsewhere': "The runner refuses a helper model outside the plan's provider",
+    # Not a row either: the runner refuses to start when Codex could ask for
+    # permissions PIO is never shown (review of L3, round 2).
+    'experimental-feature-on': 'The runner refuses a Codex that can ask for unseen permissions',
     # L1b and L3.
     'no-wait': 'A read_run waited for its run: until it exited, or to the wait limit',
     # L3 only.
@@ -538,7 +545,8 @@ PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {
                 'qualified-elsewhere': {'L3'}, 'qualified-as-committed': {'L3'},
                 'lead-tool-error-past-hold': {'L3'}, 'lead-shell-past-hold': {'L3'},
                 'tool-error-ungated': {'L3'}, 'meter-ignores-items': {'L3'},
-                'stop-ignored': {'L3'}, 'not-exited-charged-share': {'L3'}}
+                'stop-ignored': {'L3'}, 'not-exited-charged-share': {'L3'},
+                'experimental-feature-on': {'L3'}}
 
 
 def sha(data):
@@ -628,6 +636,30 @@ def helpers_elsewhere(helpers):
     provider = MODEL.split('/', 1)[0]
     return {k: m for k, m in helpers['models'].items()
             if str(m).split('/', 1)[0] != provider}
+
+
+# Codex features that let a command approval ask for more permissions than
+# its command: a field Codex strips for a client that did not opt into its
+# experimental API, as PIO does not. With either on, the desk (and the L3
+# relay's allow) would grant a widening nobody saw (review of L3, round 2).
+WIDENING_FEATURES = ('exec_permission_approvals', 'request_permissions_tool')
+
+
+def codex_features(codex_home):
+    """The two feature switches, and nothing else, from the Codex
+    configuration: `[features]` in `config.toml`. Whatever else the file
+    holds is parsed and not kept."""
+    path = Path(codex_home) / 'config.toml'
+    if not path.exists():
+        return dict(read=str(path.name), exists=False, **{k: None for k in WIDENING_FEATURES})
+    try:
+        features = tomllib.loads(path.read_text()).get('features') or {}
+    except tomllib.TOMLDecodeError as error:
+        raise SystemExit(f'refusing to start: {path.name} is unreadable, so its features '
+                         f'cannot be checked: {error}')
+    return dict(read=str(path.name), exists=True,
+                **{k: features.get(k) if isinstance(features, dict) else None
+                   for k in WIDENING_FEATURES})
 
 
 def fresh_credential(principal):
@@ -1579,6 +1611,19 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
             raise SystemExit('refusing to start: the OpenCode configuration points a helper '
                              f"at a provider other than the plan's ({MODEL.split('/', 1)[0]}): "
                              f'{sorted(elsewhere)}')
+    if HARNESS == 'codex':
+        codex_home = Path(service.config['codex']['codex_home'])
+        if args.mutant == 'experimental-feature-on':
+            # The case the check exists for, in the rehearsal's own Codex home.
+            codex_home.mkdir(parents=True, exist_ok=True)
+            (codex_home / 'config.toml').write_text('[features]\nexec_permission_approvals = true\n')
+        # Before anything is reserved or started. Only the two keys are read.
+        record['codex_features'] = codex_features(codex_home)
+        widening = [k for k in WIDENING_FEATURES if record['codex_features'][k] is True]
+        if widening:
+            raise SystemExit('refusing to start: the Codex configuration turns on '
+                             f'{widening}: a command approval could then ask for permissions '
+                             'PIO is never shown, and an allow would grant them')
     # `--relay`: a rehearsal whose desk waits for answer files, as a live
     # one does, so the relay that will run beside the live run is rehearsed
     # against the requests this code actually writes.
@@ -3052,7 +3097,7 @@ def main():
     try:
         record = run(args)
     except BaseException as error:
-        if args.mutant in ('setup-fails', 'helper-elsewhere'):
+        if args.mutant in ('setup-fails', 'helper-elsewhere', 'experimental-feature-on'):
             root = getattr(args, 'root', None)
             assert root is not None and not Path(root).exists(), (
                 f'the setup failed and left its tree behind: {root}')
@@ -3060,6 +3105,8 @@ def main():
             if args.mutant == 'helper-elsewhere':
                 assert "points a helper at a provider other than the plan's" in str(error) \
                     and 'small_model' in str(error), error
+            if args.mutant == 'experimental-feature-on':
+                assert 'exec_permission_approvals' in str(error), error
             print(f'mutant {args.mutant}: dies on {MUTANTS[args.mutant]!r}: '
                   f'{type(error).__name__}, and the tree is gone')
             raise SystemExit(1)
