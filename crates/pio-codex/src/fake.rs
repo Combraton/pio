@@ -420,7 +420,21 @@ pub fn run() -> Result<()> {
                                 if permissions {
                                     // The real request asks for a profile, not a
                                     // decision.
-                                    params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","cwd":cwd,"startedAtMs":0,"reason":"labeled fake permission grant request","permissions":{"filesystem":{"write":[cwd]}}});
+                                    params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","cwd":cwd,"startedAtMs":0,"reason":"labeled fake permission grant request",
+                                                    // 0.157.0's RequestPermissionProfile: camelCase,
+                                                    // both members present (review of L3, round 2, HR-5).
+                                                    "permissions":{"fileSystem":{"write":[cwd]},"network":null}});
+                                }
+                                if file_change {
+                                    // FileChangeRequestApprovalParams at 0.157.0:
+                                    // no command and no cwd, and a grantRoot where
+                                    // the scenario asks for writes under a root.
+                                    params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval",
+                                                    "reason":"labeled fake approval request",
+                                                    "startedAtMs":fake_turn::now_ms()});
+                                    if let Some(root) = scenario["approval_grant_root"].as_str() {
+                                        params["grantRoot"] = json!(root);
+                                    }
                                 }
                                 // A network ask in 0.157.0's shape, and a command
                                 // approval that names no cwd (it is optional):

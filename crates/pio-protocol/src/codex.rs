@@ -852,7 +852,8 @@ impl Provider {
                                // Codex command, whether it asks for network
                                // access. The placement is `classification`.
                                "reason":event["reason"],
-                               "network_approval":event["network_approval"]}}),
+                               "network_approval":event["network_approval"],
+                               "grant_root_requested":event["grant_root_requested"]}}),
                     None,
                 );
             }

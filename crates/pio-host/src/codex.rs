@@ -71,9 +71,19 @@ pub fn native_decline(method: &str, params: &Value) -> Value {
                             "sent":"a JSON-RPC error, code -32000"});
     let reason = match method {
         REFUSED_PERMISSION_GRANT => {
+            // The kinds actually asked for: 0.157.0 sends every member,
+            // `null` where it asks nothing (review of L3, round 2, HR-5).
             record["permission_kinds"] = params["permissions"]
                 .as_object()
-                .map(|kinds| json!(kinds.keys().collect::<Vec<_>>()))
+                .map(|kinds| {
+                    json!(
+                        kinds
+                            .iter()
+                            .filter(|(_, value)| !value.is_null())
+                            .map(|(kind, _)| kind)
+                            .collect::<Vec<_>>()
+                    )
+                })
                 .unwrap_or(Value::Null);
             "declined by PIO: a permission grant would widen the approved thread settings"
         }
@@ -622,6 +632,21 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                         event["server"] = params["serverName"].clone();
                         event["message"] = params["message"].clone();
                         event["persist_offered"] = params["_meta"]["persist"].clone();
+                    }
+                    if method == "item/fileChange/requestApproval" {
+                        // A file change can ask for writes under a root for
+                        // the rest of the session. Whoever decides sees that
+                        // it does, and where the root lands, by label and
+                        // digest (review of L3, round 2, HR-8). A file
+                        // change carries no cwd, so without a root it has no
+                        // placement.
+                        let root = params["grantRoot"].as_str();
+                        event["grant_root_requested"] = json!(root.is_some());
+                        if root.is_some() {
+                            let mut placement = command_placement(root, life.spec["cwd"].as_str());
+                            placement["subject"] = json!("grant_root");
+                            event["classification"] = placement;
+                        }
                     }
                     if method == "item/commandExecution/requestApproval" {
                         // Where the command would run, against this run's

@@ -749,7 +749,7 @@ fn play_led(
             json!({"threadId":play.turn.thread,"turnId":play.turn.id,"itemId":"item-grant",
                    "cwd":cwd,"startedAtMs":now_ms(),
                    "reason":"labeled fake permission grant request",
-                   "permissions":{"filesystem":{"write":[cwd]}}}),
+                   "permissions":{"fileSystem":{"write":[cwd]},"network":null}}),
         )?;
         let Some(answer) = answer else {
             return Ok(());

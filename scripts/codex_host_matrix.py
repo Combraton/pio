@@ -34,7 +34,8 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses', 'other_elicitation_declined',
          'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused',
          'command_approval_lapses', 'form_elicitation_declined', 'approval_cwd_through_a_link',
-         'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval']
+         'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
+         'file_change_grant_root']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
@@ -484,6 +485,7 @@ def run_case(out, name):
         approval_cwd_through_a_link={'approval': 'command', 'delay_ms': 100},
         early_elicitation_declined={'elicit_during_thread_start': True, 'delay_ms': 100},
         user_input_declined={'approval': 'user_input', 'delay_ms': 100},
+        file_change_grant_root={'approval': 'fileChange', 'delay_ms': 100, 'approval_grant_root': '/'},
         network_and_unplaced_approval={'approval': 'command', 'delay_ms': 100,
                                        'approval_network': True, 'approval_no_cwd': True},
         model_checked_before_turn={'model_provider': 'openai', 'delay_ms': 100},
@@ -563,6 +565,35 @@ def run_case(out, name):
             return model_case(case, name)
         if name in ('lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses'):
             return lead_tool_case(case, name)
+        if name == 'file_change_grant_root':
+            # A file change that asks for writes under a root: the request says
+            # so, and where the root lands, by label and digest (review of L3,
+            # round 2, HR-8); the L3 relay leaves every file change to the owner.
+            import l3_desk_relay
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            waiting = poll(lambda: case.inspect()['result'], lambda v: v['runtime'] == 'requires_action')
+            requested = events_of(case, 'action_requested')[0]
+            assert requested['method'] == 'item/fileChange/requestApproval', requested
+            assert requested['grant_root_requested'] is True, requested
+            placement = requested['classification']
+            assert (placement['subject'], placement['placement'], placement['target_label']) == \
+                ('grant_root', 'outside_fixture', '<outside>'), placement
+            with case.client() as c:
+                stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                      'kinds': ['execution.execution']})['result']
+            approval = next(i['event']['payload']['pio.combraton.dev/approval'] for i in stream['items']
+                            if 'event' in i and 'pio.combraton.dev/approval' in i['event']['payload'])
+            assert approval['grant_root_requested'] is True and \
+                approval['classification']['subject'] == 'grant_root', approval
+            assert l3_desk_relay.decided_in_advance(dict(run='L3.beta', approval=approval)) is None
+            action = waiting['runtime_detail']['action_id']
+            body = json.dumps({'decision': 'decline'}).encode()
+            case.execution_command('execution.respond_action', 'work',
+                                   dict(action_id=action, response=dict(digest=digest(body), media_type='application/json')),
+                                   'decline', body, 'application/json')
+            exited(case)
+            return dict(outcome='pass', grant_root='outside_fixture')
         if name == 'network_and_unplaced_approval':
             # A command approval that asks for the network and names no cwd:
             # the host says both, and the L3 relay answers neither, from the
@@ -825,11 +856,11 @@ def run_case(out, name):
             assert [e['method'] for e in declined] == ['item/permissions/requestApproval'], declined
             assert 'widen' in declined[0]['reason']
             # The kinds of permission asked for, never the paths.
-            assert declined[0]['permission_kinds'] == ['filesystem'], declined
+            assert declined[0]['permission_kinds'] == ['fileSystem'], declined
             assert str(case.root) not in json.dumps(declined), declined
             carried = carried_declines(case)
             assert [(d['method'], d['permission_kinds']) for d in carried] == \
-                [('item/permissions/requestApproval', ['filesystem'])], carried
+                [('item/permissions/requestApproval', ['fileSystem'])], carried
             # No action is ever surfaced, so nobody can answer a permission
             # grant. The view omits `actions` entirely when there are none.
             assert final.get('actions', []) == [] and events_of(case, 'action_requested') == [], final
