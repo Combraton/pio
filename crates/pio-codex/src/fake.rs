@@ -124,6 +124,10 @@ pub fn run() -> Result<()> {
     // Active turn: id, completion deadline, pending approval request id.
     let mut active: Option<(String, Instant, Option<String>)> = None;
     let mut turns = 0u64;
+    // Every response the client sent, by request id: a request answered
+    // twice is a defect the host's own record cannot show (review of L3,
+    // CH-3).
+    let mut responses: std::collections::HashMap<String, u32> = Default::default();
     loop {
         if scripted.as_ref().is_some_and(|turn| turn.finished()) {
             scripted = None;
@@ -162,6 +166,22 @@ pub fn run() -> Result<()> {
                 let id = message.get("id").cloned();
                 let method = message["method"].as_str().unwrap_or("").to_owned();
                 if method.is_empty() {
+                    if let Some(key) = id.as_ref().map(Value::to_string) {
+                        let count = responses.entry(key).or_insert(0);
+                        *count += 1;
+                        marker(
+                            &markers,
+                            json!({"source":SOURCE,"kind":"response_received","id":id,
+                                   "count":*count,"result":message.get("result"),
+                                   "error":message.get("error")}),
+                        )?;
+                        if *count > 1 {
+                            marker(
+                                &markers,
+                                json!({"source":SOURCE,"kind":"second_response","id":id}),
+                            )?;
+                        }
+                    }
                     // A reply a scripted turn is waiting for.
                     let key = id.as_ref().and_then(Value::as_str).map(str::to_owned);
                     let waiter = key.and_then(|k| waiting.lock().expect("waiting lock").remove(&k));

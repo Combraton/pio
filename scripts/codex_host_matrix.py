@@ -266,6 +266,16 @@ def events_of(case, kind):
 NATIVE = 'pio.combraton.dev/native-declines'
 
 
+def answered_once(case):
+    """What the fake received, by request id, and that no request was
+    answered twice: the wire, not PIO's own record of it (review of L3,
+    CH-3)."""
+    markers = case.markers_records()
+    twice = [m for m in markers if m['kind'] == 'second_response']
+    assert twice == [], twice
+    return [m for m in markers if m['kind'] == 'response_received']
+
+
 def carried_declines(case, identity='work'):
     """The run's native declines as a caller reads them: off the stream, on
     the run's own exit event, and nowhere else (review of L3, CH-2/F1)."""
@@ -362,6 +372,9 @@ def lead_tool_case(case, name):
         final = exited(case, seconds=30)
         assert [(d['decision'], d['decided_by'], d['sent']) for d in denied] == \
             [('decline', 'pio', {'action': 'decline'})], denied
+        # On the wire: one answer to the one request, and it is a decline.
+        wire = answered_once(case)
+        assert [(m['count'], m['result']) for m in wire] == [(1, {'action': 'decline'})], wire
         assert [a['state'] for a in final['actions']] == ['answered'], final['actions']
         calls = [e for e in witnessed(log) if e.get('method') == 'tools/call']
         assert calls == [], 'the tool ran although nobody allowed it'
@@ -380,6 +393,13 @@ def lead_tool_case(case, name):
     final = exited(case)
     applied = events_of(case, 'control_applied')
     assert [a['sent'] for a in applied] == [{'action': 'accept', 'content': {}}, {'action': 'decline'}], applied
+    # On the wire, as the fake received them: each answered once, and the
+    # accept remembers nothing (no `_meta.persist`).
+    wire = answered_once(case)
+    assert [m['result'] for m in wire] == [{'action': 'accept', 'content': {}}, {'action': 'decline'}], wire
+    read = [(m['action'], m['persist']) for m in case.markers_records()
+            if m['kind'] == 'mcp_approval_answered']
+    assert read == [('accept', None), ('decline', None)], read
     calls = [e['name'] for e in witnessed(log) if e.get('method') == 'tools/call']
     assert calls == ['start_run'], calls
     return dict(outcome='pass', sent=[a['sent'] for a in applied], tool_calls=calls, exit=final['exit'])
@@ -590,6 +610,7 @@ def run_case(out, name):
             exited(case)
             answers = [m['decision'] for m in case.markers_records() if m['kind'] == 'approval_answered']
             assert answers == ['decline'], answers
+            assert [m['result'] for m in answered_once(case)] == [{'decision': 'decline'}]
             return dict(outcome='pass', refused=refused, native_answers=answers)
         if name == 'deadline_stop_interrupts':
             final = exited(case, seconds=60)
@@ -649,6 +670,7 @@ def run_case(out, name):
             final = exited(case)
             answers = [m for m in case.markers_records() if m['kind'] == 'approval_answered']
             assert [a['decision'] for a in answers] == [decision], answers
+            assert [m['result'] for m in answered_once(case)] == [{'decision': decision}]
             items = [e for e in events_of(case, 'item_completed') if e['item_id'] == 'item-approval']
             assert items and items[0]['status'] == ('completed' if decision == 'accept' else 'declined'), items
             # The decision records which kind of command approval it answered.
