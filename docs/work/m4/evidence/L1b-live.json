@@ -1,0 +1,1659 @@
+{
+  "approvals": {
+    "l1b": "Owner approval, 2026-09-24 \u2014 L1b, with the amendments of review 48 (issue #12)",
+    "lead_tool": "owner-2026-09-22-m4b-lead-tool",
+    "model_exception": "owner-2026-09-20-m3b-opencode-fixture-runs"
+  },
+  "bound": {
+    "assumes": [
+      "a token is at least one byte",
+      "everything added to a context after the first step is sent as a session update, which PIO spools",
+      "the runner reads every meter at least once per model step (every half second; the fastest measured step took 0.96 s)",
+      "no built-in tool returns more than OpenCode truncates to",
+      "a child's step stays near the size measured in M3b"
+    ],
+    "call_ceiling": 16,
+    "child": "at most its ceiling, plus eleven steps before the kill",
+    "child_ceiling": 90000,
+    "child_step": 12000,
+    "estimate": "(tool calls + 1) x (step base + bytes the session has sent)",
+    "kill_steps": 11,
+    "last_step": 51200,
+    "lead": "at most its ceiling, plus the step in flight at the stop (at most its ceiling again, plus one tool result)",
+    "lead_ceiling": 450000,
+    "step_base": 10000,
+    "worst_case": 1395200
+  },
+  "budget": 2,
+  "charge": {
+    "ledger": "MiniMax ledger",
+    "lines": {
+      "L1b": {
+        "at": "2026-09-24T18:11:55Z",
+        "bound": 103626,
+        "charge_basis": "measured_from_store_steps",
+        "charged": 96495,
+        "measured_steps": [
+          7964,
+          10528,
+          10729,
+          10897,
+          11049,
+          11153,
+          11257,
+          11404,
+          11514
+        ],
+        "meter_estimate": 279603,
+        "model": "minimax-coding-plan/MiniMax-M3",
+        "observed_is": "the last model step of the turn",
+        "observed_total_tokens": 11514,
+        "sequence": "M4-lead-opencode",
+        "steps_at_most": 9
+      },
+      "L1b.alpha": {
+        "at": "2026-09-24T18:11:55Z",
+        "bound": 24591,
+        "charge_basis": "measured_from_store_steps",
+        "charged": 24479,
+        "measured_steps": [
+          8113,
+          8169,
+          8197
+        ],
+        "meter_estimate": 39342,
+        "model": "minimax-coding-plan/MiniMax-M3",
+        "observed_is": "the last model step of the turn",
+        "observed_total_tokens": 8197,
+        "sequence": "M4-lead-opencode",
+        "steps_at_most": 3
+      },
+      "L1b.beta": {
+        "at": "2026-09-24T18:11:55Z",
+        "bound": 15632,
+        "charge_basis": "measured_from_store_steps",
+        "charged": 7816,
+        "measured_steps": [
+          7816
+        ],
+        "meter_estimate": 22344,
+        "model": "minimax-coding-plan/MiniMax-M3",
+        "observed_is": "the last model step of the turn",
+        "observed_total_tokens": 7816,
+        "sequence": "M4-lead-opencode",
+        "steps_at_most": 2
+      }
+    },
+    "measured_against": "charged",
+    "minimax_cap": 300000000,
+    "minimax_charged": 289185,
+    "reservations_left": [],
+    "sequence_cap": 2000000,
+    "sequence_charged": 202322,
+    "sequence_stop": 1600000,
+    "stop_reached": false
+  },
+  "commit": "990c9850fd36e06e092977fd30298bdfdb5f30a6",
+  "configured": {
+    "model": "juspay-grid/glm-latest",
+    "permission_rules_configured": false,
+    "providers": [
+      "juspay-grid"
+    ],
+    "read": true,
+    "source": "~/.config/opencode/opencode.jsonc"
+  },
+  "credential_check": {
+    "id": "dcfa1fdf-779a-436d-8cd6-30f5a56f9db2",
+    "jsonrpc": "2.0",
+    "result": {
+      "acknowledgment": {
+        "command_digest": "sha256:10162f707dc33a28bcf4d3c70dd02fd53eca97dda8c8f450d9d27505d020f07c",
+        "command_id": "credential-check",
+        "effect_refs": [],
+        "operation_ref": "b3cf952d-3f0b-4897-9342-439a546f3c52",
+        "revision": 1,
+        "subject": {
+          "id": "credential-check",
+          "kind": "execution.execution"
+        }
+      },
+      "outcome": {
+        "admission": "refused",
+        "alternative": "Lead tool refused: [{\"detail\":null,\"reason\":\"lead_tool_carries_a_credential_value\"}]",
+        "execution": {
+          "id": "credential-check",
+          "kind": "execution.execution"
+        },
+        "reason": "capability_unavailable"
+      },
+      "replay": false
+    }
+  },
+  "desk": "I am at the desk on 2026-09-24 from 23:41 IST, on battery, for L1b at 990c985. I will answer beta's .env read allow within two minutes, and I will not use OpenCode or MiniMax during the run.",
+  "desk_items": [
+    {
+      "action_id": "L1b.beta.action-1",
+      "approval": {
+        "action_id": "L1b.beta.action-1",
+        "answer_deadline_seconds": 300,
+        "approval_kind": null,
+        "classification": {
+          "auto_allowed": false,
+          "disposition": "surface_as_action",
+          "format": "pio-claude-request-classification/1",
+          "placement": "inside_fixture",
+          "reason": "a decision inside the fixture is the caller's",
+          "target_label": "<fixture>/beta.env",
+          "target_sha256": "030c9a515c7ef3e4168fa3cf819803b412ebffbf77e594bf25f688b144bf3fcc",
+          "tool_name": "read",
+          "tool_use_id": "call_f3329b7a0275462eafcb7eb3"
+        },
+        "if_nobody_answers": {
+          "always_option_taken": false,
+          "option_id": "reject",
+          "option_kind": "reject_once",
+          "option_kind_offered": true,
+          "option_kind_required": "reject_once",
+          "outcome": {
+            "optionId": "reject",
+            "outcome": "selected"
+          }
+        },
+        "method": null,
+        "options": [
+          {
+            "kind": "allow_once",
+            "name": "Allow once",
+            "optionId": "once"
+          },
+          {
+            "kind": "allow_always",
+            "name": "Always allow",
+            "optionId": "always"
+          },
+          {
+            "kind": "reject_once",
+            "name": "Reject",
+            "optionId": "reject"
+          }
+        ],
+        "requested_at": "2026-09-24T18:14:16Z"
+      },
+      "relayed_at": "2026-09-24T18:14:17Z",
+      "requested_at": "2026-09-24T18:14:16Z",
+      "run": "L1b.beta",
+      "settled_as": "answered",
+      "settled_at": "2026-09-24T18:19:16Z",
+      "state": "lapsed"
+    }
+  ],
+  "dirty": false,
+  "failed": [
+    "Each child reported the true count",
+    "The lead relayed the true counts",
+    "Every approval was decided at the desk"
+  ],
+  "finished_at": "2026-09-24T18:19:35Z",
+  "format": "pio-lead-run/2",
+  "grant": {
+    "id": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+    "terms": {
+      "audience": "conformance-provider",
+      "delegation": {
+        "allowed": false,
+        "max_depth": 0
+      },
+      "holder": "lead",
+      "resources": [
+        {
+          "id_prefix": "L1b.",
+          "kind": "execution.execution"
+        }
+      ],
+      "rights": [
+        "execution.submit",
+        "execution.steer",
+        "execution.read",
+        "core.events.read"
+      ]
+    }
+  },
+  "grant_attach": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "owner_authority_required"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "161001b4-90e3-4494-a618-9aa04593a593",
+    "jsonrpc": "2.0"
+  },
+  "lead": "L1b",
+  "lead_answer": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "right_missing"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "adfc575e-398d-493b-ad78-87a832b7f306",
+    "jsonrpc": "2.0"
+  },
+  "lead_reads_itself": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "out_of_scope"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "49019ae1-aca3-45ad-b000-f55459e08dc4",
+    "jsonrpc": "2.0"
+  },
+  "lead_submit": {
+    "admission": "admitted",
+    "delivery_id": "L1b.delivery-1",
+    "execution": {
+      "id": "L1b",
+      "kind": "execution.execution"
+    }
+  },
+  "live_tree": {
+    "probe": false,
+    "releasable": true,
+    "why": null
+  },
+  "meters": {
+    "L1b": {
+      "bytes": 21067,
+      "calls": 8,
+      "ceiling": 450000,
+      "estimate": 279603,
+      "stopped": null,
+      "tool_log_calls": 9
+    },
+    "L1b.alpha": {
+      "bytes": 3114,
+      "calls": 2,
+      "ceiling": 90000,
+      "estimate": 39342,
+      "stopped": null,
+      "tool_log_calls": null
+    },
+    "L1b.beta": {
+      "bytes": 1172,
+      "calls": 1,
+      "ceiling": 90000,
+      "estimate": 22344,
+      "stopped": null,
+      "tool_log_calls": null
+    }
+  },
+  "mode": "live",
+  "model": "minimax-coding-plan/MiniMax-M3",
+  "mutant": null,
+  "no_sleep": {
+    "command": "caffeinate -i -s -w 36701",
+    "held": true,
+    "held_to_the_end": true,
+    "power": "Now drawing from 'Battery Power'"
+  },
+  "owner_service_after": [
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
+  ],
+  "owner_service_before": [
+    "6f7f1302e657d5529b0b1d0786e9f911cf8f4ec1277407f7006be77994c3f664"
+  ],
+  "preflight": {
+    "binary_newer_than_every_source": true,
+    "binary_sha256": "650d64aaf87016ca05a8b2b80a1ca6b8cc7c5aee057e611f4098f4581fc055c3",
+    "checked": true,
+    "commit": "990c9850fd36e06e092977fd30298bdfdb5f30a6",
+    "dirty": false,
+    "newest_source": "crates/pio-opencode/src/fake.rs"
+  },
+  "reserved": {
+    "L1b": {
+      "at": "2026-09-24T18:11:55Z",
+      "charge_basis": "reserved",
+      "charged": 951200,
+      "model": "minimax-coding-plan/MiniMax-M3",
+      "sequence": "M4-lead-opencode",
+      "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
+    },
+    "L1b.alpha": {
+      "at": "2026-09-24T18:11:55Z",
+      "charge_basis": "reserved",
+      "charged": 222000,
+      "model": "minimax-coding-plan/MiniMax-M3",
+      "sequence": "M4-lead-opencode",
+      "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
+    },
+    "L1b.beta": {
+      "at": "2026-09-24T18:11:55Z",
+      "charge_basis": "reserved",
+      "charged": 222000,
+      "model": "minimax-coding-plan/MiniMax-M3",
+      "sequence": "M4-lead-opencode",
+      "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
+    }
+  },
+  "root": "~/pio-m4-live/L1b-3ea58f35",
+  "rows": [
+    {
+      "expected": "admitted",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": "admitted",
+      "proven": true,
+      "row": "The lead was admitted"
+    },
+    {
+      "expected": "acknowledged",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": "acknowledged",
+      "proven": true,
+      "row": "The lead's delivery was acknowledged"
+    },
+    {
+      "expected": {
+        "exit": {
+          "code": 0
+        },
+        "runtime": "exited"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "exit": {
+          "code": 0
+        },
+        "runtime": "exited"
+      },
+      "proven": true,
+      "row": "The lead exited normally"
+    },
+    {
+      "expected": {
+        "L1b": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        },
+        "L1b.alpha": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        },
+        "L1b.beta": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "model_selected, then session_created (reported_model, model_matches_requested), both before turn_start_sent",
+      "observed": {
+        "L1b": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        },
+        "L1b.alpha": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        },
+        "L1b.beta": {
+          "before_turn": true,
+          "matches": true,
+          "reported": "minimax-coding-plan/MiniMax-M3",
+          "requested": "minimax-coding-plan/MiniMax-M3",
+          "selection_error": null
+        }
+      },
+      "proven": true,
+      "row": "Each run was on the plan's model before its turn started"
+    },
+    {
+      "expected": {
+        "L1b": [
+          [
+            "pio-lead"
+          ]
+        ],
+        "L1b.alpha": [
+          []
+        ],
+        "L1b.beta": [
+          []
+        ]
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L1b": [
+          [
+            "pio-lead"
+          ]
+        ],
+        "L1b.alpha": [
+          []
+        ],
+        "L1b.beta": [
+          []
+        ]
+      },
+      "proven": true,
+      "row": "Only the lead got the tool"
+    },
+    {
+      "expected": 1,
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": 1,
+      "proven": true,
+      "row": "The tool was launched exactly once"
+    },
+    {
+      "expected": [
+        "initialize",
+        "notifications/initialized",
+        "tools/list"
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        "initialize",
+        "notifications/initialized",
+        "tools/list"
+      ],
+      "proven": true,
+      "row": "The tool reached the lead"
+    },
+    {
+      "expected": [
+        [
+          "alpha",
+          true
+        ],
+        [
+          "beta",
+          true
+        ]
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        [
+          "alpha",
+          true
+        ],
+        [
+          "beta",
+          true
+        ]
+      ],
+      "proven": true,
+      "row": "The lead started its two runs through the tool"
+    },
+    {
+      "expected": [
+        "06f65c65-46b0-48ca-a012-b45b8454b5cc"
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        "06f65c65-46b0-48ca-a012-b45b8454b5cc"
+      ],
+      "proven": true,
+      "row": "Every tool request carried the grant"
+    },
+    {
+      "expected": {
+        "L1b.alpha": "admitted",
+        "L1b.beta": "admitted"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L1b.alpha": "admitted",
+        "L1b.beta": "admitted"
+      },
+      "proven": true,
+      "row": "The submits landed"
+    },
+    {
+      "expected": {
+        "L1b.alpha": {
+          "call_budget": 0,
+          "depth": 1,
+          "initiator": {
+            "id": "L1b",
+            "kind": "execution.execution"
+          }
+        },
+        "L1b.beta": {
+          "call_budget": 0,
+          "depth": 1,
+          "initiator": {
+            "id": "L1b",
+            "kind": "execution.execution"
+          }
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L1b.alpha": {
+          "call_budget": 0,
+          "depth": 1,
+          "initiator": {
+            "id": "L1b",
+            "kind": "execution.execution"
+          }
+        },
+        "L1b.beta": {
+          "call_budget": 0,
+          "depth": 1,
+          "initiator": {
+            "id": "L1b",
+            "kind": "execution.execution"
+          }
+        }
+      },
+      "proven": true,
+      "row": "origin.initiator is bound"
+    },
+    {
+      "expected": {
+        "L1b.alpha": {
+          "delivery": "acknowledged",
+          "exit": {
+            "code": 0
+          },
+          "runtime": "exited"
+        },
+        "L1b.beta": {
+          "delivery": "acknowledged",
+          "exit": {
+            "code": 0
+          },
+          "runtime": "exited"
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L1b.alpha": {
+          "delivery": "acknowledged",
+          "exit": {
+            "code": 0
+          },
+          "runtime": "exited"
+        },
+        "L1b.beta": {
+          "delivery": "acknowledged",
+          "exit": {
+            "code": 0
+          },
+          "runtime": "exited"
+        }
+      },
+      "proven": true,
+      "row": "The children ran"
+    },
+    {
+      "expected": {
+        "code": "call_budget_spent",
+        "lead_running": true,
+        "started": false
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "code": "call_budget_spent",
+        "lead_running": true,
+        "started": false
+      },
+      "proven": true,
+      "row": "A third start is refused by PIO"
+    },
+    {
+      "expected": [
+        "L1b.alpha",
+        "L1b.beta"
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        "L1b.alpha",
+        "L1b.beta"
+      ],
+      "proven": true,
+      "row": "L1b has exactly two children that ran"
+    },
+    {
+      "expected": "not_supported, sent while the turn was active and delivered, and before it exited",
+      "holds": true,
+      "kind": "row",
+      "note": "OpenCode's own negative: its turn was running and delivered, and the host never sets a turn id",
+      "observed": {
+        "alternative": "Steering needs an acknowledged, running native turn",
+        "delivery_at_steer": "acknowledged",
+        "request": "not_supported",
+        "runtime_after_steer": "active",
+        "runtime_at_steer": "active"
+      },
+      "proven": true,
+      "row": "A steer while the child runs"
+    },
+    {
+      "expected": "not_supported on any harness, once the turn is over",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "alternative": "Steering needs an acknowledged, running native turn",
+        "delivery_at_steer": "acknowledged",
+        "request": "not_supported",
+        "runtime_after_steer": "exited",
+        "runtime_at_steer": "exited"
+      },
+      "proven": true,
+      "row": "A steer on an exited run"
+    },
+    {
+      "expected": [
+        {
+          "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+          "holder": "lead",
+          "recorded_by": "pio"
+        },
+        {
+          "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+          "holder": "lead",
+          "recorded_by": "pio"
+        }
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        {
+          "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+          "holder": "lead",
+          "recorded_by": "pio"
+        },
+        {
+          "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+          "holder": "lead",
+          "recorded_by": "pio"
+        }
+      ],
+      "proven": true,
+      "row": "Each steer names the grant that sent it"
+    },
+    {
+      "expected": {
+        "code": "permission_denied",
+        "reason": "right_missing"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "aimed at a child it may read, so only the missing right can refuse it",
+      "observed": {
+        "code": "permission_denied",
+        "reason": "right_missing"
+      },
+      "proven": true,
+      "row": "The lead may not answer an approval"
+    },
+    {
+      "expected": {
+        "code": "permission_denied",
+        "reason": "owner_authority_required"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "code": "permission_denied",
+        "reason": "owner_authority_required"
+      },
+      "proven": true,
+      "row": "A grant cannot attach the tool"
+    },
+    {
+      "expected": {
+        "admission": "refused",
+        "named": true,
+        "reason": "capability_unavailable"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "admission": "refused",
+        "named": true,
+        "reason": "capability_unavailable"
+      },
+      "proven": true,
+      "row": "A tool spec carrying a credential is refused"
+    },
+    {
+      "expected": {
+        "code": "permission_denied",
+        "reason": "out_of_scope"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "the grant covers L1b. and not L1b",
+      "observed": {
+        "code": "permission_denied",
+        "reason": "out_of_scope"
+      },
+      "proven": true,
+      "row": "The lead cannot read its own run"
+    },
+    {
+      "expected": {
+        "alpha.md": 7,
+        "beta.env": 4
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "alpha.md": 7,
+        "beta.env": null
+      },
+      "proven": false,
+      "row": "Each child reported the true count"
+    },
+    {
+      "expected": {
+        "alpha.md": 7,
+        "beta.env": 4
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "alpha.md": 7
+      },
+      "proven": false,
+      "row": "The lead relayed the true counts"
+    },
+    {
+      "expected": "each relayed and answered at the desk, decided by the caller, sent as the single-use kind, never always, none lapsed",
+      "holds": false,
+      "kind": "row",
+      "note": "1 approval(s) asked; none asked is inconclusive; a lapse is the host's single-use reject after the delivery timeout, and it fails L1b",
+      "observed": {
+        "decisions": [
+          {
+            "action_id": "L1b.beta.action-1",
+            "always_option_taken": null,
+            "applied": null,
+            "decided_by": "pio",
+            "desk": "lapsed",
+            "desk_decision": null,
+            "option_kind": null,
+            "run": "L1b.beta"
+          }
+        ],
+        "desk": {
+          "L1b.beta.action-1": "lapsed"
+        },
+        "lapsed": [
+          {
+            "action_seq": 1,
+            "after_seconds": 300,
+            "option_kind": "reject_once",
+            "run": "L1b.beta"
+          }
+        ]
+      },
+      "proven": false,
+      "row": "Every approval was decided at the desk"
+    },
+    {
+      "expected": "a read of L1b.alpha that took at least 20 s and returned exited",
+      "holds": true,
+      "kind": "row",
+      "note": "seconds as the lead tool measured each call",
+      "observed": [
+        {
+          "run": "L1b.alpha",
+          "runtime": "exited",
+          "seconds": 54.6
+        }
+      ],
+      "proven": true,
+      "row": "A read_run waited for its run, and it had exited"
+    },
+    {
+      "expected": null,
+      "holds": null,
+      "kind": "record",
+      "note": "the fake in a rehearsal; the owner's OpenCode live",
+      "observed": [
+        {
+          "desk": "lapsed",
+          "option_kind": null,
+          "run": "L1b.beta"
+        }
+      ],
+      "proven": false,
+      "row": "What OpenCode does with a permission prompt"
+    },
+    {
+      "expected": "no stop; the lead made at most 16 tool calls; every bound stayed under its ceiling",
+      "holds": true,
+      "kind": "row",
+      "note": "estimate (tool calls + 1) x (step base + bytes the session has sent)",
+      "observed": {
+        "L1b": {
+          "bytes": 21067,
+          "calls": 8,
+          "ceiling": 450000,
+          "estimate": 279603,
+          "stopped": null,
+          "tool_log_calls": 9
+        },
+        "L1b.alpha": {
+          "bytes": 3114,
+          "calls": 2,
+          "ceiling": 90000,
+          "estimate": 39342,
+          "stopped": null,
+          "tool_log_calls": null
+        },
+        "L1b.beta": {
+          "bytes": 1172,
+          "calls": 1,
+          "ceiling": 90000,
+          "estimate": 22344,
+          "stopped": null,
+          "tool_log_calls": null
+        }
+      },
+      "proven": true,
+      "row": "Every run stayed within its ceilings"
+    },
+    {
+      "expected": "every run that ran has its steps there, and the last is the one reported",
+      "holds": true,
+      "kind": "row",
+      "note": "owner decision 2026-09-24: session_message rows of PIO's sessions, read-only; measured from the store's recorded steps, not the bill: that the store holds every billed call is not proven",
+      "observed": {
+        "read": {
+          "mode": "ro",
+          "read": true,
+          "rows": 13,
+          "sessions": 3,
+          "table": "session_message"
+        },
+        "runs": {
+          "L1b": {
+            "basis": "measured_from_store_steps",
+            "reported_last_step": 11514,
+            "steps": [
+              7964,
+              10528,
+              10729,
+              10897,
+              11049,
+              11153,
+              11257,
+              11404,
+              11514
+            ]
+          },
+          "L1b.alpha": {
+            "basis": "measured_from_store_steps",
+            "reported_last_step": 8197,
+            "steps": [
+              8113,
+              8169,
+              8197
+            ]
+          },
+          "L1b.beta": {
+            "basis": "measured_from_store_steps",
+            "reported_last_step": 7816,
+            "steps": [
+              7816
+            ]
+          }
+        }
+      },
+      "proven": true,
+      "row": "Each run's steps were read from the owner's store"
+    },
+    {
+      "expected": "a positive amount per run that ran",
+      "holds": true,
+      "kind": "row",
+      "note": "OpenCode's last model step; charged times the steps it could have taken",
+      "observed": {
+        "L1b": 11514,
+        "L1b.alpha": 8197,
+        "L1b.beta": 7816
+      },
+      "proven": true,
+      "row": "Every run reported its usage"
+    },
+    {
+      "expected": true,
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": true,
+      "proven": true,
+      "row": "The owner's OpenCode service was untouched"
+    },
+    {
+      "expected": "nothing that was listed before is missing after",
+      "holds": null,
+      "kind": "row",
+      "note": "inconclusive",
+      "observed": {
+        "after": 3,
+        "before": 0,
+        "deleted_nothing": true
+      },
+      "proven": false,
+      "row": "PIO deleted no session"
+    },
+    {
+      "expected": "releasable, and a probe removed",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "probe": false,
+        "releasable": true,
+        "why": null
+      },
+      "proven": true,
+      "row": "The live tree can be released"
+    },
+    {
+      "expected": {},
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {},
+      "proven": true,
+      "row": "The runner's own steps raised no error"
+    },
+    {
+      "expected": "released",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": "released",
+      "proven": true,
+      "row": "The service was released, and nothing it started survived"
+    }
+  ],
+  "sequence": "M4-lead-opencode",
+  "sequence_cap": 2000000,
+  "sequence_stop": 1600000,
+  "sessions_after": {
+    "digest": "327653ba0d5ed9c29de7dd715e2e99e3f09f9e5d67e697b74126db3936fc7cbd",
+    "entry_count": 3,
+    "exit": 0,
+    "observed": true
+  },
+  "sessions_before": {
+    "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "entry_count": 0,
+    "exit": 0,
+    "observed": true
+  },
+  "spoken": {
+    "alpha": "7",
+    "beta": "",
+    "lead": "I'll start by exploring the available pio-lead tool, then execute the task as specified.Both runs are admitted. Now I'll read them. Since `read_run` waits up to 55 seconds, I need to call it repeatedly until each run has exited. Let me start polling both in parallel.Alpha has exited with answer \"7\". Beta still requires action. Continue polling beta.Acknowledged \u2014 I won't use the pi-delegate skill. Continuing to poll beta.Beta has exited, but its text is empty. Let me call read_run again as instructed (again until its runtime is exited) to confirm and check if a final text is available.Both runs have exited. Alpha reported \"7\". Beta's text is empty, so the number beta reported is empty/absent. Per the instructions, I use the numbers the runs reported.\n\nalpha.md: 7\nbeta.env:"
+  },
+  "started_at": "2026-09-24T18:11:55Z",
+  "steer_exited": {
+    "alternative": "Steering needs an acknowledged, running native turn",
+    "delivery_at_steer": "acknowledged",
+    "request": "not_supported",
+    "runtime_after_steer": "exited",
+    "runtime_at_steer": "exited"
+  },
+  "steer_running": {
+    "alternative": "Steering needs an acknowledged, running native turn",
+    "delivery_at_steer": "acknowledged",
+    "request": "not_supported",
+    "runtime_after_steer": "active",
+    "runtime_at_steer": "active"
+  },
+  "store_read": {
+    "mode": "ro",
+    "read": true,
+    "rows": 13,
+    "sessions": 3,
+    "table": "session_message"
+  },
+  "third": {
+    "lead_runtime": "active",
+    "result": {
+      "refused": {
+        "alternative": null,
+        "code": "call_budget_spent"
+      },
+      "run": "L1b.third",
+      "started": false
+    }
+  },
+  "tool_log": [
+    {
+      "event": "started",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "lead": "L1b"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "initialize"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "notifications/initialized"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "tools/list"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "brief": "First run the shell command sleep 30. Then report the number of lines in alpha.md. Answer with the number alone.",
+        "name": "alpha"
+      },
+      "event": "tool_call",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "result": {
+        "admission": "admitted",
+        "run": "L1b.alpha",
+        "started": true
+      },
+      "seconds": 0.1,
+      "tool": "start_run"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "brief": "Use your file read tool, not a shell command, to read beta.env. Then report the number of lines in beta.env. Answer with the number alone.",
+        "name": "beta"
+      },
+      "event": "tool_call",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "result": {
+        "admission": "admitted",
+        "run": "L1b.beta",
+        "started": true
+      },
+      "seconds": 0.4,
+      "tool": "start_run"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "name": "alpha"
+      },
+      "event": "tool_call",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "result": {
+        "exit": {
+          "code": 0
+        },
+        "run": "L1b.alpha",
+        "runtime": "exited",
+        "text": "7"
+      },
+      "seconds": 54.6,
+      "tool": "read_run"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "name": "beta"
+      },
+      "event": "tool_call",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "result": {
+        "exit": "unavailable",
+        "run": "L1b.beta",
+        "runtime": "requires_action",
+        "text": ""
+      },
+      "seconds": 56.8,
+      "tool": "read_run"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "name": "beta"
+      },
+      "event": "tool_call",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "result": {
+        "exit": "unavailable",
+        "run": "L1b.beta",
+        "runtime": "requires_action",
+        "text": ""
+      },
+      "seconds": 56.5,
+      "tool": "read_run"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "name": "beta"
+      },
+      "event": "tool_call",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "result": {
+        "exit": "unavailable",
+        "run": "L1b.beta",
+        "runtime": "requires_action",
+        "text": ""
+      },
+      "seconds": 57.6,
+      "tool": "read_run"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "name": "beta"
+      },
+      "event": "tool_call",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "result": {
+        "exit": "unavailable",
+        "run": "L1b.beta",
+        "runtime": "requires_action",
+        "text": ""
+      },
+      "seconds": 56.5,
+      "tool": "read_run"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "name": "beta"
+      },
+      "event": "tool_call",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "result": {
+        "exit": {
+          "code": 0
+        },
+        "run": "L1b.beta",
+        "runtime": "exited",
+        "text": ""
+      },
+      "seconds": 31.1,
+      "tool": "read_run"
+    },
+    {
+      "event": "request",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "name": "beta"
+      },
+      "event": "tool_call",
+      "grant": "06f65c65-46b0-48ca-a012-b45b8454b5cc",
+      "result": {
+        "exit": {
+          "code": 0
+        },
+        "run": "L1b.beta",
+        "runtime": "exited",
+        "text": ""
+      },
+      "seconds": 1.4,
+      "tool": "read_run"
+    }
+  ],
+  "usage": {
+    "L1b": {
+      "basis": "measured_from_store_steps",
+      "bound": 103626,
+      "charged": 96495,
+      "measured_steps": [
+        7964,
+        10528,
+        10729,
+        10897,
+        11049,
+        11153,
+        11257,
+        11404,
+        11514
+      ],
+      "meter_estimate": 279603,
+      "reported_last_step": 11514,
+      "steps_at_most": 9
+    },
+    "L1b.alpha": {
+      "basis": "measured_from_store_steps",
+      "bound": 24591,
+      "charged": 24479,
+      "measured_steps": [
+        8113,
+        8169,
+        8197
+      ],
+      "meter_estimate": 39342,
+      "reported_last_step": 8197,
+      "steps_at_most": 3
+    },
+    "L1b.beta": {
+      "basis": "measured_from_store_steps",
+      "bound": 15632,
+      "charged": 7816,
+      "measured_steps": [
+        7816
+      ],
+      "meter_estimate": 22344,
+      "reported_last_step": 7816,
+      "steps_at_most": 2
+    }
+  },
+  "views": {
+    "L1b": {
+      "admission": "admitted",
+      "completions": [],
+      "containment": {
+        "mechanism": "harness_permission_rules_only",
+        "os_sandbox_observed": false
+      },
+      "deliveries": [
+        {
+          "delivery": "acknowledged",
+          "delivery_id": "L1b.delivery-1",
+          "determined_at": "2026-09-24T18:13:43Z",
+          "evidence": {
+            "class": "native_session_update",
+            "source": "opencode-acp/host"
+          },
+          "history": [
+            {
+              "delivery": "pending",
+              "recorded_at": "2026-09-24T18:13:43Z"
+            }
+          ]
+        }
+      ],
+      "delivery": "acknowledged",
+      "effects": [
+        "L1b.delivery-1"
+      ],
+      "effects_liability": "unresolved",
+      "evaluation": "not_requested",
+      "execution": {
+        "id": "L1b",
+        "kind": "execution.execution"
+      },
+      "exit": {
+        "code": 0
+      },
+      "host": {
+        "generation": 1,
+        "id": "opencode-host"
+      },
+      "next_cursor": "46b29f10-0334-420c-b840-f759f8c17a2f:1:25",
+      "obligations": [],
+      "origin": {
+        "call_budget": 2,
+        "depth": 0,
+        "initiator": {
+          "id": "L1b",
+          "kind": "execution.execution"
+        }
+      },
+      "recovery": [],
+      "result": "absent",
+      "revision": 6,
+      "runtime": "exited",
+      "usage": {
+        "liability": "resolved",
+        "observations": [
+          {
+            "amount": 11514,
+            "basis": "observed",
+            "invocation_id": "49613415-e741-4c51-b445-4a83a20fe9ee",
+            "measure": "opencode.tokens.total",
+            "recorded_at": "2026-09-24T18:19:23Z"
+          }
+        ]
+      },
+      "workspace": {
+        "checkpoints": [],
+        "lease": {
+          "base": "72ee1247aac62dd755516482b621b15532edd2c0",
+          "cleanup": "retain",
+          "lease_epoch": 1,
+          "lease_id": "L1b.workspace",
+          "repository": "~/pio-m4-live/L1b-3ea58f35/fixtures/lead",
+          "writer": "owner"
+        }
+      }
+    },
+    "L1b.alpha": {
+      "admission": "admitted",
+      "completions": [],
+      "containment": {
+        "mechanism": "harness_permission_rules_only",
+        "os_sandbox_observed": false
+      },
+      "deliveries": [
+        {
+          "delivery": "acknowledged",
+          "delivery_id": "L1b.alpha.delivery-1",
+          "determined_at": "2026-09-24T18:14:15Z",
+          "evidence": {
+            "class": "native_session_update",
+            "source": "opencode-acp/host"
+          },
+          "history": [
+            {
+              "delivery": "pending",
+              "recorded_at": "2026-09-24T18:14:15Z"
+            }
+          ]
+        }
+      ],
+      "delivery": "acknowledged",
+      "effects": [
+        "L1b.alpha.delivery-1"
+      ],
+      "evaluation": "not_requested",
+      "execution": {
+        "id": "L1b.alpha",
+        "kind": "execution.execution"
+      },
+      "exit": {
+        "code": 0
+      },
+      "host": {
+        "generation": 1,
+        "id": "opencode-host"
+      },
+      "next_cursor": "46b29f10-0334-420c-b840-f759f8c17a2f:1:25",
+      "obligations": [],
+      "origin": {
+        "call_budget": 0,
+        "depth": 1,
+        "initiator": {
+          "id": "L1b",
+          "kind": "execution.execution"
+        }
+      },
+      "recovery": [],
+      "result": "absent",
+      "revision": 8,
+      "runtime": "exited",
+      "steering": [
+        {
+          "alternative": "Steering needs an acknowledged, running native turn",
+          "recorded_at": "2026-09-24T18:14:19Z",
+          "request": "not_supported",
+          "steer_id": "L1b.alpha.steer-1"
+        },
+        {
+          "alternative": "Steering needs an acknowledged, running native turn",
+          "recorded_at": "2026-09-24T18:19:27Z",
+          "request": "not_supported",
+          "steer_id": "L1b.alpha.steer-2"
+        }
+      ],
+      "usage": {
+        "liability": "resolved",
+        "observations": [
+          {
+            "amount": 8197,
+            "basis": "observed",
+            "invocation_id": "7371918d-2ed9-4d07-89aa-427d5816b0a0",
+            "measure": "opencode.tokens.total",
+            "recorded_at": "2026-09-24T18:14:47Z"
+          }
+        ]
+      },
+      "workspace": {
+        "checkpoints": [],
+        "lease": {
+          "base": "72ee1247aac62dd755516482b621b15532edd2c0",
+          "cleanup": "retain",
+          "lease_epoch": 1,
+          "lease_id": "L1b.alpha.workspace",
+          "repository": "~/pio-m4-live/L1b-3ea58f35/fixtures/lead",
+          "writer": "lead"
+        }
+      }
+    },
+    "L1b.beta": {
+      "actions": [
+        {
+          "action_id": "L1b.beta.action-1",
+          "answered_at": "2026-09-24T18:19:16Z",
+          "owner": "opencode",
+          "requested_at": "2026-09-24T18:14:16Z",
+          "state": "answered"
+        }
+      ],
+      "admission": "admitted",
+      "completions": [],
+      "containment": {
+        "mechanism": "harness_permission_rules_only",
+        "os_sandbox_observed": false
+      },
+      "deliveries": [
+        {
+          "delivery": "acknowledged",
+          "delivery_id": "L1b.beta.delivery-1",
+          "determined_at": "2026-09-24T18:14:16Z",
+          "evidence": {
+            "class": "native_session_update",
+            "source": "opencode-acp/host"
+          },
+          "history": [
+            {
+              "delivery": "pending",
+              "recorded_at": "2026-09-24T18:14:16Z"
+            }
+          ]
+        }
+      ],
+      "delivery": "acknowledged",
+      "effects": [
+        "L1b.beta.delivery-1"
+      ],
+      "evaluation": "not_requested",
+      "execution": {
+        "id": "L1b.beta",
+        "kind": "execution.execution"
+      },
+      "exit": {
+        "code": 0
+      },
+      "host": {
+        "generation": 1,
+        "id": "opencode-host"
+      },
+      "next_cursor": "46b29f10-0334-420c-b840-f759f8c17a2f:1:25",
+      "obligations": [],
+      "origin": {
+        "call_budget": 0,
+        "depth": 1,
+        "initiator": {
+          "id": "L1b",
+          "kind": "execution.execution"
+        }
+      },
+      "recovery": [],
+      "result": "absent",
+      "revision": 8,
+      "runtime": "exited",
+      "usage": {
+        "liability": "resolved",
+        "observations": [
+          {
+            "amount": 7816,
+            "basis": "observed",
+            "invocation_id": "26adc9b0-9d20-4e3b-a2fe-ab8724b21704",
+            "measure": "opencode.tokens.total",
+            "recorded_at": "2026-09-24T18:19:16Z"
+          }
+        ]
+      },
+      "workspace": {
+        "checkpoints": [],
+        "lease": {
+          "base": "72ee1247aac62dd755516482b621b15532edd2c0",
+          "cleanup": "retain",
+          "lease_epoch": 1,
+          "lease_id": "L1b.beta.workspace",
+          "repository": "~/pio-m4-live/L1b-3ea58f35/fixtures/lead",
+          "writer": "lead"
+        }
+      }
+    },
+    "L1b.third": {
+      "admission": "refused",
+      "completions": [],
+      "deliveries": [],
+      "delivery": "failed_before_delivery",
+      "effects": [],
+      "evaluation": "not_requested",
+      "execution": {
+        "id": "L1b.third",
+        "kind": "execution.execution"
+      },
+      "exit": "unavailable",
+      "host": {
+        "generation": 1,
+        "id": "opencode-host"
+      },
+      "next_cursor": "46b29f10-0334-420c-b840-f759f8c17a2f:1:25",
+      "obligations": [],
+      "origin": {
+        "call_budget": 0,
+        "depth": 1,
+        "initiator": {
+          "id": "L1b",
+          "kind": "execution.execution"
+        }
+      },
+      "reason": "call_budget_spent",
+      "recovery": [],
+      "result": "absent",
+      "revision": 1,
+      "runtime": "not_started",
+      "usage": {
+        "liability": "none",
+        "observations": []
+      },
+      "workspace": {
+        "checkpoints": [],
+        "lease": {
+          "base": "72ee1247aac62dd755516482b621b15532edd2c0",
+          "cleanup": "retain",
+          "lease_epoch": 1,
+          "lease_id": "L1b.third.workspace",
+          "repository": "~/pio-m4-live/L1b-3ea58f35/fixtures/lead",
+          "writer": "lead"
+        }
+      }
+    }
+  },
+  "wc_l": {
+    "alpha.md": 7,
+    "beta.env": 4
+  }
+}

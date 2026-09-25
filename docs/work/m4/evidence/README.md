@@ -154,3 +154,148 @@ process of the case, found nothing PIO started still running, and the
 owner's service and session still running with the same process ids. The live store is kept, as M3b's are, and
 `~/pio-m4-live` was made `0700` by hand at 10:30Z. The fix, and a row that
 fails on a release error, come before merge.
+
+## `L1b-rehearsal.json`
+
+L1b rehearsed against the labeled fake by `scripts/lead_run.py --rehearse
+--plan L1b` at clean head `e042672` (`dirty: false`), for the second attempt. **Zero tokens, no model
+call.** Plan approved by the owner on 2026-09-24, with review 48's amendments
+(issue #12).
+
+**Every row holds: 33 rows and one record, none failed.** Two rows are not
+provable in a rehearsal, as for L1: the store read, and whether a session was
+deleted. What L1b adds:
+
+- **The desk had something to decide.** `beta`'s read of `beta.env` was
+  relayed as `L1b.beta.action-1`, answered `allow` and sent as `allow_once`.
+  It was decided by the caller, never "always", and nothing lapsed. **Here
+  the rehearsal answered for itself**, and the fake asked. Live, OpenCode
+  asks (its shipped default for `*.env`, review 48) and the owner answers.
+- **A read waited.** The lead's `read_run` of `L1b.alpha` took **30.6 s**, by
+  the tool's own log, and returned `exited`. The row also holds on a read that
+  came back still running after the tool's 55 s limit (owner decision,
+  2026-09-25; mutant `alpha-outlasts`).
+- **Review 47's rule.** A desk nobody asked is inconclusive (mutant
+  `no-ask`), and so is a session listing that was empty before (live only).
+
+The record under this name at `117f283` was the one attempt 1 ran on; it was
+replaced before attempt 2, after the waiting row was widened.
+
+**What this does not show.** The fake is not OpenCode. Its read request uses
+the read tool's parameter name (`filePath`), not a measured permission
+request. Whether 2.0.11 asks about `beta.env` live is the live run's to show.
+If it doesn't ask, the desk row is inconclusive, not passed.
+
+## `L1b-live.json`
+
+L1b, **live**, at clean head `990c985` (`dirty: false`), 2026-09-24
+**18:11:55Z to 18:19:35Z**, detached, **on battery** (the owner lifted the AC
+condition; the no-sleep assertion was held to the end). The owner's desk
+words are in `desk`, verbatim except that their "HH:MM" placeholder was filled
+with the start time, and "on AC power" was changed to "on battery" at the
+owner's answer. Review 49 cleared the run; issue #12.
+
+**L1b failed, and its cause is the desk.** `beta`'s read of `beta.env` came to
+the desk (`L1b.beta.action-1`, requested 18:14:16Z) and was relayed at once.
+The owner's answer reached the relay at about 18:28Z, after the 300-second
+deadline (18:19:16Z). So **the host's single-use reject landed** (`reject_once`,
+decided by PIO, never "always"), and `beta` exited with no count. Three rows
+fail on that one cause: the desk row (lapsed), the children's counts (`beta`:
+none), and the lead's relay (`beta.env`: none). The owner's answer was
+"always allow". It could not have been sent as "always" in any case, because
+the desk encodes only `allow` and `deny`, and an allow is sent as `allow_once`.
+
+| | Observed |
+| --- | --- |
+| **The desk request** | OpenCode's read tool, `<fixture>/beta.env`, classified **`inside_fixture`**, disposition `surface_as_action`. OpenCode's options: `once` (`allow_once`), `always` (`allow_always`), `reject` (`reject_once`). So 2.0.11 does ask about `*.env` live, as the static reading said. |
+| **The waiting read** | The lead's `read_run` of `alpha` took **54.6 s** and returned `exited` with `7`. `beta`'s reads took 56.8, 56.5, 57.6 and 56.5 s (each `requires_action`), then 31.1 s (`exited`, after the reject), then 1.4 s. Nine tool calls against a ceiling of sixteen. |
+| **The lead** | Relayed `alpha.md: 7` and left `beta.env` blank: "Beta's text is empty, so the number beta reported is empty/absent." It invented nothing. Midway it said "Acknowledged — I won't use the pi-delegate skill": a skill from the owner's own OpenCode setup was visible to it, as configured. |
+| **Everything else** | Held, as in L1: tool on the lead only, launched once; both starts; the third refused `call_budget_spent`; steer `not_supported`, running and exited; the lead cannot answer; release clean; the owner's service untouched. |
+| **Inconclusive** | "PIO deleted no session": 0 sessions listed before (3 after), so nothing could be deleted (review 47). |
+
+**The charge: 128,790**, measured from the store's recorded steps (one
+`select` on `session_message` for the three PIO sessions, `mode=ro`, 13
+rows), not the bill.
+
+| Run | Steps recorded | Charged | Reported (last step) |
+| --- | --- | ---: | ---: |
+| `L1b` | 7,964 · 10,528 · 10,729 · 10,897 · 11,049 · 11,153 · 11,257 · 11,404 · 11,514 | 96,495 | 11,514 |
+| `L1b.alpha` | 8,113 · 8,169 · 8,197 | 24,479 | 8,197 |
+| `L1b.beta` | 7,816 | 7,816 | 7,816 |
+
+Sequence `M4-lead-opencode`: **202,322** of the 1,600,000 stop. MiniMax:
+**289,185 charged** of 300,000,000. The owner reconciles 18:11–18:20Z against
+the MiniMax console.
+
+## `L1b-attempt-2-live.json`
+
+L1b's second attempt, **live**, at clean head `0ba60de` (`dirty: false`),
+2026-09-25 **04:59:36Z to 05:01:11Z**, detached, **on AC power** (the no-sleep
+assertion was held to the end). It ran under its own ledger name,
+`L1b-attempt-2`, with the same plan, model and sequence, as the owner approved
+on 2026-09-25 (after review 50; review 51 gave the go). The owner confirmed the
+desk words in `desk` before the start. Issue #12.
+
+**Every row holds but one, which is inconclusive.** Of 33 rows, 32 hold (and
+one record, of what OpenCode did with the prompt). The exception is "PIO
+deleted no session": no sessions were listed before the run (3 after), so
+there was nothing to delete (review 47).
+
+**The desk: one item, applied by the relay from the owner's advance decision,
+not answered live.** The owner decided `beta`'s `.env` read in advance
+(2026-09-25, item 3). The relay (`L1b-attempt-2-relay.py`, below) answered
+that one request by itself, and would have brought any other to the owner
+live. There was no other.
+
+| Desk item | Requested | On the desk | Answered | Sent | Who answered |
+| --- | --- | --- | --- | --- | --- |
+| `L1b.beta.action-1`: OpenCode's read tool, `<fixture>/beta.env`, `inside_fixture` | 05:00:31Z | 05:00:32Z | 05:00:32Z | 05:00:33Z (`allow_once`) | The relay, applying the owner's decision of 2026-09-25, item 3, quoted in the answer's `words` |
+
+Within a second of the request reaching the desk, and two seconds after the
+request, counted in whole-second stamps. `decided_by` is `owner` in the desk
+answer, and `caller` in PIO's own record: the answer came from the caller's
+side, not from PIO's default. OpenCode offered the same options as in attempt 1:
+`once` (`allow_once`), `always` (`allow_always`), `reject` (`reject_once`). No
+`*_always` option was taken.
+
+| | Observed |
+| --- | --- |
+| **The waiting read** | The lead's `read_run` of `alpha` took **53.1 s** and returned `exited`, with `alpha`'s text "I'll run the sleep command and count the lines in parallel.7". `beta`'s read took **0.4 s** and returned `exited` with `4`. Four tool calls in all: two starts and two reads. |
+| **The counts** | `alpha.md: 7` and `beta.env: 4` from the children, and the same two in the lead's answer. They match `wc -l`. |
+| **The lead** | It said at first that it could not see the tool, then that it could, and it started both runs and read them. Its answer was "alpha.md: 7 / beta.env: 4". |
+| **Everything else** | Held, as in L1: tool on the lead only, launched once; both starts; the third refused `call_budget_spent`; steer `not_supported`, running and exited; the lead cannot answer an approval; a credential in a tool spec is refused; release clean; the owner's service untouched. |
+| **Inconclusive** | "PIO deleted no session", as above. |
+
+**The charge: 82,910**, measured from the store's recorded steps (one `select`
+on `session_message` for the three PIO sessions, `mode=ro`, 8 rows), not the
+bill.
+
+| Run | Steps recorded | Charged | Reported (last step) |
+| --- | --- | ---: | ---: |
+| `L1b` | 8,293 · 14,024 · 14,175 · 14,356 | 50,848 | 14,356 |
+| `L1b.alpha` | 7,845 · 7,919 | 15,764 | 7,919 |
+| `L1b.beta` | 8,113 · 8,185 | 16,298 | 8,185 |
+
+Sequence `M4-lead-opencode`: **285,232** of the 1,600,000 stop. This was the
+last attempt the stop allowed; there is no attempt 3 without a new decision by
+the owner. MiniMax: **372,095 charged** of 300,000,000. The owner reconciles
+04:59–05:02Z against the MiniMax console.
+
+**What this does not show.** That the store holds every billed call: OpenCode
+2.0.11's hidden title, summary and compaction agents may not write to a
+session's messages, which is why the console reconciliation exists. The model
+those hidden agents used is not in the receipt either. The owner's
+`opencode.jsonc` sets no `small_model` and no agent override. Whether `alpha`
+ran `sleep 30` before counting ("in parallel", it said) is not read from the
+store. Only the 53.1 s wait points to it.
+
+## `L1b-attempt-2-relay.py`
+
+The desk relay that ran beside attempt 2, committed as it ran (sha256
+`6e735c82…`, the same as the copy that ran). It reads the live tree's name from
+the runner's log and polls it with `os.listdir` and `open()`, so no command
+line names the tree (the cleanup kills any process group whose command line
+does). It answers only `L1b.beta` · `read` · `<fixture>/beta.env` ·
+`inside_fixture`, with `allow` and the owner's words. On any other request it
+prints it and exits, so the request goes to the owner live. It exited on
+`RUNNER EXITED` after answering one request.
