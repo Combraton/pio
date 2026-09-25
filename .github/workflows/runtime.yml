@@ -123,8 +123,9 @@ jobs:
         # alone, its own two tools pre-allowed there, each thread's model and
         # provider checked from Codex's answer before its first turn, a steer
         # under the lead's grant delivered to a running child, and the charge
-        # from Codex's own total. Each mutant must fail its named row. The
-        # host's lapse on Codex is the matrix's `mcp_approval_lapses`, so
+        # from Codex's own total. Each mutant must fail its named row, L1's
+        # own included, played on Codex. The host's lapse on Codex is the
+        # matrix's `mcp_approval_lapses` and `command_approval_lapses`, so
         # `desk-silent` (five minutes) runs in the local gates only.
         run: |
           PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --out target/lead-run-l3
@@ -132,7 +133,9 @@ jobs:
                    grant-no-steer wrong-child wrong-relay lead-loops runner-killed \
                    lead-asked-in-openai-form child-asks-permissions service-never-ready \
                    first-number-of-all ceiling-cancel-never-sent stop-charged-reported \
-                   usage-suppressed lead-heavy qualified-elsewhere; do
+                   usage-suppressed lead-heavy qualified-elsewhere \
+                   no-tool reports-refused-as-started grant-may-answer lead-without-brief \
+                   interrupted release-refused setup-fails; do
             if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant "$m" \
                  --out target/lead-run-l3-mutants > "target/lead-run-l3-mutant-$m.log" 2>&1; then
               echo "mutant $m survived"; exit 1
