@@ -13,6 +13,8 @@ pub const CONTENT_EXTENSION: &str = "pio.combraton.dev/content";
 /// carries it is refused before admission (`grants.rs`), because a server spec
 /// is a command the host's child will launch.
 pub const LEAD_TOOL_EXTENSION: &str = "pio.combraton.dev/lead-tool";
+/// The requests a run's host declined by itself, on `execution.exit.observed`.
+pub const NATIVE_DECLINES: &str = "pio.combraton.dev/native-declines";
 const CONTENT_PATH: &str = "/extensions/pio.combraton.dev~1content";
 pub const FEATURES: &[&str] = &[
     "execution.controller",
@@ -1015,7 +1017,26 @@ impl Provider {
                     payload["pio.combraton.dev/tool-uses"] = json!({"audit":e[&ns]["tool_uses"],
                                "harness_status":e[&ns]["tool_use_harness_status"]});
                 }
+                // Every request the host declined by itself, never put to a
+                // caller: what was asked and PIO's reason. Nothing in the
+                // view can hold it (`action_entry` is closed, and no caller
+                // was asked), so it rides here under a namespaced key, as the
+                // audit does. Always present, so "none" and "not carried"
+                // differ (review of L3, CH-2/F1).
+                payload[NATIVE_DECLINES] = match &e[&ns]["native_declines"] {
+                    Value::Array(list) => Value::Array(list.clone()),
+                    _ => json!([]),
+                };
                 self.execution_event(e, "execution.exit.observed", payload, None);
+            }
+            // A request the host answered with an error by itself: never a
+            // caller's decision, and never on the stream until now.
+            "native_request_declined" => {
+                let mut record = event.clone();
+                if let Some(fields) = record.as_object_mut() {
+                    fields.remove("kind");
+                }
+                push(&mut e[&ns]["native_declines"], record);
             }
             // An acknowledgment whose proof did not hold is not a delivery.
             "turn_acknowledged" => e[&ns]["acknowledgment_unproven"] = true.into(),

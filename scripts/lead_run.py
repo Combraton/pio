@@ -112,7 +112,15 @@ does with a permission prompt.
   passed;
 - `alpha-outlasts` (L1b) has `alpha` work 62 s, past the tool's 55 s wait:
   the waiting row must still **hold**, and only through a read that came back
-  still running at the limit.
+  still running at the limit;
+- `wrong-model`, `reviewer-elsewhere`, `no-pre-allow` and `child-overspends`
+  (L3) have Codex answer another model, route approvals elsewhere, drop the
+  pre-allowance, or take one step past a child's ceiling;
+- `lead-asked-in-openai-form` (L3) has Codex ask about the lead's tool in a
+  mode PIO does not recognise, so PIO declines it by itself: the
+  pre-allowance row must fail and say so;
+- `child-asks-permissions` (L3) has `beta` ask a permission grant, which PIO
+  declines by itself: the desk row must fail, because PIO decided it.
 """
 import argparse
 import base64
@@ -292,9 +300,15 @@ CONTENT = 'pio.combraton.dev/content'
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # The lead's own two tools, pre-allowed on Codex (owner decision, 2026-09-25).
 PRE_ALLOWED = ('start_run', 'read_run')
+# The lead tool's MCP server name, as the lead's session knows it.
+LEAD_SERVER = 'pio-lead'
 UNDER_GRANT = 'pio.combraton.dev/under-grant'
 APPROVAL = 'pio.combraton.dev/approval'
 DECISION = 'pio.combraton.dev/decision'
+# What a run's host declined by itself, never put to a caller, on the run's
+# `execution.exit.observed` (review of L3, CH-2/F1).
+NATIVE = 'pio.combraton.dev/native-declines'
+ELICITATION = 'mcpServer/elicitation/request'
 
 
 def child_brief(name):
@@ -386,6 +400,11 @@ MUTANTS = {
     'reviewer-elsewhere': 'Every run asserted that approvals go to the user',
     'no-pre-allow': "The lead's own two tools were pre-allowed, and nothing else",
     'child-overspends': 'Every run stayed within its ceilings',
+    # Shapes PIO declines by itself (review of L3, CH-2/F1): the lead's
+    # approval asked in a mode PIO does not recognise, and a child's
+    # permission grant.
+    'lead-asked-in-openai-form': "The lead's own two tools were pre-allowed, and nothing else",
+    'child-asks-permissions': 'Every approval was decided at the desk',
 }
 # L1b only: a mutant that must leave its row **inconclusive**, not failed. A
 # desk that was never asked has decided nothing, and must not say it has
@@ -400,7 +419,8 @@ HOLDING_MUTANTS = {'alpha-outlasts': 'A read_run waited for its run: until it ex
 PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
-                'child-overspends': {'L3'}}
+                'child-overspends': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
+                'child-asks-permissions': {'L3'}}
 
 
 def sha(data):
@@ -1112,6 +1132,14 @@ def codex_scenario(mutant, calls):
     if mutant == 'child-overspends':
         # One step past the child's ceiling, while it sleeps.
         play.update(led_heavy_if=alpha, led_heavy_step=CHILD_CEILING + 10_000)
+    if mutant == 'lead-asked-in-openai-form':
+        # The lead's tool approval in a mode the 0.157.0 schema allows and
+        # PIO does not recognise, asked despite the pre-allowance, and only
+        # before `read_run`: both children are started by then, so nothing
+        # but the ask itself can fail the pre-allowance row.
+        play.update(lead_asks_in_mode='openai/form', lead_asks_for='read_run')
+    if mutant == 'child-asks-permissions':
+        play['led_permissions_if'] = beta
     return play
 
 
@@ -1354,7 +1382,7 @@ def watch(args, record, service, desk, meters, state):
     credential_file.write_text(service.lead_credential + '\n')
     os.chmod(credential_file, 0o600)
     tool = mutated_tool(root) if args.mutant == 'reports-refused-as-started' else TOOL
-    spec = dict(name='pio-lead', command=sys.executable,
+    spec = dict(name=LEAD_SERVER, command=sys.executable,
                 args=[str(tool), '--credential-file', str(credential_file)],
                 env=[dict(name='PIO_LEAD_SOCKET', value=str(service.socket)),
                      dict(name='PIO_LEAD_GRANT', value=grant_id),
@@ -1687,6 +1715,17 @@ def codex_model(records):
                 and kinds.index('model_checked') < turn)
 
 
+def native_declines(stream):
+    """What each run's host declined by itself, read from the run's own
+    `execution.exit.observed` on the public stream: a list, empty for none,
+    or None where the exit carried no list."""
+    found = {}
+    for e in stream:
+        if e['type'] == 'execution.exit.observed':
+            found[e['subject']['id']] = e['payload'].get(NATIVE)
+    return found
+
+
 def codex_running_steer(o):
     """L3's claim: a steer under the lead's grant, recorded while the turn
     was running and delivered, and then acknowledged by Codex with the id it
@@ -1748,20 +1787,36 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
     sent = {run: [e.get('names') for e in host.get(run, [])
                   if e['kind'] == 'mcp_servers_sent'] for run in RUNS}
     rows.add('Only the lead got the tool', sent,
-             {LEAD: [['pio-lead']], **{f'{LEAD}.{c}': [[]] for c in CHILDREN}})
+             {LEAD: [[LEAD_SERVER]], **{f'{LEAD}.{c}': [[]] for c in CHILDREN}})
+    declined = native_declines(stream)
     if HARNESS == 'codex':
         # Owner decision, 2026-09-25: the lead's own two tools, per launch,
-        # and nothing else; so Codex asked nothing about them.
+        # and nothing else; so Codex asked nothing about them. **By any
+        # path**: an ask PIO surfaced, or one in a shape PIO did not
+        # recognise and declined by itself (review of L3, CH-2/F1). An
+        # elicitation from the lead's own server, or from a server Codex did
+        # not name, counts.
+        asked = dict(
+            surfaced=[e.get('message') for e in host.get(LEAD, [])
+                      if e['kind'] == 'action_requested'
+                      and e.get('approval_kind') == 'mcp_tool_call'],
+            declined_by_pio=[{k: d.get(k) for k in ('mode', 'approval_kind', 'server', 'tool')}
+                             for d in declined.get(LEAD) or []
+                             if d.get('method') == ELICITATION
+                             and d.get('server') in (LEAD_SERVER, None)])
+        held = not asked['surfaced'] and not asked['declined_by_pio']
         rows.add("The lead's own two tools were pre-allowed, and nothing else",
                  dict(pre_allowed={run: [e.get('pre_allowed_tools') for e in host.get(run, [])
                                          if e['kind'] == 'mcp_servers_sent'] for run in RUNS},
-                      asked_about_the_tool=[e.get('message') for e in host.get(LEAD, [])
-                                            if e['kind'] == 'action_requested'
-                                            and e.get('approval_kind') == 'mcp_tool_call']),
+                      asked_about_the_tool=asked),
                  dict(pre_allowed={LEAD: [list(PRE_ALLOWED)],
                                    **{f'{LEAD}.{c}': [None] for c in CHILDREN}},
-                      asked_about_the_tool=[]),
-                 note="in the lead's thread config only; never written to the owner's")
+                      asked_about_the_tool=dict(surfaced=[], declined_by_pio=[])),
+                 note="in the lead's thread config only; never written to the owner's"
+                      + ('' if held else
+                         f"; THE PRE-ALLOWANCE DID NOT HOLD: Codex asked about the lead's "
+                         f"tool {len(asked['surfaced'])} time(s) PIO surfaced and "
+                         f"{len(asked['declined_by_pio'])} time(s) PIO declined by itself"))
     # The tool's own witness, not the host's account of itself: each
     # launch writes `started`. One is the lead's session; none means the
     # lead never had it, and three means the children did too.
@@ -1897,14 +1952,23 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
     once = (lambda d: d['sent'] in sent_once.get(d['desk_decision'], [])) \
         if HARNESS == 'codex' else \
         (lambda d: d['applied'] is True and d['option_kind'] == single_use.get(d['desk_decision']))
+    # A request the host declined by itself was decided by PIO, by default,
+    # and never reached the desk. Each one fails the row, and a run that
+    # exited without carrying the list at all fails it too: PIO's own
+    # decisions could not be read (review of L3, F1).
+    exited = [i for i in RUNS if (views.get(i) or {}).get('runtime') == 'exited']
+    by_pio = {i: declined.get(i) for i in exited}
     rows.add('Every approval was decided at the desk',
              dict(decisions=decisions, lapsed=lapsed,
-                  desk={a: i['state'] for a, i in desk.items.items()}),
+                  desk={a: i['state'] for a, i in desk.items.items()},
+                  declined_by_pio=by_pio),
              'each relayed and answered at the desk, decided by the caller, sent as '
-             'the single-use kind, never always, none lapsed',
+             'the single-use kind, never always, none lapsed, and nothing declined by '
+             'PIO by itself',
              # Nothing asked, nothing decided: that cannot fail, so it is
              # not a pass either (review 47).
-             holds=lambda o: None if not o['desk'] and not o['lapsed'] and not o['decisions']
+             holds=lambda o: False if any(v is None or v for v in o['declined_by_pio'].values())
+             else None if not o['desk'] and not o['lapsed'] and not o['decisions']
              else not o['lapsed']
              and all(s == 'answered' for s in o['desk'].values())
              and len(o['desk']) == len(o['decisions'])
@@ -1912,7 +1976,13 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                      and d['always_option_taken'] is False for d in o['decisions']),
              note=f'{len(decisions)} approval(s) asked; none asked is inconclusive; a lapse '
                   f"is the host's single-use reject after the delivery timeout, and it "
-                  f'fails {LEAD}')
+                  f'fails {LEAD}; so does any request PIO declined by itself, and a run '
+                  'whose exit did not carry that list')
+    rows.record('What PIO declined by itself',
+                {i: declined.get(i, 'not carried: the run has no exit event') for i in RUNS},
+                note="each request the host answered with an error, never put to a caller: "
+                     "what was asked (method, server, mode, Codex's approval kind, tool name) "
+                     'and why; never an argument, a form, a URL or a message')
     if PLAN['waits']:
         waiting = f"{LEAD}.{PLAN['waits']}"
         reads = [dict(run=e['result'].get('run'), runtime=e['result'].get('runtime'),

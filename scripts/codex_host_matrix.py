@@ -263,6 +263,23 @@ def events_of(case, kind):
     return records
 
 
+NATIVE = 'pio.combraton.dev/native-declines'
+
+
+def carried_declines(case, identity='work'):
+    """The run's native declines as a caller reads them: off the stream, on
+    the run's own exit event, and nowhere else (review of L3, CH-2/F1)."""
+    with case.client() as c:
+        result = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                              'kinds': ['execution.execution']})['result']
+    exits = [i['event'] for i in result['items'] if 'event' in i
+             and i['event']['type'] == 'execution.exit.observed'
+             and i['event']['subject']['id'] == identity]
+    assert len(exits) == 1, exits
+    assert NATIVE in exits[0]['payload'], exits[0]
+    return exits[0]['payload'][NATIVE]
+
+
 def model_case(case, name):
     """The thread's model and provider, from Codex's own answer, before its
     first turn: a mismatch in either ends the run with no turn sent."""
@@ -463,9 +480,18 @@ def run_case(out, name):
             final = exited(case)
             declined = events_of(case, 'native_request_declined')
             assert [d['method'] for d in declined] == ['mcpServer/elicitation/request'], declined
+            # What was asked, by whom, and the true reason; never the URL.
+            assert (declined[0]['server'], declined[0]['mode'], declined[0]['approval_kind']) \
+                == ('someone', 'url', None), declined
+            assert 'does not recognise as a tool-call approval' in declined[0]['reason'], declined
+            assert 'example.invalid' not in json.dumps(declined), declined
+            carried = carried_declines(case)
+            assert [(d['method'], d['server'], d['mode'], d['decided_by']) for d in carried] == \
+                [('mcpServer/elicitation/request', 'someone', 'url', 'pio')], carried
             refused = [m for m in case.markers_records() if m['kind'] == 'approval_refused']
             assert len(refused) == 1, case.markers_records()
-            return dict(outcome='pass', declined=declined[0]['method'], actions=0, exit=final['exit'])
+            return dict(outcome='pass', declined=declined[0]['method'], carried=carried,
+                        actions=0, exit=final['exit'])
         brief = b'Fixture task: reply with one line.'
         response, repo = case.submit(brief=brief, deadline=3 if name == 'deadline_stop_interrupts' else 600)
         assert response['result']['outcome']['admission'] == 'admitted', response
@@ -578,6 +604,12 @@ def run_case(out, name):
             declined = events_of(case, 'native_request_declined')
             assert [e['method'] for e in declined] == ['item/permissions/requestApproval'], declined
             assert 'widen' in declined[0]['reason']
+            # The kinds of permission asked for, never the paths.
+            assert declined[0]['permission_kinds'] == ['filesystem'], declined
+            assert str(case.root) not in json.dumps(declined), declined
+            carried = carried_declines(case)
+            assert [(d['method'], d['permission_kinds']) for d in carried] == \
+                [('item/permissions/requestApproval', ['filesystem'])], carried
             # No action is ever surfaced, so nobody can answer a permission
             # grant. The view omits `actions` entirely when there are none.
             assert final.get('actions', []) == [] and events_of(case, 'action_requested') == [], final

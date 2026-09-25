@@ -23,7 +23,11 @@
 //! `led_delay_if`, then the line count (`led_offset`), asking a command
 //! approval first where it contains `command_approval_if`. `usage_step` is
 //! each model step's tokens; `led_heavy_step` replaces it where the prompt
-//! contains `led_heavy_if`.
+//! contains `led_heavy_if`. Shapes PIO declines by itself, for the runner's
+//! mutants: `lead_asks_in_mode` has the lead ask before every tool call (or
+//! only calls to `lead_asks_for`), in that elicitation mode, whatever the
+//! approval mode says; a led run whose
+//! prompt contains `led_permissions_if` first asks a permission grant.
 use crate::fake_turn::{self, McpServer, Turn, Waiting, emit};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};

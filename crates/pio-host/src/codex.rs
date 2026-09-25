@@ -51,6 +51,59 @@ fn answer_body(elicitation: bool, decision: &str) -> Value {
     }
 }
 
+/// A string field, if it is one; nothing else is copied.
+fn text_of(value: &Value) -> Value {
+    value.as_str().map(|s| json!(s)).unwrap_or(Value::Null)
+}
+
+/// What PIO records about a server request it declines by itself, and why.
+///
+/// Only fields that say **what** was asked and **by whom**: the method, the
+/// turn and item, and for an MCP elicitation the server, the mode, Codex's
+/// approval kind and request type, and the tool's name or title where Codex
+/// put one in `_meta`. For a permission grant, the kinds of permission asked
+/// for, never their values. Never an argument, a form's content, a URL or a
+/// message a server wrote: any of those can carry a secret or a path. The
+/// reason is the true one, not "no user is attached" (review of L3, CH-2).
+pub fn native_decline(method: &str, params: &Value) -> Value {
+    let mut record = json!({"method":method,"turn_id":text_of(&params["turnId"]),
+                            "item_id":text_of(&params["itemId"]),"decided_by":"pio",
+                            "sent":"a JSON-RPC error, code -32000"});
+    let reason = match method {
+        REFUSED_PERMISSION_GRANT => {
+            record["permission_kinds"] = params["permissions"]
+                .as_object()
+                .map(|kinds| json!(kinds.keys().collect::<Vec<_>>()))
+                .unwrap_or(Value::Null);
+            "declined by PIO: a permission grant would widen the approved thread settings"
+        }
+        MCP_APPROVAL_METHOD => {
+            let meta = &params["_meta"];
+            record["server"] = text_of(&params["serverName"]);
+            record["mode"] = text_of(&params["mode"]);
+            record["approval_kind"] = text_of(&meta["codex_approval_kind"]);
+            record["request_type"] = text_of(&meta["codex_request_type"]);
+            record["tool"] = match text_of(&meta["tool_name"]) {
+                Value::Null => text_of(&meta["tool_title"]),
+                name => name,
+            };
+            "declined by PIO: an MCP elicitation PIO does not recognise as a tool-call \
+             approval (only mode form with _meta.codex_approval_kind mcp_tool_call is \
+             one); PIO never supplies data, a login or a URL visit"
+        }
+        "item/tool/call" => {
+            record["tool"] = text_of(&params["tool"]);
+            "declined by PIO: a tool call PIO does not run on the user's behalf"
+        }
+        _ => {
+            "declined by PIO: not a request PIO answers; it answers only command, \
+             file-change and MCP tool-call approvals"
+        }
+    };
+    record["reason"] = json!(reason);
+    record
+}
+
 /// The adapter label. It prefixes this host's event and control files, so the
 /// shared lifecycle produces exactly the paths the service already reads.
 pub const ADAPTER: &str = "codex";
@@ -461,18 +514,17 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                 } else {
                     // PIO never answers user input, elicitations, tool calls
                     // or attestation on the user's behalf, and never grants
-                    // permissions beyond the approved thread settings.
-                    let reason = if method == REFUSED_PERMISSION_GRANT {
-                        "declined by PIO: a permission grant would widen the approved thread settings"
-                    } else {
-                        "declined by PIO: no user is attached to answer this request"
-                    };
-                    app.send(
-                        &json!({"id":message["id"],"error":{"code":-32000,"message":reason}}),
-                    )?;
-                    life.event(
-                        json!({"kind":"native_request_declined","method":method,"reason":reason}),
-                    )?;
+                    // permissions beyond the approved thread settings. What
+                    // it declined is recorded with enough to say what was
+                    // asked, and the true reason, so a receipt can say that
+                    // PIO decided it (review of L3, CH-2/F1).
+                    let record = native_decline(method, params);
+                    app.send(&json!({"id":message["id"],"error":{"code":-32000,
+                                     "message":record["reason"]}}))?;
+                    let mut event = record;
+                    event["kind"] = json!("native_request_declined");
+                    event["request_id"] = message["id"].clone();
+                    life.event(event)?;
                 }
                 continue;
             }

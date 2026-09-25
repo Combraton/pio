@@ -360,6 +360,13 @@ fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value)
         .cloned()
         .unwrap_or_default();
     let offset = scenario["lead"]["relay_offset"].as_i64().unwrap_or(0);
+    // A shape PIO does not recognise, sent whatever the approval mode says:
+    // the schema allows `openai/form` and `openaiForm` beside `form`, and
+    // which one Codex sends for a tool call was read from source, not
+    // measured (review of L3, CH-2). A mutant sends it, before every call or
+    // only before calls to `lead_asks_for`.
+    let forced_mode = scenario["lead_asks_in_mode"].as_str();
+    let forced_for = scenario["lead_asks_for"].as_str();
     let mut relay = Vec::new();
     play.step()?;
     for (index, call) in calls.iter().enumerate() {
@@ -372,10 +379,14 @@ fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value)
             }
             let item_id = format!("call_mcp_{index}_{tries}");
             tries += 1;
+            let forced = forced_mode.filter(|_| forced_for.is_none_or(|only| only == tool));
             let (asks, server_name) = {
                 let servers = servers.lock().expect("servers lock");
                 let server = servers.first().context("no MCP server")?;
-                (server.asks_before(tool), server.name.clone())
+                (
+                    forced.is_some() || server.asks_before(tool),
+                    server.name.clone(),
+                )
             };
             if asks {
                 // The request Codex builds (`build_mcp_tool_approval_elicitation_request`):
@@ -384,7 +395,7 @@ fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value)
                 let answer = play.ask(
                     "mcpServer/elicitation/request",
                     json!({"threadId":play.turn.thread,"turnId":play.turn.id,
-                           "serverName":server_name,"mode":"form",
+                           "serverName":server_name,"mode":forced.unwrap_or("form"),
                            "message":format!("Allow the {server_name} MCP server to run tool \"{tool}\"?"),
                            "requestedSchema":{"type":"object","properties":{}},
                            "_meta":{"codex_approval_kind":"mcp_tool_call",
@@ -397,7 +408,8 @@ fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value)
                 let action = answer["result"]["action"].as_str().unwrap_or("cancel");
                 let persist = answer["result"]["_meta"]["persist"].as_str();
                 play.marker(json!({"event":"mcp_approval_answered","tool":tool,
-                                   "action":action,"persist":persist}))?;
+                                   "action":action,"persist":persist,
+                                   "refused":answer["error"]["message"]}))?;
                 // How Codex reads it (`parse_mcp_tool_approval_elicitation_response`).
                 match (action, persist) {
                     ("accept", Some("session" | "always")) => servers
@@ -528,19 +540,22 @@ pub(crate) fn led(
         scenario["delay_ms"].as_u64().unwrap_or(200)
     };
     let asks = named("command_approval_if");
+    let grant = named("led_permissions_if");
     let offset = scenario["led_offset"].as_i64().unwrap_or(0);
-    if let Err(error) = play_led(&mut play, &cwd, &prompt, delay, asks, offset) {
+    if let Err(error) = play_led(&mut play, &cwd, &prompt, delay, asks, grant, offset) {
         let _ = play.marker(json!({"event":"led_script_failed","error":format!("{error:#}")}));
         let _ = turn.complete("failed");
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn play_led(
     play: &mut Play,
     cwd: &str,
     prompt: &str,
     delay: u64,
     asks: bool,
+    grant: bool,
     offset: i64,
 ) -> Result<()> {
     let file = named_file(prompt).unwrap_or_default();
@@ -549,9 +564,28 @@ fn play_led(
     // -q'`).
     let command = format!(
         "/bin/zsh -lc '{}'",
-        quoted_command(prompt).unwrap_or_else(|| format!("wc -l {file}"))
+        quoted_command(prompt).unwrap_or_else(|| format!("wc -l {file}")),
     );
     play.step()?;
+    if grant {
+        // A request PIO declines by itself: a permission grant, which asks
+        // for a profile rather than a decision (0.157.0's
+        // `PermissionsRequestApprovalParams`). The run goes on either way.
+        let answer = play.ask(
+            "item/permissions/requestApproval",
+            json!({"threadId":play.turn.thread,"turnId":play.turn.id,"itemId":"item-grant",
+                   "cwd":cwd,"startedAtMs":now_ms(),
+                   "reason":"labeled fake permission grant request",
+                   "permissions":{"filesystem":{"write":[cwd]}}}),
+        )?;
+        let Some(answer) = answer else {
+            return Ok(());
+        };
+        play.marker(
+            json!({"event":"permissions_answered","result":answer["result"],
+                           "refused":answer["error"]["message"]}),
+        )?;
+    }
     if asks {
         let answer = play.ask(
             "item/commandExecution/requestApproval",
