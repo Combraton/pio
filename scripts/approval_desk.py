@@ -516,6 +516,11 @@ def pass_harness(out, harness, mutant=None):
         assert row['answer_deadline_seconds'] == 300, row
         assert row['due'] is not None, row
         assert row['if_nobody_answers'], row
+        if harness.name == 'codex':
+            # What is being approved, so whoever decides can see it: the
+            # command the request names (the fake's `echo fixture`).
+            assert row['method'] and row['approval_kind'] and \
+                row['command'] == 'echo fixture', row
 
         if harness.offers_options:
             assert [o['kind'] for o in row['options']] == \

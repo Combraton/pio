@@ -134,6 +134,21 @@ jobs:
             grep -q "mutant $m: dies on" "target/lead-run-l3-mutant-$m.log" \
               || { cat "target/lead-run-l3-mutant-$m.log"; exit 1; }
           done
+          # The live relay (owner decision of 2026-09-25, item 3): its own
+          # cases, then the relay itself beside a rehearsal whose desk waits
+          # for answer files, as a live one does.
+          python3 scripts/l3_desk_relay.py --selftest
+          mkdir -p target/l3-relay
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --relay \
+            --out target/l3-relay/out > target/l3-relay/runner.log 2>&1 &
+          echo $! > target/l3-relay/runner.pid
+          python3 scripts/l3_desk_relay.py --dir target/l3-relay > target/l3-relay/relay.log 2>&1
+          wait "$(cat target/l3-relay/runner.pid)" \
+            || { cat target/l3-relay/runner.log target/l3-relay/relay.log; exit 1; }
+          grep -q "ANSWERED IN ADVANCE L3.beta.action-1 allow" target/l3-relay/relay.log \
+            || { cat target/l3-relay/relay.log; exit 1; }
+          ! grep -q "DESK FOR THE OWNER" target/l3-relay/relay.log \
+            || { cat target/l3-relay/relay.log; exit 1; }
       - name: No private paths in any committed file
         run: |
           python3 scripts/check_private_paths.py --selftest

@@ -543,7 +543,13 @@ fn play_led(
     offset: i64,
 ) -> Result<()> {
     let file = named_file(prompt).unwrap_or_default();
-    let command = quoted_command(prompt).unwrap_or_else(|| format!("wc -l {file}"));
+    // How Codex named a command it asked about, measured in M2 R5 at 0.155.1:
+    // the user's login shell wrapping it (`/bin/zsh -lc 'python3 -m unittest
+    // -q'`).
+    let command = format!(
+        "/bin/zsh -lc '{}'",
+        quoted_command(prompt).unwrap_or_else(|| format!("wc -l {file}"))
+    );
     play.step()?;
     if asks {
         let answer = play.ask(

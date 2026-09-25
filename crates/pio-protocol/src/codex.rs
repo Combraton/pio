@@ -827,14 +827,25 @@ impl Provider {
                                "approval_kind":event["approval_kind"],
                                // Null where a harness has no such notion,
                                // and the nulls mean something: the Codex
-                               // host offers no option list and sets no
-                               // answer deadline, so a Codex action waits
-                               // until a caller answers it. The walk shows
-                               // that rather than inventing a countdown.
+                               // host offers no option list. Its deadline
+                               // is the caller's delivery timeout, after
+                               // which it declines once (owner decision,
+                               // 2026-09-25); before that it had none.
                                "answer_deadline_seconds":event["answer_deadline_seconds"],
                                "options":event["options"],
                                "if_nobody_answers":event["if_nobody_answers"],
-                               "classification":event["classification"]}}),
+                               "classification":event["classification"],
+                               // What is being approved, in the harness's
+                               // own words, so whoever decides can see it:
+                               // the command a Codex command approval
+                               // names, and for an MCP tool-call approval
+                               // the server, Codex's question and what it
+                               // offered to remember (which PIO never
+                               // sends). Null where the harness has none.
+                               "command":event["command"],
+                               "server":event["server"],
+                               "message":event["message"],
+                               "persist_offered":event["persist_offered"]}}),
                     None,
                 );
             }

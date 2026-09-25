@@ -1139,7 +1139,9 @@ def run(args):
                   lead=LEAD, model=MODEL, budget=BUDGET, sequence=SEQUENCE,
                   sequence_cap=SEQUENCE_CAP, sequence_stop=SEQUENCE_STOP,
                   approvals=APPROVALS, bound=BOUND, mutant=args.mutant,
-                  started_at=started_at, desk=args.desk)
+                  started_at=started_at, desk=args.desk,
+                  desk_answered_by='answer files, as live (--relay)' if args.relay
+                  else 'the rehearsal itself' if args.rehearse else 'answer files')
     head = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'],
                           capture_output=True, text=True).stdout.strip()
     dirty = bool(subprocess.run(['git', '-C', str(ROOT), 'status', '--porcelain'],
@@ -1227,7 +1229,11 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
             raise SystemExit('refusing to start: the OpenCode configuration points a helper '
                              f"at a provider other than the plan's ({MODEL.split('/', 1)[0]}): "
                              f'{sorted(elsewhere)}')
-    desk = Desk(root / 'desk', rehearse, silent=args.mutant == 'desk-silent')
+    # `--relay`: a rehearsal whose desk waits for answer files, as a live
+    # one does, so the relay that will run beside the live run is rehearsed
+    # against the requests this code actually writes.
+    desk = Desk(root / 'desk', rehearse and not args.relay,
+                silent=args.mutant == 'desk-silent')
     gauge = CodexMeter if HARNESS == 'codex' else Meter
     meters = {LEAD: gauge(LEAD, LEAD_CEILING),
               **{f'{LEAD}.{c}': gauge(f'{LEAD}.{c}', CHILD_CEILING) for c in CHILDREN}}
@@ -2228,6 +2234,9 @@ def main():
                              'and a request that comes to the desk; or L3, on Codex')
     parser.add_argument('--mutant', choices=sorted({*MUTANTS, *INCONCLUSIVE_MUTANTS,
                                                     *HOLDING_MUTANTS}))
+    parser.add_argument('--relay', action='store_true',
+                        help='rehearsal only: the desk waits for answer files, as live, '
+                             'so a relay can answer them')
     parser.add_argument('--inner', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     select_plan(args.plan)
@@ -2239,10 +2248,12 @@ def main():
                          'desk, and their words go in the receipt')
     if args.mutant and not args.rehearse:
         raise SystemExit('a mutant is a rehearsal; it never spends a token')
+    if args.relay and not args.rehearse:
+        raise SystemExit('--relay is a rehearsal; a live desk always waits for its files')
     args.out.mkdir(parents=True, exist_ok=True)
     rehearsal = 'rehearsal' if LEAD == 'L1' else f'rehearsal-{LEAD}'
     name = (rehearsal if args.rehearse else (args.attempt or LEAD)) + \
-        (f'-mutant-{args.mutant}' if args.mutant else '')
+        (f'-mutant-{args.mutant}' if args.mutant else '') + ('-relay' if args.relay else '')
     args.receipt = args.out / f'{name}.json'
     if args.mutant == 'runner-killed' and not args.inner:
         args.receipt.unlink(missing_ok=True)
