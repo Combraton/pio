@@ -161,6 +161,9 @@ does with a permission prompt.
 - `experimental-feature-on` (L3) turns on `features.exec_permission_approvals`
   in the rehearsal's own Codex configuration: the runner must refuse to
   start, before anything is reserved, and leave no tree and no receipt;
+  `experimental-alias-on` turns it on by Codex's legacy alias
+  `request_permissions`, beside the canonical key set false, which the
+  alias overrides: the runner must refuse the same way;
 - `stop-ignored` (L3) has `alpha`, past its share, acknowledge the interrupt
   and go on, and the runner interrupted: `alpha` is still running when its
   usage is read, is charged what it reported plus a step, and the share row
@@ -489,6 +492,7 @@ MUTANTS = {
     # Not a row either: the runner refuses to start when Codex could ask for
     # permissions PIO is never shown (review of L3, round 2).
     'experimental-feature-on': 'The runner refuses a Codex that can ask for unseen permissions',
+    'experimental-alias-on': 'The runner refuses a Codex that can ask for unseen permissions',
     # L1b and L3.
     'no-wait': 'A read_run waited for its run: until it exited, or to the wait limit',
     # L3 only.
@@ -569,7 +573,7 @@ PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {
                 'lead-tool-error-past-hold': {'L3'}, 'lead-shell-past-hold': {'L3'},
                 'tool-error-ungated': {'L3'}, 'meter-ignores-items': {'L3'},
                 'stop-ignored': {'L3'}, 'not-exited-charged-share': {'L3'},
-                'experimental-feature-on': {'L3'}, 'asked-silent': {'L3'}}
+                'experimental-feature-on': {'L3'}, 'experimental-alias-on': {'L3'}, 'asked-silent': {'L3'}}
 
 
 def sha(data):
@@ -666,23 +670,47 @@ def helpers_elsewhere(helpers):
 # experimental API, as PIO does not. With either on, the desk (and the L3
 # relay's allow) would grant a widening nobody saw (review of L3, round 2).
 WIDENING_FEATURES = ('exec_permission_approvals', 'request_permissions_tool')
+# Every key Codex 0.157.0 reads as each feature: its own, and every legacy
+# alias `codex-rs/features/src/legacy.rs` lists for it at rust-v0.157.0
+# (`request_permissions` is `exec_permission_approvals`; the other has
+# none). `[features]` is a sorted map, and Codex applies its keys in order,
+# each setting its feature (`Features::apply_map`), so the last of a
+# feature's keys in that order decides it (review of L3, round 3, SPEND-3).
+FEATURE_KEYS = {'exec_permission_approvals': ('exec_permission_approvals', 'request_permissions'),
+                'request_permissions_tool': ('request_permissions_tool',)}
+
+
+def feature_setting(features, feature):
+    """What Codex would make of one feature from a `[features]` table, and
+    the key that decided it: `None` where no key names it (Codex's default)
+    or the deciding key holds something Codex would not read as a switch."""
+    keys = sorted(k for k in FEATURE_KEYS[feature] if k in features)
+    if not keys:
+        return None, None
+    value = features[keys[-1]]
+    return (value if isinstance(value, bool) else None), keys[-1]
 
 
 def codex_features(codex_home):
-    """The two feature switches, and nothing else, from the Codex
-    configuration: `[features]` in `config.toml`. Whatever else the file
+    """The feature switches the runner checks, and nothing else, from the
+    Codex configuration: `[features]` in `config.toml`, each by its own key
+    or a legacy alias, with the key that decided it. Whatever else the file
     holds is parsed and not kept."""
     path = Path(codex_home) / 'config.toml'
     if not path.exists():
-        return dict(read=str(path.name), exists=False, **{k: None for k in WIDENING_FEATURES})
+        return dict(read=str(path.name), exists=False,
+                    **{k: None for k in FEATURE_KEYS}, **{f'{k}_key': None for k in FEATURE_KEYS})
     try:
         features = tomllib.loads(path.read_text()).get('features') or {}
     except tomllib.TOMLDecodeError as error:
         raise SystemExit(f'refusing to start: {path.name} is unreadable, so its features '
                          f'cannot be checked: {error}')
-    return dict(read=str(path.name), exists=True,
-                **{k: features.get(k) if isinstance(features, dict) else None
-                   for k in WIDENING_FEATURES})
+    if not isinstance(features, dict):
+        features = {}
+    record = dict(read=str(path.name), exists=True)
+    for feature in FEATURE_KEYS:
+        record[feature], record[f'{feature}_key'] = feature_setting(features, feature)
+    return record
 
 
 def fresh_credential(principal):
@@ -1662,13 +1690,24 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
                              f'{sorted(elsewhere)}')
     if HARNESS == 'codex':
         codex_home = Path(service.config['codex']['codex_home'])
-        if args.mutant == 'experimental-feature-on':
+        planted = {
             # The case the check exists for, in the rehearsal's own Codex home.
+            'experimental-feature-on': '[features]\nexec_permission_approvals = true\n',
+            # The same feature by Codex's legacy alias, which, sorted after the
+            # canonical key, overrides it (review of L3, round 3, SPEND-3).
+            'experimental-alias-on': '[features]\nexec_permission_approvals = false\n'
+                                     'request_permissions = true\n'}.get(args.mutant)
+        if planted:
             codex_home.mkdir(parents=True, exist_ok=True)
-            (codex_home / 'config.toml').write_text('[features]\nexec_permission_approvals = true\n')
-        # Before anything is reserved or started. Only the two keys are read.
+            (codex_home / 'config.toml').write_text(planted)
+        # Before anything is reserved or started. Only these keys are read.
         record['codex_features'] = codex_features(codex_home)
-        widening = [k for k in WIDENING_FEATURES if record['codex_features'][k] is True]
+        features = record['codex_features']
+        # A key Codex would not read as a switch is not "off": Codex would
+        # refuse the file, and the runner cannot tell what it meant.
+        widening = [f"{k} (by {features[f'{k}_key']})" for k in WIDENING_FEATURES
+                    if features[k] is True
+                    or (features[k] is None and features[f'{k}_key'] is not None)]
         if widening:
             raise SystemExit('refusing to start: the Codex configuration turns on '
                              f'{widening}: a command approval could then ask for permissions '
@@ -3208,7 +3247,8 @@ def main():
     try:
         record = run(args)
     except BaseException as error:
-        if args.mutant in ('setup-fails', 'helper-elsewhere', 'experimental-feature-on'):
+        if args.mutant in ('setup-fails', 'helper-elsewhere', 'experimental-feature-on',
+                           'experimental-alias-on'):
             root = getattr(args, 'root', None)
             assert root is not None and not Path(root).exists(), (
                 f'the setup failed and left its tree behind: {root}')
@@ -3217,7 +3257,9 @@ def main():
                 assert "points a helper at a provider other than the plan's" in str(error) \
                     and 'small_model' in str(error), error
             if args.mutant == 'experimental-feature-on':
-                assert 'exec_permission_approvals' in str(error), error
+                assert 'exec_permission_approvals (by exec_permission_approvals)' in str(error), error
+            if args.mutant == 'experimental-alias-on':
+                assert 'exec_permission_approvals (by request_permissions)' in str(error), error
             print(f'mutant {args.mutant}: dies on {MUTANTS[args.mutant]!r}: '
                   f'{type(error).__name__}, and the tree is gone')
             raise SystemExit(1)

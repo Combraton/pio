@@ -235,7 +235,8 @@ jobs:
                    no-tool reports-refused-as-started grant-may-answer lead-without-brief \
                    interrupted release-refused setup-fails lead-tool-error-past-hold \
                    lead-shell-past-hold tool-error-ungated meter-ignores-items stop-ignored \
-                   not-exited-charged-share experimental-feature-on asked-silent lead-submit-invalid \
+                   not-exited-charged-share experimental-feature-on experimental-alias-on \
+                   asked-silent lead-submit-invalid \
                    third-admitted \
             | xargs -P 2 -I{} bash -c 'l3_mutant "$1"' _ {}
           # `qualified-as-committed` must **hold**: the committed record,

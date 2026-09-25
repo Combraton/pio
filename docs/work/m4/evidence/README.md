@@ -378,13 +378,19 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   only a planted record is checked (`qualified-as-committed` holds it). A
   service that never becomes ready leaves no reservation
   (`service-never-ready`).
-- **Codex features.** Before anything is reserved the runner reads two keys
-  of the Codex configuration's `[features]`, `exec_permission_approvals` and
-  `request_permissions_tool`, and refuses to start if either is on: PIO does
-  not opt into Codex's experimental API, so Codex strips a command
-  approval's extra permissions from what the desk sees, and an allow would
-  grant them unseen (`experimental-feature-on`). A feature set by a profile,
-  a managed configuration or a command-line override is not read.
+- **Codex features.** Before anything is reserved the runner reads two
+  features of the Codex configuration's `[features]`,
+  `exec_permission_approvals` and `request_permissions_tool`, each by its
+  own key and by every legacy alias Codex 0.157.0 lists for it
+  (`request_permissions` for the first; `features/src/legacy.rs`), the
+  last key in sorted order deciding, as Codex applies them. It refuses to
+  start if either is on, or set to something Codex would not read as a
+  switch, and records which key decided: PIO does not opt into Codex's
+  experimental API, so Codex strips a command approval's extra permissions
+  from what the desk sees, and an allow would grant them unseen
+  (`experimental-feature-on`; `experimental-alias-on`, the alias set true
+  beside the canonical key set false). A feature set by a profile, a
+  managed configuration or a command-line override is not read.
 - **The sizing.** Codex reports a step once its tool has finished (M2 R5,
   R6), so a report that crosses a ceiling arrives with the next step begun.
   From the code, each run can reach its ceiling plus two steps: a child
