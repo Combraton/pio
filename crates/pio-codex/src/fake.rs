@@ -24,8 +24,8 @@
 //! approval first where it contains `command_approval_if`. `usage_step` is
 //! each model step's tokens; `led_heavy_step` replaces the first step's (the
 //! one that runs the command) where the prompt contains `led_heavy_if`. A
-//! model step takes `model_step_ms` (default 1,500) before it says or calls
-//! anything. Usage is reported as Codex was measured reporting it: once a
+//! model step takes `model_step_ms` (default 1,500), or `led_step_ms` in a led
+//! run, before it says or calls anything. Usage is reported as Codex was measured reporting it: once a
 //! step and its tool have finished, and, for the step an interrupt cuts
 //! short, after the interrupt (M2 R1, R3, R5, R6). Shapes PIO declines by itself, for the runner's
 //! mutants: `lead_asks_in_mode` has the lead ask before every tool call (or

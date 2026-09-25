@@ -607,7 +607,10 @@ pub(crate) fn led(
         step: scenario["usage_step"].as_u64().unwrap_or(4096),
         // Only the first step: the one that runs the command.
         first: named("led_heavy_if").then(|| scenario["led_heavy_step"].as_u64().unwrap_or(60_000)),
-        think: think_time(&scenario),
+        think: scenario["led_step_ms"]
+            .as_u64()
+            .map(Duration::from_millis)
+            .unwrap_or_else(|| think_time(&scenario)),
         requests: AtomicU64::new(0),
         messages: AtomicU64::new(0),
     };

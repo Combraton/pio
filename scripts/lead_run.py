@@ -129,7 +129,12 @@ does with a permission prompt.
   since nothing was submitted;
 - `first-number-of-all` (L3) has the runner read every message a child said,
   as it did, instead of its answer: the fake's children say what they are
-  about to run first, as Codex was measured doing, so the count row fails.
+  about to run first, as Codex was measured doing, so the count row fails;
+- `ceiling-cancel-never-sent` and `stop-charged-reported` (L3) play
+  `child-overspends` with the runner changed: its meter decides the stop and
+  never sends it, so the row that reads the host's own interrupt fails; or it
+  charges a stopped run only what it reported, so the charge row fails.
+  `child-overspends` itself must hold both of those rows.
 """
 import argparse
 import base64
@@ -144,6 +149,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -417,6 +423,11 @@ MUTANTS = {
     # The service refuses to start: nothing was submitted, so no reservation
     # may stand and the sequence may not be blocked (review of L3, F4).
     'service-never-ready': 'The run finished without an error',
+    # child-overspends' play, with the runner changed: its meter decides the
+    # stop and never sends it (F3), or its charge for a stopped run is only
+    # what the run reported (F2).
+    'ceiling-cancel-never-sent': 'Every stop the runner made reached Codex',
+    'stop-charged-reported': "Every run's charge covers what it could have spent, within its share",
     # The runner reads every message a child said, as it did, not its
     # answer: a preamble that quotes the command is taken for the count.
     'first-number-of-all': 'Each child reported the true count',
@@ -435,7 +446,8 @@ PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
                 'child-overspends': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
-                'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'}}
+                'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'},
+                'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'}}
 
 
 def sha(data):
@@ -740,14 +752,17 @@ def view(caller, identity):
 
 
 def events(caller):
+    """Every execution event, following `next_cursor` to the end: a page
+    shorter than the limit is the last. (It read `cursor` and `has_more`,
+    which the result does not carry, and so read one page only.)"""
     items, payload = [], {'limit': 1000, 'from': 'start', 'kinds': ['execution.execution']}
     while True:
         result = caller.query('core.events.read', payload).get('result')
         assert result is not None, 'core.events.read refused'
         items += [i['event'] for i in result['items'] if 'event' in i]
-        if not result.get('has_more'):
+        if len(result['items']) < payload['limit']:
             return items
-        payload = {'limit': 1000, 'cursor': result['cursor'],
+        payload = {'limit': 1000, 'cursor': result['next_cursor'],
                    'kinds': ['execution.execution']}
 
 
@@ -907,6 +922,10 @@ class CodexMeter(Meter):
     def __init__(self, identity, ceiling):
         super().__init__(identity, ceiling)
         self.total = 0
+        # What the event stream said last: the run's runtime and how many
+        # usage reports it has made.
+        self.runtime = None
+        self.reports = 0
 
     def read(self, caller):
         raw, self.offset = spool(caller, self.identity, self.offset)
@@ -928,6 +947,86 @@ class CodexMeter(Meter):
 
     def estimate(self):
         return self.total
+
+    def observe(self, event):
+        """One event from the run's stream."""
+        payload = event.get('payload') or {}
+        if event['type'] == 'execution.usage.observed' and isinstance(payload.get('amount'), int):
+            self.total = max(self.total, payload['amount'])
+            self.reports += 1
+        elif event['type'] == 'execution.runtime.changed' and payload.get('runtime'):
+            self.runtime = payload['runtime']
+        elif event['type'] == 'execution.exit.observed':
+            self.runtime = 'exited'
+
+
+class CodexMetering(threading.Thread):
+    """Every Codex run's spend, read as it is reported, on a connection of
+    its own and apart from the watch loop (review of L3, F3 and A7).
+
+    Measured in the L3 rehearsal: one query to the service took a median of
+    167 ms (p90 371 ms), a pass of the watch loop (which also relays the
+    desk, steers and makes the third start) took up to 8.2 s, and a usage
+    report reached the loop's meter 1.07 s after the host recorded it, too
+    late for the interrupt to reach a child before its turn ended. So this
+    follows the event stream, one `core.events.read` a pass: each
+    `execution.usage.observed` is a run's reported total, and each runtime
+    change says whether it still runs. A stop decided here is sent from
+    here.
+    """
+
+    def __init__(self, service, meters, root, record):
+        super().__init__(name='codex-meter', daemon=True)
+        self.service, self.meters, self.root, self.record = service, meters, root, record
+        self.halt = threading.Event()
+        self.error = None
+        self.passes = 0
+        self.seconds = 0.0
+
+    def run(self):
+        began = time.monotonic()
+        try:
+            owner = self.service.owner()
+        except Exception as caught:
+            self.error = redact(repr(caught))[:500]
+            return
+        cursor = None
+        try:
+            while not self.halt.is_set():
+                while True:
+                    payload = {'limit': 1000, 'kinds': ['execution.execution']}
+                    payload.update({'cursor': cursor} if cursor else {'from': 'start'})
+                    result = owner.query('core.events.read', payload).get('result')
+                    if result is None:
+                        raise RuntimeError('core.events.read refused')
+                    gap = False
+                    for item in result['items']:
+                        if 'gap' in item:
+                            gap = True
+                            continue
+                        gauge = self.meters.get(item['event']['subject']['id'])
+                        if gauge is not None:
+                            gauge.observe(item['event'])
+                    cursor = result.get('next_cursor') or cursor
+                    if gap:
+                        # Events the stream no longer holds: read each run
+                        # itself rather than trust a total with a hole in it.
+                        for identity, gauge in self.meters.items():
+                            current = view(owner, identity) or {}
+                            seen = (current.get('usage') or {}).get('observations') or []
+                            if seen and isinstance(seen[0].get('amount'), int):
+                                gauge.total = max(gauge.total, seen[0]['amount'])
+                            gauge.runtime = current.get('runtime') or gauge.runtime
+                    if len(result['items']) < payload['limit']:
+                        break
+                self.passes += 1
+                codex_meter(owner, self.meters, self.root, self.record)
+                self.halt.wait(0.1)
+        except Exception as caught:
+            self.error = redact(repr(caught))[:500]
+        finally:
+            self.seconds = round(time.monotonic() - began, 1)
+            owner.close()
 
 
 def tool_log(root):
@@ -1158,11 +1257,15 @@ def codex_scenario(mutant, calls):
         play['model_reported'] = 'another-model'
     if mutant == 'reviewer-elsewhere':
         play['approvals_reviewer'] = 'auto_review'
-    if mutant == 'child-overspends':
+    if mutant in ('child-overspends', 'ceiling-cancel-never-sent', 'stop-charged-reported'):
         # alpha's first step, the one that runs its command, is past the
         # child's ceiling. Codex reports it once the command has finished,
-        # so the runner stops alpha while its answering step is in flight.
-        play.update(led_heavy_if=alpha, led_heavy_step=CHILD_CEILING + 10_000)
+        # so the runner stops alpha while its answering step is in flight;
+        # a child's model step here takes six seconds, longer than the stop
+        # takes to reach it (about 1.5 s against this service), as a real
+        # step does.
+        play.update(led_heavy_if=alpha, led_heavy_step=CHILD_CEILING + 10_000,
+                    led_step_ms=6000)
     if mutant == 'lead-asked-in-openai-form':
         # The lead's tool approval in a mode the 0.157.0 schema allows and
         # PIO does not recognise, asked despite the pre-allowance, and only
@@ -1351,7 +1454,8 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
         # A step of the runner's own that raised left its rows unwritten, and
         # a row that was never written never fails (L1 live, review 46).
         rows.add("The runner's own steps raised no error",
-                 {k: record[k] for k in ('settle_error', 'judge_error') if k in record}, {})
+                 {k: record[k] for k in ('settle_error', 'judge_error', 'meter_error')
+                  if k in record}, {})
         try:
             if args.mutant == 'release-refused':
                 # The guard refuses every tree, as it refused L1's live one.
@@ -1400,6 +1504,9 @@ def watch(args, record, service, desk, meters, state):
         record['configured'] = live.configured_model(rehearse)
     service.start()
     owner = service.owner()
+    if HARNESS == 'codex':
+        state['metering'] = CodexMetering(service, meters, root, record)
+        state['metering'].start()
 
     grant_id = str(uuid.uuid4())
     rights = ['execution.submit', 'execution.steer', 'execution.read',
@@ -1460,7 +1567,11 @@ def watch(args, record, service, desk, meters, state):
     while time.monotonic() < deadline:
         views = {i: view(owner, i) for i in RUNS}
         desk.poll(owner, views)
-        if time.monotonic() - metered >= 0.5:
+        metering = state.get('metering')
+        if metering is not None and not metering.is_alive():
+            # Never run unmetered: the exit path stops everything.
+            raise SystemExit(f'the meter stopped: {metering.error}')
+        if metering is None and time.monotonic() - metered >= 0.5:
             metered = time.monotonic()
             meter(owner, views, meters, root, record)
         first = views[f'{LEAD}.alpha']
@@ -1514,10 +1625,15 @@ def watch(args, record, service, desk, meters, state):
     owner.close()
 
 
+def lead_calls(root):
+    return len([e for e in tool_log(root) if e.get('event') == 'request'
+                and e.get('method') == 'tools/call'])
+
+
 def meter(owner, views, meters, root, record):
-    """Read every live run's meter, and stop a run that passes its ceiling."""
-    calls = len([e for e in tool_log(root) if e.get('event') == 'request'
-                 and e.get('method') == 'tools/call'])
+    """OpenCode: read every live run's meter from its session, and stop a run
+    that passes its ceiling."""
+    calls = lead_calls(root)
     for identity, gauge in meters.items():
         current = views.get(identity)
         if not current or current.get('admission') == 'refused':
@@ -1531,12 +1647,40 @@ def meter(owner, views, meters, root, record):
         if gauge.estimate() >= gauge.ceiling:
             over.append(f'at most {gauge.estimate()} tokens, past {gauge.ceiling}')
         if over:
-            if identity == LEAD:
-                # First the hold, so the lead's next call waits for the kill.
-                (root / 'lead-stop').touch()
-            gauge.stopped = dict(why=over, at=now(), cancel=cancel(owner, identity, 'ceiling'))
-            record.setdefault('ceiling_stops', []).append(dict(run=identity, **gauge.stopped))
-            print(f'CEILING {identity}: {"; ".join(over)}; cancelled', flush=True)
+            stop_run(owner, identity, gauge, over, root, record)
+
+
+def codex_meter(owner, meters, root, record):
+    """Codex: stop a run whose reported total has reached its ceiling, or a
+    lead past its call ceiling. The totals come from the event stream
+    (`CodexMetering`)."""
+    calls = lead_calls(root)
+    for identity, gauge in meters.items():
+        if gauge.stopped or gauge.runtime == 'exited':
+            continue
+        over = []
+        if identity == LEAD and calls > CALL_CEILING:
+            over.append(f'{calls} tool calls, past {CALL_CEILING}')
+        if gauge.total >= gauge.ceiling:
+            over.append(f'{gauge.total} tokens reported, past {gauge.ceiling}')
+        if over:
+            stop_run(owner, identity, gauge, over, root, record)
+
+
+def stop_run(owner, identity, gauge, over, root, record):
+    """Stop one run: for the lead, first the hold, so no result of its tool
+    lets it take another step; then the cancel. What is recorded is PIO's
+    receipt for the cancel; whether it reached the harness is the host's to
+    say, and a row reads that (review of L3, F3)."""
+    if identity == LEAD:
+        (root / 'lead-stop').touch()
+    if record.get('mutant') == 'ceiling-cancel-never-sent':
+        sent = dict(outcome='MUTANT: the cancel was never sent')
+    else:
+        sent = cancel(owner, identity, 'ceiling')
+    gauge.stopped = dict(why=over, at=now(), cancel=sent)
+    record.setdefault('ceiling_stops', []).append(dict(run=identity, **gauge.stopped))
+    print(f'CEILING {identity}: {"; ".join(over)}; cancel requested', flush=True)
 
 
 def settle(record, service, meters, state, root):
@@ -1544,6 +1688,15 @@ def settle(record, service, meters, state, root):
     need while the service is still there to ask."""
     # The lead's tool holds from here on, whatever else happens.
     (root / 'lead-stop').touch()
+    metering = state.get('metering')
+    if metering is not None:
+        metering.halt.set()
+        metering.join(timeout=15)
+        record['metering'] = dict(source='core.events.read, one query a pass',
+                                  passes=metering.passes, seconds=metering.seconds,
+                                  error=metering.error)
+        if metering.error:
+            record['meter_error'] = metering.error
     owner = service.owner()
     try:
         stopped = {}
@@ -1554,8 +1707,12 @@ def settle(record, service, meters, state, root):
                 stopped[identity] = cancel(owner, identity, 'exit')
         if stopped:
             record['stopped_on_exit'] = stopped
-            # The host escalates an unanswered cancel to a kill after ten
-            # seconds; this waits for that, not for the turn.
+            # OpenCode's host escalates an unanswered cancel to a kill after
+            # ten seconds. **The Codex host has no such escalation**: a
+            # turn/interrupt Codex did not honour leaves the run going. So
+            # this waits at most a minute, for either, and a run still not
+            # exited when its usage is read is charged its whole share
+            # (review of L3, F2).
             end = time.monotonic() + 60
             while time.monotonic() < end and any(
                     (view(owner, i) or {}).get('runtime') not in (None, 'exited')
@@ -1604,7 +1761,10 @@ def settle(record, service, meters, state, root):
     calls = len([e for e in log if e.get('event') == 'request'
                  and e.get('method') == 'tools/call'])
     record['meters'] = {i: g.summary(calls if i == LEAD else None) for i, g in meters.items()}
-    record['usage'] = usage_of(views, meters, state['submitted'] | started_runs(root), steps)
+    stops = {s['run'] for s in record.get('ceiling_stops', [])} \
+        | set(record.get('stopped_on_exit') or {})
+    record['usage'] = usage_of(views, meters, state['submitted'] | started_runs(root), steps,
+                               stopped=stops, mutant=record.get('mutant'))
     record.update(views=views, tool_log=log, spoken=dict(said, lead=relay),
                   answered=answered)
     return dict(views=views, stream=stream, log=log, host=host, said=said, relay=relay,
@@ -1643,7 +1803,7 @@ def store_steps(home, sessions):
                        sessions=len(ids), rows=len(found))
 
 
-def usage_of(views, meters, submitted, steps=None):
+def usage_of(views, meters, submitted, steps=None, stopped=(), mutant=None):
     """What each run reported, and what it is charged, on what basis.
 
     OpenCode's turn usage is its **last model step's**, so a turn that made
@@ -1656,7 +1816,7 @@ def usage_of(views, meters, submitted, steps=None):
     and never less than the steps the store holds.
     """
     if HARNESS == 'codex':
-        return codex_usage(views, meters, submitted)
+        return codex_usage(views, meters, submitted, stopped, mutant)
     steps = steps or {}
     usage = {}
     for identity in RUNS:
@@ -1694,12 +1854,24 @@ def usage_of(views, meters, submitted, steps=None):
     return usage
 
 
-def codex_usage(views, meters, submitted):
+STOPPED_BASIS = ('stopped by the runner: its reported total plus one step in flight, '
+                 'capped at its share, never less than it reported')
+NOT_EXITED_BASIS = 'not seen exited when its usage was read: its whole share'
+
+
+def codex_usage(views, meters, submitted, stopped=(), mutant=None):
     """Codex's reported total for each run, which covers every step of its
-    turn (review 48), so it is what the run is charged. A run that reported
-    nothing is charged its whole share: never nothing, and never less than it
-    could have spent."""
+    turn (review 48), so it is what a run that ended by itself is charged.
+
+    A run the runner stopped (at a ceiling, for silence, or on the way out)
+    may have had a step in flight that Codex bills and that the report the
+    runner read does not hold, so it is charged its reported total plus one
+    step in flight, capped at its share and never less than it reported. A
+    run still not exited when its usage was read, or one that reported
+    nothing, is charged its whole share: never nothing, and never less than
+    it could have spent (review of L3, F2)."""
     usage = {}
+    in_flight = CODEX['in_flight']
     for identity in RUNS:
         current = views.get(identity) or {}
         if current.get('admission') == 'refused':
@@ -1710,13 +1882,22 @@ def codex_usage(views, meters, submitted):
         observations = (current.get('usage') or {}).get('observations') or []
         reported = observations[0]['amount'] if observations else None
         gauge = meters[identity]
-        if isinstance(reported, int) and reported > 0:
-            usage[identity] = dict(reported_total=reported, charged=max(reported, gauge.total),
-                                   basis='reported_total', meter_estimate=gauge.estimate())
+        share = LEAD_SHARE if identity == LEAD else CHILD_SHARE
+        entry = dict(reported_total=reported if isinstance(reported, int) else None,
+                     meter_estimate=gauge.estimate(), share=share,
+                     stopped_by_the_runner=identity in stopped)
+        if current.get('runtime') != 'exited':
+            entry.update(charged=share, basis=NOT_EXITED_BASIS)
+        elif isinstance(reported, int) and reported > 0:
+            total = max(reported, gauge.total)
+            if identity in stopped and mutant != 'stop-charged-reported':
+                entry.update(charged=max(total, min(total + in_flight, share)),
+                             basis=STOPPED_BASIS, in_flight=in_flight)
+            else:
+                entry.update(charged=total, basis='reported_total')
         else:
-            usage[identity] = dict(reported_total=None, usage='unknown', basis='allowance',
-                                   charged=LEAD_SHARE if identity == LEAD else CHILD_SHARE,
-                                   meter_estimate=gauge.estimate())
+            entry.update(usage='unknown', charged=share, basis='allowance')
+        usage[identity] = entry
     return usage
 
 
@@ -2075,6 +2256,62 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
              and max(m[LEAD]['calls'], m[LEAD]['tool_log_calls'] or 0) <= CALL_CEILING,
              note=f"estimate {BOUND['estimate']}")
     usage = record['usage']
+    if HARNESS == 'codex':
+        # A stop is PIO's request; whether it reached Codex is the host's to
+        # say: its own control_sent for turn/interrupt, Codex's answer to
+        # it, and the turn ending interrupted (review of L3, F3).
+        stops = {s['run'] for s in record.get('ceiling_stops', [])} \
+            | set(record.get('stopped_on_exit') or {})
+        reached = {}
+        for run in sorted(stops):
+            events_of_run = host.get(run, [])
+            sent = {e.get('control_id') for e in events_of_run
+                    if e['kind'] == 'control_sent' and e.get('method') == 'turn/interrupt'
+                    and str(e.get('control_id', '')).startswith(f'{run}.cancel-')}
+            reached[run] = dict(
+                interrupt_sent=bool(sent),
+                acknowledged=any(e['kind'] == 'control_response' and e.get('control_id') in sent
+                                 and e.get('error') is None for e in events_of_run),
+                turn=next((e.get('status') for e in events_of_run
+                           if e['kind'] == 'turn_completed'), None),
+                cancellation=((views.get(run) or {}).get('cancellation') or {}).get('outcome'))
+        rows.add('Every stop the runner made reached Codex', reached,
+                 'for each run the runner stopped: the host sent turn/interrupt, Codex '
+                 'acknowledged it, and the turn ended interrupted (cancellation cancelled)',
+                 holds=lambda o: None if not o else all(
+                     r['interrupt_sent'] and r['acknowledged'] and r['turn'] == 'interrupted'
+                     and r['cancellation'] == 'cancelled' for r in o.values()),
+                 note="the host's own control_sent and control_response, not PIO's "
+                      'cancel_requested; no stop, nothing to judge')
+        # What each run is charged, against what it could have spent and the
+        # share reserved for it: a run that ended by itself at least what it
+        # reported, one the runner stopped at least that plus a step in
+        # flight (up to its share), one not seen exited its whole share, and
+        # none more than its share (review of L3, F2 and F3).
+        judged = {}
+        for run, u in usage.items():
+            if u['basis'] == 'refused before any model call':
+                continue
+            share = LEAD_SHARE if run == LEAD else CHILD_SHARE
+            reported = u.get('reported_total') or 0
+            if u['basis'] in ('allowance', NOT_EXITED_BASIS):
+                floor = share
+            elif run in stops:
+                floor = max(reported, min(reported + CODEX['in_flight'], share))
+            else:
+                floor = reported
+            judged[run] = dict(charged=u['charged'], at_least=floor, share=share,
+                               reported=u.get('reported_total'), stopped=run in stops,
+                               basis=u['basis'])
+        rows.add("Every run's charge covers what it could have spent, within its share",
+                 dict(runs=judged, total=sum(r['charged'] for r in judged.values()),
+                      worst_case=WORST_CASE),
+                 'for every run that ran: at least what it could have spent, and at most '
+                 'the share reserved for it; in all, at most the worst case',
+                 holds=lambda o: bool(o['runs']) and o['total'] <= o['worst_case'] and all(
+                     r['at_least'] <= r['charged'] <= r['share'] for r in o['runs'].values()),
+                 note=f"in flight: {CODEX['in_flight']} a step; lead share {LEAD_SHARE}, "
+                      f'child share {CHILD_SHARE}, worst case {WORST_CASE}')
     ran = {i: u for i, u in usage.items() if u['basis'] != 'refused before any model call'}
     if HARNESS == 'opencode':
         rows.add("Each run's steps were read from the owner's store",
@@ -2464,6 +2701,13 @@ def main():
         if args.mutant == 'interrupted':
             assert record['error']['type'] == 'KeyboardInterrupt', record.get('error')
             assert record.get('stopped_on_exit'), 'nothing was stopped on the way out'
+        if args.mutant == 'child-overspends':
+            # The stop is proven here, where one is made: it reached Codex,
+            # and the run was charged its step in flight, within its share.
+            for name in ('Every stop the runner made reached Codex',
+                         "Every run's charge covers what it could have spent, within its share"):
+                row = next(r for r in record['rows'] if r['row'] == name)
+                assert row['holds'] is True, row
         if args.mutant == 'service-never-ready':
             # Found at once, not after the readiness wait; nothing reserved,
             # nothing charged, and the next attempt not blocked.
