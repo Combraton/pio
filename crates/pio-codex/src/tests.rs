@@ -305,6 +305,39 @@ fn checked_in_identity_is_the_qualified_schema_listing() {
     );
 }
 
+/// The three pin constants and the compiled-in identity name one release:
+/// the identity is the one checked in under `adapters/codex/<PINNED_VERSION>`,
+/// and the committed qualification record for that version names the same
+/// tag and source. A stale `PINNED_VERSION` fails closed at run time, but a
+/// stale tag or source was only copied into every record's `pinned` and
+/// would misstate provenance silently (review of L3, REPIN-5).
+#[test]
+fn pin_constants_name_the_identity_and_the_qualification_record() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let identity = std::fs::read_to_string(workspace.join(format!(
+        "adapters/codex/{PINNED_VERSION}/schema-identity.json"
+    )))
+    .expect("an identity directory for PINNED_VERSION");
+    assert_eq!(
+        identity, QUALIFIED_SCHEMA_IDENTITY,
+        "the compiled-in identity is not the one checked in for {PINNED_VERSION}"
+    );
+    let record: Value = serde_json::from_str(
+        &std::fs::read_to_string(workspace.join(format!(
+            "docs/work/m2/codex-qualification/qualification-{PINNED_VERSION}.json"
+        )))
+        .expect("a committed qualification record for PINNED_VERSION"),
+    )
+    .unwrap();
+    assert_eq!(
+        record["record"]["pinned"],
+        json!({"version":PINNED_VERSION,"tag":PINNED_TAG,"source":PINNED_SOURCE})
+    );
+    assert_eq!(record["record"]["qualified"], true);
+    assert_eq!(record["record"]["version"]["native"], PINNED_VERSION);
+    assert_eq!(PINNED_TAG, format!("rust-v{PINNED_VERSION}"));
+}
+
 #[test]
 fn config_diff_discloses_added_trust_entries_and_other_changes() {
     let dir = tempfile::tempdir().unwrap();
