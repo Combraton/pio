@@ -422,6 +422,19 @@ pub fn run() -> Result<()> {
                                     // decision.
                                     params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","cwd":cwd,"startedAtMs":0,"reason":"labeled fake permission grant request","permissions":{"filesystem":{"write":[cwd]}}});
                                 }
+                                // A network ask in 0.157.0's shape, and a command
+                                // approval that names no cwd (it is optional):
+                                // the two cases a relay must not answer (review
+                                // of L3, round 2, HR-3).
+                                if scenario["approval_network"] == true {
+                                    params["networkApprovalContext"] =
+                                        json!({"host":"example.invalid","protocol":"https"});
+                                }
+                                if scenario["approval_no_cwd"] == true
+                                    && let Some(fields) = params.as_object_mut()
+                                {
+                                    fields.remove("cwd");
+                                }
                                 if kind == "user_input" {
                                     // Codex's other way to ask about an MCP tool
                                     // call (0.157.0): a question whose id begins

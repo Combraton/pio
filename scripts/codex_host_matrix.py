@@ -34,7 +34,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses', 'other_elicitation_declined',
          'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused',
          'command_approval_lapses', 'form_elicitation_declined', 'approval_cwd_through_a_link',
-         'early_elicitation_declined', 'user_input_declined']
+         'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
@@ -484,6 +484,8 @@ def run_case(out, name):
         approval_cwd_through_a_link={'approval': 'command', 'delay_ms': 100},
         early_elicitation_declined={'elicit_during_thread_start': True, 'delay_ms': 100},
         user_input_declined={'approval': 'user_input', 'delay_ms': 100},
+        network_and_unplaced_approval={'approval': 'command', 'delay_ms': 100,
+                                       'approval_network': True, 'approval_no_cwd': True},
         model_checked_before_turn={'model_provider': 'openai', 'delay_ms': 100},
         model_mismatch_refused={'model_provider': 'openai', 'model_reported': 'another-model'},
         provider_mismatch_refused={'delay_ms': 100},
@@ -561,6 +563,39 @@ def run_case(out, name):
             return model_case(case, name)
         if name in ('lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses'):
             return lead_tool_case(case, name)
+        if name == 'network_and_unplaced_approval':
+            # A command approval that asks for the network and names no cwd:
+            # the host says both, and the L3 relay answers neither, from the
+            # payload the host produced (review of L3, round 2, HR-3).
+            import l3_desk_relay
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            waiting = poll(lambda: case.inspect()['result'], lambda v: v['runtime'] == 'requires_action')
+            requested = events_of(case, 'action_requested')[0]
+            assert requested['network_approval'] is True, requested
+            assert (requested['classification']['placement'], requested['classification']['target_label']) \
+                == ('not_classifiable', None), requested
+            with case.client() as c:
+                stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                      'kinds': ['execution.execution']})['result']
+            approval = next(i['event']['payload']['pio.combraton.dev/approval'] for i in stream['items']
+                            if 'event' in i and 'pio.combraton.dev/approval' in i['event']['payload'])
+            assert approval['network_approval'] is True and \
+                approval['classification']['placement'] == 'not_classifiable', approval
+            item = lambda **change: dict(run='L3.beta', approval=dict(
+                approval, command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'", **change))
+            inside = dict(approval['classification'], placement='inside_fixture')
+            assert l3_desk_relay.decided_in_advance(item()) is None
+            assert l3_desk_relay.decided_in_advance(item(classification=inside)) is None, 'network'
+            assert l3_desk_relay.decided_in_advance(item(network_approval=False)) is None, 'unplaced'
+            assert l3_desk_relay.decided_in_advance(item(classification=inside, network_approval=False))
+            action = waiting['runtime_detail']['action_id']
+            body = json.dumps({'decision': 'decline'}).encode()
+            case.execution_command('execution.respond_action', 'work',
+                                   dict(action_id=action, response=dict(digest=digest(body), media_type='application/json')),
+                                   'decline', body, 'application/json')
+            exited(case)
+            return dict(outcome='pass', network_approval=True, placement='not_classifiable')
         if name == 'user_input_declined':
             # Codex's other route for an MCP tool-call approval: declined by
             # PIO, recorded by how many questions and whether one is that

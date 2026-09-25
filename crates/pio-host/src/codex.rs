@@ -120,6 +120,51 @@ pub fn native_decline(method: &str, params: &Value) -> Value {
     record
 }
 
+/// Where a command approval's working directory lands against the run's
+/// workspace, by the classifier the other hosts use: a label and a digest,
+/// never the path. A command with no cwd, or a run with no absolute
+/// workspace to judge it against, is `not_classifiable`: an empty workspace
+/// would contain every path (review of L3, round 2, HR-7).
+pub fn command_placement(cwd: Option<&str>, workspace: Option<&str>) -> Value {
+    let Some(workspace) = workspace.filter(|w| Path::new(w).is_absolute()) else {
+        return json!({"subject":"cwd","placement":"not_classifiable",
+                      "target_label":null,"target_sha256":null});
+    };
+    let workspace = Path::new(workspace);
+    let mut placement = pio_claude::classify_path(cwd, workspace, workspace);
+    placement["subject"] = json!("cwd");
+    placement
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::command_placement;
+
+    #[test]
+    fn a_command_is_placed_only_against_an_absolute_workspace() {
+        // Any directory that exists will do: the crate's own.
+        let workspace = std::fs::canonicalize(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let root = workspace.to_str().unwrap();
+        let inside = command_placement(Some(root), Some(root));
+        assert_eq!(inside["placement"], "inside_fixture");
+        assert_eq!(inside["target_label"], "<fixture>/");
+        assert_eq!(
+            command_placement(Some("/"), Some(root))["placement"],
+            "outside_fixture"
+        );
+        // No cwd from Codex, and no workspace to judge against: nothing can
+        // be said, and no path is carried.
+        let unplaced = command_placement(None, Some(root));
+        assert_eq!(unplaced["placement"], "not_classifiable");
+        assert!(unplaced["target_label"].is_null());
+        for workspace in [None, Some(""), Some("relative")] {
+            let placed = command_placement(Some("/Users"), workspace);
+            assert_eq!(placed["placement"], "not_classifiable", "{workspace:?}");
+            assert!(placed["target_label"].is_null(), "{workspace:?}");
+        }
+    }
+}
+
 /// The adapter label. It prefixes this host's event and control files, so the
 /// shared lifecycle produces exactly the paths the service already reads.
 pub const ADAPTER: &str = "codex";
@@ -585,11 +630,8 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                         // Codex is asking for network access, which is a
                         // different thing from running a command (review
                         // of L3, CH-6/F6).
-                        let workspace = Path::new(life.spec["cwd"].as_str().unwrap_or_default());
-                        let mut placement =
-                            pio_claude::classify_path(params["cwd"].as_str(), workspace, workspace);
-                        placement["subject"] = json!("cwd");
-                        event["classification"] = placement;
+                        event["classification"] =
+                            command_placement(params["cwd"].as_str(), life.spec["cwd"].as_str());
                         event["network_approval"] =
                             json!(!params["networkApprovalContext"].is_null());
                     }
