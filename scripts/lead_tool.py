@@ -37,6 +37,10 @@ past the kill is a model step the lead cannot take in between. The stop file
 is checked again when a result is ready, so a call that was running when the
 lead was stopped (a `read_run` waits up to 55 s) hands back nothing either.
 
+**Only the plan's children.** With `PIO_LEAD_CHILDREN` set, `start_run`
+refuses any other name before anything reaches the service, so every run the
+lead can start is one the runner knows by name.
+
 **On Codex, no result that would let the lead step past its share.** Codex
 reports a step once its tool has finished (M2 R5, R6), so when a result is
 ready the lead's last report covers every step but the one that made this
@@ -84,6 +88,12 @@ METER = os.environ.get('PIO_LEAD_METER', '')
 # the meter must have begun a pass this long after the call arrived.
 FRESH = 1.5
 METER_WAIT = 30
+# The plan's children, by name (`PIO_LEAD_CHILDREN`, comma-separated). A
+# start under any other name is refused here, before it reaches the service:
+# a child the runner does not know by name is a run nothing meters, stops or
+# charges by name (review of L3, round 3, SPEND-1). Unset, any name is
+# started, as the M4b proofs start theirs.
+CHILDREN = [c for c in os.environ.get('PIO_LEAD_CHILDREN', '').split(',') if c]
 
 
 def credential():
@@ -170,6 +180,10 @@ class Api:
 def start_run(name, brief):
     """Start one run under this lead, and report how it went."""
     identity = f'{LEAD}.{name}'
+    if CHILDREN and name not in CHILDREN:
+        return dict(run=identity, started=False,
+                    refused=dict(code='not_a_planned_child', children=CHILDREN,
+                                 message=f'this lead may start only {CHILDREN}'))
     body = brief.encode()
     api = Api()
     answer = api.call(

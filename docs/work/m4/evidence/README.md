@@ -510,6 +510,14 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   `tool_timeout_sec`; PIO sets none). The lead tool's longest path, a read
   (55 s), the meter wait (30 s) and a hold (30 s), is 115 s, which fits: a
   timeout would hand the lead an error and start a step.
+- **Children under other names.** The lead's tool starts only the plan's
+  children (`PIO_LEAD_CHILDREN`), so a lead that names another is refused
+  before anything reaches the service (`child-renamed`). Behind that, the
+  runner meters, stops, cancels (on its way out and from the watchdog),
+  relays at the desk and charges every execution under `L3.` the stream
+  shows, whatever its name (`child-renamed-unchecked`; review of L3, round
+  3, SPEND-1). Before this, a renamed child ran unmetered and was charged
+  nothing while every spend row held.
 - **The runner's probes.** The third start, the grant's attempt to attach
   the tool and the credential check must be refused; one that was admitted
   instead is cancelled and charged its share on a line of its own

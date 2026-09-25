@@ -227,6 +227,7 @@ jobs:
           }
           export -f l3_mutant
           printf '%s\n' wrong-model reviewer-elsewhere no-pre-allow child-overspends no-wait \
+                   child-renamed child-renamed-unchecked \
                    grant-no-steer wrong-child wrong-relay lead-loops runner-killed \
                    lead-asked-in-openai-form lead-asked-by-user-input child-asks-permissions \
                    service-never-ready \

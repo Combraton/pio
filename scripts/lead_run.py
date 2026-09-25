@@ -158,6 +158,12 @@ does with a permission prompt.
   the shell's result met by a stop; `tool-error-ungated` (errors skip the
   gate) and `meter-ignores-items` (the meter blind to such results) must each
   fail the row that checks every result against the hold;
+- `child-renamed` (L3) has the lead start and read its children as
+  `alpha_run` and `beta_run`: its tool refuses both, since only the plan's
+  children may be started, so the start row fails and nothing runs;
+  `child-renamed-unchecked` lets them through the tool, and the runner must
+  still meter the renamed `alpha`, stop it at its ceiling, cancel it and
+  charge both on lines of their own, so the ceilings row fails;
 - `experimental-feature-on` (L3) turns on `features.exec_permission_approvals`
   in the rehearsal's own Codex configuration: the runner must refuse to
   start, before anything is reserved, and leave no tree and no receipt;
@@ -394,12 +400,15 @@ def select_plan(name):
     harness."""
     global PLAN, LEAD, FILES, CHILDREN, RUNS, APPROVALS, BRIEF, HARNESS, live
     global MODEL, SEQUENCE, SEQUENCE_CAP, SEQUENCE_STOP, LEAD_CEILING, CHILD_CEILING
-    global LEAD_SHARE, CHILD_SHARE, WORST_CASE, BOUND, HOLD_ABOVE
+    global LEAD_SHARE, CHILD_SHARE, WORST_CASE, BOUND, HOLD_ABOVE, PROBES
     PLAN = dict(PLANS[name], name=name)
     LEAD = name
     FILES = PLAN['files']
     CHILDREN = {f.split('.')[0]: f for f in FILES}
     RUNS = (LEAD, *[f'{LEAD}.{c}' for c in CHILDREN])
+    # The runner's own starts under this lead, each expected to be refused,
+    # and charged apart if one is not (review of L3, round 2, SB-5).
+    PROBES = (f'{LEAD}.third', f'{LEAD}.attached')
     HARNESS = PLAN['harness']
     if HARNESS == 'codex':
         live = CODEX['live']
@@ -500,6 +509,12 @@ MUTANTS = {
     'reviewer-elsewhere': 'Every run asserted that approvals go to the user',
     'no-pre-allow': "The lead's own two tools were pre-allowed, and nothing else",
     'child-overspends': 'Every run stayed within its ceilings',
+    # The lead starts its children under other names (review of L3, round 3,
+    # SPEND-1): the tool refuses them, so no run starts; or, with the tool's
+    # check let through, the runner must still meter, stop and charge them:
+    # the renamed alpha passes its ceiling.
+    'child-renamed': 'The lead started its two runs through the tool',
+    'child-renamed-unchecked': 'Every run stayed within its ceilings',
     # Shapes PIO declines by itself (review of L3, CH-2/F1): the lead's
     # approval asked in a mode PIO does not recognise, and a child's
     # permission grant.
@@ -564,7 +579,8 @@ HOLDING_MUTANTS = {'alpha-outlasts': 'A read_run waited for its run: until it ex
 PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
-                'child-overspends': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
+                'child-overspends': {'L3'}, 'child-renamed': {'L3'},
+                'child-renamed-unchecked': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
                 'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'},
                 'lead-asked-by-user-input': {'L3'},
                 'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'},
@@ -946,6 +962,55 @@ def events(caller):
                    'kinds': ['execution.execution']}
 
 
+def in_family(identity):
+    """An execution under this lead: the lead, or any id beneath it,
+    whatever its name (review of L3, round 3, SPEND-1)."""
+    return isinstance(identity, str) and (identity == LEAD or identity.startswith(f'{LEAD}.'))
+
+
+def adopt(meters, identity, record):
+    """Meter a run under this lead that the plan did not name, as a child:
+    from here it is metered, stopped, cancelled, relayed at the desk and
+    charged like one. The lead's tool starts only the plan's children, so
+    this is the second line (review of L3, round 3, SPEND-1)."""
+    if identity in meters or not in_family(identity):
+        return
+    gauge = CodexMeter if HARNESS == 'codex' else Meter
+    meters[identity] = gauge(identity, CHILD_CEILING)
+    if identity not in PROBES:
+        record.setdefault('unplanned_runs', []).append(dict(run=identity, seen_at=now()))
+        print(f'UNPLANNED {identity}: metered, stopped and charged as a child', flush=True)
+
+
+def runs(meters):
+    """Every run the watch, the rows and the charge cover: the plan's, then
+    any other under this lead the stream has shown, in the order seen. The
+    runner's own probes are charged apart."""
+    return (*RUNS, *[i for i in list(meters) if i not in RUNS and i not in PROBES])
+
+
+class Discovery:
+    """The executions under this lead that the stream has shown, one read a
+    pass from where the last left off, each adopted as it appears."""
+
+    def __init__(self):
+        self.cursor = None
+
+    def adopt(self, owner, meters, record):
+        while True:
+            payload = {'limit': 1000, 'kinds': ['execution.execution']}
+            payload.update({'cursor': self.cursor} if self.cursor else {'from': 'start'})
+            result = owner.query('core.events.read', payload).get('result')
+            if result is None:
+                return
+            for item in result['items']:
+                if 'event' in item:
+                    adopt(meters, item['event']['subject']['id'], record)
+            self.cursor = result.get('next_cursor') or self.cursor
+            if len(result['items']) < payload['limit']:
+                return
+
+
 def spool(caller, identity, offset=0):
     """A run's spooled session updates from `offset`, and where they end."""
     raw = b''
@@ -1241,14 +1306,16 @@ class CodexMetering(threading.Thread):
                         if 'gap' in item:
                             gap = True
                             continue
-                        gauge = self.meters.get(item['event']['subject']['id'])
+                        subject = item['event']['subject']['id']
+                        adopt(self.meters, subject, self.record)
+                        gauge = self.meters.get(subject)
                         if gauge is not None:
                             gauge.observe(item['event'])
                     cursor = result.get('next_cursor') or cursor
                     if gap:
                         # Events the stream no longer holds: read each run
                         # itself rather than trust a total with a hole in it.
-                        for identity, gauge in self.meters.items():
+                        for identity, gauge in list(self.meters.items()):
                             current = view(owner, identity) or {}
                             seen = (current.get('usage') or {}).get('observations') or []
                             if seen and isinstance(seen[0].get('amount'), int):
@@ -1477,9 +1544,13 @@ def scenario(mutant):
     answers a model would give, neither of them a model."""
     if mutant == 'setup-fails':
         raise RuntimeError('setup-fails: the scenario could not be built')
-    reads = [dict(tool='read_run', arguments=dict(name=short), until='exited',
+    # `child-renamed`: the lead starts and reads its children under names
+    # the plan does not have (review of L3, round 3, SPEND-1).
+    renamed = mutant in ('child-renamed', 'child-renamed-unchecked')
+    called = {short: f'{short}_run' if renamed else short for short in CHILDREN}
+    reads = [dict(tool='read_run', arguments=dict(name=called[short]), until='exited',
                   report_as=name) for short, name in CHILDREN.items()]
-    starts = [dict(tool='start_run', arguments=dict(name=short, brief=child_brief(name)))
+    starts = [dict(tool='start_run', arguments=dict(name=called[short], brief=child_brief(name)))
               for short, name in CHILDREN.items()]
     loops = ([dict(tool='read_run', arguments=dict(name='alpha'), repeat=CALL_CEILING * 2)]
              if mutant == 'lead-loops' else [])
@@ -1525,7 +1596,8 @@ def codex_scenario(mutant, calls):
         play['model_reported'] = 'another-model'
     if mutant == 'reviewer-elsewhere':
         play['approvals_reviewer'] = 'auto_review'
-    if mutant in ('child-overspends', 'ceiling-cancel-never-sent', 'stop-charged-reported'):
+    if mutant in ('child-overspends', 'ceiling-cancel-never-sent', 'stop-charged-reported',
+                  'child-renamed', 'child-renamed-unchecked'):
         # alpha's first step, the one that runs its command, is past the
         # child's ceiling. Codex reports it once the command has finished,
         # so the runner stops alpha while its answering step is in flight;
@@ -1868,7 +1940,14 @@ def watch(args, record, service, desk, meters, state):
                      dict(name='PIO_LEAD_BASE', value=base),
                      dict(name='PIO_LEAD_LOG', value=str(root / 'lead-tool.jsonl')),
                      dict(name='PIO_LEAD_CALL_CEILING', value=str(CALL_CEILING)),
-                     dict(name='PIO_LEAD_STOP', value=str(root / 'lead-stop'))])
+                     dict(name='PIO_LEAD_STOP', value=str(root / 'lead-stop')),
+                     # Only the plan's children, by name (review of L3,
+                     # round 3, SPEND-1). `child-renamed-unchecked` stands
+                     # for a tool whose check let other names through: the
+                     # runner must meter, stop and charge them regardless.
+                     dict(name='PIO_LEAD_CHILDREN', value=','.join(
+                         [f'{c}_run' for c in CHILDREN]
+                         if args.mutant == 'child-renamed-unchecked' else CHILDREN))])
     if HARNESS == 'codex':
         # What the meter reads, for the tool to read before it hands back a
         # result (review of L3, A7).
@@ -1904,8 +1983,11 @@ def watch(args, record, service, desk, meters, state):
     record['steer_running'], record['third'] = None, None
     metered = 0.0
     deadline = time.monotonic() + EXECUTION_DEADLINE + 120
+    discovery = Discovery()
     while time.monotonic() < deadline:
-        views = {i: view(owner, i) for i in RUNS}
+        # Every run under this lead, the plan's and any other the stream has
+        # shown (review of L3, round 3, SPEND-1).
+        views = {i: view(owner, i) for i in runs(meters)}
         desk.poll(owner, views)
         metering = state.get('metering')
         if metering is not None and not metering.is_alive():
@@ -1913,6 +1995,7 @@ def watch(args, record, service, desk, meters, state):
             raise SystemExit(f'the meter stopped: {metering.error}')
         if metering is None and time.monotonic() - metered >= 0.5:
             metered = time.monotonic()
+            discovery.adopt(owner, meters, record)
             meter(owner, views, meters, root, record)
         first = views[f'{LEAD}.alpha']
         # **Only a turn that is running and has been delivered.** Anything
@@ -1930,7 +2013,12 @@ def watch(args, record, service, desk, meters, state):
         if record['third'] is None and both and lead_view.get('runtime') != 'exited':
             if args.mutant == 'interrupted':
                 raise KeyboardInterrupt('the interrupted mutant, with every run admitted')
-            instance = ToolInstance(spec, root / 'runner-tool.jsonl')
+            # The runner's own probe of PIO's budget: its instance of the
+            # tool may name `third`, so the start reaches the service.
+            probe_spec = dict(spec, env=[dict(v, value=f"{v['value']},third")
+                                         if v['name'] == 'PIO_LEAD_CHILDREN' else v
+                                         for v in spec['env']])
+            instance = ToolInstance(probe_spec, root / 'runner-tool.jsonl')
             try:
                 record['third'] = dict(
                     result=instance.tool('start_run', name='third',
@@ -1939,7 +2027,7 @@ def watch(args, record, service, desk, meters, state):
             finally:
                 instance.close()
         over = lambda v: not v or v.get('admission') == 'refused' or v.get('runtime') == 'exited'
-        if all(over(views[i]) for i in RUNS):
+        if all(over(views[i]) for i in views):
             break
         time.sleep(0.25)
 
@@ -2011,7 +2099,7 @@ def meter(owner, views, meters, root, record):
     """OpenCode: read every live run's meter from its session, and stop a run
     that passes its ceiling."""
     calls = lead_calls(root)
-    for identity, gauge in meters.items():
+    for identity, gauge in list(meters.items()):
         current = views.get(identity)
         if not current or current.get('admission') == 'refused':
             continue
@@ -2033,7 +2121,7 @@ def codex_meter(owner, meters, root, record):
     (`CodexMetering`)."""
     calls = lead_calls(root)
     at = time.monotonic()
-    for identity, gauge in meters.items():
+    for identity, gauge in list(meters.items()):
         if gauge.looked is not None and gauge.runtime == 'active':
             gauge.silent += at - gauge.looked
         gauge.looked = at
@@ -2097,8 +2185,13 @@ def settle(record, service, meters, state, root):
             record['meter_error'] = metering.error
     owner = service.owner()
     try:
+        # Every execution under this lead the stream holds, whatever its
+        # name, adopted before anything is cancelled (review of L3, round 3,
+        # SPEND-1).
+        for event in events(owner):
+            adopt(meters, event['subject']['id'], record)
         stopped = {}
-        for identity in RUNS:
+        for identity in runs(meters):
             current = view(owner, identity)
             if current and current.get('admission') == 'admitted' \
                     and current.get('runtime') != 'exited':
@@ -2116,7 +2209,7 @@ def settle(record, service, meters, state, root):
                     (view(owner, i) or {}).get('runtime') not in (None, 'exited')
                     for i in stopped):
                 time.sleep(0.5)
-        views = {i: view(owner, i) or {} for i in (*RUNS, f'{LEAD}.third')}
+        views = {i: view(owner, i) or {} for i in (*runs(meters), *PROBES)}
         # The runner's own probes, each expected to be refused. One the
         # service admitted is a real run with no reservation: cancelled
         # here, and charged its share (review of L3, round 2, SB-5).
@@ -2134,8 +2227,8 @@ def settle(record, service, meters, state, root):
         # is charged nothing, not its share (review of L3, round 2, SB-6).
         record['no_such_execution'] = sorted(i for i in RUNS if not views[i]
                                              and missing(owner, i))
-        for identity, gauge in meters.items():
-            if views[identity]:
+        for identity, gauge in list(meters.items()):
+            if views.get(identity):
                 gauge.read(owner)
         stream = events(owner)
         log = tool_log(root)
@@ -2146,7 +2239,8 @@ def settle(record, service, meters, state, root):
         host = service.host_events(views, briefs)
         if HARNESS == 'opencode':
             sessions = {i: next((e.get('session_id') for e in host.get(i, [])
-                                 if e['kind'] == 'session_created'), None) for i in RUNS}
+                                 if e['kind'] == 'session_created'), None)
+                        for i in runs(meters)}
             steps, record['store_read'] = store_steps(service.config['opencode']['home'],
                                                       sessions)
         else:
@@ -2247,7 +2341,7 @@ def opencode_usage(views, meters, submitted, steps=None):
     """OpenCode's charges; see usage_of."""
     steps = steps or {}
     usage = {}
-    for identity in RUNS:
+    for identity in runs(meters):
         current = views.get(identity) or {}
         if current.get('admission') == 'refused':
             usage[identity] = dict(charged=0, basis='refused before any model call')
@@ -2305,7 +2399,7 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None):
     was reported or observed, and never nothing (F2)."""
     usage = {}
     in_flight = CODEX['in_flight']
-    for identity in RUNS:
+    for identity in runs(meters):
         current = views.get(identity) or {}
         if current.get('admission') == 'refused':
             usage[identity] = dict(charged=0, basis='refused before any model call')
@@ -2487,6 +2581,9 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
     said, relay, answered = observed['said'], observed['relay'], observed['answered']
     grant_id = state['grant_id']
     truth = record['wc_l']
+    # Every run under this lead that ran, the plan's and any other (review
+    # of L3, round 3, SPEND-1); the runner's own probes are judged apart.
+    everyone = runs(meters)
 
     # --- The lead's own run.
     lead_view = views[LEAD]
@@ -2735,7 +2832,7 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
     # and never reached the desk. Each one fails the row, and a run that
     # exited without carrying the list at all fails it too: PIO's own
     # decisions could not be read (review of L3, F1).
-    exited = [i for i in RUNS if (views.get(i) or {}).get('runtime') == 'exited']
+    exited = [i for i in everyone if (views.get(i) or {}).get('runtime') == 'exited']
     by_pio = {i: declined.get(i) for i in exited}
     rows.add('Every approval was decided at the desk',
              dict(decisions=decisions, lapsed=lapsed,
@@ -2758,7 +2855,7 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                   f'fails {LEAD}; so does any request PIO declined by itself, and a run '
                   'whose exit did not carry that list')
     rows.record('What PIO declined by itself',
-                {i: declined.get(i, 'not carried: the run has no exit event') for i in RUNS},
+                {i: declined.get(i, 'not carried: the run has no exit event') for i in everyone},
                 note="each request the host answered with an error, never put to a caller: "
                      "what was asked (method, server, mode, Codex's approval kind, tool name) "
                      'and why; never an argument, a form, a URL or a message')
@@ -2944,7 +3041,8 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
         # thread in a writable workspace trusts that project, which every run
         # discloses (M2); anything else would be a change nobody asked for.
         diffs = {i: next((e.get('diff') for e in host.get(i, [])
-                          if e['kind'] == 'config_after'), None) for i in RUNS}
+                          if e['kind'] == 'config_after'), None) for i in everyone
+                 if views.get(i)}
         rows.add("The owner's Codex configuration changed only by the fixture's trust entry",
                  diffs,
                  'for every run, nothing removed or changed, nothing outside the project '
@@ -3027,7 +3125,12 @@ def charge(path, names, usage, at, authoritative, lead_submitted=True, probes=No
     started leaves its name free."""
     book = read_ledger(path)
     lines = {}
-    for identity in RUNS:
+    # A run under this lead the plan did not name is charged on a line of
+    # its own, named as a planned child would be (review of L3, round 3,
+    # SPEND-1); it has no reservation to replace.
+    names = dict(names, **{i: f'{names[LEAD]}{i[len(LEAD):]}' for i in usage
+                           if i not in names and in_family(i)})
+    for identity in (*RUNS, *[i for i in usage if i not in RUNS]):
         entry = usage.get(identity)
         base = dict(sequence=SEQUENCE, model=MODEL, at=at)
         reserved = (book['runs'].get(names[identity]) or {}).get('charge_basis') == 'reserved'
@@ -3128,8 +3231,12 @@ def watchdog(runner, daemon, root):
                        config['protocol']['credentials'][0]['credential'],
                        features=FEATURES, execution_features=EXECUTION_FEATURES)
         try:
+            # Every execution under this lead, whatever its name (review of
+            # L3, round 3, SPEND-1).
+            family = sorted({*RUNS, *(e['subject']['id'] for e in events(owner)
+                                      if in_family(e['subject']['id']))})
             record['cancelled'] = {
-                i: cancel(owner, i, 'watchdog') for i in RUNS
+                i: cancel(owner, i, 'watchdog') for i in family
                 if (view(owner, i) or {}).get('admission') == 'admitted'
                 and (view(owner, i) or {}).get('runtime') != 'exited'}
             end = time.monotonic() + 60
@@ -3137,7 +3244,7 @@ def watchdog(runner, daemon, root):
                     (view(owner, i) or {}).get('runtime') not in (None, 'exited')
                     for i in record['cancelled']):
                 time.sleep(0.5)
-            record['runtimes'] = {i: (view(owner, i) or {}).get('runtime') for i in RUNS}
+            record['runtimes'] = {i: (view(owner, i) or {}).get('runtime') for i in family}
         finally:
             owner.close()
     except Exception as caught:
@@ -3380,6 +3487,29 @@ def main():
                 row = next(r for r in record['rows'] if r['row'] == name)
                 assert row['holds'] is True, row
             assert record['usage'][LEAD]['reported_total'] <= LEAD_SHARE, record['usage'][LEAD]
+        if args.mutant == 'child-renamed':
+            # The tool refused both before anything reached the service, and
+            # nothing under another name ran.
+            starts = [e for e in record['tool_log'] if e.get('event') == 'tool_call'
+                      and e.get('tool') == 'start_run']
+            assert starts and all(((e.get('result') or {}).get('refused') or {}).get('code')
+                                  == 'not_a_planned_child' for e in starts), starts
+            assert not record.get('unplanned_runs'), record.get('unplanned_runs')
+        if args.mutant == 'child-renamed-unchecked':
+            # Run under names the plan does not have, and still metered,
+            # stopped at the ceiling, cancelled and charged on lines of their
+            # own (review of L3, round 3, SPEND-1).
+            renamed = {f'{LEAD}.alpha_run', f'{LEAD}.beta_run'}
+            assert renamed <= {u['run'] for u in record.get('unplanned_runs', [])}, \
+                record.get('unplanned_runs')
+            alpha = f'{LEAD}.alpha_run'
+            assert any(s['run'] == alpha for s in record.get('ceiling_stops', [])), \
+                record.get('ceiling_stops')
+            spent = record['usage'][alpha]
+            assert spent['charged'] >= spent['reported_total'] + CODEX['in_flight'], spent
+            lines = record['charge']['lines']
+            assert all(lines[f'{names_of(record)}{i[len(LEAD):]}']['charged']
+                       == record['usage'][i]['charged'] > 0 for i in renamed), lines
         if args.mutant == 'third-admitted':
             probe = record['probes_admitted'].get(f'{LEAD}.third')
             assert probe and probe['basis'] == PROBE_BASIS and probe['charged'] == CHILD_SHARE, \
