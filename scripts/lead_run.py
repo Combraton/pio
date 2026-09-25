@@ -2653,7 +2653,8 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
     rows.add('Each child reported the true count',
              {CHILDREN[c]: first_number(final[c]) for c in CHILDREN}, truth,
              note=(compares + '; ' if compares else '') + 'the last message each child '
-                  'completed, not its preamble')
+                  'completed after its last command, not its preamble; none if it never '
+                  'answered')
     rows.add('The lead relayed the true counts', relayed(relay), truth, note=compares)
 
     # --- Approvals: the desk, never PIO by default, never "always".
@@ -3292,6 +3293,12 @@ def main():
             # its first step alone, and the step in flight is the charge's.
             reported = record['usage'][f'{LEAD}.alpha']['reported_total']
             assert reported == CHILD_CEILING + 10_000, record['usage'][f'{LEAD}.alpha']
+            # Cut off before it answered, alpha answered nothing: its
+            # preamble's 30 is not taken for a count (review of L3, round 2,
+            # V-7).
+            counts = next(r for r in record['rows']
+                          if r['row'] == 'Each child reported the true count')['observed']
+            assert counts[CHILDREN['alpha']] is None, counts
             # The stop is proven here, where one is made: it reached Codex,
             # and the run was charged its step in flight, within its share.
             for name in ('Every stop the runner made reached Codex',

@@ -244,10 +244,32 @@ def message_text(raw):
 
 
 def final_answer(raw):
-    """The last message a run completed: its answer, not its preamble. None
-    when it completed none."""
-    done = [m['text'] for m in messages(raw) if m['completed']]
-    return done[-1] if done else None
+    """What a run answered. On Codex, the last agentMessage it completed
+    after its last completed command: a run cut off before it answered has
+    only its preamble, which quotes the command, numbers and all, and that
+    is no answer (review of L3, round 2, V-7). None when there is none. On
+    OpenCode, whose updates carry no items, the words it said."""
+    chunks, answer, ran = [], None, False
+    for line in raw.splitlines():
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(record, dict):
+            continue
+        update = record.get('update') or {}
+        if update.get('sessionUpdate') == 'agent_message_chunk':
+            chunks.append(update.get('content', {}).get('text', ''))
+        item = (record.get('params') or {}).get('item') or {}
+        if record.get('method') != 'item/completed':
+            continue
+        if item.get('type') == 'commandExecution':
+            ran, answer = True, None
+        elif item.get('type') == 'agentMessage' and ran:
+            answer = item.get('text', '')
+    if chunks:
+        return ''.join(chunks)
+    return answer
 
 
 def read_run(name):
