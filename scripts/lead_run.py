@@ -2903,6 +2903,13 @@ def main():
             assert record['error']['type'] == 'KeyboardInterrupt', record.get('error')
             assert record.get('stopped_on_exit'), 'nothing was stopped on the way out'
         if args.mutant == 'child-overspends':
+            # alpha was stopped while its answering step was still being
+            # produced, and Codex reports no usage for a step cut short
+            # before its response completed (0.157.0 records usage only on a
+            # completed response; review of L3, round 2, SB-4): its report is
+            # its first step alone, and the step in flight is the charge's.
+            reported = record['usage'][f'{LEAD}.alpha']['reported_total']
+            assert reported == CHILD_CEILING + 10_000, record['usage'][f'{LEAD}.alpha']
             # The stop is proven here, where one is made: it reached Codex,
             # and the run was charged its step in flight, within its share.
             for name in ('Every stop the runner made reached Codex',

@@ -192,13 +192,16 @@ pub(crate) struct Turn {
     pub(crate) thread: String,
     pub(crate) interrupted: AtomicBool,
     finished: AtomicBool,
-    /// The thread's total as last reported, and the tokens of the model step
-    /// now in flight (0 when none is). Codex reports a step's usage once the
-    /// step and its tool have finished, not when the step's output ends (M2
-    /// R5, R6: `item/completed` for the command, then the usage), and it
-    /// reports the step an interrupt cut short (M2 R1, R3: a usage after
-    /// `turn/interrupt` was sent).
-    usage: Mutex<(u64, u64)>,
+    /// The thread's total as last reported, the tokens of the model step now
+    /// in flight (0 when none is), and whether that step's model response has
+    /// completed. Codex reports a step's usage once the step and its tool
+    /// have finished (M2 R5, R6: `item/completed` for the command, then the
+    /// usage), and it reports a step an interrupt cut short in its tool
+    /// phase (M2 R1, R3: a usage after `turn/interrupt` was sent, while a
+    /// command ran). A step cut short while the model was still producing it
+    /// is not reported: 0.157.0 records usage only on a completed response
+    /// (review of L3, round 2, SB-4).
+    usage: Mutex<(u64, u64, bool)>,
     /// A mutant's Codex that reports no usage at all.
     pub(crate) quiet: AtomicBool,
 }
@@ -219,7 +222,7 @@ impl Turn {
             thread,
             interrupted: AtomicBool::new(false),
             finished: AtomicBool::new(false),
-            usage: Mutex::new((0, 0)),
+            usage: Mutex::new((0, 0, false)),
             quiet: AtomicBool::new(false),
         })
     }
@@ -229,12 +232,13 @@ impl Turn {
     }
 
     /// `turn/interrupt`: the script stops at its next step, the step in
-    /// flight is reported, as Codex reports it, and the turn ends now.
+    /// flight is reported if its response had completed (as Codex reports
+    /// it), and the turn ends now.
     pub(crate) fn interrupt(&self) -> Result<()> {
         {
             let mut usage = self.usage.lock().expect("usage lock");
             self.interrupted.store(true, Ordering::SeqCst);
-            if !self.finished() && usage.1 > 0 {
+            if !self.finished() && usage.1 > 0 && usage.2 {
                 usage.0 += usage.1;
                 if !self.quiet.load(Ordering::SeqCst) {
                     usage_report(&self.thread, &self.id, usage.0, usage.1)?;
@@ -300,7 +304,15 @@ impl Play {
             usage_report(&self.turn.thread, &self.turn.id, usage.0, last)?;
         }
         usage.1 = if more { self.step } else { 0 };
+        usage.2 = false;
         Ok(())
+    }
+
+    /// The step in flight has finished producing its output (a tool call or
+    /// an answer): its response is complete, so Codex holds its usage, and
+    /// an interrupt from here on reports it.
+    fn responded(&self) {
+        self.turn.usage.lock().expect("usage lock").2 = true;
     }
 
     /// A model step takes time before it says or calls anything. False if
@@ -451,6 +463,7 @@ fn play_lead(play: &Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> 
             if !play.think() {
                 return Ok(());
             }
+            play.responded();
             let item_id = format!("call_mcp_{index}_{tries}");
             tries += 1;
             let forced = forced_mode.filter(|_| forced_for.is_none_or(|only| only == tool));
@@ -586,6 +599,7 @@ fn play_lead(play: &Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> 
     for line in &relay {
         play.say(line)?;
     }
+    play.responded();
     play.step(false)?;
     play.turn.complete("completed")
 }
@@ -665,6 +679,7 @@ fn play_led(
     // before its command, and then answers. Its preamble quotes the command,
     // numbers and all, so only its last message is its answer.
     play.say(&format!("Running `{asked_for}`."))?;
+    play.responded();
     if grant {
         // A request PIO declines by itself: a permission grant, which asks
         // for a profile rather than a decision (0.157.0's
@@ -710,6 +725,7 @@ fn play_led(
                 return Ok(());
             }
             play.say("The command was not approved, so I could not count the lines.")?;
+            play.responded();
             play.step(false)?;
             return play.turn.complete("completed");
         }
@@ -743,6 +759,7 @@ fn play_led(
         Some(n) => (n + offset).to_string(),
         None => "unknown".to_owned(),
     })?;
+    play.responded();
     play.step(false)?;
     play.turn.complete("completed")
 }
