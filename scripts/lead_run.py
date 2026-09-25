@@ -1693,6 +1693,12 @@ def watch(args, record, service, desk, meters, state):
             planted['resolution']['native']['sha256'] = '0' * 64
         planted['service_node_resolution'] = dict(applicable=True, matches_qualification=True)
         (service.store / 'qualification.json').write_text(json.dumps(planted))
+    if HARNESS == 'codex':
+        # Before anything is reserved: serve-codex starts on any Codex its
+        # qualification passes, and that never compares the wrapper, native
+        # binary or Node with the committed record, so a Hermes Node update
+        # would pass it and burn the one attempt (review of L3, round 2, V-1).
+        record['qualification_check'] = qualification_precheck(service, rehearse)
     owner = service.owner()
     if HARNESS == 'codex':
         state['metering'] = CodexMetering(service, meters, root, record)
@@ -2002,7 +2008,8 @@ def settle(record, service, meters, state, root):
                 record['harness']['pinned'] = record['harness']['qualification']['pinned']
             else:
                 record['harness']['qualification'] = dict(
-                    qualified=None, reason='labeled fake: no qualification')
+                    qualified=None, reason='labeled fake: no qualification' if service.rehearse
+                    else 'serve-codex wrote no qualification record')
         heard = {c: spoken(owner, f'{LEAD}.{c}') for c in CHILDREN}
         said = {c: text for c, (text, _) in heard.items()}
         answered = {c: last for c, (_, last) in heard.items()}
@@ -2220,6 +2227,27 @@ def qualification_block(q):
                 drift=(q.get('schema') or {}).get('drift_count'),
                 service_node_matches=(q.get('service_node_resolution') or {})
                 .get('matches_qualification'))
+
+
+def qualification_precheck(service, rehearse):
+    """The pin row's judgment, before anything is reserved: live, a missing
+    record or one that is not the committed record for its pin refuses the
+    run. A labeled fake has no record, so a rehearsal checks only a record
+    that is there (the mutants plant one)."""
+    path = service.store / 'qualification.json'
+    if not path.exists():
+        if rehearse:
+            return dict(checked=False, reason='labeled fake: serve-codex qualifies none')
+        raise SystemExit('refusing to start: serve-codex wrote no qualification record')
+    ran = qualification_block(json.loads(path.read_text()))
+    committed = committed_qualification(ran.get('pinned'))
+    held = qualified_at_pin(dict(ran=ran, committed=committed, rehearsal=False))
+    if not held:
+        raise SystemExit('refusing to start: the Codex serve-codex qualified is not the '
+                         f"committed identity for its pin {(ran.get('pinned') or {}).get('version')}: "
+                         'a wrapper, native binary, Node, version or schema differs, or its '
+                         'record says it is not qualified')
+    return dict(checked=True, holds=True, pinned=ran.get('pinned'))
 
 
 def committed_qualification(pinned):
@@ -3146,6 +3174,11 @@ def main():
                 row = next(r for r in record['rows'] if r['row'] == name)
                 assert row['holds'] is True, row
             assert record['usage'][LEAD]['reported_total'] <= LEAD_SHARE, record['usage'][LEAD]
+        if args.mutant == 'qualified-elsewhere':
+            # Refused before anything was reserved, so nothing is charged.
+            assert 'not the committed identity' in record['error']['message'], record['error']
+            assert 'reserved' not in record and not record['charge']['lines'], record['charge']
+            assert record['charge']['sequence_charged'] == 0, record['charge']
         if args.mutant == 'service-never-ready':
             # Found at once, not after the readiness wait; nothing reserved,
             # nothing charged, and the next attempt not blocked.
