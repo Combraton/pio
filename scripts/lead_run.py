@@ -138,6 +138,9 @@ does with a permission prompt.
 - `usage-suppressed` (L3) has Codex report no usage at all, and `alpha` work
   past the silence bound: the meter must stop the lead and `alpha` for their
   silence, and every run is charged its whole share;
+- `asked-silent` (L3) is `usage-suppressed` with both children asking a
+  command approval first, which the desk answers: `alpha` must still be
+  stopped for its silence;
 - `lead-heavy` (L3) has each of the lead's steps cost a whole step in flight
   (30,000) and the lead read once more: its tool must withhold that result,
   the runner stop the lead, and the lead end within its share;
@@ -506,6 +509,10 @@ MUTANTS = {
     # more: its tool must withhold that result and the runner stop it, so
     # it ends within its share (review of L3, A7).
     'lead-heavy': 'Every run stayed within its ceilings',
+    # usage-suppressed, with both children asking a command approval that
+    # the desk answers: alpha must still be stopped for its silence after
+    # its answer (review of L3, round 2, SB-3).
+    'asked-silent': 'Every run stayed within its ceilings',
     # The store holds a qualification whose native binary is not the one
     # the committed record qualified (review of L3, REPIN-2).
     'qualified-elsewhere': 'Codex qualified at the pinned identity',
@@ -546,7 +553,7 @@ PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {
                 'lead-tool-error-past-hold': {'L3'}, 'lead-shell-past-hold': {'L3'},
                 'tool-error-ungated': {'L3'}, 'meter-ignores-items': {'L3'},
                 'stop-ignored': {'L3'}, 'not-exited-charged-share': {'L3'},
-                'experimental-feature-on': {'L3'}}
+                'experimental-feature-on': {'L3'}, 'asked-silent': {'L3'}}
 
 
 def sha(data):
@@ -1056,6 +1063,8 @@ class CodexMeter(Meter):
         self.silenced = False
         # The lead only: results its tool never saw, with its total then.
         self.untooled = []
+        # The actions it is waiting on.
+        self.asking = set()
 
     def read(self, caller):
         raw, self.offset = spool(caller, self.identity, self.offset)
@@ -1088,6 +1097,17 @@ class CodexMeter(Meter):
             self.reports += 1
         elif event['type'] == 'execution.runtime.changed' and payload.get('runtime'):
             self.runtime = payload['runtime']
+            if payload['runtime'] == 'requires_action' and payload.get('action_id'):
+                self.asking.add(payload['action_id'])
+        elif event['type'] == 'execution.action.answered':
+            # The fold sets the view back to `active` when the last pending
+            # action settles, and emits no runtime change for it: without
+            # this, a run that had asked once never counted as active again,
+            # and the silence stop could not fire for it (review of L3, round
+            # 2, SB-3).
+            self.asking.discard(payload.get('action_id'))
+            if self.runtime == 'requires_action' and not self.asking:
+                self.runtime = 'active'
         elif event['type'] == 'execution.exit.observed':
             self.runtime = 'exited'
 
@@ -1481,10 +1501,14 @@ def codex_scenario(mutant, calls):
     if mutant in ('lead-heavy', 'lead-tool-error-past-hold', 'tool-error-ungated',
                   'lead-shell-past-hold', 'meter-ignores-items'):
         play['lead_usage_step'] = CODEX['in_flight']
-    if mutant == 'usage-suppressed':
+    if mutant in ('usage-suppressed', 'asked-silent'):
         # No run reports anything, and alpha works past the silence bound,
         # so the lead waiting on it and alpha itself must be stopped.
         play.update(usage_suppressed=True, led_delay_ms=(USAGE_SILENCE + 30) * 1000)
+    if mutant == 'asked-silent':
+        # Both children ask first: alpha's silence counts only once its
+        # answer has put it back to work.
+        play['command_approval_if'] = 'Run the shell command'
     return play
 
 
@@ -3189,7 +3213,7 @@ def main():
                          "Every run's charge stayed within its reserved share"):
                 row = next(r for r in record['rows'] if r['row'] == name)
                 assert row['holds'] is True, row
-        if args.mutant == 'usage-suppressed':
+        if args.mutant in ('usage-suppressed', 'asked-silent'):
             silenced = {s['run'] for s in record.get('ceiling_stops', [])
                         if any('no usage reported' in w for w in s['why'])}
             assert {LEAD, f'{LEAD}.alpha'} <= silenced, record.get('ceiling_stops')

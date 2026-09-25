@@ -137,7 +137,7 @@ jobs:
                    no-tool reports-refused-as-started grant-may-answer lead-without-brief \
                    interrupted release-refused setup-fails lead-tool-error-past-hold \
                    lead-shell-past-hold tool-error-ungated meter-ignores-items stop-ignored \
-                   not-exited-charged-share experimental-feature-on; do
+                   not-exited-charged-share experimental-feature-on asked-silent; do
             if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant "$m" \
                  --out target/lead-run-l3-mutants > "target/lead-run-l3-mutant-$m.log" 2>&1; then
               echo "mutant $m survived"; exit 1
