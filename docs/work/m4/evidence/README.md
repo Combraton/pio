@@ -299,3 +299,81 @@ does). It answers only `L1b.beta` · `read` · `<fixture>/beta.env` ·
 `inside_fixture`, with `allow` and the owner's words. On any other request it
 prints it and exits, so the request goes to the owner live. It exited on
 `RUNNER EXITED` after answering one request.
+
+## `L3-rehearsal.json`
+
+L3 rehearsed against the labeled Codex fake by `scripts/lead_run.py --rehearse
+--plan L3` at clean head `f3693c1` (`dirty: false`). **Zero tokens, no model
+call.** The fake is `pio codex fake-app-server` (`pio-fake-app-server`): it
+speaks 0.157.0's app-server shapes and runs no model, tool or command, and
+`serve-codex` does not qualify a labeled fake. Plan: owner approval of
+2026-09-24 (sequence cap 400,000, stop 320,000) and the decisions of
+2026-09-25 (issue #12).
+
+**Every row holds: 34 rows and one record, none failed, none inconclusive.**
+No L3 row is live-only (the two live-only rows are OpenCode's), so every row
+here holds against the fake. What L3 adds, as the fake plays it:
+
+- The lead tool is on the lead's thread only, with `start_run` and `read_run`
+  sent as `approval_mode: approve` on that thread, and nothing was asked
+  about either.
+- Each thread's model and provider (`gpt-5.6-terra`, `openai`) were checked
+  from `thread/start`'s answer before its first turn. `approvalsReviewer` is
+  `user` on all three.
+- The lead's steer on `L3.alpha` was recorded under its grant while the turn
+  was `active` and `acknowledged`, and acknowledged with `provider_ack_id`.
+  Behavior is `not_observed`.
+- The lead's `read_run` of `alpha` took 30.3 s and returned `exited`.
+- `beta`'s command approval came to the desk, was answered `allow` by the
+  rehearsal, and was sent as `{"decision": "accept"}`.
+- The charge is Codex's reported totals, 20,480 + 8,192 + 8,192 = 36,864,
+  on the rehearsal's own ledger. The reservations (155,000 + 80,000 + 80,000)
+  were replaced and none is left.
+
+**What only the live run can show.** These are the places where
+`lead_run.py` takes a different branch live, or where a row that holds here
+holds only because of what the fake does:
+
+- **Codex itself.** Live runs the owner's `~/.local/bin/codex` with the
+  owner's home and `~/.codex`. `serve-codex` qualifies it (binary, version,
+  schema listing, drift, in `harness.qualification`), and the runner builds
+  and preflights its own binary. Here `qualified` is null and `preflight` is
+  not checked.
+- **The pre-allowance.** Whether Codex honours the per-thread
+  `tools.<name>.approval_mode: approve` and asks nothing before the lead's
+  tool calls. The fake implements that mode itself, so the row shows only
+  that the host sends it and the runner reads it. If Codex asks anyway, the
+  row fails, and the relay answers (item 3b).
+- **The MCP elicitation.** When Codex asks before an MCP tool call, what it
+  offers, and how it reads the answer. This is read from its source at
+  rust-v0.157.0 (`codex-rs/core/src/mcp_tool_call.rs`) and not measured.
+  Nothing in this rehearsal asked it.
+- **Command approvals.** The fake asks about `beta`'s command because its
+  scenario says to, and names it `/bin/zsh -lc '…'` as M2 R5 measured.
+  Live, `on-request` in a `workspace-write` sandbox need not ask. If nobody
+  asks, the desk row is inconclusive, not passed. Live answers come from
+  answer files (the relay or the owner). Here the rehearsal answered itself
+  (`desk_answered_by`).
+- **Model, provider, reviewer, tool launch.** The fake answers whatever its
+  scenario names. Live, these are Codex's own answers, and the lead tool is
+  launched with the owner's `config.toml` present, which the lead-tool probe
+  never had.
+- **The steer.** The fake acknowledges `turn/steer`. M2 R4 saw real Codex
+  acknowledge a steer. Live will show whether 0.157.0 acknowledges one sent
+  under the lead's grant.
+- **The work.** A real model decides whether to use the tool. The children
+  run `sleep N && wc -l` for real. Here `alpha`'s 30 s is the fake's delay,
+  the counts are the fake's, and the relay is scripted.
+- **Usage and charge.** Here usage is the fake's 4,096 per step. Live it is
+  `thread/tokenUsage/updated`, charged to the Codex ledger (`M4-lead-codex`,
+  counted in the Codex cap). The live runner refuses to start if the charge
+  so far plus the 315,000 worst case passes the 320,000 stop.
+- **The configuration snapshot.** Here the diff is of the fake's own Codex
+  home inside the tree. The lead's thread shows `existed_before: false` and
+  one fixture trust entry added. Live, it is the owner's
+  `~/.codex/config.toml`, before and after each run. No store is read on
+  Codex in either mode.
+- **The live tree.** Here the tree is under `/tmp` and removed. The
+  live-tree row holds through a probe made the same way under
+  `~/pio-m4-live` and then removed. Live, the tree itself is checked before
+  anything starts, and at the end its store is released and the tree kept.
