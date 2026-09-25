@@ -828,8 +828,11 @@ pub fn resolve_target(target: &str, cwd: &Path) -> PathBuf {
                         .rev()
                         .collect();
                     resolved = PathBuf::new();
-                    restored.append(&mut pending);
-                    pending = restored;
+                    // The link's target goes on top of what is left of the
+                    // path, its first component to be walked next. The other
+                    // way round walked the rest of the path first and then
+                    // lost it (review of L3, round 2, HR-1).
+                    pending.append(&mut restored);
                 }
             }
         }

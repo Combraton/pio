@@ -597,6 +597,70 @@ fn a_symlink_pointing_out_of_the_fixture_is_followed() {
     );
 }
 
+/// A link that is not the last component of the path (review of L3, round
+/// 2, HR-1). The resolver used to put the rest of the path on the stack
+/// above the link's target, so it walked the rest first and then threw it
+/// away: a path through a link inside the fixture and then out of it read
+/// `inside_fixture`. These escapes are real on Codex, which joins a
+/// command's working directory without canonicalizing it, and on Claude
+/// Code and OpenCode, whose tool targets go through the same resolver.
+#[test]
+fn a_symlink_before_the_last_component_is_followed_in_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    std::os::unix::fs::symlink(fixture.join("src"), fixture.join("inside")).unwrap();
+    // Through a link that stays inside, then out by `..`.
+    assert_eq!(
+        placement_of(
+            json!({"file_path":"inside/../../outside/secret.txt"}),
+            &fixture,
+            &fixture
+        ),
+        "outside_fixture"
+    );
+    // No `..` at all: a link to the fixture itself, then a link out of it.
+    std::os::unix::fs::symlink(".", fixture.join("self")).unwrap();
+    std::os::unix::fs::symlink(&outside, fixture.join("esc2")).unwrap();
+    assert_eq!(
+        placement_of(
+            json!({"file_path":"self/esc2/secret.txt"}),
+            &fixture,
+            &fixture
+        ),
+        "outside_fixture"
+    );
+    // A link that stays inside, to a directory holding a link out.
+    std::fs::create_dir_all(fixture.join("sub")).unwrap();
+    std::os::unix::fs::symlink(&outside, fixture.join("sub/esc")).unwrap();
+    std::os::unix::fs::symlink(fixture.join("sub"), fixture.join("link-in")).unwrap();
+    assert_eq!(
+        placement_of(
+            json!({"file_path":"link-in/esc/secret.txt"}),
+            &fixture,
+            &fixture
+        ),
+        "outside_fixture"
+    );
+    // The same classifier on a directory, as the Codex host uses it for a
+    // command's working directory: out through the two links, and the
+    // label of a path that stays inside keeps everything after the link.
+    let workdir = fixture.join("self/esc2");
+    assert_eq!(
+        classify_path(workdir.to_str(), &fixture, &fixture)["placement"],
+        "outside_fixture"
+    );
+    let deeper = classify_path(fixture.join("inside/deeper").to_str(), &fixture, &fixture);
+    assert_eq!(deeper["placement"], "inside_fixture");
+    assert_eq!(deeper["target_label"], "<fixture>/src/deeper");
+    // And the decision the Claude and OpenCode hosts make on a permission
+    // request: a target out through the links is declined, not surfaced.
+    let request = json!({"request":{"input":{"file_path":"self/esc2/secret.txt"},
+                                    "tool_name":"Read","tool_use_id":"t-link"}});
+    let decided = classify_permission_request(&request, &fixture, &fixture);
+    assert_eq!(decided["placement"], "outside_fixture");
+    assert_eq!(decided["disposition"], "decline");
+}
+
 #[test]
 fn a_symlink_loop_terminates_instead_of_hanging() {
     let dir = tempfile::tempdir().unwrap();

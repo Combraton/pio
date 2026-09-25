@@ -33,7 +33,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'widening_decisions_refused', 'deadline_stop_interrupts', 'thread_settings_broader_refused', 'permission_grant_refused',
          'lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses', 'other_elicitation_declined',
          'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused',
-         'command_approval_lapses', 'form_elicitation_declined']
+         'command_approval_lapses', 'form_elicitation_declined', 'approval_cwd_through_a_link']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
@@ -174,8 +174,8 @@ class Case:
         run('-c', 'user.email=pio@example.invalid', '-c', 'user.name=pio', 'commit', '-q', '-m', 'fixture')
         return repo, run('rev-parse', 'HEAD').stdout.strip()
 
-    def submit(self, identity='work', brief=b'Fixture task: reply with one line.', content=True, repository=None, tamper=False, deadline=600, delivery=120, extensions=None):
-        repo, base = self.fixture(identity) if repository is None else (repository, 'unused')
+    def submit(self, identity='work', brief=b'Fixture task: reply with one line.', content=True, repository=None, tamper=False, deadline=600, delivery=120, extensions=None, base='unused'):
+        repo, base = self.fixture(identity) if repository is None else (repository, base)
         # Live submits carry a 2 minute delivery timeout and 10 minute deadline.
         # The delivery timeout is also how long an approval may wait for its
         # caller before PIO declines it once (owner decision, 2026-09-25).
@@ -406,6 +406,53 @@ def lead_tool_case(case, name):
     return dict(outcome='pass', sent=[a['sent'] for a in applied], tool_calls=calls, exit=final['exit'])
 
 
+def link_case(case):
+    """A command approval whose working directory is inside the fixture by
+    its spelling and outside it on disk: through `self -> .` and then
+    `esc2 -> <outside>`, with no `..` for any lexical check to catch. Codex
+    joins a command's workdir without canonicalizing it, so this is what
+    reaches PIO (review of L3, round 2, HR-1). It must read outside_fixture,
+    and the L3 relay must not answer it."""
+    import l3_desk_relay
+    repo, base = case.fixture('work')
+    outside = Path(tempfile.mkdtemp(prefix='pio-cx-outside-', dir='/tmp')).resolve()
+    case.extra_roots.append(outside)
+    os.symlink('.', repo / 'self')
+    os.symlink(outside, repo / 'esc2')
+    scenario = json.loads(case.config['codex']['env']['PIO_CODEX_FAKE_SCENARIO'])
+    scenario['approval_cwd'] = str(repo / 'self' / 'esc2')
+    case.config['codex']['env']['PIO_CODEX_FAKE_SCENARIO'] = json.dumps(scenario)
+    case.config_path.write_text(json.dumps(case.config))
+    case.start()
+    response, _ = case.submit(repository=repo, base=base)
+    assert response['result']['outcome']['admission'] == 'admitted', response
+    waiting = poll(lambda: case.inspect()['result'], lambda v: v['runtime'] == 'requires_action')
+    placement = events_of(case, 'action_requested')[0]['classification']
+    assert (placement['placement'], placement['target_label']) == ('outside_fixture', '<outside>'), placement
+    assert str(outside) not in json.dumps(placement) and str(repo) not in json.dumps(placement), placement
+    with case.client() as c:
+        stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                              'kinds': ['execution.execution']})['result']
+    approval = next(i['event']['payload']['pio.combraton.dev/approval'] for i in stream['items']
+                    if 'event' in i and 'pio.combraton.dev/approval' in i['event']['payload'])
+    assert approval['classification']['placement'] == 'outside_fixture', approval
+    # The relay, given this very payload for a command it would otherwise
+    # answer, leaves it to the owner; the same item placed inside is answered.
+    item = dict(run='L3.beta', approval=dict(approval, command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'"))
+    assert l3_desk_relay.decided_in_advance(item) is None, item
+    inside = dict(item, approval=dict(item['approval'], classification=dict(
+        approval['classification'], placement='inside_fixture')))
+    assert l3_desk_relay.decided_in_advance(inside), inside
+    action = waiting['runtime_detail']['action_id']
+    body = json.dumps({'decision': 'decline'}).encode()
+    case.execution_command('execution.respond_action', 'work',
+                           dict(action_id=action, response=dict(digest=digest(body), media_type='application/json')),
+                           'decline', body, 'application/json')
+    exited(case)
+    return dict(outcome='pass', placement=placement['placement'], label=placement['target_label'],
+                relay_answered=False)
+
+
 def run_case(out, name):
     scenario = dict(
         approvals_reviewer_must_be_user={'approval': 'command', 'delay_ms': 100,
@@ -433,6 +480,7 @@ def run_case(out, name):
         command_approval_lapses={'approval': 'command', 'delay_ms': 100},
         form_elicitation_declined={'approval': 'elicitation', 'elicitation_mode': 'form',
                                    'delay_ms': 100},
+        approval_cwd_through_a_link={'approval': 'command', 'delay_ms': 100},
         model_checked_before_turn={'model_provider': 'openai', 'delay_ms': 100},
         model_mismatch_refused={'model_provider': 'openai', 'model_reported': 'another-model'},
         provider_mismatch_refused={'delay_ms': 100},
@@ -443,6 +491,8 @@ def run_case(out, name):
                        test_only_model_exception='owner-2026-09-19-m2-fixture-runs',
                        expected_model_provider='openai')
     try:
+        if name == 'approval_cwd_through_a_link':
+            return link_case(case)
         if name == 'unqualified_executable_refused':
             daemon = case.start(expect_ready=False)
             code = daemon.wait(timeout=60)
