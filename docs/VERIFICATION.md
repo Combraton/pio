@@ -34,7 +34,7 @@ cargo --version
 cargo fmt --all -- --check
 cargo build --workspace --locked
 cargo test --workspace --locked
-cargo clippy --workspace --locked -- -D warnings
+cargo clippy --workspace --all-targets --locked -- -D warnings
 python3 scripts/check_docs.py
 git diff --exit-code -- Cargo.lock
 python3 scripts/fake_host_matrix.py --out target/fake-host --repetitions 3

@@ -146,35 +146,6 @@ pub fn command_placement(cwd: Option<&str>, workspace: Option<&str>) -> Value {
     placement
 }
 
-#[cfg(test)]
-mod placement_tests {
-    use super::command_placement;
-
-    #[test]
-    fn a_command_is_placed_only_against_an_absolute_workspace() {
-        // Any directory that exists will do: the crate's own.
-        let workspace = std::fs::canonicalize(env!("CARGO_MANIFEST_DIR")).unwrap();
-        let root = workspace.to_str().unwrap();
-        let inside = command_placement(Some(root), Some(root));
-        assert_eq!(inside["placement"], "inside_fixture");
-        assert_eq!(inside["target_label"], "<fixture>/");
-        assert_eq!(
-            command_placement(Some("/"), Some(root))["placement"],
-            "outside_fixture"
-        );
-        // No cwd from Codex, and no workspace to judge against: nothing can
-        // be said, and no path is carried.
-        let unplaced = command_placement(None, Some(root));
-        assert_eq!(unplaced["placement"], "not_classifiable");
-        assert!(unplaced["target_label"].is_null());
-        for workspace in [None, Some(""), Some("relative")] {
-            let placed = command_placement(Some("/Users"), workspace);
-            assert_eq!(placed["placement"], "not_classifiable", "{workspace:?}");
-            assert!(placed["target_label"].is_null(), "{workspace:?}");
-        }
-    }
-}
-
 /// The adapter label. It prefixes this host's event and control files, so the
 /// shared lifecycle produces exactly the paths the service already reads.
 pub const ADAPTER: &str = "codex";
@@ -804,4 +775,33 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
     let receipt = json!({"source":source(&life.spec),"kind":"native_turn_completed","turn_status":turn_status,"app_server_exit":exit,"output_digest":pio_core::digest(&all_output),"output_bytes":output_offset,"completion_is_acceptance":false});
     life.complete(receipt)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::command_placement;
+
+    #[test]
+    fn a_command_is_placed_only_against_an_absolute_workspace() {
+        // Any directory that exists will do: the crate's own.
+        let workspace = std::fs::canonicalize(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let root = workspace.to_str().unwrap();
+        let inside = command_placement(Some(root), Some(root));
+        assert_eq!(inside["placement"], "inside_fixture");
+        assert_eq!(inside["target_label"], "<fixture>/");
+        assert_eq!(
+            command_placement(Some("/"), Some(root))["placement"],
+            "outside_fixture"
+        );
+        // No cwd from Codex, and no workspace to judge against: nothing can
+        // be said, and no path is carried.
+        let unplaced = command_placement(None, Some(root));
+        assert_eq!(unplaced["placement"], "not_classifiable");
+        assert!(unplaced["target_label"].is_null());
+        for workspace in [None, Some(""), Some("relative")] {
+            let placed = command_placement(Some("/Users"), workspace);
+            assert_eq!(placed["placement"], "not_classifiable", "{workspace:?}");
+            assert!(placed["target_label"].is_null(), "{workspace:?}");
+        }
+    }
 }
