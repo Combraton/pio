@@ -22,7 +22,7 @@
 //! command its prompt quotes, `led_delay_ms` long where the prompt contains
 //! `led_delay_if`, then the line count (`led_offset`), asking a command
 //! approval first where it contains `command_approval_if`. `usage_step` is
-//! each model step's tokens; `led_heavy_step` replaces the first step's (the
+//! each model step's tokens (`lead_usage_step` for the lead's, where given); `led_heavy_step` replaces the first step's (the
 //! one that runs the command) where the prompt contains `led_heavy_if`. A
 //! model step takes `model_step_ms` (default 1,500), or `led_step_ms` in a led
 //! run, before it says or calls anything. Usage is reported as Codex was measured reporting it: once a

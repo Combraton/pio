@@ -409,7 +409,10 @@ pub(crate) fn lead(
         turn: turn.clone(),
         waiting,
         markers,
-        step: scenario["usage_step"].as_u64().unwrap_or(4096),
+        step: scenario["lead_usage_step"]
+            .as_u64()
+            .or(scenario["usage_step"].as_u64())
+            .unwrap_or(4096),
         first: None,
         think: think_time(&scenario),
         requests: AtomicU64::new(0),

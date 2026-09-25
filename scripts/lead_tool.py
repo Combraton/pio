@@ -33,7 +33,19 @@ characters, so no call can add more than that to the lead's context.
 once the runner has created the file `PIO_LEAD_STOP`, a call is held for
 `HOLD` seconds and then refused. OpenCode does not end a turn on
 `session/cancel` (M3b, R4); the host kills it ten seconds later. A call held
-past the kill is a model step the lead cannot take in between.
+past the kill is a model step the lead cannot take in between. The stop file
+is checked again when a result is ready, so a call that was running when the
+lead was stopped (a `read_run` waits up to 55 s) hands back nothing either.
+
+**On Codex, no result that would let the lead step past its share.** Codex
+reports a step once its tool has finished (M2 R5, R6), so when a result is
+ready the lead's last report covers every step but the one that made this
+call; handing the result back starts one more. With `PIO_LEAD_METER` set,
+the tool waits for the runner's meter to have read the stream after the call
+arrived, and withholds the result if the lead's reported total is past the
+meter's `hold_above` (its ceiling less one step): the step that made the
+call and the one the result would start could take it past its share. The
+runner then stops the lead (review of L3, A7).
 """
 import base64
 import hashlib
@@ -65,6 +77,13 @@ CALL_CEILING = int(os.environ.get('PIO_LEAD_CALL_CEILING') or 0)
 STOP = os.environ.get('PIO_LEAD_STOP', '')
 HOLD = 30
 CALLS = []
+# The runner's meter for this lead (Codex only): its reported total, and how
+# far past it no result is handed back.
+METER = os.environ.get('PIO_LEAD_METER', '')
+# A report reaches the runner's meter within this long of Codex sending it;
+# the meter must have begun a pass this long after the call arrived.
+FRESH = 1.5
+METER_WAIT = 30
 
 
 def credential():
@@ -270,6 +289,32 @@ TOOLS = {
 }
 
 
+def withheld(arrived):
+    """Why a result that is ready must not be handed back, if it must not."""
+    why = ['the runner stopped this lead'] if STOP and os.path.exists(STOP) else []
+    if not METER:
+        return why
+    until = time.monotonic() + METER_WAIT
+    seen = None
+    while seen is None:
+        try:
+            with open(METER) as handle:
+                seen = json.load(handle)
+            if seen.get('pass_started', 0) < arrived + FRESH:
+                seen = None
+        except (OSError, ValueError):
+            seen = None
+        if seen is None and time.monotonic() >= until:
+            return why + [f"the runner's meter has not read the lead's usage in the "
+                          f'{METER_WAIT} s since this call arrived']
+        if seen is None:
+            time.sleep(0.1)
+    if seen['total'] > seen['hold_above']:
+        why.append(f"the lead has reported {seen['total']} tokens, past "
+                   f"{seen['hold_above']}: this result would start a step past its share")
+    return why
+
+
 def handle(message):
     method = message.get('method')
     if method == 'initialize':
@@ -281,6 +326,7 @@ def handle(message):
                            'inputSchema': schema}
                           for name, (_, about, schema) in TOOLS.items()]}
     if method == 'tools/call':
+        arrived = time.time()
         name = message['params']['name']
         arguments = message['params'].get('arguments') or {}
         CALLS.append(name)
@@ -307,6 +353,14 @@ def handle(message):
         # waited, from the tool's own log (L1b).
         note({'event': 'tool_call', 'tool': name, 'arguments': arguments,
               'result': result, 'seconds': round(time.monotonic() - began, 1)})
+        held = withheld(arrived)
+        if held:
+            # Done, and not handed back: the lead takes no step on it.
+            note({'event': 'held', 'tool': name, 'call': len(CALLS), 'why': held,
+                  'seconds': HOLD, 'result_withheld': True})
+            time.sleep(HOLD)
+            return {'isError': True,
+                    'content': [{'type': 'text', 'text': 'stopped: ' + '; '.join(held)}]}
         return {'content': [{'type': 'text', 'text': json.dumps(result)}]}
     return {}
 

@@ -137,7 +137,10 @@ does with a permission prompt.
   `child-overspends` itself must hold both of those rows;
 - `usage-suppressed` (L3) has Codex report no usage at all, and `alpha` work
   past the silence bound: the meter must stop the lead and `alpha` for their
-  silence, and every run is charged its whole share.
+  silence, and every run is charged its whole share;
+- `lead-heavy` (L3) has each of the lead's steps cost a whole step in flight
+  (30,000) and the lead read once more: its tool must withhold that result,
+  the runner stop the lead, and the lead end within its share.
 """
 import argparse
 import base64
@@ -357,7 +360,7 @@ def select_plan(name):
     harness."""
     global PLAN, LEAD, FILES, CHILDREN, RUNS, APPROVALS, BRIEF, HARNESS, live
     global MODEL, SEQUENCE, SEQUENCE_CAP, SEQUENCE_STOP, LEAD_CEILING, CHILD_CEILING
-    global LEAD_SHARE, CHILD_SHARE, WORST_CASE, BOUND
+    global LEAD_SHARE, CHILD_SHARE, WORST_CASE, BOUND, HOLD_ABOVE
     PLAN = dict(PLANS[name], name=name)
     LEAD = name
     FILES = PLAN['files']
@@ -369,21 +372,40 @@ def select_plan(name):
         MODEL, SEQUENCE = CODEX['model'], CODEX['sequence']
         SEQUENCE_CAP, SEQUENCE_STOP = CODEX['sequence_cap'], CODEX['sequence_stop']
         LEAD_CEILING, CHILD_CEILING = CODEX['lead_ceiling'], CODEX['child_ceiling']
-        LEAD_SHARE = LEAD_CEILING + CODEX['in_flight']
-        CHILD_SHARE = CHILD_CEILING + CODEX['in_flight']
+        step = CODEX['in_flight']
+        # Codex reports a step once its tool has finished (M2 R5, R6), so a
+        # report that crosses a ceiling arrives with the next step already
+        # begun: the crossing step and the one in flight when the stop lands
+        # (review of L3, A7). A child has no tool of PIO's to hold, so that
+        # is its ceiling plus two steps. The lead's tool hands back no result
+        # once the lead has reported more than its ceiling less one step, so
+        # the last result it gets comes at most one step under its ceiling,
+        # and the step that made that call and the one the result starts
+        # bring it to its ceiling plus one step.
+        HOLD_ABOVE = LEAD_CEILING - step
+        LEAD_SHARE = HOLD_ABOVE + 2 * step
+        CHILD_SHARE = CHILD_CEILING + 2 * step
         WORST_CASE = LEAD_SHARE + 2 * CHILD_SHARE
         BOUND = dict(
             call_ceiling=CALL_CEILING, lead_ceiling=LEAD_CEILING,
-            child_ceiling=CHILD_CEILING, in_flight=CODEX['in_flight'],
-            worst_case=WORST_CASE,
+            child_ceiling=CHILD_CEILING, in_flight=step, hold_above=HOLD_ABOVE,
+            lead_share=LEAD_SHARE, child_share=CHILD_SHARE, worst_case=WORST_CASE,
             estimate="Codex's own running total for the thread, reported after every step",
-            lead='at most its ceiling, plus the one step in flight when it is interrupted',
-            child='at most its ceiling, plus the one step in flight when it is interrupted',
+            lead=f'its tool hands back no result once it has reported more than '
+                 f'{HOLD_ABOVE} (its ceiling less one step), so at most that, plus the step '
+                 'that made the last call and the step its result starts',
+            child='at most its ceiling, plus the step that crossed it (reported only after '
+                  'its command) and the step in flight when the stop lands',
             usage_silence=USAGE_SILENCE,
             assumes=["Codex's reported total covers every step of a turn (review 48)",
                      'a step on this harness and model is at most 30,000 tokens '
                      '(measured about 22,000 to 24,500, M2 R4 to R6)',
-                     'Codex honours turn/interrupt (M2)'])
+                     'Codex reports a step once its tool has finished, before the next '
+                     "step calls a tool (M2 R5, R6), and the report reaches the runner's "
+                     'meter within 1.5 s',
+                     'a model step takes longer than a stop takes to reach Codex (about '
+                     '1.5 s against the labeled fake)',
+                     'Codex honours turn/interrupt (M2), before the tool\'s 30 s hold ends'])
     else:
         live = opencode_live_run
         MODEL, SEQUENCE = OPENCODE_MODEL, OPENCODE_SEQUENCE
@@ -391,6 +413,7 @@ def select_plan(name):
         LEAD_CEILING, CHILD_CEILING = OPENCODE_LEAD_CEILING, OPENCODE_CHILD_CEILING
         LEAD_SHARE, CHILD_SHARE, WORST_CASE = (OPENCODE_LEAD_SHARE, OPENCODE_CHILD_SHARE,
                                                OPENCODE_WORST_CASE)
+        HOLD_ABOVE = None
         BOUND = OPENCODE_BOUND
     APPROVALS = dict(model_exception=live.MODEL_EXCEPTION,
                      lead_tool='owner-2026-09-22-m4b-lead-tool',
@@ -442,6 +465,10 @@ MUTANTS = {
     # Codex reports no usage at all: nothing can stop a run at its ceiling,
     # so the meter must stop it for its silence (review of L3, F9).
     'usage-suppressed': 'Every run stayed within its ceilings',
+    # The lead's steps are a whole step in flight each, and it reads once
+    # more: its tool must withhold that result and the runner stop it, so
+    # it ends within its share (review of L3, A7).
+    'lead-heavy': 'Every run stayed within its ceilings',
     # The runner reads every message a child said, as it did, not its
     # answer: a preamble that quotes the command is taken for the count.
     'first-number-of-all': 'Each child reported the true count',
@@ -462,7 +489,7 @@ PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {
                 'child-overspends': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
                 'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'},
                 'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'},
-                'usage-suppressed': {'L3'}}
+                'usage-suppressed': {'L3'}, 'lead-heavy': {'L3'}}
 
 
 def sha(data):
@@ -1014,6 +1041,7 @@ class CodexMetering(threading.Thread):
         cursor = None
         try:
             while not self.halt.is_set():
+                started = time.time()
                 while True:
                     payload = {'limit': 1000, 'kinds': ['execution.execution']}
                     payload.update({'cursor': cursor} if cursor else {'from': 'start'})
@@ -1042,6 +1070,14 @@ class CodexMetering(threading.Thread):
                         break
                 self.passes += 1
                 codex_meter(owner, self.meters, self.root, self.record)
+                # What the lead's tool reads before it hands back a result.
+                lead = self.meters[LEAD]
+                meter_file = self.root / 'lead-meter.json'
+                temporary = meter_file.with_name(meter_file.name + '.tmp')
+                temporary.write_text(json.dumps(dict(
+                    total=lead.total, reports=lead.reports, hold_above=HOLD_ABOVE,
+                    pass_started=started)))
+                os.replace(temporary, meter_file)
                 self.halt.wait(0.1)
         except Exception as caught:
             self.error = redact(repr(caught))[:500]
@@ -1246,7 +1282,9 @@ def scenario(mutant):
     loops = ([dict(tool='read_run', arguments=dict(name='alpha'), repeat=CALL_CEILING * 2)]
              if mutant == 'lead-loops' else [])
     if HARNESS == 'codex':
-        return codex_scenario(mutant, starts + reads + loops)
+        extra = ([dict(tool='read_run', arguments=dict(name='alpha'))]
+                 if mutant == 'lead-heavy' else [])
+        return codex_scenario(mutant, starts + reads + loops + extra)
     return {
         **dict(
             lead=dict(calls=starts + reads + loops,
@@ -1295,6 +1333,8 @@ def codex_scenario(mutant, calls):
         play.update(lead_asks_in_mode='openai/form', lead_asks_for='read_run')
     if mutant == 'child-asks-permissions':
         play['led_permissions_if'] = beta
+    if mutant == 'lead-heavy':
+        play['lead_usage_step'] = CODEX['in_flight']
     if mutant == 'usage-suppressed':
         # No run reports anything, and alpha works past the silence bound,
         # so the lead waiting on it and alpha itself must be stopped.
@@ -1563,6 +1603,10 @@ def watch(args, record, service, desk, meters, state):
                      dict(name='PIO_LEAD_LOG', value=str(root / 'lead-tool.jsonl')),
                      dict(name='PIO_LEAD_CALL_CEILING', value=str(CALL_CEILING)),
                      dict(name='PIO_LEAD_STOP', value=str(root / 'lead-stop'))])
+    if HARNESS == 'codex':
+        # What the meter reads, for the tool to read before it hands back a
+        # result (review of L3, A7).
+        spec['env'].append(dict(name='PIO_LEAD_METER', value=str(root / 'lead-meter.json')))
     if HARNESS == 'codex' and args.mutant != 'no-pre-allow':
         # Owner decision, 2026-09-25: the lead's own two tools are
         # pre-allowed, per launch, in the lead's thread config alone.
@@ -1655,6 +1699,11 @@ def lead_calls(root):
                 and e.get('method') == 'tools/call'])
 
 
+def lead_withheld(root):
+    """Whether the lead's tool has withheld a result it had ready."""
+    return any(e.get('event') == 'held' and e.get('result_withheld') for e in tool_log(root))
+
+
 def meter(owner, views, meters, root, record):
     """OpenCode: read every live run's meter from its session, and stop a run
     that passes its ceiling."""
@@ -1690,6 +1739,11 @@ def codex_meter(owner, meters, root, record):
         over = []
         if identity == LEAD and calls > CALL_CEILING:
             over.append(f'{calls} tool calls, past {CALL_CEILING}')
+        if identity == LEAD and lead_withheld(root):
+            # Its tool will not hand it another result: stop the turn now,
+            # rather than let the held call run out and start a step.
+            over.append(f'its tool withheld a result: {gauge.total} tokens reported, past '
+                        f'{HOLD_ABOVE}')
         if gauge.total >= gauge.ceiling:
             over.append(f'{gauge.total} tokens reported, past {gauge.ceiling}')
         if gauge.silent >= USAGE_SILENCE:
@@ -2753,6 +2807,17 @@ def main():
             assert {LEAD, f'{LEAD}.alpha'} <= silenced, record.get('ceiling_stops')
             assert all(record['usage'][i]['charged'] == (LEAD_SHARE if i == LEAD else CHILD_SHARE)
                        for i in RUNS), record['usage']
+        if args.mutant == 'lead-heavy':
+            # Stopped because its tool withheld a result, and within its
+            # share: 120,000 reported at the withheld call, the step that
+            # made it in flight, and no step after.
+            stops = [s for s in record.get('ceiling_stops', []) if s['run'] == LEAD]
+            assert stops and any('withheld' in w for w in stops[0]['why']), stops
+            assert [e for e in record['tool_log'] if e.get('result_withheld')], 'nothing withheld'
+            row = next(r for r in record['rows'] if r['row'] ==
+                       "Every run's charge covers what it could have spent, within its share")
+            assert row['holds'] is True, row
+            assert record['usage'][LEAD]['reported_total'] <= LEAD_SHARE, record['usage'][LEAD]
         if args.mutant == 'service-never-ready':
             # Found at once, not after the readiness wait; nothing reserved,
             # nothing charged, and the next attempt not blocked.

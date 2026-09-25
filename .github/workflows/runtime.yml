@@ -130,7 +130,7 @@ jobs:
                    grant-no-steer wrong-child wrong-relay lead-loops runner-killed \
                    lead-asked-in-openai-form child-asks-permissions service-never-ready \
                    first-number-of-all ceiling-cancel-never-sent stop-charged-reported \
-                   usage-suppressed; do
+                   usage-suppressed lead-heavy; do
             if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant "$m" \
                  --out target/lead-run-l3-mutants > "target/lead-run-l3-mutant-$m.log" 2>&1; then
               echo "mutant $m survived"; exit 1
