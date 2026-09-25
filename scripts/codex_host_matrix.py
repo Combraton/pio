@@ -34,7 +34,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses', 'other_elicitation_declined',
          'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused',
          'command_approval_lapses', 'form_elicitation_declined', 'approval_cwd_through_a_link',
-         'early_elicitation_declined']
+         'early_elicitation_declined', 'user_input_declined']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
@@ -483,6 +483,7 @@ def run_case(out, name):
                                    'delay_ms': 100},
         approval_cwd_through_a_link={'approval': 'command', 'delay_ms': 100},
         early_elicitation_declined={'elicit_during_thread_start': True, 'delay_ms': 100},
+        user_input_declined={'approval': 'user_input', 'delay_ms': 100},
         model_checked_before_turn={'model_provider': 'openai', 'delay_ms': 100},
         model_mismatch_refused={'model_provider': 'openai', 'model_reported': 'another-model'},
         provider_mismatch_refused={'delay_ms': 100},
@@ -560,6 +561,23 @@ def run_case(out, name):
             return model_case(case, name)
         if name in ('lead_tool_on_the_thread', 'mcp_approval_to_the_caller', 'mcp_approval_lapses'):
             return lead_tool_case(case, name)
+        if name == 'user_input_declined':
+            # Codex's other route for an MCP tool-call approval: declined by
+            # PIO, recorded by how many questions and whether one is that
+            # approval, never by their text or options (review of L3, round 2,
+            # HR-2 and HR-4).
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = exited(case)
+            assert events_of(case, 'action_requested') == [], 'surfaced a request for input'
+            declined = events_of(case, 'native_request_declined')
+            assert [(d['method'], d['questions'], d['mcp_tool_call_approval'], d['phase'])
+                    for d in declined] == [('item/tool/requestUserInput', 1, True, 'turn')], declined
+            assert 'SENTINEL' not in json.dumps(declined), declined
+            carried = carried_declines(case)
+            assert [(d['method'], d['mcp_tool_call_approval']) for d in carried] == \
+                [('item/tool/requestUserInput', True)] and 'SENTINEL' not in json.dumps(carried), carried
+            return dict(outcome='pass', declined=declined[0]['method'], exit=final['exit'])
         if name == 'early_elicitation_declined':
             # A request that arrives while the host waits for thread/start:
             # answered at once with PIO's decline, recorded with its phase,
@@ -623,7 +641,13 @@ def run_case(out, name):
             assert [(d['method'], d['server'], d['mode'], d['approval_kind']) for d in declined] == \
                 [('mcpServer/elicitation/request', 'someone', 'form', None)], declined
             assert 'region' not in json.dumps(declined), declined
+            # Nothing from _meta but its approval kind, request type and the
+            # tool's name or title: never its arguments or description (review
+            # of L3, round 2, HR-4).
+            assert 'SENTINEL' not in json.dumps(declined), declined
+            assert declined[0]['tool'] == 'Region picker', declined
             carried = carried_declines(case)
+            assert 'SENTINEL' not in json.dumps(carried), carried
             assert [(d['method'], d['mode']) for d in carried] == \
                 [('mcpServer/elicitation/request', 'form')], carried
             wire = answered_once(case)

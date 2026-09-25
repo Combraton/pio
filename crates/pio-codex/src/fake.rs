@@ -407,6 +407,7 @@ pub fn run() -> Result<()> {
                                     "fileChange" => "item/fileChange/requestApproval",
                                     "permissions" => "item/permissions/requestApproval",
                                     "elicitation" => "mcpServer/elicitation/request",
+                                    "user_input" => "item/tool/requestUserInput",
                                     _ => "item/commandExecution/requestApproval",
                                 };
                                 // Where the command would run: the thread's
@@ -421,6 +422,17 @@ pub fn run() -> Result<()> {
                                     // decision.
                                     params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","cwd":cwd,"startedAtMs":0,"reason":"labeled fake permission grant request","permissions":{"filesystem":{"write":[cwd]}}});
                                 }
+                                if kind == "user_input" {
+                                    // Codex's other way to ask about an MCP tool
+                                    // call (0.157.0): a question whose id begins
+                                    // mcp_tool_call_approval, text PIO must never
+                                    // record.
+                                    params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval",
+                                                    "questions":[{"id":"mcp_tool_call_approval_call-1","header":"Approve app tool call?",
+                                                                  "question":"Allow the someone MCP server to run tool \"go\"? SENTINEL-question",
+                                                                  "isOther":false,"isSecret":false,
+                                                                  "options":[{"label":"Allow","description":"SENTINEL-option"}]}]});
+                                }
                                 if kind == "elicitation" {
                                     // An elicitation that is not an MCP
                                     // tool-call approval: a server asking for
@@ -431,7 +443,10 @@ pub fn run() -> Result<()> {
                                     // `_meta.codex_approval_kind` (review of
                                     // L3, CH-5).
                                     params = if scenario["elicitation_mode"] == "form" {
-                                        json!({"threadId":thread_id,"turnId":turn,"serverName":"someone","mode":"form","message":"Which region should I use?","requestedSchema":{"type":"object","properties":{"region":{"type":"string"}},"required":["region"]},"_meta":{}})
+                                        json!({"threadId":thread_id,"turnId":turn,"serverName":"someone","mode":"form","message":"Which region should I use?","requestedSchema":{"type":"object","properties":{"region":{"type":"string"}},"required":["region"]},
+                                               // Where real Codex puts a call's arguments:
+                                               // never to be recorded (review of L3, round 2, HR-4).
+                                               "_meta":{"tool_params":{"brief":"SENTINEL-arg"},"tool_description":"SENTINEL-desc","tool_title":"Region picker"}})
                                     } else {
                                         json!({"threadId":thread_id,"turnId":turn,"serverName":"someone","mode":"url","elicitationId":"fake-elicitation","url":"https://example.invalid/login","message":"Sign in to continue"})
                                     };
@@ -445,6 +460,7 @@ pub fn run() -> Result<()> {
                                 if !file_change
                                     && !permissions
                                     && kind != "elicitation"
+                                    && kind != "user_input"
                                     && approval_kind != "absent"
                                 {
                                     params["kind"] = json!(approval_kind);
