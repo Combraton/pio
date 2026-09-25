@@ -32,7 +32,7 @@ pub(crate) fn emit(message: &Value) -> Result<()> {
     Ok(())
 }
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
@@ -689,7 +689,7 @@ fn play_led(
             "item/commandExecution/requestApproval",
             json!({"threadId":play.turn.thread,"turnId":play.turn.id,"itemId":"item-command",
                    "command":&command,"cwd":cwd,"reason":"labeled fake approval request",
-                   "kind":"command"}),
+                   "kind":"command","startedAtMs":now_ms()}),
         )?;
         let Some(answer) = answer else {
             return Ok(());

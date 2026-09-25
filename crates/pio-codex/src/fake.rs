@@ -393,7 +393,9 @@ pub fn run() -> Result<()> {
                                 // directory unless the scenario names another.
                                 let approval_cwd =
                                     scenario["approval_cwd"].as_str().unwrap_or(&cwd);
-                                let mut params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","command":"echo fixture","cwd":approval_cwd,"reason":"labeled fake approval request"});
+                                // `startedAtMs` is required in both command and file-change
+                                // approvals at 0.155.1 and 0.157.0 (review of L3, REPIN-7).
+                                let mut params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","command":"echo fixture","cwd":approval_cwd,"reason":"labeled fake approval request","startedAtMs":fake_turn::now_ms()});
                                 if permissions {
                                     // The real request asks for a profile, not a
                                     // decision.
