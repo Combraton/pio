@@ -464,7 +464,10 @@ def run_case(out, name):
         # Asked from outside the fixture: surfaced, and classified so.
         approval_decline={'approval': 'command', 'approval_kind': 'writeStdin', 'delay_ms': 100,
                           'approval_cwd': '/'},
-        approval_accept={'approval': 'command', 'delay_ms': 100},
+        # A reason where Codex gives one; the measured command approvals (M2 R5,
+        # R6) gave none, which the other cases send.
+        approval_accept={'approval': 'command', 'delay_ms': 100,
+                         'approval_reason': 'labeled fake approval request'},
         interrupt_cancels_turn={'delay_ms': 60000},
         steer_acknowledged={'delay_ms': 60000},
         suppressed_ack_negative_control={'ack_turn': False, 'delay_ms': 300},
@@ -898,6 +901,7 @@ def run_case(out, name):
             placement = requested[0]['classification']
             expected = ('outside_fixture', '<outside>') if decision == 'decline' \
                 else ('inside_fixture', '<fixture>/')
+            reason = None if decision == 'decline' else 'labeled fake approval request'
             assert (placement['subject'], placement['placement'], placement['target_label']) \
                 == ('cwd', *expected), placement
             assert str(case.root) not in json.dumps(placement), placement
@@ -908,7 +912,7 @@ def run_case(out, name):
             approval = [i['event']['payload']['pio.combraton.dev/approval'] for i in stream['items']
                         if 'event' in i and 'pio.combraton.dev/approval' in i['event']['payload']]
             assert [(a['classification']['placement'], a['reason'], a['network_approval'])
-                    for a in approval] == [(expected[0], 'labeled fake approval request', False)], approval
+                    for a in approval] == [(expected[0], reason, False)], approval
             with case.client() as c:
                 record = c.query('core.effects.get', {'effect': effect})['result']
             assert record['status'] == 'succeeded' and record['observations'][-1]['evidence']['class'] == 'native_request_resolved', record

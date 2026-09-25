@@ -416,7 +416,11 @@ pub fn run() -> Result<()> {
                                     scenario["approval_cwd"].as_str().unwrap_or(&cwd);
                                 // `startedAtMs` is required in both command and file-change
                                 // approvals at 0.155.1 and 0.157.0 (review of L3, REPIN-7).
-                                let mut params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","command":"echo fixture","cwd":approval_cwd,"reason":"labeled fake approval request","startedAtMs":fake_turn::now_ms()});
+                                // Codex's reason: null in both command approvals
+                                // M2 measured (R5, R6), a string only where a
+                                // case names one (review of L3, round 2, V-9).
+                                let reason = scenario["approval_reason"].clone();
+                                let mut params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","command":"echo fixture","cwd":approval_cwd,"reason":reason,"startedAtMs":fake_turn::now_ms()});
                                 if permissions {
                                     // The real request asks for a profile, not a
                                     // decision.
@@ -430,7 +434,7 @@ pub fn run() -> Result<()> {
                                     // no command and no cwd, and a grantRoot where
                                     // the scenario asks for writes under a root.
                                     params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval",
-                                                    "reason":"labeled fake approval request",
+                                                    "reason":reason,
                                                     "startedAtMs":fake_turn::now_ms()});
                                     if let Some(root) = scenario["approval_grant_root"].as_str() {
                                         params["grantRoot"] = json!(root);

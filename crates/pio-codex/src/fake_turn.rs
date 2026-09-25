@@ -763,7 +763,8 @@ fn play_led(
         let answer = play.ask(
             "item/commandExecution/requestApproval",
             json!({"threadId":play.turn.thread,"turnId":play.turn.id,"itemId":"item-command",
-                   "command":&command,"cwd":cwd,"reason":"labeled fake approval request",
+                   // null, as in both command approvals M2 measured (R5, R6).
+                   "command":&command,"cwd":cwd,"reason":null,
                    "kind":"command","startedAtMs":now_ms()}),
         )?;
         let Some(answer) = answer else {
