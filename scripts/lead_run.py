@@ -92,6 +92,9 @@ does with a permission prompt.
 - `wrong-relay` has the lead relay one line too many;
 - `lead-without-brief` sends the lead's brief without its bytes, which is how
   the first rehearsal's lead came to be refused;
+- `lead-submit-invalid` sends the lead's brief with bytes that do not match
+  its digest, so the service refuses the envelope and no execution exists:
+  the lead is charged nothing, not its share;
 - `desk-silent` never answers the desk, so the host's single-use reject lands
   after the delivery timeout; the run must still finish and leave a receipt;
 - `lead-loops` has the lead keep calling `read_run` after it has its answers,
@@ -461,6 +464,9 @@ MUTANTS = {
     'wrong-child': 'Each child reported the true count',
     'wrong-relay': 'The lead relayed the true counts',
     'lead-without-brief': 'The lead was admitted',
+    # The lead's submit is answered with an error, so no execution exists:
+    # it is charged nothing, not its share (review of L3, round 2, SB-6).
+    'lead-submit-invalid': 'The lead was admitted',
     'desk-silent': 'Every approval was decided at the desk',
     'lead-loops': 'Every run stayed within its ceilings',
     'interrupted': 'The run finished without an error',
@@ -879,6 +885,12 @@ class Service:
 def view(caller, identity):
     answer = caller.query('execution.inspect', {'execution': identity})
     return answer.get('result')
+
+
+def missing(caller, identity):
+    """The service, asked, says it holds no such execution."""
+    answer = caller.query('execution.inspect', {'execution': identity})
+    return ((answer.get('error') or {}).get('data') or {}).get('code') == 'not_found'
 
 
 def events(caller):
@@ -1816,6 +1828,10 @@ def watch(args, record, service, desk, meters, state):
     extensions = {CONTENT: dict(media_type='text/plain', text=BRIEF)}
     if args.mutant == 'lead-without-brief':
         extensions = {}
+    if args.mutant == 'lead-submit-invalid':
+        # Bytes that do not match the brief's digest: the service refuses the
+        # envelope, and no execution is made.
+        extensions[CONTENT] = dict(media_type='text/plain', text=BRIEF + ' tampered')
     if args.mutant != 'no-tool':
         extensions[LEAD_TOOL] = spec
     # Before anything can spend: each run's worst case, held in the ledger
@@ -2047,6 +2063,10 @@ def settle(record, service, meters, state, root):
                     for i in stopped):
                 time.sleep(0.5)
         views = {i: view(owner, i) or {} for i in (*RUNS, f'{LEAD}.third')}
+        # A submit the service answered with an error made nothing: that run
+        # is charged nothing, not its share (review of L3, round 2, SB-6).
+        record['no_such_execution'] = sorted(i for i in RUNS if not views[i]
+                                             and missing(owner, i))
         for identity, gauge in meters.items():
             if views[identity]:
                 gauge.read(owner)
@@ -2091,7 +2111,8 @@ def settle(record, service, meters, state, root):
     stops = {s['run'] for s in record.get('ceiling_stops', [])} \
         | set(record.get('stopped_on_exit') or {})
     record['usage'] = usage_of(views, meters, state['submitted'] | started_runs(root), steps,
-                               stopped=stops, mutant=record.get('mutant'))
+                               stopped=stops, mutant=record.get('mutant'),
+                               absent=set(record.get('no_such_execution') or []))
     record.update(views=views, tool_log=log, spoken=dict(said, lead=relay),
                   answered=answered)
     return dict(views=views, stream=stream, log=log, host=host, said=said, relay=relay,
@@ -2130,7 +2151,10 @@ def store_steps(home, sessions):
                        sessions=len(ids), rows=len(found))
 
 
-def usage_of(views, meters, submitted, steps=None, stopped=(), mutant=None):
+NO_SUCH_EXECUTION = 'no such execution: the service, asked, holds none, so nothing ran'
+
+
+def usage_of(views, meters, submitted, steps=None, stopped=(), mutant=None, absent=()):
     """What each run reported, and what it is charged, on what basis.
 
     OpenCode's turn usage is its **last model step's**, so a turn that made
@@ -2142,8 +2166,16 @@ def usage_of(views, meters, submitted, steps=None, stopped=(), mutant=None):
     nothing is charged its meter's bound, never less than the M3b allowance,
     and never less than the steps the store holds.
     """
-    if HARNESS == 'codex':
-        return codex_usage(views, meters, submitted, stopped, mutant)
+    usage = (codex_usage(views, meters, submitted, stopped, mutant) if HARNESS == 'codex'
+             else opencode_usage(views, meters, submitted, steps))
+    for identity in absent:
+        if identity in usage:
+            usage[identity] = dict(charged=0, basis=NO_SUCH_EXECUTION)
+    return usage
+
+
+def opencode_usage(views, meters, submitted, steps=None):
+    """OpenCode's charges; see usage_of."""
     steps = steps or {}
     usage = {}
     for identity in RUNS:
@@ -2765,7 +2797,7 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
         # stopped for silence.
         step, floors, within = CODEX['in_flight'], {}, {}
         for run, u in usage.items():
-            if u['basis'] == 'refused before any model call':
+            if u['basis'] in ('refused before any model call', NO_SUCH_EXECUTION):
                 continue
             current = views.get(run) or {}
             share = LEAD_SHARE if run == LEAD else CHILD_SHARE
@@ -2797,7 +2829,8 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                      r['charged'] <= r['share'] for r in o['runs'].values()),
                  note=f'lead share {LEAD_SHARE}, child share {CHILD_SHARE}, worst case '
                       f'{WORST_CASE}')
-    ran = {i: u for i, u in usage.items() if u['basis'] != 'refused before any model call'}
+    ran = {i: u for i, u in usage.items()
+           if u['basis'] not in ('refused before any model call', NO_SUCH_EXECUTION)}
     if HARNESS == 'opencode':
         rows.add("Each run's steps were read from the owner's store",
                  dict(read=record.get('store_read'),
@@ -2815,7 +2848,7 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                       'that the store holds every billed call is not proven')
     rows.add('Every run reported its usage',
              {i: u.get('reported_total', u.get('reported_last_step')) for i, u in usage.items()
-              if u['basis'] != 'refused before any model call'},
+              if u['basis'] not in ('refused before any model call', NO_SUCH_EXECUTION)},
              'a positive amount per run that ran',
              holds=lambda u: bool(u) and all(isinstance(a, int) and a > 0
                                              for a in u.values()),
@@ -2922,7 +2955,7 @@ def charge(path, names, usage, at, authoritative, lead_submitted=True):
                                                       'submitted, so nothing could spend')
         elif entry is None:
             line = dict(base, charged=0, charge_basis='never submitted')
-        elif entry['basis'] == 'refused before any model call':
+        elif entry['basis'] in ('refused before any model call', NO_SUCH_EXECUTION):
             line = dict(base, charged=0, charge_basis=entry['basis'])
         elif HARNESS == 'codex':
             line = dict(base, charged=entry['charged'], charge_basis=entry['basis'],
@@ -3180,7 +3213,7 @@ def main():
         assert args.receipt.exists(), 'no receipt was written'
         charged = record['charge']['lines']
         ran = {i for i, u in record['usage'].items()
-               if u['basis'] != 'refused before any model call'}
+               if u['basis'] not in ('refused before any model call', NO_SUCH_EXECUTION)}
         assert ran <= set(charged) and all(charged[i]['charged'] > 0 for i in ran), (
             ran, charged)
         assert not record['charge']['reservations_left'], record['charge']
@@ -3245,6 +3278,10 @@ def main():
                 row = next(r for r in record['rows'] if r['row'] == name)
                 assert row['holds'] is True, row
             assert record['usage'][LEAD]['reported_total'] <= LEAD_SHARE, record['usage'][LEAD]
+        if args.mutant == 'lead-submit-invalid':
+            lead = record['usage'][LEAD]
+            assert (lead['charged'], lead['basis']) == (0, NO_SUCH_EXECUTION), lead
+            assert record['charge']['sequence_charged'] == 0, record['charge']
         if args.mutant == 'qualified-elsewhere':
             # Refused before anything was reserved, so nothing is charged.
             assert 'not the committed identity' in record['error']['message'], record['error']
