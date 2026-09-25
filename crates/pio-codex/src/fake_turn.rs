@@ -192,6 +192,22 @@ pub(crate) struct Turn {
     pub(crate) thread: String,
     pub(crate) interrupted: AtomicBool,
     finished: AtomicBool,
+    /// The thread's total as last reported, and the tokens of the model step
+    /// now in flight (0 when none is). Codex reports a step's usage once the
+    /// step and its tool have finished, not when the step's output ends (M2
+    /// R5, R6: `item/completed` for the command, then the usage), and it
+    /// reports the step an interrupt cut short (M2 R1, R3: a usage after
+    /// `turn/interrupt` was sent).
+    usage: Mutex<(u64, u64)>,
+}
+
+/// `thread/tokenUsage/updated` as Codex sends it: the thread's running total
+/// and the step just taken.
+fn usage_report(thread: &str, turn: &str, total: u64, last: u64) -> Result<()> {
+    let breakdown = |n: u64| json!({"cachedInputTokens":0,"inputTokens":n/2,"outputTokens":n-n/2,"reasoningOutputTokens":0,"totalTokens":n});
+    emit(&json!({"method":"thread/tokenUsage/updated","params":{
+        "threadId":thread,"turnId":turn,
+        "tokenUsage":{"total":breakdown(total),"last":breakdown(last)}}}))
 }
 
 impl Turn {
@@ -201,11 +217,27 @@ impl Turn {
             thread,
             interrupted: AtomicBool::new(false),
             finished: AtomicBool::new(false),
+            usage: Mutex::new((0, 0)),
         })
     }
 
     pub(crate) fn finished(&self) -> bool {
         self.finished.load(Ordering::SeqCst)
+    }
+
+    /// `turn/interrupt`: the script stops at its next step, the step in
+    /// flight is reported, as Codex reports it, and the turn ends now.
+    pub(crate) fn interrupt(&self) -> Result<()> {
+        {
+            let mut usage = self.usage.lock().expect("usage lock");
+            self.interrupted.store(true, Ordering::SeqCst);
+            if !self.finished() && usage.1 > 0 {
+                usage.0 += usage.1;
+                usage_report(&self.thread, &self.id, usage.0, usage.1)?;
+                usage.1 = 0;
+            }
+        }
+        self.complete("interrupted")
     }
 
     pub(crate) fn complete(&self, status: &str) -> Result<()> {
@@ -223,8 +255,11 @@ struct Play {
     turn: Arc<Turn>,
     waiting: Waiting,
     markers: Option<PathBuf>,
+    /// A model step's tokens, and the first step's where it differs.
     step: u64,
-    used: u64,
+    first: Option<u64>,
+    /// How long a model step takes before it says or calls anything.
+    think: Duration,
     requests: AtomicU64,
     messages: AtomicU64,
 }
@@ -238,14 +273,30 @@ impl Play {
         super::fake::marker(&self.markers, record)
     }
 
-    /// One model step's tokens, reported the way Codex reports them: the
-    /// thread's running total and the step just taken.
-    fn step(&mut self) -> Result<()> {
-        self.used += self.step;
-        let breakdown = |n: u64| json!({"cachedInputTokens":0,"inputTokens":n/2,"outputTokens":n-n/2,"reasoningOutputTokens":0,"totalTokens":n});
-        emit(&json!({"method":"thread/tokenUsage/updated","params":{
-            "threadId":self.turn.thread,"turnId":self.turn.id,
-            "tokenUsage":{"total":breakdown(self.used),"last":breakdown(self.step)}}}))
+    /// The first model step begins with the turn.
+    fn begin(&self) {
+        self.turn.usage.lock().expect("usage lock").1 = self.first.unwrap_or(self.step);
+    }
+
+    /// The step in flight has finished, with its tool: report it the way
+    /// Codex does, and begin the next one if there is one. Nothing is
+    /// reported twice: an interrupt that came first reported it.
+    fn step(&self, more: bool) -> Result<()> {
+        let mut usage = self.turn.usage.lock().expect("usage lock");
+        if self.stopped() {
+            return Ok(());
+        }
+        let last = usage.1;
+        usage.0 += last;
+        usage_report(&self.turn.thread, &self.turn.id, usage.0, last)?;
+        usage.1 = if more { self.step } else { 0 };
+        Ok(())
+    }
+
+    /// A model step takes time before it says or calls anything. False if
+    /// the turn was interrupted meanwhile.
+    fn think(&self) -> bool {
+        self.wait(self.think)
     }
 
     fn item(&self, method: &str, item: Value) -> Result<()> {
@@ -347,22 +398,23 @@ pub(crate) fn lead(
     waiting: Waiting,
     markers: Option<PathBuf>,
 ) {
-    let mut play = Play {
+    let play = Play {
         turn: turn.clone(),
         waiting,
         markers,
         step: scenario["usage_step"].as_u64().unwrap_or(4096),
-        used: 0,
+        first: None,
+        think: think_time(&scenario),
         requests: AtomicU64::new(0),
         messages: AtomicU64::new(0),
     };
-    if let Err(error) = play_lead(&mut play, &servers, &scenario) {
+    if let Err(error) = play_lead(&play, &servers, &scenario) {
         let _ = play.marker(json!({"event":"lead_script_failed","error":format!("{error:#}")}));
         let _ = turn.complete("failed");
     }
 }
 
-fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> Result<()> {
+fn play_lead(play: &Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> Result<()> {
     let calls = scenario["lead"]["calls"]
         .as_array()
         .cloned()
@@ -376,13 +428,14 @@ fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value)
     let forced_mode = scenario["lead_asks_in_mode"].as_str();
     let forced_for = scenario["lead_asks_for"].as_str();
     let mut relay = Vec::new();
-    play.step()?;
+    play.begin();
     for (index, call) in calls.iter().enumerate() {
         let tool = call["tool"].as_str().unwrap_or_default();
         let repeat = call["repeat"].as_u64();
         let mut tries = 0;
         let (text, failed) = loop {
-            if play.stopped() {
+            // Each call is one model step, which takes time before it calls.
+            if !play.think() {
                 return Ok(());
             }
             let item_id = format!("call_mcp_{index}_{tries}");
@@ -436,11 +489,11 @@ fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value)
                                    "result":null,
                                    "error":{"message":"user rejected MCP tool call"}}),
                         )?;
-                        play.step()?;
+                        play.step(true)?;
                         break ("user rejected MCP tool call".to_owned(), true);
                     }
                     _ => {
-                        play.turn.complete("interrupted")?;
+                        play.turn.interrupt()?;
                         return Ok(());
                     }
                 }
@@ -476,7 +529,9 @@ fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value)
                                         "structuredContent":null});
             }
             play.item("item/completed", item)?;
-            play.step()?;
+            // This step's usage, now that its tool has finished; the next
+            // step begins.
+            play.step(true)?;
             let done = match repeat {
                 Some(times) => tries >= times,
                 None => {
@@ -488,9 +543,6 @@ fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value)
             };
             if done || tries >= 480 {
                 break (text, failed);
-            }
-            if !play.wait(Duration::from_millis(250)) {
-                return Ok(());
             }
         };
         play.marker(
@@ -512,15 +564,24 @@ fn play_lead(play: &mut Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value)
             });
         }
     }
-    if play.stopped() {
+    // The last step: it answers, one message per file (not measured, a
+    // shape a model may send, so that an answer split across messages is
+    // what the runner reads), and then its usage.
+    if !play.think() {
         return Ok(());
     }
-    // One message per file: not measured, a shape a model may send, so that
-    // an answer split across messages is what the runner reads.
     for line in &relay {
         play.say(line)?;
     }
+    play.step(false)?;
     play.turn.complete("completed")
+}
+
+/// How long a model step takes before it says or calls anything
+/// (`model_step_ms`, default 1,500): long enough that a runner reading the
+/// thread's usage has read each report before the next step can call.
+fn think_time(scenario: &Value) -> Duration {
+    Duration::from_millis(scenario["model_step_ms"].as_u64().unwrap_or(1500))
 }
 
 /// Play a led run: one command, the one its prompt quotes, run in the
@@ -539,16 +600,14 @@ pub(crate) fn led(
             .as_str()
             .is_some_and(|needle| !needle.is_empty() && prompt.contains(needle))
     };
-    let mut play = Play {
+    let play = Play {
         turn: turn.clone(),
         waiting,
         markers,
-        step: if named("led_heavy_if") {
-            scenario["led_heavy_step"].as_u64().unwrap_or(60_000)
-        } else {
-            scenario["usage_step"].as_u64().unwrap_or(4096)
-        },
-        used: 0,
+        step: scenario["usage_step"].as_u64().unwrap_or(4096),
+        // Only the first step: the one that runs the command.
+        first: named("led_heavy_if").then(|| scenario["led_heavy_step"].as_u64().unwrap_or(60_000)),
+        think: think_time(&scenario),
         requests: AtomicU64::new(0),
         messages: AtomicU64::new(0),
     };
@@ -560,7 +619,7 @@ pub(crate) fn led(
     let asks = named("command_approval_if");
     let grant = named("led_permissions_if");
     let offset = scenario["led_offset"].as_i64().unwrap_or(0);
-    if let Err(error) = play_led(&mut play, &cwd, &prompt, delay, asks, grant, offset) {
+    if let Err(error) = play_led(&play, &cwd, &prompt, delay, asks, grant, offset) {
         let _ = play.marker(json!({"event":"led_script_failed","error":format!("{error:#}")}));
         let _ = turn.complete("failed");
     }
@@ -568,7 +627,7 @@ pub(crate) fn led(
 
 #[allow(clippy::too_many_arguments)]
 fn play_led(
-    play: &mut Play,
+    play: &Play,
     cwd: &str,
     prompt: &str,
     delay: u64,
@@ -582,7 +641,10 @@ fn play_led(
     // -q'`).
     let asked_for = quoted_command(prompt).unwrap_or_else(|| format!("wc -l {file}"));
     let command = format!("/bin/zsh -lc '{asked_for}'");
-    play.step()?;
+    play.begin();
+    if !play.think() {
+        return Ok(());
+    }
     // Measured on this model (M2 R5, R6): a run says what it is about to do
     // before its command, and then answers. Its preamble quotes the command,
     // numbers and all, so only its last message is its answer.
@@ -624,11 +686,15 @@ fn play_led(
                 json!({"type":"commandExecution","id":"item-command","command":&command,
                        "cwd":cwd,"status":"declined","commandActions":[]}),
             )?;
-            play.step()?;
             if decision == "cancel" {
-                return play.turn.complete("interrupted");
+                return play.turn.interrupt();
+            }
+            play.step(true)?;
+            if !play.think() {
+                return Ok(());
             }
             play.say("The command was not approved, so I could not count the lines.")?;
+            play.step(false)?;
             return play.turn.complete("completed");
         }
     }
@@ -651,13 +717,16 @@ fn play_led(
                "aggregatedOutput":lines.map(|n| format!("{n} {file}\n")),
                "durationMs":started.elapsed().as_millis() as u64}),
     )?;
-    play.step()?;
-    if play.stopped() {
+    // The first step's usage, now that its command has finished (M2 R5,
+    // R6); the step that answers begins.
+    play.step(true)?;
+    if !play.think() {
         return Ok(());
     }
     play.say(&match lines {
         Some(n) => (n + offset).to_string(),
         None => "unknown".to_owned(),
     })?;
+    play.step(false)?;
     play.turn.complete("completed")
 }

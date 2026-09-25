@@ -22,8 +22,12 @@
 //! command its prompt quotes, `led_delay_ms` long where the prompt contains
 //! `led_delay_if`, then the line count (`led_offset`), asking a command
 //! approval first where it contains `command_approval_if`. `usage_step` is
-//! each model step's tokens; `led_heavy_step` replaces it where the prompt
-//! contains `led_heavy_if`. Shapes PIO declines by itself, for the runner's
+//! each model step's tokens; `led_heavy_step` replaces the first step's (the
+//! one that runs the command) where the prompt contains `led_heavy_if`. A
+//! model step takes `model_step_ms` (default 1,500) before it says or calls
+//! anything. Usage is reported as Codex was measured reporting it: once a
+//! step and its tool have finished, and, for the step an interrupt cuts
+//! short, after the interrupt (M2 R1, R3, R5, R6). Shapes PIO declines by itself, for the runner's
 //! mutants: `lead_asks_in_mode` has the lead ask before every tool call (or
 //! only calls to `lead_asks_for`), in that elicitation mode, whatever the
 //! approval mode says; a led run whose
@@ -375,11 +379,10 @@ pub fn run() -> Result<()> {
                     "turn/interrupt" if scripted.is_some() => {
                         send(json!({"id":id,"result":{}}))?;
                         // Codex honours an interrupt (M2); the script stops
-                        // at its next step and the turn ends now.
+                        // at its next step, the step in flight is reported,
+                        // and the turn ends now.
                         if let Some(turn) = scripted.take() {
-                            turn.interrupted
-                                .store(true, std::sync::atomic::Ordering::SeqCst);
-                            turn.complete("interrupted")?;
+                            turn.interrupt()?;
                         }
                     }
                     "turn/interrupt" => {

@@ -1159,7 +1159,9 @@ def codex_scenario(mutant, calls):
     if mutant == 'reviewer-elsewhere':
         play['approvals_reviewer'] = 'auto_review'
     if mutant == 'child-overspends':
-        # One step past the child's ceiling, while it sleeps.
+        # alpha's first step, the one that runs its command, is past the
+        # child's ceiling. Codex reports it once the command has finished,
+        # so the runner stops alpha while its answering step is in flight.
         play.update(led_heavy_if=alpha, led_heavy_step=CHILD_CEILING + 10_000)
     if mutant == 'lead-asked-in-openai-form':
         # The lead's tool approval in a mode the 0.157.0 schema allows and
