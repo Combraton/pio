@@ -7,8 +7,9 @@
 //! `mcpToolCall` and `commandExecution`, `McpServerElicitationRequestParams`).
 //! **When** Codex asks before an MCP tool call, what it offers and how it reads
 //! the answer are read from its source at `rust-v0.157.0`
-//! (`codex-rs/core/src/mcp_tool_call.rs`, identical at `rust-v0.155.1`), not
-//! measured: L3's live run is the first observation.
+//! (`codex-rs/core/src/mcp_tool_call.rs`), not measured: L3's live run is the
+//! first observation. That file differs from `rust-v0.155.1`; the functions
+//! that decide whether to ask, build the request and parse the answer do not.
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use std::collections::HashMap;

@@ -230,8 +230,15 @@ CODEX = dict(
                'follows it',
         mcp_approvals='when Codex asks before an MCP tool call, what it offers and how it '
                       'reads the answer: read from its source at rust-v0.157.0 '
-                      '(codex-rs/core/src/mcp_tool_call.rs, identical at rust-v0.155.1), '
-                      'not measured'))
+                      '(codex-rs/core/src/mcp_tool_call.rs), not measured. The file differs '
+                      'from rust-v0.155.1; the functions that decide, build the request and '
+                      'read the answer do not (requires_mcp_tool_approval_for_mode, '
+                      'maybe_request_mcp_tool_approval, custom_mcp_tool_approval_mode, '
+                      'build_mcp_tool_approval_elicitation_request, _meta, _question and '
+                      '_fallback_message, parse_mcp_tool_approval_elicitation_response, '
+                      'normalize_approval_decision_for_mode). request_mcp_tool_user_approval, '
+                      'which sends the request, changed (analytics on a refused answer), and so '
+                      'did the persistence helpers PIO never triggers'))
 WAITED = 20
 
 # --- The bound on what one attempt can spend.
