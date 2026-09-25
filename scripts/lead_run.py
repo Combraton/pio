@@ -220,7 +220,18 @@ CODEX = dict(
     model='gpt-5.6-terra', model_provider='openai', sequence='M4-lead-codex',
     sequence_cap=400_000, sequence_stop=320_000, lead_ceiling=125_000,
     child_ceiling=50_000, in_flight=30_000, ledger='Codex ledger',
-    live=codex_live_run)
+    live=codex_live_run,
+    # Where the rehearsal's Codex comes from, in the receipt (owner decision
+    # for L3, 2026-09-25: the record says so).
+    record=dict(
+        pinned='0.157.0',
+        shapes="0.157.0's generated app-server schema: ThreadItem mcpToolCall and "
+               'commandExecution, McpServerElicitationRequestParams; the labeled fake '
+               'follows it',
+        mcp_approvals='when Codex asks before an MCP tool call, what it offers and how it '
+                      'reads the answer: read from its source at rust-v0.157.0 '
+                      '(codex-rs/core/src/mcp_tool_call.rs, identical at rust-v0.155.1), '
+                      'not measured'))
 WAITED = 20
 
 # --- The bound on what one attempt can spend.
@@ -1124,6 +1135,7 @@ def run(args):
     rehearse = args.rehearse
     started_at = now()
     record = dict(format='pio-lead-run/2', mode='rehearsal' if rehearse else 'live',
+                  harness=dict(name=HARNESS, **(CODEX['record'] if HARNESS == 'codex' else {})),
                   lead=LEAD, model=MODEL, budget=BUDGET, sequence=SEQUENCE,
                   sequence_cap=SEQUENCE_CAP, sequence_stop=SEQUENCE_STOP,
                   approvals=APPROVALS, bound=BOUND, mutant=args.mutant,
@@ -1487,6 +1499,19 @@ def settle(record, service, meters, state, root):
             record['store_read'] = dict(
                 read=False, reason="Codex's own total covers every step (review 48); "
                                    'no store is read')
+            # The qualification serve-codex made before any native work: a
+            # labeled fake has none.
+            qualified = service.store / 'qualification.json'
+            if qualified.exists():
+                q = json.loads(qualified.read_text())
+                record['harness']['qualification'] = dict(
+                    qualified=q.get('qualified'), version=(q.get('version') or {}).get('native'),
+                    native_sha256=((q.get('resolution') or {}).get('native') or {}).get('sha256'),
+                    schema_listing=(q.get('schema') or {}).get('canonical_listing_sha256'),
+                    drift=(q.get('schema') or {}).get('drift_count'))
+            else:
+                record['harness']['qualification'] = dict(
+                    qualified=None, reason='labeled fake: no qualification')
         said = {c: spoken(owner, f'{LEAD}.{c}') for c in CHILDREN}
         relay = spoken(owner, LEAD)
     finally:
