@@ -289,8 +289,9 @@ fn resolve_mirrors_the_pinned_npm_wrapper_layouts() {
 fn checked_in_identity_is_the_qualified_schema_listing() {
     let identity: Value = serde_json::from_str(QUALIFIED_SCHEMA_IDENTITY).unwrap();
     assert_eq!(identity["format"], "pio-codex-schema-identity/1");
-    assert_eq!(identity["file_count"], 312);
-    assert_eq!(identity["files"].as_object().unwrap().len(), 312);
+    // 0.157.0: 314 files (0.155.1 had 312; four added, two removed).
+    assert_eq!(identity["file_count"], 314);
+    assert_eq!(identity["files"].as_object().unwrap().len(), 314);
     let mut listing = String::new();
     for (file, digest) in identity["files"].as_object().unwrap() {
         listing.push_str(&format!(
@@ -406,14 +407,14 @@ fn thread_settings_guard_refuses_broader_than_configured_defaults() {
         ])
     );
     // A configured `untrusted` approval policy is not a stricter default at
-    // 0.155.1: the app-server exits before `initialize`, so it is unresolved
+    // 0.155.1 and 0.157.0: the app-server exits before `initialize`, so it is unresolved
     // rather than compared, while requesting `untrusted` per thread is fine.
     let configured_untrusted = guard_for(Some("approval_policy = \"untrusted\"\n"), plan.clone());
     assert_eq!(configured_untrusted["allowed"], false);
     assert_eq!(configured_untrusted["broader_than_configured"], json!([]));
     assert_eq!(
         configured_untrusted["unresolved"],
-        json!([{"setting":"approval_policy","reason":"Codex 0.155.1 does not start with this configured value","value":"untrusted"}])
+        json!([{"setting":"approval_policy","reason":format!("Codex {PINNED_VERSION} does not start with this configured value"),"value":"untrusted"}])
     );
     assert_eq!(
         guard_for(Some("sandbox_mode = \"read-only\"\n"), untrusted)["allowed"],

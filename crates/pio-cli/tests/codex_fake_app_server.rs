@@ -253,7 +253,7 @@ fn fake_app_server_interrupt_steer_and_suppressed_ack() {
     assert!(server.child.wait().unwrap().success());
 }
 
-/// File-change approvals have no `kind` at 0.155.1; only command approvals do.
+/// File-change approvals have no `kind` at 0.155.1 or 0.157.0; only command approvals do.
 #[test]
 fn fake_app_server_file_change_approval_carries_no_kind() {
     let dir = tempfile::tempdir().unwrap();

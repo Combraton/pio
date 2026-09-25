@@ -1,4 +1,4 @@
-//! Codex 0.155.1 qualification. Binds the user-selected executable, the native
+//! Codex 0.157.0 qualification. Binds the user-selected executable, the native
 //! binary it actually runs and the per-file canonical app-server schema identity
 //! before any native work. Qualification runs the selected executable only with
 //! an isolated `CODEX_HOME`; it never reads or writes the user's Codex home and
@@ -11,13 +11,16 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub const PINNED_VERSION: &str = "0.155.1";
-pub const PINNED_TAG: &str = "rust-v0.155.1";
-pub const PINNED_SOURCE: &str = "be2951ea34f0d295ed0becf97079f92fa5f6950e";
+/// Re-pinned from 0.155.1 on 2026-09-25 (owner decision): the owner's Codex
+/// updated itself, and PIO drives the Codex that is installed. The evidence is
+/// in `docs/work/m2/codex-qualification/`, "Re-qualification at 0.157.0".
+pub const PINNED_VERSION: &str = "0.157.0";
+pub const PINNED_TAG: &str = "rust-v0.157.0";
+pub const PINNED_SOURCE: &str = "00c972ed5d6ff6499317fd41b7f23605b8e6850d";
 
-/// Canonical schema identity captured from the qualified 0.155.1 binary.
+/// Canonical schema identity captured from the qualified 0.157.0 binary.
 pub const QUALIFIED_SCHEMA_IDENTITY: &str =
-    include_str!("../../../adapters/codex/0.155.1/schema-identity.json");
+    include_str!("../../../adapters/codex/0.157.0/schema-identity.json");
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -451,7 +454,7 @@ fn project_tables(text: &str) -> (BTreeMap<String, Option<String>>, String) {
     (projects, other)
 }
 
-/// Top-level settings that decide the thread defaults at 0.155.1, plus the
+/// Top-level settings that decide the thread defaults at 0.155.1 and 0.157.0, plus the
 /// configured `model` so a receipt can state it. Values are the raw right-hand
 /// side; `tables` lists `[permissions…]` headers and whether any table was seen
 /// before a key (keys after a header belong to it).
@@ -494,15 +497,15 @@ const SANDBOX_ORDER: &[&str] = &["read-only", "workspace-write", "danger-full-ac
 const APPROVAL_ORDER: &[&str] = &["untrusted", "on-request", "never"];
 
 /// Refuse requested thread settings broader than the user's configured default
-/// (owner guard, 2026-09-17). An absent setting is Codex 0.155.1's default for a
+/// (owner guard, 2026-09-17). An absent setting is Codex's default for a
 /// trusted project, `workspace-write` and `on-request`, which the offline probe
-/// measures rather than infers: with the project already trusted and no setting
+/// measures rather than infers, at 0.155.1 and again at 0.157.0: with the project already trusted and no setting
 /// configured, `thread/start` projects `workspaceWrite` and `on-request`. The
 /// same probe shows an untrusted project defaults to `readOnly` and that
 /// requesting `workspace-write` is what trusts it, so every run discloses the
 /// trust entry it adds. Settings this scan cannot resolve — a legacy `profile`,
 /// named `default_permissions`, `[permissions]` tables, a configured
-/// `approval_policy = "untrusted"` that 0.155.1 refuses to start with, or a
+/// `approval_policy = "untrusted"` that Codex refuses to start with, or a
 /// non-string or unknown value — refuse rather than guess.
 pub fn thread_settings_guard(snapshot: &Value, requested: &Value) -> Value {
     let settings = &snapshot["settings"];
@@ -537,11 +540,12 @@ pub fn thread_settings_guard(snapshot: &Value, requested: &Value) -> Value {
             None => (default.to_owned(), "absent_trusted_project_default"),
         };
         if key == "approval_policy" && source == "configured" && value == "untrusted" {
-            // Measured at 0.155.1: the app-server exits 1 before answering
+            // Measured at 0.155.1 and again at 0.157.0: the app-server exits 1
+            // before answering
             // `initialize` (`UnsupportedUntrustedApprovalPolicyError`). Refuse
             // rather than spawn something that cannot start. Requesting
             // `untrusted` per thread is still accepted.
-            unresolved.push(json!({"setting":key,"reason":"Codex 0.155.1 does not start with this configured value","value":value}));
+            unresolved.push(json!({"setting":key,"reason":format!("Codex {PINNED_VERSION} does not start with this configured value"),"value":value}));
             continue;
         }
         let Some(configured_rank) = order.iter().position(|v| *v == value) else {

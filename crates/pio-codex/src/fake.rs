@@ -223,8 +223,8 @@ pub fn run() -> Result<()> {
                         // The scenario can say otherwise so the host's
                         // refusal is something a case can reach.
                         "approvalsReviewer":scenario["approvals_reviewer"].as_str().unwrap_or("user")});
-                        // `null` omits the field. 0.155.1's schema makes it
-                        // required, so an answer without it is not from the
+                        // `null` omits the field. The schema makes it
+                        // required (0.155.1 and 0.157.0), so an answer without it is not from the
                         // qualified app-server, and silence is not `user`.
                         if let Some(Value::Null) = scenario.get("approvals_reviewer") {
                             result
@@ -276,7 +276,7 @@ pub fn run() -> Result<()> {
                                     params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval","cwd":cwd,"startedAtMs":0,"reason":"labeled fake permission grant request","permissions":{"filesystem":{"write":[cwd]}}});
                                 }
                                 // Only command approvals carry `kind` at
-                                // 0.155.1, and it is optional there too, so
+                                // 0.155.1 and 0.157.0, and it is optional there too, so
                                 // `absent` omits it and the client must read
                                 // that as `command`.
                                 let approval_kind =
