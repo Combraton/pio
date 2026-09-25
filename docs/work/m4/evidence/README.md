@@ -354,21 +354,28 @@ What L3 shows, as the fake plays it:
 
 **What only the live run can show.** These are the places where
 `lead_run.py` takes a different branch live, or where a row that holds here
-holds only because of what the fake does (review of L3, F13):
+holds only because of what the fake does (reviews of L3, F13 and round 2):
 
 - **Codex itself.** Live runs the owner's `~/.local/bin/codex` with the
   owner's home and `~/.codex`. `serve-codex` qualifies it before any native
   work, and the receipt's `harness.qualification` names the npm wrapper, the
   native binary and the Node that ran it (Hermes-managed), each by label and
-  sha256, from that record; the row "Codex qualified at the pinned identity"
-  compares them, the pin, the version and the schema listing with the
-  committed record, and fails live on a missing or different record. Here
-  the labeled fake has no qualification, so that row is **inconclusive**;
-  the mutants `qualified-elsewhere` (fails it) and `qualified-as-committed`
-  (holds it) exercise it on a planted record. Re-run `pio codex qualify`
-  just before the live run: Codex updated itself once on 2026-09-25, and the
-  Node belongs to Hermes. A service that never becomes ready (a refused
-  qualification, say) now leaves no reservation (`service-never-ready`).
+  sha256, from that record. Right after the service starts, and before
+  anything is reserved, the runner compares them, the pin, the version and
+  the schema listing with the committed record and refuses a run that
+  differs (`qualified-elsewhere`: refused, nothing reserved); the row "Codex
+  qualified at the pinned identity" states the same in the receipt. Here the
+  labeled fake has no qualification, so that row is **inconclusive**, and
+  only a planted record is checked (`qualified-as-committed` holds it). A
+  service that never becomes ready leaves no reservation
+  (`service-never-ready`).
+- **Codex features.** Before anything is reserved the runner reads two keys
+  of the Codex configuration's `[features]`, `exec_permission_approvals` and
+  `request_permissions_tool`, and refuses to start if either is on: PIO does
+  not opt into Codex's experimental API, so Codex strips a command
+  approval's extra permissions from what the desk sees, and an allow would
+  grant them unseen (`experimental-feature-on`). A feature set by a profile,
+  a managed configuration or a command-line override is not read.
 - **The sizing.** Codex reports a step once its tool has finished (M2 R5,
   R6), so a report that crosses a ceiling arrives with the next step begun.
   From the code, each run can reach its ceiling plus two steps: a child
@@ -376,48 +383,67 @@ holds only because of what the fake does (review of L3, F13):
   185,000. The lead's tool withholds any response (a result, an error or an
   unknown tool) once the lead has reported more than 95,000, and the meter
   stops the lead when a result its tool never saw comes back past 95,000;
-  that keeps a lead that uses only its tool within 155,000. But a result
-  the tool never sees (Codex's own shell, another MCP server, a refused
-  approval) is back, with the next step begun, before anything can see it,
-  when the lead may be just under 125,000 (review of L3, round 2, SB-1).
-  The worst case is **405,000** (185,000 + 2 x 110,000), past the 320,000
-  stop and the 400,000 cap, so **the live runner refuses to start L3**
-  until the owner decides the sizing. The limits are the owner's and are
-  unchanged.
+  that keeps a lead that uses only its tool within 155,000 (`lead-heavy`,
+  `lead-tool-error-past-hold`). But a result the tool never sees (Codex's
+  own shell, another MCP server, a refused approval) is back, with the next
+  step begun, before anything can see it, when the lead may be just under
+  125,000 (review of L3, round 2, SB-1; `lead-shell-past-hold`). The worst
+  case is **405,000** (185,000 + 2 x 110,000), past the 320,000 stop, the
+  400,000 cap and, with Codex's 421,450 used, the 800,000 Codex stop, so
+  **the live runner refuses to start L3** until the owner decides the
+  sizing. The limits are the owner's and are unchanged.
 - **The pre-allowance.** Whether Codex honours the per-thread
   `tools.<name>.approval_mode: approve` and asks nothing before the lead's
   tool calls. The fake implements that mode itself, so the row shows that
   the host sends exactly the two tools and no default mode (read back from
   the request, and witnessed by the fake), and that the runner reads it. If
   Codex asks anyway, by any path, the row fails and says the pre-allowance
-  did not hold: an ask PIO surfaces (the relay then answers, item 3b), or
-  one in a shape PIO does not recognise, such as `openai/form`, which PIO
-  declines by itself (`lead-asked-in-openai-form`). A quiet run cannot tell
-  an honoured pre-allowance from a Codex that would not have asked: there is
-  no control tool without it.
+  did not hold: an ask PIO surfaces (the relay then answers, item 3b); one
+  in a shape PIO does not recognise, such as `openai/form`, which PIO
+  declines by itself (`lead-asked-in-openai-form`); or one by
+  `item/tool/requestUserInput`, Codex's route when its elicitation route is
+  off (`lead-asked-by-user-input`). A quiet run cannot tell an honoured
+  pre-allowance from a Codex that would not have asked: there is no control
+  tool without it.
 - **The MCP elicitation.** When Codex asks before an MCP tool call, what it
   offers, and how it reads the answer. This is read from its source at
   rust-v0.157.0 (`codex-rs/core/src/mcp_tool_call.rs`; the functions that
   decide, build and parse are identical at 0.155.1, the file is not) and not
   measured. Nothing in this rehearsal asked it.
 - **What PIO declines by itself.** A request the host answers with an error
-  (a permission grant, a login or a form asking for data, a tool call it
-  does not run) is recorded with what was asked and why, carried on the
-  run's exit event, listed in the record "What PIO declined by itself", and
-  fails the desk row. The fake sends none unless a mutant does
-  (`child-asks-permissions`). Live, the owner's own MCP servers and plugins
-  (four servers and fourteen plugins in `~/.codex/config.toml`) are loaded
-  on every thread and could ask something; each such ask would fail the desk
-  row, by design.
+  (a permission grant, a login or a form asking for data, a request for the
+  user's input, a tool call it does not run) is recorded with what was
+  asked and why, never an argument, a form, a URL or a question's text,
+  carried on the run's exit event, listed in the record "What PIO declined
+  by itself", and fails the desk row. That now includes a request that
+  arrives while the host waits for `initialize`, `account/read` or
+  `thread/start` (phase `before_turn`; before round 2 it was dropped
+  unanswered). The fake sends none unless a mutant or case does. Live, the
+  owner's own MCP servers and plugins (four servers and fourteen plugins in
+  `~/.codex/config.toml`) are loaded on every thread and could ask
+  something; each such ask fails the desk row, by design.
 - **Command approvals.** The fake asks about `beta`'s command because its
-  scenario says to, and names it `/bin/zsh -lc '…'` as M2 R5 measured.
-  Live, `on-request` in a `workspace-write` sandbox need not ask. If nobody
-  asks, the desk row is inconclusive, not passed. Each command approval
-  carries its placement (the command's working directory, classified
-  against the workspace), a network flag and Codex's reason; the relay
-  answers only the exact command, inside the fixture, with no network ask.
-  Live answers come from answer files (the relay or the owner). Here the
-  rehearsal answered itself (`desk_answered_by`).
+  scenario says to, and names it `/bin/zsh -lc '…'` as M2 R5 measured, with
+  `reason` null as both measured approvals (R5, R6) had it. Live,
+  `on-request` in a `workspace-write` sandbox need not ask. If nobody asks,
+  the desk row is inconclusive, not passed. Each command approval carries
+  its placement (the command's working directory, followed through any
+  symlinks and classified against the workspace; a cwd through links that
+  lead out of it reads `outside_fixture`), a network flag and Codex's
+  reason. One with no cwd, or asking for the network, is left to the owner.
+  The relay answers only the exact command, inside the fixture, with no
+  network ask. Live answers come from answer files (the relay or the
+  owner). Here the rehearsal answered itself (`desk_answered_by`).
+- **File-change approvals.** A file change carries no working directory, so
+  it has no placement unless it asks for writes under a root
+  (`grantRoot`): then `grant_root_requested` is true and the root is
+  classified by label and digest. The owner decides any other file change
+  with no placement. The relay leaves every file change to the owner.
+- **An approval pending when its turn ends.** If a stop or a deadline ends
+  a turn while one of its approvals is still pending, the approval stays
+  pending, and a late answer (the relay's or the owner's) is accepted and
+  never sent (deferred; see STATE.md). The desk row catches it: no
+  `control_applied`, so nothing was sent, and the row fails.
 - **Model, provider, reviewer, tool launch.** The fake answers whatever its
   scenario names. Live, these are Codex's own answers, and the lead tool is
   launched with the owner's `config.toml` present, which the lead-tool probe
@@ -430,29 +456,49 @@ holds only because of what the fake does (review of L3, F13):
   30 s is the fake's delay and the counts are the fake's. As measured on this
   model (M2 R5, R6), each fake child says what it is about to run before its
   command (``Running `sleep 30 && wc -l alpha.md`.``), then answers; the
-  count row reads each child's **last** completed message
-  (`first-number-of-all` shows why). The fake lead's answer arrives one
-  message per file, which is not measured. Live, what a preamble says is the
-  model's.
+  count row reads each child's last message completed **after its last
+  command**, and none if it never answered (`first-number-of-all` shows
+  why). The fake lead's answer arrives one message per file, which is not
+  measured. Live, what a preamble says is the model's.
 - **Usage, stops and the charge.** Here usage is the fake's 4,096 per step,
-  reported as Codex was measured reporting it: after a step's tool, and, for
-  a step an interrupt cut short, after the interrupt. A model step takes
-  1.5 s in the fake. Live steps take seconds. Measured against the fake, a
-  query to the service takes a median 167 ms, a meter pass about 0.9 s, and
-  a stop about 1.5 s to reach the run; the lead's tool waits for a meter pass
-  that began 1.5 s after its call arrived. No run is stopped in this
-  rehearsal, so the row "Every stop the runner made reached Codex" is
-  **inconclusive**; `child-overspends` must hold it (the interrupt sent,
-  acknowledged, the turn interrupted) and `ceiling-cancel-never-sent` fails
-  it. A run the runner stops is charged its report plus one step, within its
-  share; whether Codex bills an aborted step beyond what it reports is not
-  measured. A run that reports nothing for 150 s of activity is stopped
-  (`usage-suppressed`); every M2 step reported usage, so live this should
-  never fire. Live, usage is charged to the Codex ledger (`M4-lead-codex`,
-  counted in the Codex cap).
+  reported as Codex was measured reporting it: after a step's tool; and,
+  for a step an interrupt cuts short in its tool phase, after the interrupt
+  (M2 R1, R3). A step cut short while the model is still producing it is
+  not reported, since 0.157.0 records usage only on a completed response;
+  that timing was not measured live. A model step takes 1.5 s in the fake;
+  live steps take seconds. Measured against the fake, a query to the service
+  takes a median 167 ms, a stop about 1.5 s to reach a run, and the meter's
+  passes and seconds are in each receipt (`metering`). The lead's tool waits
+  for a meter pass that began 1.5 s after its call arrived
+  (`lead_tool.py --selftest`). No run is stopped in this rehearsal, so the
+  row "Every stop the runner made reached Codex" is **inconclusive**;
+  `child-overspends` must hold it and `ceiling-cancel-never-sent` fails it.
+  A run the runner stops is charged what it reported plus one step, not
+  capped; one not seen exited, its share or what it reported or its meter
+  saw plus a step, if more; one stopped for silence or with no usage, its
+  share or what it reported, if more; a submit that made no execution,
+  nothing. Two rows judge that: the charge covers what each run could have
+  spent (a floor worked out from the views and meters, not from the charge),
+  and each charge stays within its reserved share. A Codex that ignored an
+  interrupt (`stop-ignored`) fails the share row and the stop row. Whether
+  Codex bills an aborted step beyond what it reports is not measured. A run
+  active for 150 s with no usage is stopped (`usage-suppressed`,
+  `asked-silent`); every M2 step reported usage, so live this should not
+  fire, but three reads of runs still running in one lead step, each
+  waiting its full 55 s, would come to about 170 s and stop the lead falsely
+  (not likely with this brief, and not measured). Live, usage is charged to
+  the Codex ledger (`M4-lead-codex`, counted in the Codex cap).
 - **The lead's read.** `read_run` waits up to 55 s for its run. Codex's own
-  timeout for an MCP tool call is believed to be 60 s by default (a reading
-  of codex-rs, not verified here).
+  timeout for an MCP tool call is 300 s at 0.157.0
+  (`codex-rs/codex-mcp/src/rmcp_client.rs:104`, `DEFAULT_TOOL_TIMEOUT`,
+  applied in `connection_manager.rs:336-339` when a server sets no
+  `tool_timeout_sec`; PIO sets none). The lead tool's longest path, a read
+  (55 s), the meter wait (30 s) and a hold (30 s), is 115 s, which fits: a
+  timeout would hand the lead an error and start a step.
+- **The runner's probes.** The third start, the grant's attempt to attach
+  the tool and the credential check must be refused; one that was admitted
+  instead is cancelled and charged its share on a line of its own
+  (`third-admitted`).
 - **The configuration snapshot.** Here the diff is of the fake's own Codex
   home inside the tree. The lead's thread shows `existed_before: false` and
   one fixture trust entry added. Live, it is the owner's
