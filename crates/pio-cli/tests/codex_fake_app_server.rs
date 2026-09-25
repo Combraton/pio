@@ -143,15 +143,26 @@ fn fake_app_server_handshake_thread_turn_approval_and_usage() {
         .lines()
         .map(|l| serde_json::from_str::<Value>(l).unwrap()["kind"].clone())
         .collect();
+    // What the thread's config asked of its MCP servers (none here), and
+    // every answer the client sent, each once (review of L3, CH-1 and CH-3).
     assert_eq!(
         kinds,
         [
             json!("spawned"),
+            json!("thread_config_received"),
             json!("turn_received"),
+            json!("response_received"),
             json!("approval_answered"),
             json!("exiting")
         ]
     );
+    let received: Vec<Value> = records
+        .lines()
+        .map(|l| serde_json::from_str::<Value>(l).unwrap())
+        .collect();
+    assert_eq!(received[1]["servers"], json!({}));
+    assert_eq!(received[3]["result"], json!({"decision":"decline"}));
+    assert_eq!(received[3]["count"], 1);
 }
 
 #[test]
