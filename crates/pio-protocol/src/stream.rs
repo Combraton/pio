@@ -954,4 +954,25 @@ mod tests {
             task.await.unwrap().unwrap();
         }
     }
+
+    /// D13: PIO enforces no budget of its own (every stop so far has been a
+    /// live runner's, external to the product); a real service must never
+    /// let a launch configuration claim otherwise. `enforced_bounds`, and
+    /// the other conformance-only controls beside it, are refused before
+    /// any of the three real services (`serve-codex`, `serve-claude`,
+    /// `serve-opencode`) ever reaches the shared engine that accepts them
+    /// structurally for the conformance participant.
+    #[test]
+    fn no_adapter_service_may_declare_enforced_bounds() {
+        for field in ["enforcement", "enforced_bounds", "echo_proves_delivery"] {
+            let protocol = json!({"executor":{"adapter":{field:["codex.tokens.total"]}}});
+            let error = refuse_conformance_only_controls(&protocol).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("conformance-only"),
+                "{field}: {error:#}"
+            );
+        }
+        // A configuration naming none of them is unaffected.
+        assert!(refuse_conformance_only_controls(&json!({"executor":{"adapter":{}}})).is_ok());
+    }
 }

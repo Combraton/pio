@@ -282,6 +282,59 @@ fn auth_route_reports_a_missing_route_as_unusable() {
     assert_eq!(route["account_identity_fields_dropped"], json!([]));
 }
 
+/// D10: the owner's dated model exception is compiled out of release builds.
+/// Built normally (dev, test, CI and the live runners: `test-exceptions` on,
+/// the default) this configuration is refused only for the ordinary reasons
+/// this file covers elsewhere; built `--no-default-features` — the release
+/// configuration — it is refused outright with one clear reason, whatever
+/// else the configuration says, because a real caller never sets either
+/// field and the exception has no other purpose.
+#[test]
+fn a_release_build_refuses_the_model_exception_outright() {
+    let dir = tempfile::tempdir().unwrap();
+    let record = serialized(|| {
+        let claude = fake_claude(
+            dir.path(),
+            PINNED_VERSION,
+            "top help",
+            r#"{"loggedIn":true,"authMethod":"claude.ai"}"#,
+        );
+        let config = json!({
+            "executable":claude,
+            "env":{"PATH":"/usr/bin:/bin"},
+            "config_dir":dir.path().join("config"),
+            "home":dir.path().join("home"),
+            "fixture_root":dir.path().join("fixtures"),
+            "labeled_fake":true,
+            "permission_mode":product_default_permission_mode(),
+            "model":"claude-opus-x",
+            "test_only_model_exception":MODEL_EXCEPTION,
+        });
+        service_admission(&dir.path().join("work"), &config).unwrap()
+    });
+    let reasons: Vec<&str> = record["refusals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["reason"].as_str().unwrap())
+        .collect();
+    if cfg!(feature = "test-exceptions") {
+        assert!(
+            !reasons.contains(&"test_only_model_exception_not_compiled_in"),
+            "{record}"
+        );
+    } else {
+        assert!(
+            reasons.contains(&"test_only_model_exception_not_compiled_in"),
+            "{record}"
+        );
+        assert!(
+            !reasons.contains(&"model_requires_the_dated_test_only_exception"),
+            "{record}"
+        );
+    }
+}
+
 #[test]
 fn permission_mode_guard_requires_the_configured_default() {
     let accept = json!({"permissions":{"defaultMode":"acceptEdits"}});

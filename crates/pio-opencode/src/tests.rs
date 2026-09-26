@@ -258,6 +258,36 @@ fn a_model_requires_the_dated_exception_and_a_run_requires_a_model() {
     );
 }
 
+/// D10: the owner's dated model exception is compiled out of release builds.
+/// Built normally (dev, test, CI and the live runners: `test-exceptions` on,
+/// the default) this configuration is admitted, exactly as
+/// `a_helper_model_on_the_session_s_own_provider_is_admitted` proves without
+/// the helper. Built `cargo build --no-default-features` — the release
+/// configuration — OpenCode admission refuses it outright and says so with
+/// one reason: OpenCode has no other path to a model at all (the owner's
+/// default is a forbidden gateway), so it is test scope only in a release
+/// build.
+#[test]
+fn a_release_build_refuses_the_model_exception_outright() {
+    let dir = tempfile::tempdir().unwrap();
+    let record = admitted(
+        dir.path(),
+        &service(
+            json!("minimax-coding-plan/MiniMax-M2.7-highspeed"),
+            json!({}),
+        ),
+    );
+    if cfg!(feature = "test-exceptions") {
+        assert_eq!(record["admitted"], true, "{record}");
+    } else {
+        assert_eq!(record["admitted"], false, "{record}");
+        assert!(
+            reasons(&record).contains(&"test_only_model_exception_not_compiled_in".to_owned()),
+            "{record}"
+        );
+    }
+}
+
 #[test]
 fn a_credential_variable_never_reaches_a_child() {
     let dir = tempfile::tempdir().unwrap();

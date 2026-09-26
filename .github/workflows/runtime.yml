@@ -45,6 +45,20 @@ jobs:
           cargo build --workspace --locked
           cargo test --workspace --locked
           cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: D10 the release configuration compiles out the test-only model exception
+        # `pio-cli` (and the crates that carry the exception) default the
+        # `test-exceptions` feature on, which is every build above. The
+        # release/packaged build turns it off with `--no-default-features`
+        # and refuses the exception key with a clear reason on all three
+        # adapters (OpenCode admission then has no path to succeed at all,
+        # so it is test scope only in a release build). This builds that
+        # configuration and runs only the targeted tests that assert the
+        # refusal; the rest of each crate's suite assumes the exception is
+        # available, exactly as every build above provides it.
+        run: |
+          cargo build --release --locked --no-default-features -p pio-cli
+          cargo test --workspace --locked --no-default-features \
+            a_release_build_refuses_the_model_exception_outright
           python3 scripts/check_docs.py
           git diff --exit-code -- Cargo.lock
       - name: Case cleanup guard self-tests

@@ -804,10 +804,19 @@ pub fn service_admission(work: &Path, claude: &Value) -> Result<Value> {
     checks.push("environment");
 
     // PIO never selects a model outside the owner's dated, test-only exception,
-    // and the exception is refused on its own so it cannot sit unused.
+    // and the exception is refused on its own so it cannot sit unused. D10:
+    // that exception is compiled out of release builds; a real caller never
+    // sets either field, so that path is untouched, but a configuration that
+    // tries to use the exception in a release build gets one clear reason
+    // rather than a check it could pass by guessing the right token.
     let model = claude["model"].as_str();
     let exception = claude["test_only_model_exception"].as_str();
-    if model.is_some_and(str::is_empty) {
+    if !cfg!(feature = "test-exceptions") && (model.is_some() || exception.is_some()) {
+        refusals.push(refusal(
+            "test_only_model_exception_not_compiled_in",
+            json!({"reason":"the dated model exception is test-only; this PIO build was compiled without the test-exceptions feature, so claude.model is refused outright (D10)"}),
+        ));
+    } else if model.is_some_and(str::is_empty) {
         refusals.push(refusal("model_must_be_a_non_empty_name", Value::Null));
     } else if model.is_some() != exception.is_some_and(|e| e == MODEL_EXCEPTION) {
         refusals.push(refusal(
