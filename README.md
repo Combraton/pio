@@ -47,6 +47,8 @@ PIO drives the harnesses you already have installed, **exactly as you configured
 
 No adapter or authentication journey has passed yet. Details: [ADR 001 amendment](docs/decisions/001-standalone-stack.md#amendment--owner-decisions-after-m1-acceptance-2026-09-16).
 
+**What v0.1 does not establish:** budget enforcement. PIO records usage and unresolved liability (see Responsibilities above), but enforces no budget of its own — every spend stop so far (Codex, Claude Code and MiniMax caps alike) has been the external live runner's, not something the product reads and refuses on. No adapter service may advertise an enforced bound (`docs/work/STATE.md`).
+
 ## Working on this repository
 
 Read [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), [the documentation map](docs/README.md), and [verification](docs/VERIFICATION.md). Use existing native harnesses for development. **Combraton self-development is deferred until usable v0.1 releases of all four projects.** The project license is [MIT](LICENSE).
