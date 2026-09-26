@@ -1267,9 +1267,9 @@ impl Provider {
                     e["view"]["containment"]["denied_by_harness_reason"] =
                         "the harness refused it under its own rules; PIO was not asked".into();
                 }
-                if record["out_of_fixture_effect_observed"] == true
-                    || record["unclassifiable_target_count"].as_u64().unwrap_or(0) > 0
-                {
+                // The record's own verdict: an out-of-fixture or unclassifiable
+                // use, or one whose outcome no `result` settled (D3).
+                if record["liability"] == "unresolved" {
                     e["view"]["effects_liability"] = "unresolved".into();
                 }
             }

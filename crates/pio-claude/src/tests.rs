@@ -568,7 +568,7 @@ fn workspace(dir: &Path) -> (PathBuf, PathBuf) {
 fn placement_of(input: Value, fixture: &Path, cwd: &Path) -> String {
     let record = tool_use_records(
         &[tool_use("Read", "t1", input)],
-        &Value::Null,
+        Some(&json!([])),
         &Value::Null,
         fixture,
         cwd,
@@ -924,7 +924,7 @@ fn a_tool_use_the_harness_refused_is_an_attempt_and_not_an_effect() {
     // reported it as an observed effect with unresolved liability anyway.
     let denials = json!([{"tool_name":"Read","tool_use_id":"t2",
                           "tool_input":{"file_path":"…"}}]);
-    let record = tool_use_records(&messages, &denials, &Value::Null, &fixture, &fixture);
+    let record = tool_use_records(&messages, Some(&denials), &Value::Null, &fixture, &fixture);
     let uses = record["tool_uses"].as_array().unwrap();
     // Both are still recorded: an attempt is worth knowing about.
     assert_eq!(uses.len(), 2);
@@ -964,7 +964,7 @@ fn a_refusal_is_attributed_to_whoever_decided_it() {
         "t1": {"by":"caller","decision":"deny"},
         "t2": {"by":"pio","decision":"deny","reason":"target_outside_the_fixture_workspace"},
     });
-    let record = tool_use_records(&messages, &denials, &decided, &fixture, &fixture);
+    let record = tool_use_records(&messages, Some(&denials), &decided, &fixture, &fixture);
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses[0]["outcome"], "denied_by_caller");
     assert_eq!(uses[0]["decided_by"], "caller");
@@ -985,6 +985,68 @@ fn a_refusal_is_attributed_to_whoever_decided_it() {
     assert_eq!(record["liability"], "none_observed");
 }
 
+/// D3. A turn killed or crashed before its final `result` has no denial list.
+/// The audit used to read that absence as "nothing was refused" and record
+/// PIO's own decline as `performed`, `denied: false`. A deny PIO sent is a
+/// refusal whether or not a `result` confirms it; a use nobody denied, with
+/// no `result`, is `unknown` and leaves the liability unresolved.
+#[test]
+fn without_a_result_a_denied_use_stays_denied_and_the_rest_are_unknown() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    let messages = vec![
+        tool_use(
+            "Read",
+            "t1",
+            json!({"file_path":outside.join("marker.txt")}),
+        ),
+        tool_use("Bash", "t2", json!({"command":"git tag x"})),
+        tool_use("Read", "t3", json!({"file_path":"src/calc.py"})),
+        tool_use("Bash", "t4", json!({"command":"git tag y"})),
+    ];
+    let decided = json!({
+        "t1": {"by":"pio","decision":"deny","reason":"target_outside_the_fixture_workspace"},
+        "t2": {"by":"caller","decision":"deny"},
+        "t4": {"by":"caller","decision":"allow"},
+    });
+    let record = tool_use_records(&messages, None, &decided, &fixture, &fixture);
+    let uses = record["tool_uses"].as_array().unwrap();
+    assert_eq!(uses[0]["outcome"], "declined_by_pio", "{record}");
+    assert_eq!(uses[0]["denied"], true);
+    assert_eq!(uses[0]["denied_by_harness"], false);
+    assert_eq!(uses[1]["outcome"], "denied_by_caller");
+    assert_eq!(uses[1]["denied"], true);
+    // Nobody denied these, and no `result` says whether they ran: an allow is
+    // a decision, not an observation that the use completed.
+    assert_eq!(uses[2]["outcome"], "unknown");
+    assert_eq!(uses[2]["denied"], false);
+    assert_eq!(uses[3]["outcome"], "unknown");
+    assert!(uses.iter().all(|u| u["outcome"] != "performed"), "{record}");
+    assert_eq!(record["result_observed"], false);
+    assert_eq!(record["unknown_outcome_count"], 2);
+    assert_eq!(record["declined_by_pio_count"], 1);
+    assert_eq!(record["denied_by_caller_count"], 1);
+    // PIO's decline outside the workspace never ran, so it is no effect.
+    assert_eq!(record["out_of_fixture_effect_observed"], false);
+    assert_eq!(record["liability"], "unresolved");
+
+    // The same uses with a `result` that refused nothing: the undecided
+    // inside-fixture read ran, and PIO's decline is still a decline.
+    let settled = tool_use_records(
+        &messages[..3],
+        Some(&json!([])),
+        &decided,
+        &fixture,
+        &fixture,
+    );
+    let uses = settled["tool_uses"].as_array().unwrap();
+    assert_eq!(uses[0]["outcome"], "declined_by_pio");
+    assert_eq!(uses[2]["outcome"], "performed");
+    assert_eq!(settled["result_observed"], true);
+    assert_eq!(settled["unknown_outcome_count"], 0);
+    assert_eq!(settled["liability"], "none_observed", "{settled}");
+}
+
 #[test]
 fn every_tool_use_is_recorded_and_targets_outside_the_fixture_are_flagged() {
     let dir = tempfile::tempdir().unwrap();
@@ -997,7 +1059,13 @@ fn every_tool_use_is_recorded_and_targets_outside_the_fixture_are_flagged() {
             json!({"file_path":outside.join("secret.txt")}),
         ),
     ];
-    let record = tool_use_records(&messages, &Value::Null, &Value::Null, &fixture, &fixture);
+    let record = tool_use_records(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+    );
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses.len(), 2, "a tool use went unrecorded");
     assert_eq!(uses[0]["placement"], "inside_fixture");
@@ -1026,7 +1094,13 @@ fn a_receipt_carries_labels_and_digests_rather_than_paths() {
             json!({"file_path":outside.join("secret.txt")}),
         ),
     ];
-    let record = tool_use_records(&messages, &Value::Null, &Value::Null, &fixture, &fixture);
+    let record = tool_use_records(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+    );
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses[0]["target_label"], "<fixture>/src/calc.py");
     assert_eq!(uses[1]["target_label"], "<outside>");
@@ -1045,7 +1119,13 @@ fn a_shell_command_is_not_classifiable_rather_than_assumed_contained() {
     let dir = tempfile::tempdir().unwrap();
     let (fixture, _) = workspace(dir.path());
     let messages = vec![tool_use("Bash", "t1", json!({"command":"cat /etc/passwd"}))];
-    let record = tool_use_records(&messages, &Value::Null, &Value::Null, &fixture, &fixture);
+    let record = tool_use_records(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+    );
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses[0]["placement"], "not_classifiable");
     assert!(uses[0]["target_label"].is_null());
@@ -1059,7 +1139,13 @@ fn a_clean_run_inside_the_fixture_reports_no_outstanding_liability() {
     let dir = tempfile::tempdir().unwrap();
     let (fixture, _) = workspace(dir.path());
     let messages = vec![tool_use("Read", "t1", json!({"file_path":"src/calc.py"}))];
-    let record = tool_use_records(&messages, &Value::Null, &Value::Null, &fixture, &fixture);
+    let record = tool_use_records(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+    );
     assert_eq!(record["liability"], "none_observed");
     assert_eq!(record["out_of_fixture_effect_observed"], false);
 }

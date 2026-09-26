@@ -562,13 +562,10 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let after = pio_claude::durable_snapshot(&home, &config_dir, &cwd)?;
     let diff = pio_claude::durable_diff(&before, &after);
     // The result names every tool use the harness refused; a refused use
-    // never ran and is not an effect.
-    let denials = result
-        .as_ref()
-        .map(|r| r["permission_denials"].clone())
-        .unwrap_or(Value::Null);
-    let tool_uses =
-        pio_claude::tool_use_records(&tool_use_messages, &denials, &decided, &cwd, &cwd);
+    // never ran and is not an effect. Without a result (a kill, a crash) that
+    // list does not exist, and nothing nobody denied is called performed.
+    let denials = result.as_ref().map(|r| &r["permission_denials"]);
+    let tool_uses = pio_claude::tool_use_records(&tool_use_messages, denials, &decided, &cwd, &cwd);
     // Ordered deliberately: the exit event is what turns the runtime to
     // `exited`, so everything a caller must see on a finished execution is
     // recorded first. A matrix run caught the other order.

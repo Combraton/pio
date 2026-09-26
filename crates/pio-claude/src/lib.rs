@@ -908,9 +908,17 @@ fn target_label(resolved: &Option<String>, workspace: &Path, placement: &str) ->
 /// command never produces a permission request — it never reaches PIO at all.
 /// A target outside the fixture is therefore an **observed effect with
 /// unresolved liability**, not a declined request. ADR 004 §5.
+///
+/// `denials` is the final `result`'s denial list, or `None` when no final
+/// `result` arrived (a forced kill, a crash, a harness that left early). Then
+/// what the harness refused under its own rules is unknown, and so is whether
+/// any use nobody denied actually ran: such a use is `unknown`, never
+/// `performed`, and leaves the liability unresolved. A use PIO or a caller
+/// denied is denied either way — PIO sent that deny itself — and is never
+/// `performed`.
 pub fn tool_use_records(
     messages: &[Value],
-    denials: &Value,
+    denials: Option<&Value>,
     decided: &Value,
     workspace: &Path,
     cwd: &Path,
@@ -920,8 +928,9 @@ pub fn tool_use_records(
     // along and ignored it: R6 reported an out-of-fixture effect with
     // unresolved liability for a read the harness refused outright, and R3
     // counted a denied compound command among its effects.
+    let result_observed = denials.is_some();
     let denied: Vec<&str> = denials
-        .as_array()
+        .and_then(Value::as_array)
         .map(|list| {
             list.iter()
                 .filter_map(|d| d["tool_use_id"].as_str())
@@ -939,7 +948,7 @@ pub fn tool_use_records(
             let input = &block["input"];
             let (resolved, placement) = classify_target(input, &workspace, &cwd);
             let digest_source = resolved.clone().unwrap_or_else(|| input.to_string());
-            let refused = block["id"].as_str().is_some_and(|id| denied.contains(&id));
+            let listed = block["id"].as_str().is_some_and(|id| denied.contains(&id));
             // Who decided. `result.permission_denials` names every refusal
             // without saying whose it was, so a denial PIO forwarded on a
             // caller's behalf looked exactly like one the harness made on its
@@ -949,10 +958,17 @@ pub fn tool_use_records(
                 .as_str()
                 .map(|id| decided[id].clone())
                 .unwrap_or(Value::Null);
+            // A deny PIO sent, on its own account or a caller's, is a refusal
+            // whether or not a `result` ever confirmed it. Before this, a turn
+            // killed before its `result` recorded PIO's own decline as
+            // `performed` (D3).
+            let refused = listed || decision["decision"] == "deny";
             let outcome = match (refused, decision["by"].as_str()) {
                 (true, Some("caller")) => "denied_by_caller",
                 (true, Some("pio")) => "declined_by_pio",
                 (true, _) => "attempted_and_denied",
+                // No `result`, so nothing says whether it ran.
+                (false, _) if !result_observed => "unknown",
                 (false, _) => "performed",
             };
             records.push(json!({
@@ -964,7 +980,7 @@ pub fn tool_use_records(
                 // Refused. It never ran, so it is not an effect and carries no
                 // liability, whoever decided.
                 "denied": refused,
-                "denied_by_harness": refused && decision["by"].is_null(),
+                "denied_by_harness": listed && decision["by"].is_null(),
                 "decided_by": decision["by"].clone(),
                 // What was decided, not only by whom. Recorded because a
                 // receipt that names a decider and not a decision leaves the
@@ -995,8 +1011,9 @@ pub fn tool_use_records(
         .iter()
         .filter(|r| r["outcome"] == "declined_by_pio")
         .count();
+    let unknown = records.iter().filter(|r| r["outcome"] == "unknown").count();
     json!({
-        "format":"pio-claude-tool-uses/5",
+        "format":"pio-claude-tool-uses/6",
         "containment":{
             "mechanism":"harness_permission_rules_only",
             "os_sandbox_observed":false,
@@ -1012,7 +1029,15 @@ pub fn tool_use_records(
         "out_of_fixture_effect_observed":outside > 0,
         "out_of_fixture_count":outside,
         "unclassifiable_target_count":unclassified,
-        "liability":if outside > 0 || unclassified > 0 { "unresolved" } else { "none_observed" },
+        // Whether the final `result` arrived, and how many uses it left
+        // undecided because it did not.
+        "result_observed":result_observed,
+        "unknown_outcome_count":unknown,
+        "liability":if outside > 0 || unclassified > 0 || unknown > 0 {
+            "unresolved"
+        } else {
+            "none_observed"
+        },
     })
 }
 
