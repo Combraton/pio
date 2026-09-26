@@ -52,7 +52,8 @@
 //! sends a url-mode elicitation before answering each wait it names;
 //! `exit_after_early` then exits once the client has answered it.
 //! `memory_pipeline` writes, at the first turn, what Codex's memory pipeline
-//! would under the Codex home (`memories/`, `memories_1.sqlite`).
+//! would under the Codex home (`memories/`, `memories_1.sqlite`), unless the
+//! thread's config turned memories off (`crate::features_off`).
 use crate::fake_turn::{self, McpServer, Turn, Waiting, emit};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
@@ -344,28 +345,47 @@ pub fn run() -> Result<()> {
                                 )
                             })
                             .collect();
-                        // And what it said of agents, by the dotted keys a
-                        // request override takes: with `agents.enabled`
+                        // And what it said of Codex's unmetered features, by
+                        // the dotted keys a request override takes
+                        // (`crate::features_off`): with `agents.enabled`
                         // false and `multi_agent_v2` not on, Codex offers no
                         // collaboration tools whatever the model's catalog
                         // says (`Config::multi_agent_version_override`,
-                        // rust-v0.157.0), so this fake spawns none.
+                        // rust-v0.157.0), so this fake spawns none; with
+                        // memories off (the alias `memory_tool` sorts last
+                        // and decides where both are given) it runs no
+                        // memory pipeline; with goals off it continues no
+                        // turn by itself.
                         let config = &params["config"];
-                        let agents = config["agents.enabled"]
-                            .as_bool()
-                            .or(config["agents"]["enabled"].as_bool());
-                        let v2 = config["features.multi_agent_v2"]
-                            .as_bool()
-                            .or(config["features"]["multi_agent_v2"].as_bool());
+                        let key = |dotted: &str| {
+                            let (table, name) = dotted.split_once('.').unwrap_or(("", dotted));
+                            config[dotted].as_bool().or(config[table][name].as_bool())
+                        };
+                        let agents = key("agents.enabled");
+                        let v2 = key("features.multi_agent_v2");
                         fake_turn::AGENTS_OFF.store(
                             agents == Some(false) && v2 != Some(true),
                             std::sync::atomic::Ordering::SeqCst,
                         );
+                        let memories = key("features.memory_tool").or(key("features.memories"));
+                        fake_turn::MEMORIES_OFF
+                            .store(memories == Some(false), std::sync::atomic::Ordering::SeqCst);
+                        fake_turn::GOALS_OFF.store(
+                            key("features.goals") == Some(false),
+                            std::sync::atomic::Ordering::SeqCst,
+                        );
+                        // Every key of the override set as received, and
+                        // nothing else of the config.
+                        let features_off: serde_json::Map<String, Value> = crate::features_off()
+                            .into_iter()
+                            .filter(|(_, dotted, _)| !config[*dotted].is_null())
+                            .map(|(_, dotted, _)| (dotted.to_owned(), config[dotted].clone()))
+                            .collect();
                         marker(
                             &markers,
                             json!({"source":SOURCE,"kind":"thread_config_received","servers":received,
                                    "agents_enabled":agents,"multi_agent":config["features.multi_agent"],
-                                   "multi_agent_v2":v2}),
+                                   "multi_agent_v2":v2,"features_off":features_off}),
                         )?;
                         // The servers this thread's own config names, launched
                         // and listed before the answer, as the M4b probe saw.
@@ -429,7 +449,15 @@ pub fn run() -> Result<()> {
                     }
                     "turn/start" => {
                         turns += 1;
-                        if turns == 1 && scenario["memory_pipeline"] == true {
+                        let memories_off =
+                            fake_turn::MEMORIES_OFF.load(std::sync::atomic::Ordering::SeqCst);
+                        if turns == 1 && scenario["memory_pipeline"] == true && memories_off {
+                            marker(
+                                &markers,
+                                json!({"source":SOURCE,"kind":"memory_pipeline_not_started"}),
+                            )?;
+                        }
+                        if turns == 1 && scenario["memory_pipeline"] == true && !memories_off {
                             // What Codex 0.157.0's memory pipeline writes, in the
                             // background, once a root thread's first turn starts
                             // with [features] memories on (read from source, not

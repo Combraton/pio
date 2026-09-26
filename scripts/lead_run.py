@@ -816,10 +816,17 @@ FEATURE_KEYS = {'exec_permission_approvals': ('exec_permission_approvals', 'requ
 # Codex's sub-agents (review of L3, round 3, SPEND-2): `multi_agent` and its
 # legacy alias `collab` (legacy.rs, rust-v0.157.0).
 AGENT_KEYS = {'multi_agent': ('multi_agent', 'collab')}
-# A labeled fake's own token for turning sub-agents off per launch; a real
-# Codex takes only a recorded owner decision (pio-protocol stream.rs,
-# AGENTS_OFF_DECISIONS, empty until the owner decides).
-AGENTS_OFF_REHEARSAL = 'rehearsal-only-agents-off'
+# A labeled fake's own token for turning Codex's unmetered features off per
+# launch (sub-agents among them); a real Codex takes only a recorded owner
+# decision (pio-protocol stream.rs, FEATURES_OFF_DECISIONS, empty until the
+# owner decides).
+FEATURES_OFF_REHEARSAL = 'rehearsal-only-features-off'
+# What the host puts in each thread's config under that decision or token,
+# key by key (pio_codex::features_off, rust-v0.157.0; review of L3, round 4).
+FEATURES_OFF = {'agents.enabled': False, 'features.multi_agent': False,
+                'features.multi_agent_v2': False, 'features.memories': False,
+                'features.memory_tool': False, 'features.goals': False,
+                'web_search': 'disabled', 'features.image_generation': False}
 
 
 def feature_setting(features, feature):
@@ -1032,7 +1039,7 @@ class Service:
     """One service for the lead and its children, rehearsed or live:
     `serve-opencode` for L1 and L1b, `serve-codex` for L3."""
 
-    def __init__(self, root, rehearse, scenario, mutant=None, agents_off=None):
+    def __init__(self, root, rehearse, scenario, mutant=None, features_off=None):
         self.root = root
         self.rehearse = rehearse
         self.store = root / 'store'
@@ -1049,9 +1056,10 @@ class Service:
         if HARNESS == 'codex':
             self.config = dict(format='pio-codex-service/1', protocol=protocol,
                                codex=self.codex(root, rehearse, scenario))
-            if agents_off:
-                # Sub-agents off per launch (review of L3, round 3, SPEND-2).
-                self.config['codex']['agents_off_decision'] = agents_off
+            if features_off:
+                # Codex's unmetered features off per launch (review of L3,
+                # round 3, SPEND-2; round 4).
+                self.config['codex']['features_off_decision'] = features_off
         else:
             self.config = self.opencode(root, rehearse, scenario, protocol)
         if mutant == 'service-never-ready':
@@ -2103,9 +2111,9 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
     rows = Rows(rehearse)
     # Sub-agents off per launch: the owner's recorded decision, live, or the
     # labeled fake's own token (review of L3, round 3, SPEND-2).
-    agents_off = AGENTS_OFF_REHEARSAL if args.mutant == 'subagents-off' \
-        else args.agents_off_decision
-    service = Service(root, rehearse, scenario(args.mutant), args.mutant, agents_off=agents_off)
+    agents_off = FEATURES_OFF_REHEARSAL if args.mutant == 'subagents-off' \
+        else args.features_off_decision
+    service = Service(root, rehearse, scenario(args.mutant), args.mutant, features_off=agents_off)
     if HARNESS == 'opencode':
         config_dir = Path(service.config['opencode']['config_dir'])
         if args.mutant == 'helper-elsewhere':
@@ -2162,7 +2170,7 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
                 "configuration does not turn them off ([agents] enabled = false, with "
                 'features.multi_agent_v2 not on; multi_agent = false alone is not enough for '
                 f"{MODEL}, whose catalog entry names multi-agent v2), and no owner decision "
-                'turns them off per launch (--agents-off-decision). The owner decides which.')
+                'turns them off per launch (--features-off-decision). The owner decides which.')
     # `--relay`: a rehearsal whose desk waits for answer files, as a live
     # one does, so the relay that will run beside the live run is rehearsed
     # against the requests this code actually writes.
@@ -2710,10 +2718,11 @@ def settle(record, service, meters, state, root):
                        for e in log if e.get('event') == 'tool_call'
                        and e.get('tool') == 'start_run'})
         host = service.host_events(views, briefs)
-        # What each run's host sent to turn sub-agents off, where it did.
-        record['agents_off_sent'] = {i: next((e.get('sent') for e in host.get(i, [])
-                                              if e['kind'] == 'agents_off_sent'), None)
-                                     for i in host}
+        # What each run's host sent to turn Codex's unmetered features off,
+        # where it did.
+        record['features_off_sent'] = {i: next((e.get('sent') for e in host.get(i, [])
+                                                if e['kind'] == 'features_off_sent'), None)
+                                       for i in host}
         if HARNESS == 'opencode':
             sessions = {i: next((e.get('session_id') for e in host.get(i, [])
                                  if e['kind'] == 'session_created'), None)
@@ -3945,11 +3954,11 @@ def main():
     parser.add_argument('--relay', action='store_true',
                         help='rehearsal only: the desk waits for answer files, as live, '
                              'so a relay can answer them')
-    parser.add_argument('--agents-off-decision',
-                        help="L3: the owner's dated decision to turn Codex's sub-agents off "
-                             "per launch (agents.enabled = false in each thread's config); "
+    parser.add_argument('--features-off-decision',
+                        help="L3: the owner's dated decision to turn Codex's unmetered features "
+                             "off per launch (pio_codex::features_off, in each thread's config); "
                              "a real Codex takes it only once it is recorded in pio-protocol's "
-                             'AGENTS_OFF_DECISIONS')
+                             'FEATURES_OFF_DECISIONS')
     parser.add_argument('--charge-selftest', action='store_true',
                         help="check the Codex charge's corners on made-up runs, and exit")
     parser.add_argument('--inner', action='store_true', help=argparse.SUPPRESS)
@@ -4023,12 +4032,10 @@ def main():
         if args.mutant == 'subagents-off':
             # Off per launch on every thread, and so nothing spawned.
             assert record['subagents']['off'].startswith('per launch'), record['subagents']
-            assert all(sent == {'agents.enabled': False, 'features.multi_agent': False,
-                                'features.multi_agent_v2': False}
-                       for sent in record['agents_off_sent'].values()) \
-                and record['agents_off_sent'], record['agents_off_sent']
+            assert all(sent == FEATURES_OFF for sent in record['features_off_sent'].values()) \
+                and record['features_off_sent'], record['features_off_sent']
             print(f'mutant {args.mutant}: holds on {wanted!r}, with agents.enabled = false on '
-                  f"{len(record['agents_off_sent'])} threads")
+                  f"{len(record['features_off_sent'])} threads")
             return
         at_limit = [r for r in row['observed'] if r['runtime'] not in ('exited', None)
                     and (r['seconds'] or 0) >= READ_WAIT]

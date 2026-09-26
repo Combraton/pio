@@ -653,6 +653,58 @@ pub fn config_diff(before: &Value, after: &Value, fixture_root: Option<&Path>) -
     })
 }
 
+/// Codex 0.157.0's unmetered, default-on features and the per-launch
+/// override that turns each off on a thread, by feature: the dotted keys a
+/// `thread/start` `config` takes, each a request override Codex merges over
+/// the user's `config.toml` as it merges a `-c key=value`
+/// (`app-server/src/config_manager.rs:445-452`, `json_to_toml`), so it
+/// replaces the user's value for that key on that thread and changes nothing
+/// on disk. Read from source at `rust-v0.157.0` (00c972e), not measured
+/// (review of L3, round 4, SPEND-8, SPEND-9 and the web-search and
+/// image-generation gaps). Each spends outside every report PIO reads:
+///
+/// - **sub-agents**: `agents.enabled = false` turns them off whatever the
+///   model's catalog says unless `multi_agent_v2` is on
+///   (`core/src/config/mod.rs:1562-1570`); `features.multi_agent`
+///   (`features/src/lib.rs:1319`) and `features.multi_agent_v2` (`:1325`)
+///   false keep the override from being V1 or V2;
+/// - **memories**: `features.memories = false` (`features/src/lib.rs:1147`)
+///   and its legacy alias `features.memory_tool = false`
+///   (`features/src/legacy.rs:41`), which sorts after it and would decide
+///   it (`Features::apply_map` walks a `BTreeMap`); the pipeline starts only
+///   with the feature on (`memories/write/src/start.rs:33-34`, called from
+///   `app-server/src/request_processors/turn_processor.rs:689`);
+/// - **goals**: `features.goals = false` (`features/src/lib.rs:1673`), which
+///   hides the goal tools and stops a continuation turn
+///   (`app-server/src/extensions.rs:85`, `ext/goal/src/runtime.rs:425-429`);
+/// - **standalone web search**: `web_search = "disabled"`
+///   (`config/src/config_toml.rs:470`), which decides the mode before any
+///   feature does (`core/src/config/mod.rs:2659-2662`) and keeps `web.run`
+///   unregistered (`core/src/tools/spec_plan.rs:1429-1437`);
+/// - **image generation**: `features.image_generation = false`
+///   (`features/src/lib.rs:1535`, checked at
+///   `core/src/tools/spec_plan.rs:694-701`); with it present, the legacy
+///   alias `imagegenext` is ignored (`features/src/lib.rs:645`).
+///
+/// Sent only under the owner's recorded decision (pio-protocol,
+/// `FEATURES_OFF_DECISIONS`), or a labeled fake's own token.
+pub fn features_off() -> Vec<(&'static str, &'static str, Value)> {
+    vec![
+        ("sub-agents", "agents.enabled", json!(false)),
+        ("sub-agents", "features.multi_agent", json!(false)),
+        ("sub-agents", "features.multi_agent_v2", json!(false)),
+        ("memories", "features.memories", json!(false)),
+        ("memories", "features.memory_tool", json!(false)),
+        ("goals", "features.goals", json!(false)),
+        ("standalone web search", "web_search", json!("disabled")),
+        (
+            "image generation",
+            "features.image_generation",
+            json!(false),
+        ),
+    ]
+}
+
 /// PATH value to hand to the selected executable, as the durable host will.
 pub fn inherited_path() -> Option<OsString> {
     std::env::var_os("PATH")

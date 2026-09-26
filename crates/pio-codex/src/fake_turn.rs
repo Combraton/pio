@@ -186,6 +186,11 @@ impl Drop for McpServer {
 /// agents off, so no spawn is offered (review of L3, round 3, SPEND-2).
 pub(crate) static SUB_TURNS: Mutex<Vec<Arc<Turn>>> = Mutex::new(Vec::new());
 pub(crate) static AGENTS_OFF: AtomicBool = AtomicBool::new(false);
+/// Whether the thread's own config turned memories off (so no memory
+/// pipeline runs) and goals off (so no turn continues by itself); review of
+/// L3, round 4.
+pub(crate) static MEMORIES_OFF: AtomicBool = AtomicBool::new(false);
+pub(crate) static GOALS_OFF: AtomicBool = AtomicBool::new(false);
 
 /// Codex 0.157.0 spawning a sub-agent, as it reaches the client, read from
 /// its source at `rust-v0.157.0` and not measured. On the parent's own
