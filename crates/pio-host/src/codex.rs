@@ -1149,6 +1149,64 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
 }
 
 #[cfg(test)]
+mod recognition_tests {
+    use super::{is_mcp_tool_approval, native_decline};
+    use serde_json::json;
+
+    /// Codex's other route for an MCP tool-call approval is recognised by
+    /// the question's id alone, never by its words (review of L3, round 4,
+    /// R4-HC-4). At rust-v0.157.0 the id begins `mcp_tool_call_approval`
+    /// (`core/src/mcp_tool_call.rs:1443`, used at `:1625`), and the words
+    /// are a template or a fallback that may name an app, a connector or a
+    /// server (`:1885-1946`).
+    #[test]
+    fn a_question_is_an_mcp_approval_by_its_id_alone() {
+        let ask = |id: &str, text: &str| {
+            native_decline(
+                "item/tool/requestUserInput",
+                &json!({"threadId":"t","turnId":"u","itemId":"i","isBlocking":true,
+                        "questions":[{"id":id,"header":"h","question":text,
+                                      "isOther":false,"isSecret":false,"options":[]}]}),
+            )
+        };
+        // Codex's own id, in words that name no server at all.
+        let approval = ask(
+            "mcp_tool_call_approval_call-7",
+            "Allow this app to run tool \"x\"?",
+        );
+        assert_eq!(approval["mcp_tool_call_approval"], true, "{approval}");
+        // A model's own question that talks about an MCP server: not one.
+        let question = ask(
+            "model_question_1",
+            "Should the pio-lead MCP server run tool \"start_run\"?",
+        );
+        assert_eq!(question["mcp_tool_call_approval"], false, "{question}");
+        assert!(!question.to_string().contains("pio-lead"), "{question}");
+    }
+
+    /// Only a form is a tool-call approval: an elicitation in url mode is
+    /// not, whatever its `_meta` says, since a server writes its own `_meta`
+    /// (R4-HC-4); PIO declines it natively and never surfaces it.
+    #[test]
+    fn only_a_form_elicitation_is_a_tool_call_approval() {
+        let meta = json!({"codex_approval_kind":"mcp_tool_call"});
+        let form = json!({"threadId":"t","serverName":"s","mode":"form","message":"m",
+                          "requestedSchema":{"type":"object","properties":{}},"_meta":meta});
+        assert!(is_mcp_tool_approval("mcpServer/elicitation/request", &form));
+        let mut url = form.clone();
+        url["mode"] = json!("url");
+        url["url"] = json!("https://example.invalid/x");
+        assert!(!is_mcp_tool_approval("mcpServer/elicitation/request", &url));
+        let mut unmarked = form;
+        unmarked["_meta"] = json!({});
+        assert!(!is_mcp_tool_approval(
+            "mcpServer/elicitation/request",
+            &unmarked
+        ));
+    }
+}
+
+#[cfg(test)]
 mod placement_tests {
     use super::{command_placement, named_threads};
     use serde_json::json;

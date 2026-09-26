@@ -39,7 +39,8 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'early_declines_in_every_wait', 'early_decline_then_exit', 'file_change_no_root',
          'file_change_root_inside',
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
-         'file_change_grant_root', 'continuation_interrupted', 'subagent_turn_after_interrupt']
+         'file_change_grant_root', 'continuation_interrupted', 'subagent_turn_after_interrupt',
+         'url_elicitation_with_approval_kind_declined']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
@@ -692,6 +693,8 @@ def run_case(out, name):
                                                        {'tool': 'read_run', 'arguments': {}}]}},
         mcp_approval_lapses={'lead': {'calls': [{'tool': 'start_run', 'arguments': {}}]}},
         other_elicitation_declined={'approval': 'elicitation', 'delay_ms': 100},
+        url_elicitation_with_approval_kind_declined={'approval': 'elicitation', 'delay_ms': 100,
+                                                     'elicitation_meta_kind': 'mcp_tool_call'},
         command_approval_lapses={'approval': 'command', 'delay_ms': 100},
         form_elicitation_declined={'approval': 'elicitation', 'elicitation_mode': 'form',
                                    'delay_ms': 100},
@@ -1029,6 +1032,26 @@ def run_case(out, name):
             wire = answered_once(case)
             assert [m['error']['code'] for m in wire] == [-32000] and \
                 all(m['result'] is None for m in wire), wire
+            return dict(outcome='pass', declined=declined[0]['mode'], actions=0, exit=final['exit'])
+        if name == 'url_elicitation_with_approval_kind_declined':
+            # A url-mode elicitation whose server-written `_meta` claims the
+            # tool-call approval kind: only a form is one, so PIO declines it
+            # natively and never surfaces it (review of L3, round 4, R4-HC-4).
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            poll(lambda: case.inspect()['result'],
+                 lambda v: v['runtime'] in ('exited', 'requires_action'), 30)
+            assert events_of(case, 'action_requested') == [], 'surfaced a url-mode elicitation'
+            final = exited(case)
+            declined = events_of(case, 'native_request_declined')
+            assert [(d['method'], d['mode'], d['approval_kind']) for d in declined] == \
+                [('mcpServer/elicitation/request', 'url', 'mcp_tool_call')], declined
+            assert 'does not recognise as a tool-call approval' in declined[0]['reason'], declined
+            assert 'example.invalid' not in json.dumps(declined), declined
+            carried = carried_declines(case)
+            assert [(d['mode'], d['approval_kind']) for d in carried] == [('url', 'mcp_tool_call')]
+            wire = answered_once(case)
+            assert [m['error']['code'] for m in wire] == [-32000], wire
             return dict(outcome='pass', declined=declined[0]['mode'], actions=0, exit=final['exit'])
         if name == 'other_elicitation_declined':
             response, _ = case.submit()

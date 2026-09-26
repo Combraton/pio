@@ -655,7 +655,17 @@ pub fn run() -> Result<()> {
                                                // never to be recorded (review of L3, round 2, HR-4).
                                                "_meta":{"tool_params":{"brief":"SENTINEL-arg"},"tool_description":"SENTINEL-desc","tool_title":"Region picker"}})
                                     } else {
-                                        json!({"threadId":thread_id,"turnId":turn,"serverName":"someone","mode":"url","elicitationId":"fake-elicitation","url":"https://example.invalid/login","message":"Sign in to continue"})
+                                        let mut url = json!({"threadId":thread_id,"turnId":turn,"serverName":"someone","mode":"url","elicitationId":"fake-elicitation","url":"https://example.invalid/login","message":"Sign in to continue"});
+                                        // A server's own `_meta`, which Codex
+                                        // forwards unchanged, claiming the
+                                        // tool-call approval kind in url mode
+                                        // (review of L3, round 4, R4-HC-4).
+                                        if let Some(kind) =
+                                            scenario["elicitation_meta_kind"].as_str()
+                                        {
+                                            url["_meta"] = json!({"codex_approval_kind":kind});
+                                        }
+                                        url
                                     };
                                 }
                                 // Only command approvals carry `kind` at
