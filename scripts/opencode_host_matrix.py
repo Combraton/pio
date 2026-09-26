@@ -79,6 +79,7 @@ CASES = [
     'service_refuses_a_downgraded_session_before_any_prompt',
     'service_tells_a_harness_refusal_apart_from_a_pio_decline',
     'service_records_who_decided_and_what',
+    'session_cancel_sent_as_notification_not_request',
 ]
 
 
@@ -1097,6 +1098,25 @@ def run_case(out, name):
         view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
         assert view['exit'] == 'unavailable', view
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'session_cancel_sent_as_notification_not_request':
+        # D8: `session/cancel` is an ACP notification — no id, no response
+        # ever awaited — never a request. The labeled fake now refuses the
+        # request framing outright, so a host that regressed to
+        # `Rpc::request` would be caught here instead of the fake quietly
+        # tolerating both, as it used to.
+        from public_api import command
+        case = ServiceCase(out, name, model=REQUESTED, scenario={'delay_ms': 3000})
+        case.start()
+        case.submit()
+        poll(lambda: case.markers_of('prompt_received'), lambda m: len(m) >= 1)
+        revision = case.inspect()['revision']
+        with case.client() as c:
+            c.call(command('execution.cancel', dict(kind='execution.execution', id='work'),
+                           {}, command_id='work.cancel', revision=revision))
+        poll(lambda: case.markers_of('cancelled'), lambda m: len(m) >= 1, seconds=30)
+        assert case.markers_of('cancel_sent_as_request_not_notification') == [], \
+            'session/cancel must never be sent as a request'
 
     else:
         raise AssertionError(f'unknown case {name}')

@@ -233,6 +233,14 @@ impl Rpc {
         Ok(self.next_id)
     }
 
+    /// An ACP notification: no `id`, and no response is ever awaited for it
+    /// (D8). `session/cancel` is one (the Zed ACP schema has no result for
+    /// it); sending it as a request, with an id a reply could answer, is a
+    /// framing the real host never uses and the labeled fake now refuses.
+    fn notify(&mut self, child: &mut StdioChild, method: &str, params: Value) -> Result<()> {
+        child.send(&json!({"jsonrpc":"2.0","method":method,"params":params}))
+    }
+
     /// Wait for the response to `id`, letting the caller see everything else.
     fn wait(
         &mut self,
@@ -808,8 +816,9 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                     }
                 }
                 Some("interrupt") => {
-                    // In band, unlike the Claude adapter's signal.
-                    rpc.request(child, "session/cancel", json!({"sessionId":session}))?;
+                    // In band, unlike the Claude adapter's signal, and as
+                    // a notification: no id, no response awaited (D8).
+                    rpc.notify(child, "session/cancel", json!({"sessionId":session}))?;
                     life.event(json!({"kind":"control_sent","control_id":id,
                         "method":"session/cancel","in_band":true,
                         "escalates_after_ms":CANCEL_ESCALATION.as_millis() as u64}))?;
