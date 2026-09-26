@@ -582,7 +582,13 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   `interrupted-charged-reported` for a charge that reads the runner's stops
   alone); one not seen exited, or stopped for silence, its share or that,
   if more; one with no usage, its share; a submit that made no execution,
-  nothing. `lead_run.py --charge-selftest` checks the corners no play
+  nothing. What a run was seen to spend, its largest step, its threads and
+  whether its turn was cut short are read for the charge from its own host
+  events afresh, as the floor reads them, not only from the meter's fold,
+  which stops when the runner halts the meter: a step the host reports
+  during the cancels on the way out is charged (review of L3, round 4,
+  SPEND-11; `late-step-after-halt`, and `stale-meter-charged` for the fold
+  alone, which fails the floor row). `lead_run.py --charge-selftest` checks the corners no play
   reaches. Two rows judge that: the charge covers what each run could have
   spent (a floor worked out from the views, the meters and the host's own
   usage events, not from the charge), and each charge stays within its

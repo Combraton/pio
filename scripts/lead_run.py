@@ -187,6 +187,11 @@ does with a permission prompt.
 - `meter-dies` (L3) fails the meter thread as the third start begins: the
   meter must cancel every run still going itself, within seconds, before
   alpha reaches its ceiling, and the run ends with the error;
+- `late-step-after-halt` (L3) interrupts the runner while `alpha`'s
+  40,000-token step is in flight, so the host reports it only after the meter
+  has stopped: the charge, read from the host's files, must cover it and the
+  floor row hold; `stale-meter-charged` charges from the meter's fold alone,
+  and the floor row fails;
 - `goal-continued` (L3) has Codex start a turn on `beta`'s own thread by
   itself once `beta`'s has ended, as a goal's continuation does: the host,
   reading the thread for its grace period, interrupts it, `beta` is charged
@@ -780,6 +785,12 @@ MUTANTS = {
     # charged as cut short. With that charge put back to "ended by itself",
     # the floor row fails too.
     'goal-continued': 'No run took a turn of its own after its turn ended',
+    # The runner is interrupted while alpha's 40,000-token step is in
+    # flight, so the host reports it after the meter has stopped (review of
+    # L3, round 4, SPEND-11): the charge must read the host's files, and
+    # the floor row hold; with the meter's fold alone, the floor row fails.
+    'late-step-after-halt': 'The run finished without an error',
+    'stale-meter-charged': "Every run's charge covers what it could have spent",
     'continuation-uncharged': "Every run's charge covers what it could have spent",
     # The meter thread fails as the third start begins (review of L3, round
     # 3, SPEND-5): it must stop every run itself, at once, and the run ends
@@ -821,7 +832,8 @@ PLAN_MUTANTS = {**{m: {'L3'} for m in (
                     'step-past-in-flight', 'stopped-past-share', 'stopped-charge-capped',
                     'deadline-interrupted', 'interrupted-charged-reported',
                     'memory-pipeline-ran', 'meter-dies', 'lead-exit-uncarried',
-                    'goal-continued', 'continuation-uncharged')},
+                    'goal-continued', 'continuation-uncharged', 'late-step-after-halt',
+                    'stale-meter-charged')},
                 'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
@@ -2180,6 +2192,9 @@ def codex_scenario(mutant, calls):
     if mutant == 'step-past-in-flight':
         # One step of 40,000: under the ceiling, past the in-flight bound.
         play.update(led_heavy_if=alpha, led_heavy_step=40_000, led_step_ms=6000)
+    if mutant in ('late-step-after-halt', 'stale-meter-charged'):
+        # The same step, reported only once the runner is on its way out.
+        play.update(led_heavy_if=alpha, led_heavy_step=40_000)
     if mutant in ('memory-pipeline-ran', 'overrides-on'):
         play['memory_pipeline'] = True
     if mutant in ('goal-continued', 'continuation-uncharged', 'overrides-on'):
@@ -2643,6 +2658,15 @@ def watch(args, record, service, desk, meters, state):
         if record['steer_running'] is None and first and first['admission'] == 'admitted' \
                 and first['runtime'] == 'active' and first.get('delivery') == 'acknowledged':
             record['steer_running'] = steer(lead_grant, f'{LEAD}.alpha')
+            if args.mutant in ('late-step-after-halt', 'stale-meter-charged'):
+                # alpha's heavy first step is in flight, its command running.
+                # The runner is interrupted now: the step is reported only
+                # when settle's cancel reaches alpha, after the meter has
+                # stopped folding the host's events (review of L3, round 4,
+                # SPEND-11).
+                time.sleep(5)
+                raise KeyboardInterrupt("the runner interrupted with alpha's heavy step in "
+                                        'flight')
         both = all(views[f'{LEAD}.{c}'] and views[f'{LEAD}.{c}']['admission'] == 'admitted'
                    for c in CHILDREN)
         lead_view = views[LEAD] or {}
@@ -2992,7 +3016,7 @@ def settle(record, service, meters, state, root):
         | set(record.get('stopped_on_exit') or {})
     record['usage'] = usage_of(views, meters, state['submitted'] | started_runs(root), steps,
                                stopped=stops, mutant=record.get('mutant'),
-                               absent=set(record.get('no_such_execution') or []))
+                               absent=set(record.get('no_such_execution') or []), host=host)
     record.update(views=views, tool_log=log, spoken=dict(said, lead=relay),
                   answered=answered)
     return dict(views=views, stream=stream, log=log, host=host, said=said, relay=relay,
@@ -3036,7 +3060,8 @@ PROBE_BASIS = ('admitted though it should have been refused: a run with no reser
                'charged its whole share')
 
 
-def usage_of(views, meters, submitted, steps=None, stopped=(), mutant=None, absent=()):
+def usage_of(views, meters, submitted, steps=None, stopped=(), mutant=None, absent=(),
+             host=None):
     """What each run reported, and what it is charged, on what basis.
 
     OpenCode's turn usage is its **last model step's**, so a turn that made
@@ -3048,7 +3073,7 @@ def usage_of(views, meters, submitted, steps=None, stopped=(), mutant=None, abse
     nothing is charged its meter's bound, never less than the M3b allowance,
     and never less than the steps the store holds.
     """
-    usage = (codex_usage(views, meters, submitted, stopped, mutant) if HARNESS == 'codex'
+    usage = (codex_usage(views, meters, submitted, stopped, mutant, host) if HARNESS == 'codex'
              else opencode_usage(views, meters, submitted, steps))
     for identity in absent:
         if identity in usage:
@@ -3105,7 +3130,7 @@ SILENT_BASIS = (f'stopped by the runner after {USAGE_SILENCE} s of activity with
                 'of its threads, if more')
 
 
-def codex_usage(views, meters, submitted, stopped=(), mutant=None):
+def codex_usage(views, meters, submitted, stopped=(), mutant=None, host=None):
     """Codex's reported total for each run, which covers every step of its
     turn (review 48) and, from round 3, every thread it had: so it is what a
     run that ended by itself is charged.
@@ -3123,7 +3148,15 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None):
     or its own meter saw plus the allowance, if that is more; one stopped
     for silence the same (round 3, SPEND-6); one that reported nothing, its
     whole share or what was seen, if more. Never below what was reported or
-    observed, and never nothing (F2)."""
+    observed, and never nothing (F2).
+
+    What was seen, the largest step, every thread and whether the turn was
+    cut short come from the meter and, where the service could still be
+    asked, from each run's own host events read afresh from the files: the
+    meter stops folding them when the runner halts it, and a step or a
+    thread the host writes after that, during the cancels on the way out,
+    is the floor's and must be the charge's too (review of L3, round 4,
+    SPEND-11)."""
     usage = {}
     for identity in runs(meters):
         current = views.get(identity) or {}
@@ -3136,23 +3169,28 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None):
         reported = observations[0]['amount'] if observations else None
         gauge = meters[identity]
         share = LEAD_SHARE if identity == LEAD else CHILD_SHARE
-        allowance = gauge.allowance()
+        filed = host_steps((host or {}).get(identity, []))
+        if mutant == 'stale-meter-charged':
+            # A charge that read the meter's fold alone, as before round 4.
+            filed = host_steps([])
+        allowance = max(CODEX['in_flight'], gauge.largest_step, filed['largest']) * (
+            1 + max(len(gauge.subagents), len(filed['others'])))
         # Cut short: by the runner, or by an interrupt the host sent and
         # the turn ended on (round 3, SPEND-6).
         # Or by the host's interrupt of a turn Codex started by itself after
         # the run's own (round 4, SPEND-9).
         cut = identity in stopped or gauge.turn_status == 'interrupted' \
             or (current.get('cancellation') or {}).get('outcome') == 'cancelled' \
-            or bool(gauge.continued)
+            or bool(gauge.continued) or filed['interrupted'] or bool(filed['continued'])
         if mutant == 'interrupted-charged-reported':
             cut = identity in stopped
         if mutant == 'continuation-uncharged':
-            cut = cut and not gauge.continued
+            cut = cut and not (gauge.continued or filed['continued'])
         # What PIO saw it spend: its report (the sum over its threads), its
         # own meter's total, or the sum of its threads' host reports, if
         # higher (the meter is all there is when the service cannot be asked).
         seen = max(reported if isinstance(reported, int) else 0, gauge.total,
-                   sum(gauge.threads.values()))
+                   sum(gauge.threads.values()), filed['sum'])
         if mutant == 'subagent-uncounted':
             # A PIO that counted the run's own thread alone.
             reported = gauge.own_total or reported
@@ -3162,7 +3200,10 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None):
                      meter_estimate=gauge.estimate(), share=share,
                      stopped_by_the_runner=identity in stopped, cut_short=cut,
                      allowance=allowance, threads=dict(gauge.threads) or None,
-                     subagents=[s['thread_id'] for s in gauge.subagents])
+                     host_files=dict(sum=filed['sum'], largest=filed['largest'],
+                                     others=filed['others']),
+                     subagents=sorted({*(s['thread_id'] for s in gauge.subagents),
+                                       *filed['others']}))
         if current.get('runtime') != 'exited':
             entry.update(charged=share if mutant == 'not-exited-charged-share'
                          else max(share, seen + allowance), basis=NOT_EXITED_BASIS)
@@ -4476,6 +4517,13 @@ def main():
             assert took <= 5, died
             assert (spent.get('reported_total') or 0) < CHILD_CEILING, spent
             assert 'the meter stopped' in record['error']['message'], record['error']
+        if args.mutant == 'late-step-after-halt':
+            # The meter never saw the 40,000 step; the host's files did, and
+            # so did the charge: its report plus that step in flight.
+            assert record['meters'][alpha]['largest_step'] < 40_000, record['meters'][alpha]
+            assert spent['host_files']['largest'] == 40_000, spent
+            assert spent['charged'] == spent['reported_total'] + 40_000, spent
+            assert row_of("Every run's charge covers what it could have spent")['holds'] is True
         if args.mutant == 'goal-continued':
             # Interrupted by the host, and charged as cut short: its report
             # plus a step in flight, which the floor agrees with.
