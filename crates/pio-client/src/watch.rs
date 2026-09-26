@@ -76,30 +76,112 @@ impl WatchState {
         Ok(())
     }
 
-    /// Whether an event has not been delivered yet. An event from another
-    /// stream than the saved one resets the position.
-    pub fn is_new(&mut self, event: &Value) -> bool {
-        let stream = event["stream"].as_str().map(str::to_owned);
-        if stream.is_some() && self.stream.is_some() && stream != self.stream {
-            self.last = None;
+    /// Takes the stream a page (or a probe) came from. A saved position
+    /// that belongs to another stream (another store, or one rebuilt) means
+    /// nothing here: it is dropped and the follower starts from the
+    /// beginning. Returns whether it was dropped, so the caller can say so.
+    pub fn adopt(&mut self, stream: &str) -> bool {
+        let other = self.stream.as_deref().is_some_and(|saved| saved != stream);
+        if other {
             self.cursor = None;
+            self.last = None;
         }
-        if stream.is_some() {
-            self.stream = stream;
-        }
-        let at = (
-            event["epoch"].as_u64().unwrap_or(0),
-            event["sequence"].as_u64().unwrap_or(0),
-        );
-        self.last.is_none_or(|last| at > last)
+        self.stream = Some(stream.to_owned());
+        other
     }
 
-    pub fn delivered(&mut self, event: &Value) {
-        self.last = Some((
-            event["epoch"].as_u64().unwrap_or(0),
-            event["sequence"].as_u64().unwrap_or(0),
-        ));
+    /// Whether a stream item has not been delivered yet: an event, a
+    /// retention gap or an epoch change, each at its place in the stream.
+    pub fn is_new(&self, item: &Value) -> bool {
+        match point(item) {
+            Some(at) => self.last.is_none_or(|last| at > last),
+            None => true,
+        }
     }
+
+    pub fn delivered(&mut self, item: &Value) {
+        if let Some(at) = point(item) {
+            self.last = Some(at);
+        }
+    }
+}
+
+/// How one page went for a follower.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PageEnd {
+    /// Events delivered from this page (gaps and epoch changes not counted).
+    pub events: u64,
+    /// Whether every item was delivered, so the cursor moved past the page.
+    pub finished: bool,
+}
+
+/// Delivers one page (a `core.events.read` result) to a follower.
+///
+/// Every item not yet delivered — an event, a retention gap, an epoch
+/// change — goes to `deliver`, in order, and the position is saved after
+/// each (when `path` is given). `deliver` returns `false` to stop there, and
+/// the page stops after `limit` events. Until the whole page is delivered
+/// the cursor stays at the page's start, so a follower that stopped inside
+/// it resumes there and skips, by position, everything it already had:
+/// events and notices alike.
+pub fn deliver_page(
+    state: &mut WatchState,
+    path: Option<&Path>,
+    page: &Value,
+    limit: Option<u64>,
+    deliver: &mut dyn FnMut(&Value) -> Result<bool>,
+) -> Result<PageEnd> {
+    if let Some(stream) = page["stream"]["id"].as_str() {
+        state.adopt(stream);
+    }
+    let mut events = 0;
+    for item in page["items"].as_array().into_iter().flatten() {
+        if !state.is_new(item) {
+            continue;
+        }
+        let keep_going = deliver(item)?;
+        state.delivered(item);
+        if let Some(path) = path {
+            state.save(path)?;
+        }
+        if item.get("event").is_some() {
+            events += 1;
+        }
+        if !keep_going || limit.is_some_and(|limit| events >= limit) {
+            return Ok(PageEnd {
+                events,
+                finished: false,
+            });
+        }
+    }
+    if let Some(next) = page["next_cursor"].as_str() {
+        state.cursor = Some(next.to_owned());
+        if let Some(path) = path {
+            state.save(path)?;
+        }
+    }
+    Ok(PageEnd {
+        events,
+        finished: true,
+    })
+}
+
+/// Where a stream item sits, as (epoch, sequence): an event at its own
+/// place; a retention gap at the position its snapshot is as of (the last
+/// place it covers); an epoch change just before the new epoch's first
+/// event. An item may be a page item (`{"event": …}`) or the event itself.
+pub fn point(item: &Value) -> Option<(u64, u64)> {
+    let at = |position: &Value| Some((position["epoch"].as_u64()?, position["sequence"].as_u64()?));
+    if let Some(event) = item.get("event") {
+        return at(event);
+    }
+    if let Some(gap) = item.get("gap") {
+        return at(&gap["to"]);
+    }
+    if let Some(change) = item.get("epoch_change") {
+        return Some((change["to_epoch"].as_u64()?, 0));
+    }
+    at(item)
 }
 
 #[cfg(test)]
@@ -107,7 +189,7 @@ mod tests {
     use super::*;
 
     fn event(sequence: u64) -> Value {
-        json!({"stream": "s", "epoch": 1, "sequence": sequence})
+        json!({"event": {"stream": "s", "epoch": 1, "sequence": sequence}})
     }
 
     #[test]
@@ -117,17 +199,98 @@ mod tests {
         let path = dir.join("watch.json");
         let mut state = WatchState::load(&path).unwrap();
         assert_eq!(state, WatchState::default());
+        assert!(!state.adopt("s"), "nothing saved, nothing dropped");
         assert!(state.is_new(&event(1)));
         state.delivered(&event(1));
         state.cursor = Some("page-1".into());
         state.save(&path).unwrap();
         let mut again = WatchState::load(&path).unwrap();
         assert_eq!(again, state);
+        assert!(!again.adopt("s"));
         assert!(!again.is_new(&event(1)), "delivered once is delivered");
         assert!(again.is_new(&event(2)));
-        // A new store is a new stream: start over.
-        assert!(again.is_new(&json!({"stream": "t", "epoch": 1, "sequence": 1})));
-        assert_eq!(again.cursor, None);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_position_from_another_stream_is_dropped() {
+        let mut state = WatchState {
+            stream: Some("store-a".into()),
+            cursor: Some("store-a:1:9".into()),
+            last: Some((1, 9)),
+        };
+        assert!(state.adopt("store-b"));
+        assert_eq!(state.cursor, None);
+        assert_eq!(state.last, None);
+        assert_eq!(state.stream.as_deref(), Some("store-b"));
+        assert!(state.is_new(&event(1)));
+    }
+
+    #[test]
+    fn a_follower_that_stops_inside_a_page_repeats_nothing_on_resuming() {
+        let page = json!({"stream": {"id": "s", "epoch": 2}, "next_cursor": "s:2:2", "items": [
+            {"epoch_change": {"from_epoch": 1, "to_epoch": 2, "vouched_through": 9}},
+            {"event": {"stream": "s", "epoch": 2, "sequence": 1}},
+            {"gap": {"kind": "retention", "from": {"epoch": 2, "sequence": 2},
+                     "to": {"epoch": 2, "sequence": 5}, "snapshot": {"subjects": []}}},
+            {"event": {"stream": "s", "epoch": 2, "sequence": 6}}]});
+        let mut state = WatchState {
+            cursor: Some("s:1:9".into()),
+            ..WatchState::default()
+        };
+        let mut seen = vec![];
+        let mut record = |item: &Value| -> Result<bool> {
+            seen.push(point(item).unwrap());
+            Ok(true)
+        };
+        let first = deliver_page(&mut state, None, &page, Some(1), &mut record).unwrap();
+        assert_eq!(
+            first,
+            PageEnd {
+                events: 1,
+                finished: false
+            }
+        );
+        assert_eq!(
+            state.cursor.as_deref(),
+            Some("s:1:9"),
+            "still at the page's start"
+        );
+        let second = deliver_page(&mut state, None, &page, None, &mut record).unwrap();
+        assert_eq!(
+            second,
+            PageEnd {
+                events: 1,
+                finished: true
+            }
+        );
+        assert_eq!(state.cursor.as_deref(), Some("s:2:2"));
+        assert_eq!(
+            seen,
+            [(2, 0), (2, 1), (2, 5), (2, 6)],
+            "each item exactly once"
+        );
+    }
+
+    #[test]
+    fn gaps_and_epoch_changes_are_delivered_once_too() {
+        let gap = json!({"gap": {"kind": "retention", "from": {"epoch": 1, "sequence": 1},
+                                 "to": {"epoch": 1, "sequence": 7}, "snapshot": {}}});
+        let change = json!({"epoch_change": {"from_epoch": 1, "to_epoch": 2,
+                                             "vouched_through": 9}});
+        let mut state = WatchState::default();
+        assert!(state.is_new(&gap));
+        state.delivered(&gap);
+        assert!(
+            !state.is_new(&gap),
+            "a resumed watcher does not repeat the gap"
+        );
+        assert!(!state.is_new(&event(7)));
+        assert!(state.is_new(&event(8)));
+        state.delivered(&event(9));
+        assert!(state.is_new(&change));
+        state.delivered(&change);
+        assert!(!state.is_new(&change));
+        assert!(state.is_new(&json!({"event": {"epoch": 2, "sequence": 1}})));
     }
 }

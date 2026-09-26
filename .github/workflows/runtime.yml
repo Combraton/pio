@@ -104,7 +104,7 @@ jobs:
         # serve-fake and serve-opencode (labeled fake), with its mutants.
         run: |
           cargo test -p pio-client --locked --test dependencies --test folds
-          python3 scripts/client_boundary_mutant.py
+          python3 scripts/client_source_mutants.py
           python3 scripts/fold_parity.py --out target/fold-parity --record
           for mutant in walk-drops-offer board-exited-running blocks-nobody-unknown; do
             python3 scripts/fold_parity.py --out "target/fold-parity-$mutant" --mutant "$mutant"

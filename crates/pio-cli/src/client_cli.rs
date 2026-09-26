@@ -8,8 +8,8 @@
 use crate::ledger;
 use anyhow::{Context, Result, bail};
 use pio_client::board::{Board, glyph, run_state};
-use pio_client::walk::{Order, decisions, walk};
-use pio_client::watch::WatchState;
+use pio_client::walk::{Order, decisions, lost_to_retention, walk};
+use pio_client::watch::{WatchState, deliver_page};
 use pio_client::{Client, Credential, Failure, Options, Pinned, Position, Reply, decision_word};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
@@ -39,8 +39,11 @@ pio client COMMAND [--socket PATH] [--credential-file PATH] [--grant ID] [--json
   reconcile --store DIR         the caller ledger: submit once, recover after a loss
 
 The socket and the credential file can also come from PIO_SOCKET and
-PIO_CREDENTIAL_FILE. Exit status: 0 done, 3 refused by the service (the
-refusal is printed as it came), 2 anything else.";
+PIO_CREDENTIAL_FILE. Exit status: 0 done; 3 refused by the service (the
+refusal is printed as it came, whole); 4 (submit and reconcile only) the
+outcome is not known yet, the service answered retry after_reconcile or a
+reconcile could not establish it: the caller ledger keeps it pending, run
+pio client reconcile; 2 anything else.";
 
 const FLAGS: [&str; 2] = ["--json", "--follow"];
 
@@ -250,53 +253,87 @@ fn ledger_command(command: &str, args: &Args) -> Result<()> {
         request,
         args.opt("--basis").map(Path::new),
     )?;
+    // How it ended, from the service's own answer: 0 taken, 3 refused, 4
+    // not known yet (the ledger holds it pending until a reconcile says).
+    // A submit the ledger already holds, unacknowledged, reconciles instead
+    // of sending again, and answers as a reconcile does.
+    let reconciled = record.get("operations").is_some();
+    let operations: Vec<Value> = match record["operations"].as_array() {
+        Some(operations) => operations.clone(),
+        None => vec![record.clone()],
+    };
+    let status = operations.iter().map(ledger_status).max().unwrap_or(0);
     if args.json() {
         println!("{record}");
-        return Ok(());
-    }
-    let describe = |outcome: &Value| -> String {
-        let response = &outcome["response"];
-        if let Some(error) = response.get("error") {
-            return format!(
-                "refused by the service: {}",
-                serde_json::to_string(error).unwrap_or_default()
-            );
-        }
-        if let Some(result) = response.get("result") {
-            let replay = if outcome["caller_replay"] == true || result["replay"] == true {
-                " (a replay of the first answer)"
-            } else {
-                ""
-            };
-            return format!(
-                "{} {}{replay}",
-                word(&result["acknowledgment"]["subject"]["id"]),
-                word(&result["outcome"]["admission"])
-            );
-        }
-        format!("still pending: {}", word(&outcome["reason"]))
-    };
-    if command == "submit" {
-        println!(
-            "caller operation {}: {}",
-            word(&record["caller_operation"]),
-            describe(&record)
-        );
     } else {
-        let operations = record["operations"].as_array().cloned().unwrap_or_default();
-        println!(
-            "{} pending in the caller ledger",
-            plural(operations.len(), "operation")
-        );
-        for operation in &operations {
+        if reconciled {
             println!(
-                "  {}: {}",
-                word(&operation["caller_operation"]),
-                describe(operation)
+                "{} pending in the caller ledger",
+                plural(operations.len(), "operation")
             );
         }
+        for operation in &operations {
+            let indent = if reconciled { "  " } else { "" };
+            println!(
+                "{indent}caller operation {}: {}",
+                word(&operation["caller_operation"]),
+                describe_ledger(operation)
+            );
+        }
+    }
+    if status != 0 {
+        std::process::exit(status);
     }
     Ok(())
+}
+
+/// A caller-ledger outcome's exit status: 0 the service took it (or
+/// replayed its first answer), 3 the service refused it and said so, 4 the
+/// outcome is not known: the service answered `retry: after_reconcile`
+/// (an `internal_error` on a submit is exactly that), or a reconcile could
+/// not establish it. A 4 stays pending in the ledger: run `pio client
+/// reconcile`.
+fn ledger_status(outcome: &Value) -> i32 {
+    let response = &outcome["response"];
+    if let Some(error) = response.get("error") {
+        return if error["data"]["retry"] == "after_reconcile" {
+            4
+        } else {
+            3
+        };
+    }
+    if response.get("result").is_some() {
+        return 0;
+    }
+    4
+}
+
+fn describe_ledger(outcome: &Value) -> String {
+    let response = &outcome["response"];
+    if let Some(error) = response.get("error") {
+        let verbatim = serde_json::to_string(error).unwrap_or_default();
+        return if ledger_status(outcome) == 4 {
+            format!("pending: the outcome is not known ({verbatim}); run pio client reconcile")
+        } else {
+            format!("refused by the service: {verbatim}")
+        };
+    }
+    if let Some(result) = response.get("result") {
+        let replay = if outcome["caller_replay"] == true || result["replay"] == true {
+            " (a replay of the first answer)"
+        } else {
+            ""
+        };
+        return format!(
+            "{} {}{replay}",
+            word(&result["acknowledgment"]["subject"]["id"]),
+            word(&result["outcome"]["admission"])
+        );
+    }
+    format!(
+        "pending: {}; run pio client reconcile again later",
+        word(&outcome["reason"])
+    )
 }
 
 fn list(args: &Args) -> Result<()> {
@@ -487,32 +524,60 @@ fn base64_of(data: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(data)
 }
 
-/// Every event of the given kinds, from the start.
-fn all_events(client: &mut Client, json: bool, kinds: &[&str]) -> Result<Vec<Value>> {
+/// Every event of the given kinds, from the start, and the retention gaps
+/// met on the way.
+fn all_events(client: &mut Client, json: bool, kinds: &[&str]) -> Result<(Vec<Value>, usize)> {
     let mut events = vec![];
+    let mut gaps = 0;
     let mut from = Position::Start;
     loop {
         let page = check(json, client.events_read(&from, kinds, 1000))?;
         let items = page["items"].as_array().cloned().unwrap_or_default();
+        gaps += items
+            .iter()
+            .filter(|item| item.get("gap").is_some())
+            .count();
         events.extend(items.iter().filter_map(|item| item.get("event").cloned()));
         match page["next_cursor"].as_str() {
             Some(cursor) if !items.is_empty() => from = Position::Cursor(cursor.into()),
-            _ => return Ok(events),
+            _ => return Ok((events, gaps)),
         }
     }
 }
 
 fn approvals(args: &Args) -> Result<()> {
+    let json = args.json();
     let mut client = connect(args)?;
-    let events = all_events(&mut client, args.json(), &[pio_client::client::EXECUTION])?;
-    let waiting = walk(&events, Order::Deadline, None);
+    let (events, gaps) = all_events(&mut client, json, &[pio_client::client::EXECUTION])?;
+    let mut waiting = walk(&events, Order::Deadline, None);
+    // After a retention gap the walk cannot be trusted to be whole: the
+    // event that carried a request may be gone. The runs' views still list
+    // their pending actions, so the walk is completed from them, and every
+    // row it could not fill says what was lost. Never a guess, never silence.
+    let lost = if gaps > 0 {
+        let mut board = Board::default();
+        check(json, board.refresh(&mut client))?;
+        lost_to_retention(&waiting, &board.drawn)
+    } else {
+        vec![]
+    };
+    waiting.extend(lost.iter().cloned());
     let decided = decisions(&events);
-    if args.json() {
+    if json {
         println!(
             "{}",
-            json!({"waiting": waiting, "decided": decided, "now": now()})
+            json!({"waiting": waiting, "decided": decided, "gaps": gaps,
+                   "walk_complete": gaps == 0, "lost_to_retention": lost.len(),
+                   "now": now()})
         );
         return Ok(());
+    }
+    if gaps > 0 {
+        println!(
+            "the stream no longer holds all of its history ({}): the walk is completed from \
+             the runs' views, and decisions made before the gap are not listed",
+            plural(gaps, "retention gap")
+        );
     }
     if waiting.is_empty() {
         println!("no approvals waiting");
@@ -529,6 +594,20 @@ fn approvals(args: &Args) -> Result<()> {
             word(&row["run"]),
             word(&row["action_id"])
         );
+        if row["lost_to_retention"] == true {
+            println!(
+                "    asked {} of {}; {}",
+                word(&row["requested_at"]),
+                word(&row["owner"]),
+                pio_client::walk::LOST
+            );
+            println!(
+                "    answer: pio client answer {} {} allow|deny",
+                word(&row["run"]),
+                word(&row["action_id"])
+            );
+            continue;
+        }
         let asks = ["command", "message", "server", "approval_kind", "method"]
             .iter()
             .filter_map(|key| row[*key].as_str().map(|v| format!("{key} {v}")))
@@ -759,6 +838,38 @@ fn print_event(json: bool, event: &Value) -> Result<()> {
     Ok(())
 }
 
+fn print_notice(json: bool, item: &Value) -> Result<()> {
+    let mut out = std::io::stdout().lock();
+    if json {
+        writeln!(out, "{item}")?;
+    } else if let Some(gap) = item.get("gap") {
+        let subjects = gap["snapshot"]["subjects"].as_array().map_or(0, Vec::len);
+        writeln!(
+            out,
+            "-- retention gap: events {}:{} to {}:{} are no longer kept; a snapshot of {} as of {}:{} stands in",
+            word(&gap["from"]["epoch"]),
+            word(&gap["from"]["sequence"]),
+            word(&gap["to"]["epoch"]),
+            word(&gap["to"]["sequence"]),
+            plural(subjects, "subject"),
+            word(&gap["snapshot"]["as_of"]["epoch"]),
+            word(&gap["snapshot"]["as_of"]["sequence"])
+        )?;
+    } else if let Some(change) = item.get("epoch_change") {
+        writeln!(
+            out,
+            "-- epoch change: {} to {}, vouched through {}",
+            word(&change["from_epoch"]),
+            word(&change["to_epoch"]),
+            word(&change["vouched_through"])
+        )?;
+    } else {
+        writeln!(out, "-- {item}")?;
+    }
+    out.flush()?;
+    Ok(())
+}
+
 fn watch(args: &Args) -> Result<()> {
     let json = args.json();
     let path = PathBuf::from(
@@ -775,6 +886,29 @@ fn watch(args: &Args) -> Result<()> {
     stop_on_signal();
     let mut client = connect(args)?;
     let mut state = WatchState::load(&path)?;
+    // A saved cursor belongs to one stream. Against another store it is
+    // refused `invalid_cursor` on every read, so the stream is compared
+    // first, and a position from elsewhere is dropped, and said so.
+    if state.stream.is_some() || state.cursor.is_some() {
+        let probe = check(json, client.events_read(&Position::Now, &kinds, 1))?;
+        let stream = probe["stream"]["id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let saved = state.stream.clone().unwrap_or_default();
+        if state.adopt(&stream) {
+            let notice = format!(
+                "the saved position belongs to stream {saved}, and this service's stream is \
+                 {stream}: starting from the beginning"
+            );
+            if json {
+                println!("{}", json!({"notice": notice}));
+            } else {
+                eprintln!("PIO: {notice}");
+            }
+            state.save(&path)?;
+        }
+    }
     let mut delivered = 0u64;
     let mut quiet_since = Instant::now();
     let mut subscription: Option<String> = None;
@@ -784,35 +918,23 @@ fn watch(args: &Args) -> Result<()> {
             None => Position::Start,
         };
         let page = check(json, client.events_read(&from, &kinds, 1000))?;
-        let items = page["items"].as_array().cloned().unwrap_or_default();
-        for item in &items {
-            let Some(event) = item.get("event") else {
+        let remaining = most.map(|most| most.saturating_sub(delivered));
+        let end = deliver_page(&mut state, Some(&path), &page, remaining, &mut |item| {
+            match item.get("event") {
+                Some(event) => print_event(json, event)?,
                 // A retention gap or an epoch change: said, not hidden.
-                if json {
-                    println!("{item}");
-                } else {
-                    println!("-- {}", item);
-                }
-                continue;
-            };
-            if !state.is_new(event) {
-                continue;
+                None => print_notice(json, item)?,
             }
-            print_event(json, event)?;
-            // The cursor stays at this page's start until the whole page is
-            // delivered; `last` says how far into it.
-            state.delivered(event);
-            state.save(&path)?;
-            delivered += 1;
+            Ok(!stopped())
+        })?;
+        delivered += end.events;
+        if end.events > 0 {
             quiet_since = Instant::now();
-            if most.is_some_and(|most| delivered >= most) || stopped() {
-                break 'follow;
-            }
         }
-        if let Some(next) = page["next_cursor"].as_str() {
-            state.cursor = Some(next.to_owned());
-            state.save(&path)?;
+        if !end.finished || most.is_some_and(|most| delivered >= most) {
+            break 'follow;
         }
+        let items = page["items"].as_array().cloned().unwrap_or_default();
         if !items.is_empty() {
             continue;
         }

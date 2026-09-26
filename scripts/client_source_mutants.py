@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""The mutants for the public-wire boundary of pio-client and the CLI.
+"""Source mutants for pio-client and the command line, checked by `cargo test`.
 
-`crates/pio-client/tests/dependencies.rs` fails if pio-client, or the
-command-line code on it, reaches a PIO service crate. Each mutant here goes
-round it one way, in a clean worktree of HEAD (see `source_mutant.py`), and
-the named check must fail **for that reason**. The verifier's two bypasses
-of the first cut are B1 and B2.
+Each mutant edits a clean worktree of HEAD (see `source_mutant.py`) and the
+named test must fail **for that reason**. Most go round the public-wire
+boundary: `crates/pio-client/tests/dependencies.rs` fails if pio-client, or
+the command-line code on it, reaches a PIO service crate, and each of these
+reaches one another way. The verifier's two bypasses of the first cut are B1
+and B2. (The command line's own mutants, which need the binary, are in
+`client_cli_matrix.py --mutant`.)
 
-    client_boundary_mutant.py [--mutant NAME]...     (all of them by default)
+    client_source_mutants.py [--mutant NAME]...     (all of them by default)
 
 - `direct-pio-core`: pio-client depends on pio-core;
 - `transitive-pio-protocol`: on pio-protocol, which reaches pio-core too;
@@ -15,7 +17,10 @@ of the first cut are B1 and B2.
 - `B2-path-include`: a service source file compiled in with a module path;
 - `cli-borrows-service`: the command-line code names pio_protocol;
 - `ledger-lenient`: the caller ledger parses its request with serde_json,
-  which takes a duplicate key the service refuses.
+  which takes a duplicate key the service refuses;
+- `watch-notices-repeat`: a follower checks only events against its saved
+  position, so a gap or an epoch change is repeated when it resumes inside a
+  page.
 """
 import argparse
 import sys
@@ -55,6 +60,14 @@ MUTANTS = {
           'Ok(serde_json::from_slice(bytes)?)')],
         ['test', '--quiet', '-p', 'pio-cli', '--bin', 'pio', 'ledger::'],
         ['a_request_file_is_parsed_as_strictly_as_the_service_parses_it', 'FAILED']),
+    'watch-notices-repeat': (
+        [('crates/pio-client/src/watch.rs',
+          '        if !state.is_new(item) {\n            continue;\n        }\n'
+          '        let keep_going',
+          '        if item.get("event").is_some() && !state.is_new(item) {\n'
+          '            continue;\n        }\n        let keep_going')],
+        ['test', '--quiet', '-p', 'pio-client', '--lib', 'watch::'],
+        ['a_follower_that_stops_inside_a_page_repeats_nothing_on_resuming', 'FAILED']),
 }
 
 

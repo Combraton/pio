@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A source mutant: a clean worktree of HEAD with named edits, built apart.
 
-The mutant scripts for M4 T1 (`fold_parity.py`, `client_boundary_mutant.py`,
+The mutant scripts for M4 T1 (`fold_parity.py`, `client_source_mutants.py`,
 `client_cli_matrix.py --mutant`) break one thing in the source and require a
 named check to fail. They never touch the checkout they run from: the edit
 goes into a worktree of HEAD at one fixed place under the ignored `target/`,

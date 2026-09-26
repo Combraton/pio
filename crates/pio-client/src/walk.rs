@@ -136,6 +136,46 @@ pub fn decisions(events: &[Value]) -> Vec<Value> {
         .collect()
 }
 
+/// What a walk cannot know after a retention gap, said on each row.
+pub const LOST: &str = "lost to retention: the request's deadline, the options the harness \
+offered and what PIO will send are no longer on the stream";
+
+/// Pending requests the stream no longer carries.
+///
+/// After a retention gap the `execution.runtime.changed` that carried a
+/// request's details may be gone, and the walk above cannot see the
+/// request at all. The run's view still lists it: `actions[]` holds every
+/// action with its state. So every action a view shows `pending`, on a run
+/// that has not exited, that the walk does not already have, is waiting
+/// too. Its row says what is known (run, action, owner, when it was asked)
+/// and that the rest was lost, rather than leaving it out or guessing.
+pub fn lost_to_retention(rows: &[Value], views: &BTreeMap<String, Value>) -> Vec<Value> {
+    let known: BTreeSet<&str> = rows
+        .iter()
+        .filter_map(|r| r["action_id"].as_str())
+        .collect();
+    let mut out = vec![];
+    for (run, view) in views {
+        if view["runtime"] == "exited" {
+            continue;
+        }
+        for action in view["actions"].as_array().into_iter().flatten() {
+            let Some(id) = action["action_id"].as_str() else {
+                continue;
+            };
+            if action["state"] != "pending" || known.contains(id) {
+                continue;
+            }
+            out.push(
+                json!({"run": run, "action_id": id, "owner": action["owner"],
+                            "requested_at": action["requested_at"], "due": null,
+                            "lost_to_retention": true, "details": LOST}),
+            );
+        }
+    }
+    out
+}
+
 /// The walk and the decisions together: what the approval card draws.
 pub fn desk(events: &[Value]) -> Value {
     json!({"walk": walk(events, Order::Deadline, None), "decided": decisions(events)})
@@ -188,6 +228,35 @@ mod tests {
             Some(951_868_799)
         );
         assert_eq!(epoch_seconds("not a time"), None);
+    }
+
+    #[test]
+    fn a_request_the_stream_lost_is_still_listed_from_its_view() {
+        let rows = vec![json!({"run": "run-1", "action_id": "run-1.action-1"})];
+        let views = BTreeMap::from([
+            (
+                "run-1".to_owned(),
+                json!({"runtime": "requires_action", "actions": [
+                {"action_id": "run-1.action-1", "owner": "opencode", "state": "pending"}]}),
+            ),
+            (
+                "run-2".to_owned(),
+                json!({"runtime": "requires_action", "actions": [
+                {"action_id": "run-2.action-1", "owner": "opencode", "state": "pending",
+                 "requested_at": "2026-09-26T00:00:00Z"},
+                {"action_id": "run-2.action-0", "owner": "opencode", "state": "answered"}]}),
+            ),
+            (
+                "run-3".to_owned(),
+                json!({"runtime": "exited", "actions": [
+                {"action_id": "run-3.action-1", "owner": "opencode", "state": "pending"}]}),
+            ),
+        ]);
+        let lost = lost_to_retention(&rows, &views);
+        assert_eq!(lost.len(), 1, "{lost:?}");
+        assert_eq!(lost[0]["action_id"], "run-2.action-1");
+        assert_eq!(lost[0]["lost_to_retention"], true);
+        assert_eq!(lost[0]["due"], Value::Null, "no deadline is invented");
     }
 
     #[test]

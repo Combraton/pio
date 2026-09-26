@@ -32,14 +32,20 @@ def main():
         assert len(pending)==1 and pending[0][3]=='pending' and json.loads(pending[0][1])==case.request
         assert records(case.root/'spawn.jsonl')==[]
         case.start()
-        empty=subprocess.run([str(BINARY),'client','reconcile',*common],capture_output=True,text=True,check=True)
+        # Exit 4: not known yet, and the ledger keeps it pending.
+        empty=subprocess.run([str(BINARY),'client','reconcile',*common],capture_output=True,text=True)
+        assert empty.returncode==4,empty
         assert json.loads(empty.stdout)['operations'][0]['status']=='pending'
         assert records(case.root/'spawn.jsonl')==[]
         # Use a second ledger to exercise initial send and an intentionally lost
         # success response. No direct writes to either caller ledger.
         caller2=Path(tempfile.mkdtemp(prefix='pio-caller-',dir='/tmp'));callers.append(caller2);common2=common.copy();common2[1]=str(caller2)
-        sent=subprocess.run([str(BINARY),'client','submit',*common2,'--request',str(request),'--basis',str(basis)],capture_output=True,text=True,check=True)
+        # An internal_error on a submit: the outcome is not known (retry
+        # after_reconcile), so exit 4, never 0 and never a plain refusal.
+        sent=subprocess.run([str(BINARY),'client','submit',*common2,'--request',str(request),'--basis',str(basis)],capture_output=True,text=True)
+        assert sent.returncode==4,sent
         assert json.loads(sent.stdout)['response']['error']['data']['code']=='internal_error'
+        assert json.loads(sent.stdout)['response']['error']['data']['retry']=='after_reconcile'
         with sqlite3.connect(caller2/'caller.sqlite3') as db:assert db.execute('select status from operations').fetchone()[0]=='pending'
         recovered=subprocess.run([str(BINARY),'client','reconcile',*common2],capture_output=True,text=True,check=True)
         receipt=json.loads(recovered.stdout)['operations'][0]
