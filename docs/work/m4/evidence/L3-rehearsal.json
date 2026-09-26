@@ -4,7 +4,7 @@
     "beta": "4"
   },
   "approvals": {
-    "l3": "Owner approval, 2026-09-24 \u2014 L3; owner decisions of 2026-09-25 (issue #12); owner decision of 2026-09-26, \"More headroom\": lead 150,000, child 60,000, in flight 30,000; owner decision of 2026-09-26 (Q8, \"Raise for attempt 2\"): sequence cap 610,000 and stop 488,000, Codex cap 1,135,000 and stop 908,000, limits per run unchanged",
+    "l3": "Owner approval, 2026-09-24 \u2014 L3; owner decisions of 2026-09-25 (issue #12); owner decision of 2026-09-26, \"More headroom\": lead 150,000, child 60,000, in flight 30,000; owner decision of 2026-09-26 (Q9, \"Child 90k\"): child 90,000, worst case 510,000, sequence cap 685,000 and stop 548,000, Codex cap 1,210,000 and stop 968,000",
     "lead_tool": "owner-2026-09-22-m4b-lead-tool",
     "model_exception": "owner-2026-09-19-m2-fixture-runs"
   },
@@ -24,8 +24,8 @@
     ],
     "call_ceiling": 16,
     "child": "at most its ceiling, plus the step that crossed it (reported only after its command) and the step in flight when the stop lands",
-    "child_ceiling": 60000,
-    "child_share": 120000,
+    "child_ceiling": 90000,
+    "child_share": 150000,
     "estimate": "Codex's own running total for the thread, reported after every step",
     "hold_above": 120000,
     "in_flight": 30000,
@@ -41,24 +41,24 @@
         "image generation"
       ],
       "memories_on": "on the order of 900,000 input tokens an attempt: Phase 1 sends up to two of the owner's idle sessions per app-server to the extraction model, three app-servers an attempt, and Phase 2 runs a consolidation agent (rust-v0.157.0, not measured)",
-      "off": "450000: with every one of them off on every thread, by the owner's own config.toml or per launch under a recorded owner decision (pio_codex::features_off), the bound above stands; the live runner refuses to start otherwise, naming each feature not off and the key that decided it (review of L3, round 4, U1)",
+      "off": "510000: with every one of them off on every thread, by the owner's own config.toml or per launch under a recorded owner decision (pio_codex::features_off), the bound above stands; the live runner refuses to start otherwise, naming each feature not off and the key that decided it (review of L3, round 4, U1)",
       "subagents_on": {
-        "v1": 990000,
-        "v2": 720000
+        "v1": 1050000,
+        "v2": 780000
       },
-      "subagents_on_how": "450000 plus, for each of the 3 runs, a step in flight on every sub-agent it could start in one step before the stop lands: three for multi-agent V2, six for V1 (rust-v0.157.0, not measured)"
+      "subagents_on_how": "510000 plus, for each of the 3 runs, a step in flight on every sub-agent it could start in one step before the stop lands: three for multi-agent V2, six for V1 (rust-v0.157.0, not measured)"
     },
     "usage_silence": 150,
-    "worst_case": 450000
+    "worst_case": 510000
   },
   "budget": 2,
   "charge": {
-    "codex_cap": 1135000,
+    "codex_cap": 1210000,
     "codex_charged": 36864,
     "ledger": "rehearsal ledger",
     "lines": {
       "L3": {
-        "at": "2026-09-26T11:09:32Z",
+        "at": "2026-09-26T12:23:56Z",
         "charge_basis": "reported_total",
         "charged": 20480,
         "meter_estimate": 20480,
@@ -69,7 +69,7 @@
         "tokens": 20480
       },
       "L3.alpha": {
-        "at": "2026-09-26T11:09:32Z",
+        "at": "2026-09-26T12:23:56Z",
         "charge_basis": "reported_total",
         "charged": 8192,
         "meter_estimate": 8192,
@@ -80,7 +80,7 @@
         "tokens": 8192
       },
       "L3.beta": {
-        "at": "2026-09-26T11:09:32Z",
+        "at": "2026-09-26T12:23:56Z",
         "charge_basis": "reported_total",
         "charged": 8192,
         "meter_estimate": 8192,
@@ -93,9 +93,9 @@
     },
     "measured_against": "charged",
     "reservations_left": [],
-    "sequence_cap": 610000,
+    "sequence_cap": 685000,
     "sequence_charged": 36864,
-    "sequence_stop": 488000,
+    "sequence_stop": 548000,
     "stop_reached": false
   },
   "codex_features": {
@@ -106,16 +106,16 @@
     "request_permissions_tool": null,
     "request_permissions_tool_key": null
   },
-  "commit": "3798caa0dfe628f29b95ab60afbb41cd3581ebb9",
+  "commit": "84a227bd8d4b55bf64aa8475ba2e46425b343114",
   "credential_check": {
-    "id": "738cfc00-210e-4419-8dc7-b5bb33a2da2e",
+    "id": "906d6828-6a5a-4951-95c9-3f7907d72b8e",
     "jsonrpc": "2.0",
     "result": {
       "acknowledgment": {
-        "command_digest": "sha256:74ae27566c648c9e8ef87ce7a9b3e1a20cfacfd17e7f845d99c868d82fb36944",
+        "command_digest": "sha256:59cf96faabd286ddbfa5fbb0d3154cd97533e8694289954552b06e2d8b30ca7c",
         "command_id": "credential-check",
         "effect_refs": [],
-        "operation_ref": "4d896e98-e7c6-4e0e-88ee-4e5d5fa7b804",
+        "operation_ref": "a73234c1-4143-4ac3-8eb9-d5f6c651b61a",
         "revision": 1,
         "subject": {
           "id": "credential-check",
@@ -144,7 +144,7 @@
         "decision": "allow",
         "words": "rehearsal: the runner answers; no owner is asked"
       },
-      "answered_by_desk_at": "2026-09-26T11:09:42Z",
+      "answered_by_desk_at": "2026-09-26T12:24:07Z",
       "approval": {
         "action_id": "L3.beta.action-1",
         "answer_deadline_seconds": 300,
@@ -153,7 +153,7 @@
           "placement": "inside_fixture",
           "subject": "cwd",
           "target_label": "<fixture>/",
-          "target_sha256": "e5edce5d85729ba0f0527262f920126ca43e1c44818f73e79723ba6e43762dd3"
+          "target_sha256": "f1d3145058612729e1937995a290c5458b59dcc4c582cf75e831894591e6169a"
         },
         "command": "/bin/zsh -lc 'sleep 5 && wc -l beta.md'",
         "grant_root_requested": null,
@@ -168,11 +168,11 @@
         "options": null,
         "persist_offered": null,
         "reason": null,
-        "requested_at": "2026-09-26T11:09:41Z",
+        "requested_at": "2026-09-26T12:24:06Z",
         "server": null
       },
-      "relayed_at": "2026-09-26T11:09:42Z",
-      "requested_at": "2026-09-26T11:09:41Z",
+      "relayed_at": "2026-09-26T12:24:07Z",
+      "requested_at": "2026-09-26T12:24:06Z",
       "run": "L3.beta",
       "sent": "answered",
       "state": "answered"
@@ -213,10 +213,10 @@
       "web_search": "disabled"
     }
   },
-  "finished_at": "2026-09-26T11:10:24Z",
+  "finished_at": "2026-09-26T12:24:51Z",
   "format": "pio-lead-run/2",
   "grant": {
-    "id": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+    "id": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
     "terms": {
       "audience": "conformance-provider",
       "delegation": {
@@ -250,7 +250,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "520c5ae7-58b2-494e-9396-5754e4b75a6a",
+    "id": "d5b7a04c-bc59-4ba8-b8dc-242818f529de",
     "jsonrpc": "2.0"
   },
   "harness": {
@@ -275,7 +275,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "5e1517ca-f774-43b5-922b-444edf41a466",
+    "id": "c65b3d58-10c5-44f1-9a41-8835b2aff4f1",
     "jsonrpc": "2.0"
   },
   "lead_reads_itself": {
@@ -290,7 +290,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "c12713ed-f60e-4edb-9329-64b7be7299ee",
+    "id": "e1c2a493-508b-42c5-89b5-24be1e445d60",
     "jsonrpc": "2.0"
   },
   "lead_submit": {
@@ -329,8 +329,8 @@
   },
   "metering": {
     "error": null,
-    "passes": 293,
-    "seconds": 48.4,
+    "passes": 191,
+    "seconds": 49.7,
     "source": "core.events.read, one query a pass"
   },
   "meters": {
@@ -346,7 +346,7 @@
       "stopped": null,
       "subagents": [],
       "threads": {
-        "fake-thread-50224": 20480
+        "fake-thread-22776": 20480
       },
       "tool_log_calls": 4,
       "turn_status": "completed"
@@ -354,7 +354,7 @@
     "L3.alpha": {
       "bytes": 1137,
       "calls": 0,
-      "ceiling": 60000,
+      "ceiling": 90000,
       "continued": [],
       "estimate": 8192,
       "host_total": 8192,
@@ -363,7 +363,7 @@
       "stopped": null,
       "subagents": [],
       "threads": {
-        "fake-thread-50439": 8192
+        "fake-thread-23617": 8192
       },
       "tool_log_calls": null,
       "turn_status": "completed"
@@ -371,7 +371,7 @@
     "L3.beta": {
       "bytes": 1128,
       "calls": 0,
-      "ceiling": 60000,
+      "ceiling": 90000,
       "continued": [],
       "estimate": 8192,
       "host_total": 8192,
@@ -380,7 +380,7 @@
       "stopped": null,
       "subagents": [],
       "threads": {
-        "fake-thread-52118": 8192
+        "fake-thread-26012": 8192
       },
       "tool_log_calls": null,
       "turn_status": "completed"
@@ -388,7 +388,7 @@
     "L3.third": {
       "bytes": 0,
       "calls": 0,
-      "ceiling": 60000,
+      "ceiling": 90000,
       "continued": [],
       "estimate": 0,
       "host_total": 0,
@@ -405,7 +405,7 @@
   "model": "gpt-5.6-terra",
   "mutant": null,
   "no_sleep": {
-    "command": "caffeinate -i -s -w 50060",
+    "command": "caffeinate -i -s -w 21747",
     "held": true,
     "held_to_the_end": true,
     "power": "Now drawing from 'AC Power'"
@@ -447,7 +447,7 @@
   },
   "reserved": {
     "L3": {
-      "at": "2026-09-26T11:09:32Z",
+      "at": "2026-09-26T12:23:56Z",
       "charge_basis": "reserved",
       "charged": 210000,
       "model": "gpt-5.6-terra",
@@ -456,25 +456,25 @@
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     },
     "L3.alpha": {
-      "at": "2026-09-26T11:09:32Z",
+      "at": "2026-09-26T12:23:56Z",
       "charge_basis": "reserved",
-      "charged": 120000,
+      "charged": 150000,
       "model": "gpt-5.6-terra",
       "sequence": "M4-lead-codex",
-      "tokens": 120000,
+      "tokens": 150000,
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     },
     "L3.beta": {
-      "at": "2026-09-26T11:09:32Z",
+      "at": "2026-09-26T12:23:56Z",
       "charge_basis": "reserved",
-      "charged": 120000,
+      "charged": 150000,
       "model": "gpt-5.6-terra",
       "sequence": "M4-lead-codex",
-      "tokens": 120000,
+      "tokens": 150000,
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     }
   },
-  "root": "/private/tmp/pio-l1-brq_tmzk",
+  "root": "/private/tmp/pio-l1-vzu_09a7",
   "rows": [
     {
       "expected": "admitted",
@@ -966,13 +966,13 @@
     },
     {
       "expected": [
-        "5f986803-c7d8-4cf4-b6f2-6fa7fca59574"
+        "6838daaa-d37a-4cf4-a31a-eb30cac53605"
       ],
       "holds": true,
       "kind": "row",
       "note": "",
       "observed": [
-        "5f986803-c7d8-4cf4-b6f2-6fa7fca59574"
+        "6838daaa-d37a-4cf4-a31a-eb30cac53605"
       ],
       "proven": true,
       "row": "Every tool request carried the grant"
@@ -1125,7 +1125,7 @@
             "source": "pio-fake-app-server/host"
           },
           "proof_class": "provider_ack_id",
-          "recorded_at": "2026-09-26T11:09:36Z",
+          "recorded_at": "2026-09-26T12:24:01Z",
           "request": "recorded",
           "steer_id": "L3.alpha.steer-1"
         },
@@ -1160,12 +1160,12 @@
     {
       "expected": [
         {
-          "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+          "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
           "holder": "lead",
           "recorded_by": "pio"
         },
         {
-          "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+          "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
           "holder": "lead",
           "recorded_by": "pio"
         }
@@ -1175,12 +1175,12 @@
       "note": "",
       "observed": [
         {
-          "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+          "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
           "holder": "lead",
           "recorded_by": "pio"
         },
         {
-          "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+          "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
           "holder": "lead",
           "recorded_by": "pio"
         }
@@ -1337,7 +1337,7 @@
         {
           "run": "L3.alpha",
           "runtime": "exited",
-          "seconds": 30.4
+          "seconds": 30.8
         }
       ],
       "proven": true,
@@ -1392,7 +1392,7 @@
           "stopped": null,
           "subagents": [],
           "threads": {
-            "fake-thread-50224": 20480
+            "fake-thread-22776": 20480
           },
           "tool_log_calls": 4,
           "turn_status": "completed"
@@ -1400,7 +1400,7 @@
         "L3.alpha": {
           "bytes": 1137,
           "calls": 0,
-          "ceiling": 60000,
+          "ceiling": 90000,
           "continued": [],
           "estimate": 8192,
           "host_total": 8192,
@@ -1409,7 +1409,7 @@
           "stopped": null,
           "subagents": [],
           "threads": {
-            "fake-thread-50439": 8192
+            "fake-thread-23617": 8192
           },
           "tool_log_calls": null,
           "turn_status": "completed"
@@ -1417,7 +1417,7 @@
         "L3.beta": {
           "bytes": 1128,
           "calls": 0,
-          "ceiling": 60000,
+          "ceiling": 90000,
           "continued": [],
           "estimate": 8192,
           "host_total": 8192,
@@ -1426,7 +1426,7 @@
           "stopped": null,
           "subagents": [],
           "threads": {
-            "fake-thread-52118": 8192
+            "fake-thread-26012": 8192
           },
           "tool_log_calls": null,
           "turn_status": "completed"
@@ -1434,7 +1434,7 @@
         "L3.third": {
           "bytes": 0,
           "calls": 0,
-          "ceiling": 60000,
+          "ceiling": 90000,
           "continued": [],
           "estimate": 0,
           "host_total": 0,
@@ -1589,7 +1589,7 @@
       "expected": "every run charged at most the share reserved for it, and all of them at most the worst case",
       "holds": true,
       "kind": "row",
-      "note": "lead share 210000, child share 120000, worst case 450000",
+      "note": "lead share 210000, child share 150000, worst case 510000",
       "observed": {
         "runs": {
           "L3": {
@@ -1598,15 +1598,15 @@
           },
           "L3.alpha": {
             "charged": 8192,
-            "share": 120000
+            "share": 150000
           },
           "L3.beta": {
             "charged": 8192,
-            "share": 120000
+            "share": 150000
           }
         },
         "total": 36864,
-        "worst_case": 450000
+        "worst_case": 510000
       },
       "proven": true,
       "row": "Every run's charge stayed within its reserved share"
@@ -1654,14 +1654,14 @@
           "projects_added": [
             {
               "location": "fixture",
-              "path_sha256": "e5edce5d85729ba0f0527262f920126ca43e1c44818f73e79723ba6e43762dd3",
+              "path_sha256": "f1d3145058612729e1937995a290c5458b59dcc4c582cf75e831894591e6169a",
               "trust_level": "trusted"
             }
           ],
           "projects_changed": [],
           "projects_removed": [],
           "raw_sha256": {
-            "after": "f39f2424f889e1d1733426893a8ae863b15401df0593b855806b9dc7801abe43",
+            "after": "0becc62b121c336e6e615b854421c0addd7b16aa93b20bd6400350d0b47b3087",
             "before": "888a17752b0cc9018541e552d996410800396bfa99045288776810135d0bc406"
           },
           "unchanged": false
@@ -1675,8 +1675,8 @@
           "projects_changed": [],
           "projects_removed": [],
           "raw_sha256": {
-            "after": "f39f2424f889e1d1733426893a8ae863b15401df0593b855806b9dc7801abe43",
-            "before": "f39f2424f889e1d1733426893a8ae863b15401df0593b855806b9dc7801abe43"
+            "after": "0becc62b121c336e6e615b854421c0addd7b16aa93b20bd6400350d0b47b3087",
+            "before": "0becc62b121c336e6e615b854421c0addd7b16aa93b20bd6400350d0b47b3087"
           },
           "unchanged": true
         },
@@ -1689,8 +1689,8 @@
           "projects_changed": [],
           "projects_removed": [],
           "raw_sha256": {
-            "after": "f39f2424f889e1d1733426893a8ae863b15401df0593b855806b9dc7801abe43",
-            "before": "f39f2424f889e1d1733426893a8ae863b15401df0593b855806b9dc7801abe43"
+            "after": "0becc62b121c336e6e615b854421c0addd7b16aa93b20bd6400350d0b47b3087",
+            "before": "0becc62b121c336e6e615b854421c0addd7b16aa93b20bd6400350d0b47b3087"
           },
           "unchanged": true
         }
@@ -1751,14 +1751,14 @@
     }
   ],
   "sequence": "M4-lead-codex",
-  "sequence_cap": 610000,
-  "sequence_stop": 488000,
+  "sequence_cap": 685000,
+  "sequence_stop": 548000,
   "spoken": {
     "alpha": "Running `sleep 30 && wc -l alpha.md`.\n7",
     "beta": "Running `sleep 5 && wc -l beta.md`.\n4",
     "lead": "alpha.md: 7\nbeta.md: 4"
   },
-  "started_at": "2026-09-26T11:09:32Z",
+  "started_at": "2026-09-26T12:23:56Z",
   "steer_exited": {
     "alternative": "Steering needs an acknowledged, running native turn",
     "delivery_at_steer": "acknowledged",
@@ -1793,33 +1793,33 @@
   "third_started": true,
   "tool_log": [
     {
-      "at": "2026-09-26T11:09:34.934Z",
+      "at": "2026-09-26T12:23:59.149Z",
       "event": "started",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "lead": "L3"
     },
     {
-      "at": "2026-09-26T11:09:34.935Z",
+      "at": "2026-09-26T12:23:59.150Z",
       "event": "request",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "method": "initialize"
     },
     {
-      "at": "2026-09-26T11:09:34.935Z",
+      "at": "2026-09-26T12:23:59.154Z",
       "event": "request",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "method": "notifications/initialized"
     },
     {
-      "at": "2026-09-26T11:09:34.935Z",
+      "at": "2026-09-26T12:23:59.155Z",
       "event": "request",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "method": "tools/list"
     },
     {
-      "at": "2026-09-26T11:09:36.609Z",
+      "at": "2026-09-26T12:24:01.028Z",
       "event": "request",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "method": "tools/call"
     },
     {
@@ -1827,32 +1827,32 @@
         "brief": "Run the shell command `sleep 30 && wc -l alpha.md`. Then report the number of lines in alpha.md. Answer with the number alone.",
         "name": "alpha"
       },
-      "at": "2026-09-26T11:09:36.657Z",
+      "at": "2026-09-26T12:24:01.243Z",
       "call": 1,
       "event": "tool_call",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "result": {
         "admission": "admitted",
         "run": "L3.alpha",
         "started": true
       },
-      "seconds": 0.0,
+      "seconds": 0.2,
       "tool": "start_run"
     },
     {
-      "at": "2026-09-26T11:09:38.245Z",
+      "at": "2026-09-26T12:24:02.747Z",
       "call": 1,
       "event": "gate",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "held": false,
       "hold_above": 120000,
       "tool": "start_run",
       "total": 0
     },
     {
-      "at": "2026-09-26T11:09:39.759Z",
+      "at": "2026-09-26T12:24:04.288Z",
       "event": "request",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "method": "tools/call"
     },
     {
@@ -1860,42 +1860,42 @@
         "brief": "Run the shell command `sleep 5 && wc -l beta.md`. Then report the number of lines in beta.md. Answer with the number alone.",
         "name": "beta"
       },
-      "at": "2026-09-26T11:09:40.015Z",
+      "at": "2026-09-26T12:24:04.943Z",
       "call": 2,
       "event": "tool_call",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "result": {
         "admission": "admitted",
         "run": "L3.beta",
         "started": true
       },
-      "seconds": 0.3,
+      "seconds": 0.7,
       "tool": "start_run"
     },
     {
-      "at": "2026-09-26T11:09:41.490Z",
+      "at": "2026-09-26T12:24:06.020Z",
       "call": 2,
       "event": "gate",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "held": false,
       "hold_above": 120000,
       "tool": "start_run",
       "total": 4096
     },
     {
-      "at": "2026-09-26T11:09:43.032Z",
+      "at": "2026-09-26T12:24:07.565Z",
       "event": "request",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "method": "tools/call"
     },
     {
       "arguments": {
         "name": "alpha"
       },
-      "at": "2026-09-26T11:10:13.415Z",
+      "at": "2026-09-26T12:24:38.369Z",
       "call": 3,
       "event": "tool_call",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "result": {
         "exit": {
           "code": 0
@@ -1904,33 +1904,33 @@
         "runtime": "exited",
         "text": "Running `sleep 30 && wc -l alpha.md`.\n7"
       },
-      "seconds": 30.4,
+      "seconds": 30.8,
       "tool": "read_run"
     },
     {
-      "at": "2026-09-26T11:10:13.416Z",
+      "at": "2026-09-26T12:24:38.369Z",
       "call": 3,
       "event": "gate",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "held": false,
       "hold_above": 120000,
       "tool": "read_run",
       "total": 8192
     },
     {
-      "at": "2026-09-26T11:10:14.954Z",
+      "at": "2026-09-26T12:24:39.911Z",
       "event": "request",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "method": "tools/call"
     },
     {
       "arguments": {
         "name": "beta"
       },
-      "at": "2026-09-26T11:10:15.252Z",
+      "at": "2026-09-26T12:24:41.186Z",
       "call": 4,
       "event": "tool_call",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "result": {
         "exit": {
           "code": 0
@@ -1939,14 +1939,14 @@
         "runtime": "exited",
         "text": "Running `sleep 5 && wc -l beta.md`.\n4"
       },
-      "seconds": 0.3,
+      "seconds": 1.3,
       "tool": "read_run"
     },
     {
-      "at": "2026-09-26T11:10:16.640Z",
+      "at": "2026-09-26T12:24:41.602Z",
       "call": 4,
       "event": "gate",
-      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
       "held": false,
       "hold_above": 120000,
       "tool": "read_run",
@@ -2015,7 +2015,7 @@
       "stopped_by_the_runner": false,
       "subagents": [],
       "threads": {
-        "fake-thread-50224": 20480
+        "fake-thread-22776": 20480
       }
     },
     "L3.alpha": {
@@ -2031,11 +2031,11 @@
       "meter_estimate": 8192,
       "reported_total": 8192,
       "seen": 8192,
-      "share": 120000,
+      "share": 150000,
       "stopped_by_the_runner": false,
       "subagents": [],
       "threads": {
-        "fake-thread-50439": 8192
+        "fake-thread-23617": 8192
       }
     },
     "L3.beta": {
@@ -2051,11 +2051,11 @@
       "meter_estimate": 8192,
       "reported_total": 8192,
       "seen": 8192,
-      "share": 120000,
+      "share": 150000,
       "stopped_by_the_runner": false,
       "subagents": [],
       "threads": {
-        "fake-thread-52118": 8192
+        "fake-thread-26012": 8192
       }
     }
   },
@@ -2067,7 +2067,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L3.delivery-1",
-          "determined_at": "2026-09-26T11:09:35Z",
+          "determined_at": "2026-09-26T12:23:59Z",
           "evidence": {
             "class": "native_turn_acknowledged",
             "source": "pio-fake-app-server/host"
@@ -2075,7 +2075,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-26T11:09:35Z"
+              "recorded_at": "2026-09-26T12:23:59Z"
             }
           ],
           "proof_class": "provider_ack_id"
@@ -2097,7 +2097,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "ae2b06ff-6610-47e5-802f-07e08876ea41:1:32",
+      "next_cursor": "9f26ec89-3f73-4d88-877c-160b5febfe8c:1:32",
       "obligations": [],
       "origin": {
         "call_budget": 2,
@@ -2117,20 +2117,20 @@
           {
             "amount": 20480,
             "basis": "observed",
-            "invocation_id": "caf4bb8d-ae57-41c0-8901-8d84f1b07784",
+            "invocation_id": "0267e891-854a-46cb-bcf8-01b2aa99fc81",
             "measure": "codex.tokens.total",
-            "recorded_at": "2026-09-26T11:10:18Z"
+            "recorded_at": "2026-09-26T12:24:43Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "ebaac1d5d7e13a94eb9bc041602e3df90d41d70d",
+          "base": "f447bd07db5cacb2defdfe4b72e952a906d2b0a5",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.workspace",
-          "repository": "/private/tmp/pio-l1-brq_tmzk/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-vzu_09a7/fixtures/lead",
           "writer": "owner"
         }
       }
@@ -2142,7 +2142,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L3.alpha.delivery-1",
-          "determined_at": "2026-09-26T11:09:36Z",
+          "determined_at": "2026-09-26T12:24:01Z",
           "evidence": {
             "class": "native_turn_acknowledged",
             "source": "pio-fake-app-server/host"
@@ -2150,7 +2150,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-26T11:09:36Z"
+              "recorded_at": "2026-09-26T12:24:01Z"
             }
           ],
           "proof_class": "provider_ack_id"
@@ -2173,7 +2173,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "ae2b06ff-6610-47e5-802f-07e08876ea41:1:32",
+      "next_cursor": "9f26ec89-3f73-4d88-877c-160b5febfe8c:1:32",
       "obligations": [],
       "origin": {
         "call_budget": 0,
@@ -2197,13 +2197,13 @@
             "source": "pio-fake-app-server/host"
           },
           "proof_class": "provider_ack_id",
-          "recorded_at": "2026-09-26T11:09:36Z",
+          "recorded_at": "2026-09-26T12:24:01Z",
           "request": "recorded",
           "steer_id": "L3.alpha.steer-1"
         },
         {
           "alternative": "Steering needs an acknowledged, running native turn",
-          "recorded_at": "2026-09-26T11:10:21Z",
+          "recorded_at": "2026-09-26T12:24:47Z",
           "request": "not_supported",
           "steer_id": "L3.alpha.steer-2"
         }
@@ -2214,20 +2214,20 @@
           {
             "amount": 8192,
             "basis": "observed",
-            "invocation_id": "f5edfa26-8669-4bff-a330-2ebd7dacb75f",
+            "invocation_id": "9cbb96a3-8127-4068-a0d1-33f53b141f8d",
             "measure": "codex.tokens.total",
-            "recorded_at": "2026-09-26T11:10:09Z"
+            "recorded_at": "2026-09-26T12:24:34Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "ebaac1d5d7e13a94eb9bc041602e3df90d41d70d",
+          "base": "f447bd07db5cacb2defdfe4b72e952a906d2b0a5",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.alpha.workspace",
-          "repository": "/private/tmp/pio-l1-brq_tmzk/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-vzu_09a7/fixtures/lead",
           "writer": "lead"
         }
       }
@@ -2237,9 +2237,9 @@
       "actions": [
         {
           "action_id": "L3.beta.action-1",
-          "answered_at": "2026-09-26T11:09:42Z",
+          "answered_at": "2026-09-26T12:24:07Z",
           "owner": "codex",
-          "requested_at": "2026-09-26T11:09:41Z",
+          "requested_at": "2026-09-26T12:24:06Z",
           "response_effect": "L3.beta.response-1",
           "state": "answered"
         }
@@ -2250,7 +2250,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L3.beta.delivery-1",
-          "determined_at": "2026-09-26T11:09:40Z",
+          "determined_at": "2026-09-26T12:24:05Z",
           "evidence": {
             "class": "native_turn_acknowledged",
             "source": "pio-fake-app-server/host"
@@ -2258,7 +2258,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-26T11:09:40Z"
+              "recorded_at": "2026-09-26T12:24:05Z"
             }
           ],
           "proof_class": "provider_ack_id"
@@ -2281,7 +2281,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "ae2b06ff-6610-47e5-802f-07e08876ea41:1:32",
+      "next_cursor": "9f26ec89-3f73-4d88-877c-160b5febfe8c:1:32",
       "obligations": [],
       "origin": {
         "call_budget": 0,
@@ -2301,20 +2301,20 @@
           {
             "amount": 8192,
             "basis": "observed",
-            "invocation_id": "99349df5-407c-4f3f-8b57-ef0599bb8f1f",
+            "invocation_id": "0e5235d9-c4a9-4c2c-8f79-cf9362a1b7de",
             "measure": "codex.tokens.total",
-            "recorded_at": "2026-09-26T11:09:44Z"
+            "recorded_at": "2026-09-26T12:24:09Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "ebaac1d5d7e13a94eb9bc041602e3df90d41d70d",
+          "base": "f447bd07db5cacb2defdfe4b72e952a906d2b0a5",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.beta.workspace",
-          "repository": "/private/tmp/pio-l1-brq_tmzk/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-vzu_09a7/fixtures/lead",
           "writer": "lead"
         }
       }
@@ -2335,7 +2335,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "ae2b06ff-6610-47e5-802f-07e08876ea41:1:32",
+      "next_cursor": "9f26ec89-3f73-4d88-877c-160b5febfe8c:1:32",
       "obligations": [],
       "origin": {
         "call_budget": 0,
@@ -2357,11 +2357,11 @@
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "ebaac1d5d7e13a94eb9bc041602e3df90d41d70d",
+          "base": "f447bd07db5cacb2defdfe4b72e952a906d2b0a5",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.third.workspace",
-          "repository": "/private/tmp/pio-l1-brq_tmzk/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-vzu_09a7/fixtures/lead",
           "writer": "lead"
         }
       }
@@ -2383,7 +2383,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "ae2b06ff-6610-47e5-802f-07e08876ea41:1:32",
+      "next_cursor": "9f26ec89-3f73-4d88-877c-160b5febfe8c:1:32",
       "obligations": [],
       "reason": "capability_unavailable",
       "recovery": [],
@@ -2397,11 +2397,11 @@
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "ebaac1d5d7e13a94eb9bc041602e3df90d41d70d",
+          "base": "f447bd07db5cacb2defdfe4b72e952a906d2b0a5",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "credential-check.workspace",
-          "repository": "/private/tmp/pio-l1-brq_tmzk/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-vzu_09a7/fixtures/lead",
           "writer": "owner"
         }
       }

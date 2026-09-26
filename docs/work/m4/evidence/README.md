@@ -361,17 +361,20 @@ lead runs." No second live attempt is planned.
 ## `L3-rehearsal.json`
 
 L3 rehearsed against the labeled Codex fake by `scripts/lead_run.py --rehearse
---plan L3` at clean head `3798caa` (`dirty: false`), for L3's second
+--plan L3` at clean head `84a227b` (`dirty: false`), for L3's second
 live attempt, after its first (`L3-live.json`, above). **Zero tokens, no
 model call.** The fake is `pio codex fake-app-server` (`pio-fake-app-server`):
 it speaks 0.157.0's app-server shapes and runs no model, tool or command, and
 `serve-codex` does not qualify a labeled fake. Plan: owner approval of
 2026-09-24, the decisions of 2026-09-25 (issue #12), and the owner's
-decisions of 2026-09-26: L3's limits ("More headroom": lead 150,000, child
-60,000, a step in flight 30,000), Codex's five unmetered features off per
-launch, the owner's plugins, apps and MCP servers off per launch (Q7, "All
-off for L3"), and the sizing for attempt 2 (Q8, "Raise for attempt 2":
-sequence cap 610,000 and stop 488,000, Codex cap 1,135,000 and stop 908,000).
+decisions of 2026-09-26: L3's limits ("More headroom": lead 150,000, a
+step in flight 30,000), Codex's five unmetered features off per launch, the
+owner's plugins, apps and MCP servers off per launch (Q7, "All off for
+L3"), and the sizing for attempt 2 (Q9, "Child 90k": each child 90,000,
+worst case 510,000, sequence cap 685,000 and stop 548,000, Codex cap
+1,210,000 and stop 968,000; it replaced Q8's 60,000 per child the same
+day). Attempt 2 is built and rehearsed here, and parked (owner, 2026-09-26):
+J7 acceptance through the TUI replaces the headless lead runs.
 
 **49 rows and 3 records: 46 rows hold, none failed, and three are
 inconclusive**, the three this rehearsal cannot observe:
@@ -436,7 +439,7 @@ What L3 shows, as the fake plays it:
 - The lead's steer on `L3.alpha` was recorded under its grant while the turn
   was `active` and `acknowledged`, and acknowledged with `provider_ack_id`.
   Behavior is `not_observed`.
-- The lead's `read_run` of `alpha` took 30.4 s and returned `exited`.
+- The lead's `read_run` of `alpha` took 30.8 s and returned `exited`.
 - Each child said what it was about to run before its command
   (``Running `sleep 30 && wc -l alpha.md`.``), then answered; the count row
   read each child's last message after its last command: 7 and 4. The fake
@@ -463,19 +466,20 @@ What L3 shows, as the fake plays it:
   unchanged, is now inconclusive rather than failed (`memory-mtime-only`),
   and a size change fails (`memory-db-grew`).
 - Codex's runs were metered on the event stream and on each run's own host
-  events by a thread of their own: 293 passes in 48.4 s. No stop and no
+  events by a thread of their own: 191 passes in 49.7 s. No stop and no
   silence.
 - The charge is Codex's reported totals, 20,480 + 8,192 + 8,192 = 36,864,
   on the rehearsal's own ledger: each at least what the run could have
   spent, and each within its share. The reservations, written immediately
-  before the lead's submit (210,000 + 120,000 + 120,000 = 450,000), were
+  before the lead's submit (210,000 + 150,000 + 150,000 = 510,000), were
   replaced and none is left. Every submit made an execution, and no probe
   was admitted.
-- The live runner's ledger checks, run dry at `81174a1` against a copy of
+- The live runner's ledger checks, run dry at `f9d54a7` against a copy of
   the Codex ledger (build and preflight stubbed, the live tree an
-  assertion), pass `--attempt L3-attempt-2` with the sequence at 36,126 and
-  Codex at 457,576, and refuse a third attempt once the second has charged
-  more than 423 (`--sizing-selftest` pins the same on made-up ledgers).
+  assertion), pass `--attempt L3-attempt-2` with the sequence at 36,126
+  (546,126 within the 548,000 stop) and Codex at 457,576 (967,576 under the
+  968,000 stop), and refuse a third attempt once the second has charged more
+  than 423 (`--sizing-selftest` pins the same on made-up ledgers).
 
 **What only the live run can show.** These are the places where
 `lead_run.py` takes a different branch live, or where a row that holds here
