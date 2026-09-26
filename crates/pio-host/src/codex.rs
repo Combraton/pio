@@ -1034,7 +1034,29 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
 
 #[cfg(test)]
 mod placement_tests {
-    use super::command_placement;
+    use super::{command_placement, named_threads};
+    use serde_json::json;
+
+    /// The agents a run's own item names, in both of 0.157.0's shapes: a V2
+    /// spawn's `subAgentActivity` and a V1 `collabAgentToolCall` (review of
+    /// L3, round 3, SPEND-2). The matrix plays only V2, the version
+    /// `gpt-5.6-terra`'s catalog entry names.
+    #[test]
+    fn an_item_names_the_agents_it_started() {
+        let v2 = json!({"type":"subAgentActivity","id":"call_1","kind":"started",
+                        "agentThreadId":"t-sub","agentPath":"/root/helper"});
+        assert_eq!(named_threads(&v2), vec!["t-sub".to_owned()]);
+        let v1 = json!({"type":"collabAgentToolCall","id":"call_2","tool":"spawnAgent",
+                        "status":"completed","senderThreadId":"t-run",
+                        "receiverThreadIds":["t-a","t-b"],"agentsStates":{}});
+        assert_eq!(named_threads(&v1), vec!["t-a".to_owned(), "t-b".to_owned()]);
+        let started = json!({"type":"collabAgentToolCall","id":"call_3","tool":"spawnAgent",
+                             "status":"inProgress","senderThreadId":"t-run",
+                             "receiverThreadIds":[],"agentsStates":{}});
+        assert!(named_threads(&started).is_empty());
+        let message = json!({"type":"agentMessage","id":"m","text":"agentThreadId t-x"});
+        assert!(named_threads(&message).is_empty());
+    }
 
     #[test]
     fn a_command_is_placed_only_against_an_absolute_workspace() {
