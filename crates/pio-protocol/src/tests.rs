@@ -1000,6 +1000,115 @@ fn a_codex_lead_tool_spec_may_keep_its_tools_in_the_model_list() {
     assert_eq!(opencode, ["lead_tool_unsupported_field"; 4]);
 }
 
+/// The most projection records one commit may examine in
+/// `commit_cost_does_not_scale_with_prior_executions`. A changed-key commit
+/// examines `meta` plus the records its command or observation changed; the
+/// retained projection there holds 82 records at N=10 and 8,002 at
+/// N=1000, so a whole-state scan exceeds the bound at either size.
+const COMMIT_EXAMINED_BOUND: u64 = 32;
+
+/// Opens a provider holding `n` completed prior executions, then submits and
+/// runs one more to exit. Returns the submit commit's cost, the most expensive
+/// commit from the submit to exit, and the retained record count. The prior
+/// executions are copies of one real scripted execution — its execution,
+/// delivery effect, subject, dedupe outcome and events — renamed, with events
+/// renumbered, because admitting 1,000 one by one costs a tick over every
+/// earlier execution per request.
+fn commit_costs_with_prior_executions(
+    n: usize,
+) -> (
+    pio_core::projections::CommitCost,
+    pio_core::projections::CommitCost,
+    usize,
+) {
+    let mut cfg = config();
+    cfg["executor"] = json!({"default_script":[{"deliver":"provider_ack_id"},{"runtime":"active"},{"exit":{"code":0}}]});
+    let mut s = session();
+    s.selected
+        .as_mut()
+        .unwrap()
+        .insert("execution".into(), vec![]);
+    let root = tempfile::tempdir().unwrap();
+    let mut p = Provider::new(root.path(), cfg.clone()).unwrap();
+    p.handle(&mut s, "execution.submit", &submit_for("px0000"))
+        .unwrap();
+    for _ in 0..4 {
+        p.execution_tick().unwrap();
+    }
+    assert_eq!(p.data.executions["px0000"]["view"]["runtime"], "exited");
+    drop(p);
+
+    let mut store = pio_core::Store::open(root.path()).unwrap();
+    let (revision, mut records) = store.protocol_records().unwrap();
+    let seed: Vec<(String, Value)> = records
+        .iter()
+        .filter(|(k, v)| *k != "meta" && (k.contains("px0000") || v.to_string().contains("px0000")))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    assert!(seed.iter().any(|(k, _)| k.starts_with("event/")));
+    let mut sequence = num(&records["meta"]["sequence"]);
+    for i in 1..n {
+        let id = format!("px{i:04}");
+        for (key, value) in &seed {
+            let mut value: Value =
+                serde_json::from_str(&value.to_string().replace("px0000", &id)).unwrap();
+            let key = if key.starts_with("event/") {
+                sequence += 1;
+                value["sequence"] = sequence.into();
+                format!("event/{:020}/{sequence:020}", num(&value["epoch"]))
+            } else {
+                key.replace("px0000", &id)
+            };
+            records.insert(key, value);
+        }
+    }
+    records.get_mut("meta").unwrap()["sequence"] = sequence.into();
+    store.commit_protocol(revision, &records).unwrap();
+    drop(store);
+
+    let mut p = Provider::new(root.path(), cfg).unwrap();
+    // The oracle rereads the whole projection per commit; this test measures.
+    p.verify_commits = false;
+    assert_eq!(p.data.executions.len(), n);
+    p.store.take_peak_commit_cost();
+    p.handle(&mut s, "execution.submit", &submit_for("measured"))
+        .unwrap();
+    let submit = p.store.last_commit_cost();
+    for _ in 0..4 {
+        p.execution_tick().unwrap();
+    }
+    assert_eq!(p.data.executions["measured"]["view"]["runtime"], "exited");
+    let peak = p.store.take_peak_commit_cost();
+    // Nothing was missed: the committed projection is the whole state.
+    assert_eq!(
+        p.store.protocol_records().unwrap(),
+        (p.store_revision, p.data.records().unwrap())
+    );
+    (submit, peak, records.len())
+}
+
+#[test]
+fn commit_cost_does_not_scale_with_prior_executions() {
+    let mut submits = vec![];
+    for n in [10, 1000] {
+        let (submit, peak, retained) = commit_costs_with_prior_executions(n);
+        eprintln!(
+            "N={n}: {retained} retained records; submit commit {submit:?}; peak commit {peak:?}"
+        );
+        assert!(retained >= 8 * n, "the prior executions are retained");
+        assert!(
+            peak.examined <= COMMIT_EXAMINED_BOUND,
+            "commit_cost_scales_with_state: a commit examined {} records with {retained} retained ({n} prior executions); bound {COMMIT_EXAMINED_BOUND}",
+            peak.examined
+        );
+        submits.push(submit);
+    }
+    assert_eq!(
+        submits[0], submits[1],
+        "commit_cost_scales_with_state: the same submit cost differs between 10 and 1000 prior executions"
+    );
+}
+
 /// D7. Only an identifier the harness returned earns `provider_ack_id`.
 /// Claude Code's replay echo returns the message PIO sent and no identifier,
 /// so its delivery carries evidence class `native_replay_echo` and no proof
