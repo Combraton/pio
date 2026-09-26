@@ -233,6 +233,11 @@ does with a permission prompt.
   Codex defers its tools behind `exec` and never names them, so the fake's
   lead, like the live one, says it cannot access the tool and starts
   nothing, and the start row fails;
+- `memory-mtime-only` (L3) plants an hour-old memories database the fake
+  opens at each app-server's start, as Codex does whatever features are on:
+  its time moves and its size does not, so the memory row must be
+  inconclusive, not failed; `memory-db-grew` has the fake write to it
+  during the run, and the row fails on the size;
 - `brief-unnamed` (L3) sends the lead the brief L3's first live run sent,
   which names no tool as the model sees it: the row that reads the brief
   the host sent fails;
@@ -824,6 +829,9 @@ MUTANTS = {
     # The lead's brief as L3's first live run sent it, naming no tool as
     # the model sees it (2026-09-26).
     'brief-unnamed': "The lead's brief named its tools as the model sees them",
+    # The memories database grows during the run: a size change fails the
+    # memory row, whatever else is said of time.
+    'memory-db-grew': "Codex's memory pipeline wrote nothing during the run",
     'child-renamed-unchecked': 'Every run stayed within its ceilings',
     # Shapes PIO declines by itself (review of L3, CH-2/F1): the lead's
     # approval asked in a mode PIO does not recognise, and a child's
@@ -948,7 +956,11 @@ INCONCLUSIVE_MUTANTS = {'no-ask': 'Every approval was decided at the desk',
                                                'and nothing else',
                         # No OpenCode service of the owner's before or after:
                         # nothing observed (C3-4).
-                        'owner-service-absent': "The owner's OpenCode service was untouched"}
+                        'owner-service-absent': "The owner's OpenCode service was untouched",
+                        # L3: the memories database's time moves and its size
+                        # does not, as every app-server start opens it (L3's
+                        # first live run): inconclusive, not failed.
+                        'memory-mtime-only': "Codex's memory pipeline wrote nothing during the run"}
 # L1b only: a mutant whose row must still **hold**. `alpha` outlasts the lead
 # tool's wait, so its first read comes back still running at the limit, and
 # its second comes back `exited` too soon to count. Only the limit can hold
@@ -979,7 +991,7 @@ PLAN_MUTANTS = {**{m: {'L3'} for m in (
                 'child-overspends': {'L3'}, 'child-renamed': {'L3'},
                 'child-renamed-unchecked': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
                 'lead-tool-deferred': {'L3'}, 'plugins-decision-absent': {'L3'},
-                'brief-unnamed': {'L3'},
+                'brief-unnamed': {'L3'}, 'memory-mtime-only': {'L3'}, 'memory-db-grew': {'L3'},
                 'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'},
                 'lead-asked-by-user-input': {'L3'},
                 'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'},
@@ -1452,6 +1464,33 @@ def memory_changes(before, after):
         elif old != new:
             changes.append(dict(path=name, before=old, after=new))
     return changes
+
+
+def mtime_only(change):
+    """A change that is only a later modification time on a path that was
+    there before and after, of the same kind and size (or, for the git
+    baseline, the same files and bytes)."""
+    before, after = change.get('before'), change.get('after')
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return False
+    if 'files' in before:
+        return (before['files'], before['bytes']) == (after.get('files'), after.get('bytes')) \
+            and before.get('newest') != after.get('newest')
+    return before.get('size') == after.get('size') and before.get('kind') == after.get('kind') \
+        and before.get('mtime') != after.get('mtime')
+
+
+def memory_verdict(changes):
+    """The memory row's judgment. Nothing changed: it holds. Every change
+    only a later modification time, size unchanged: inconclusive, because
+    Codex opens its runtime databases read-write at every app-server start,
+    whatever features are on, and a time alone cannot say the pipeline
+    wrote (L3's first live run: `memories_1.sqlite` kept its size and moved
+    its time, and `goals_1.sqlite` did in the same second with goals off).
+    A size change, or a path added or removed: it fails."""
+    if not changes:
+        return True
+    return None if all(mtime_only(c) for c in changes) else False
 
 
 def fresh_credential(principal):
@@ -2465,6 +2504,13 @@ def codex_scenario(mutant, calls):
         play.update(led_heavy_if=alpha, led_heavy_step=40_000)
     if mutant in ('memory-pipeline-ran', 'overrides-on'):
         play['memory_pipeline'] = True
+    if mutant == 'memory-mtime-only':
+        # Each app-server opens the runtime databases at start, as 0.157.0's
+        # does whatever features are on: a later time, the same size.
+        play['touch_runtime_dbs'] = True
+    if mutant == 'memory-db-grew':
+        # Something writes to the memories database during the run.
+        play['memory_db_grows'] = True
     if mutant == 'overrides-on':
         # And two stream retries on beta, which the receipt counts.
         play.update(stream_retries_if=beta, stream_retries=2)
@@ -2666,6 +2712,13 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
             # The rehearsal's own servers, named by table headers only.
             codex_home.mkdir(parents=True, exist_ok=True)
             (codex_home / 'config.toml').write_text(REHEARSAL_SERVERS)
+        if args.mutant in ('memory-mtime-only', 'memory-db-grew'):
+            # A memories database already there, an hour old, as the owner's
+            # is: the fake opens it at start, as Codex does, or writes to it.
+            database = codex_home / 'memories_1.sqlite'
+            database.write_bytes(b'\0' * 8192)
+            an_hour_ago = time.time() - 3600
+            os.utime(database, (an_hour_ago, an_hour_ago))
         # The owner's plugins, apps and MCP servers off per launch (owner
         # decision, 2026-09-26, Q7), before anything is reserved. The
         # servers' names come from table header lines alone; the receipt
@@ -2780,17 +2833,24 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
             # pipeline, which runs inside it, has stopped too (review of L3,
             # round 3, S6).
             record['memory_after'] = memory_state(service.config['codex']['codex_home'])
+            changes = memory_changes(record['memory_before'], record['memory_after'])
             rows.add("Codex's memory pipeline wrote nothing during the run",
-                     dict(changes=memory_changes(record['memory_before'], record['memory_after']),
+                     dict(changes=changes,
+                          mtime_only=[c['path'] for c in changes if mtime_only(c)],
                           memories=((record.get('unmetered') or {}).get('features') or {})
                           .get('memories')),
-                     "no memory file or database added, removed or changed",
-                     holds=lambda o: not o['changes'],
+                     'no memory file or database added, removed or changed in size; a later '
+                     'modification time alone, size unchanged, is inconclusive',
+                     holds=lambda o: memory_verdict(o['changes']),
                      note="Codex's own background pipeline, which [features] memories starts at "
                           "a root thread's first turn: its files and databases by name (a digest "
                           'for any name Codex did not choose), size and time, never content. A '
-                          'change means it ran, and its model calls report nowhere PIO reads and '
-                          'are outside every meter')
+                          'size change, or a path added or removed, means something wrote there, '
+                          'and the pipeline\'s model calls report nowhere PIO reads. A time alone '
+                          'decides nothing: at rust-v0.157.0 every app-server start opens the '
+                          'memories database read-write, in WAL mode, and runs its migrations, '
+                          'whatever features are on (state/src/runtime.rs:172-185; '
+                          'state/src/sqlite.rs:251-293, the pool at :296-310)')
         try:
             if args.mutant == 'release-refused':
                 # The guard refuses every tree, as it refused L1's live one.

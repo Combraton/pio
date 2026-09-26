@@ -788,8 +788,15 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   those paths before the service starts and after every run is over (by a
   name Codex chose or a digest of any other, size and time, never content),
   and the row "Codex's memory pipeline wrote nothing during the run" fails
-  if anything changed (`memory-pipeline-ran`, where the fake writes what the
-  pipeline would). In-turn memory tools (an ad-hoc note under
+  if a path was added or removed or a size changed (`memory-pipeline-ran`,
+  where the fake writes what the pipeline would; `memory-db-grew`). A later
+  modification time alone, size unchanged, is **inconclusive**, not a
+  failure (`memory-mtime-only`): at rust-v0.157.0 every app-server start
+  opens the memories database read-write, in WAL mode, and runs its
+  migrations, whatever features are on (`state/src/runtime.rs:172-185`;
+  `state/src/sqlite.rs:251-293`, the pool at `:296-310`). L3's first live run
+  failed this row on exactly that: `memories_1.sqlite` kept its size and
+  moved its time, as `goals_1.sqlite` did in the same second with goals off. In-turn memory tools (an ad-hoc note under
   `memories/extensions/ad_hoc/notes/`) are offered only with `[memories]
   dedicated_tools = true`, which is off by default. With memories off for
   L3's threads, as the runner now requires (above), the pipeline does not

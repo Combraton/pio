@@ -77,6 +77,10 @@
 //! `plugin_servers` the scenario names unless `features.plugins` is off, and
 //! `codex_apps` where the scenario has `apps_server`, unless apps are off (by
 //! the last of `features.apps` and its alias `features.connectors`).
+//! `touch_runtime_dbs` gives `memories_1.sqlite` and `goals_1.sqlite`, where
+//! the home has them, a later modification time at every start, as Codex
+//! opens its runtime databases; `memory_db_grows` appends to
+//! `memories_1.sqlite` at the first turn.
 //! `memory_pipeline` writes, at the first turn, what Codex's memory pipeline
 //! would under the Codex home (`memories/`, `memories_1.sqlite`), unless the
 //! thread's config turned memories off (`crate::features_off`).
@@ -399,6 +403,24 @@ pub fn run() -> Result<()> {
                 match method.as_str() {
                     "initialize" => {
                         initialized = true;
+                        if scenario["touch_runtime_dbs"] == true {
+                            // What every Codex 0.157.0 app-server does at
+                            // start, whatever features are on: it opens its
+                            // runtime databases read-write and runs their
+                            // migrations (`state/src/runtime.rs:123-200`,
+                            // `state/src/sqlite.rs:251-310`). Played as a
+                            // later modification time on those already
+                            // there, and not a byte more.
+                            for name in ["memories_1.sqlite", "goals_1.sqlite"] {
+                                let path = home.join(name);
+                                if path.is_file() {
+                                    std::fs::OpenOptions::new()
+                                        .append(true)
+                                        .open(&path)?
+                                        .set_modified(std::time::SystemTime::now())?;
+                                }
+                            }
+                        }
                         if let Some(early) = early_request(&scenario, "initialize", None, &markers)?
                         {
                             leave_after = Some(early);
@@ -653,6 +675,16 @@ pub fn run() -> Result<()> {
                     }
                     "turn/start" => {
                         turns += 1;
+                        if turns == 1 && scenario["memory_db_grows"] == true {
+                            // Something writes to the memories database.
+                            let path = home.join("memories_1.sqlite");
+                            if path.is_file() {
+                                std::fs::OpenOptions::new()
+                                    .append(true)
+                                    .open(&path)?
+                                    .write_all(&[0u8; 4096])?;
+                            }
+                        }
                         let memories_off =
                             fake_turn::MEMORIES_OFF.load(std::sync::atomic::Ordering::SeqCst);
                         if turns == 1 && scenario["memory_pipeline"] == true && memories_off {
