@@ -688,7 +688,12 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   a disabled server is never started
   (`codex-mcp/src/connection_manager.rs:241-251`, `:288-291`). The servers
   are read from header lines alone; the receipt carries them as digests and
-  a count. Two rows judge it: what each thread's host sent, read back from
+  a count. Read that way on 2026-09-26 the owner's configuration names
+  four, and all four are turned off per launch. The owner named three
+  because the fourth is already disabled in the owner's own configuration
+  (the owner's word; the runner reads only header lines, so it does not see
+  that setting): consistent with "Only PIO's lead tool remains". Two rows
+  judge it: what each thread's host sent, read back from
   its request, and every server Codex reported starting on each run's
   thread, which must be the lead's tool on the lead's thread and nothing
   else. Here the fake announces what Codex would start (the rehearsal home's
