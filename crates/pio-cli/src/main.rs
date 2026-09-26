@@ -390,6 +390,13 @@ fn run() -> Result<()> {
         }
         // Everything a caller does, through the public client (M4 rule 1).
         Some("client") => client_cli::run(&args[1..])?,
+        // The terminal screen: its own crate, on pio-client alone (M4 rule 1).
+        Some("tui") => {
+            let status = pio_tui::run(&args[1..])?;
+            if status != 0 {
+                std::process::exit(status);
+            }
+        }
         Some("fake") => {
             let action = args.get(1).context(
                 "fake requires daemon, request, host, child, identity or fill-projection",
@@ -434,7 +441,7 @@ fn run() -> Result<()> {
             }
         }
         _ => {
-            bail!("expected conformance, serve-fake, client, codex, or diagnostic fake command")
+            bail!("expected conformance, serve-fake, client, tui, codex, or diagnostic fake command")
         }
     }
     Ok(())
