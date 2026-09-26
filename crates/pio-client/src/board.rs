@@ -48,10 +48,9 @@ pub fn run_state(view: Option<&Value>) -> &'static str {
     let Some(view) = view else {
         return "unknown";
     };
-    let pending = view["actions"]
-        .as_array()
-        .is_some_and(|actions| actions.iter().any(|a| a["state"] == "pending"));
-    if pending {
+    // A run that has exited can answer nothing, so an action it still shows
+    // pending is not waiting on anyone: the walk's rule.
+    if !pending_actions(view).is_empty() {
         return "needs approval";
     }
     if view["delivery"] == "ambiguous" || view["runtime"] == "unknown" {
@@ -77,6 +76,22 @@ pub fn run_state(view: Option<&Value>) -> &'static str {
         return "finished";
     }
     "running"
+}
+
+/// The actions a run is waiting on: those `pending`, while it has not
+/// exited. An exited run's leftover `pending` action is not one: it can no
+/// longer be answered (the service refuses it `run_not_running`).
+pub fn pending_actions(view: &Value) -> Vec<Value> {
+    if view["runtime"] == "exited" {
+        return vec![];
+    }
+    view["actions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|a| a["state"] == "pending")
+        .map(|a| a["action_id"].clone())
+        .collect()
 }
 
 /// What a row says beside its state. Usage lives here, never in it.
@@ -189,13 +204,7 @@ impl Board {
             let state = run_state(view);
             *counts.entry(state).or_insert(0) += 1;
             let field = |key: &str| view.map(|v| v[key].clone()).unwrap_or(Value::Null);
-            let pending: Vec<Value> = view
-                .and_then(|v| v["actions"].as_array())
-                .into_iter()
-                .flatten()
-                .filter(|a| a["state"] == "pending")
-                .map(|a| a["action_id"].clone())
-                .collect();
+            let pending = view.map(pending_actions).unwrap_or_default();
             rows.push(json!({
                 "id": id, "revision": revision, "state": state, "glyph": glyph(state),
                 "drawn_revision": field("revision"), "admission": field("admission"),
@@ -247,6 +256,21 @@ mod tests {
         assert_eq!(run_state(Some(&view)), "finished");
         assert_eq!(row_markers(Some(&view)), ["usage unresolved"]);
         assert!(row_markers(Some(&exited(json!({"code": 0}), "absent", "none"))).is_empty());
+    }
+
+    #[test]
+    fn an_exited_run_waits_on_nobody() {
+        // A waiting run cancelled on the OpenCode fake: exited, no exit
+        // status, and its action still `pending` in the view.
+        let view = json!({"runtime": "exited", "delivery": "acknowledged",
+                          "exit": "unavailable", "result": "absent",
+                          "actions": [{"action_id": "run-1.action-1", "state": "pending"}]});
+        assert!(pending_actions(&view).is_empty());
+        assert_eq!(run_state(Some(&view)), "uncertain");
+        let waiting = json!({"runtime": "requires_action", "delivery": "acknowledged",
+                             "actions": [{"action_id": "run-1.action-1", "state": "pending"}]});
+        assert_eq!(pending_actions(&waiting), [json!("run-1.action-1")]);
+        assert_eq!(run_state(Some(&waiting)), "needs approval");
     }
 
     #[test]

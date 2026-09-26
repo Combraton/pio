@@ -115,4 +115,13 @@ fn the_recordings_cover_what_the_folds_decide() {
         }
         assert_eq!(board["notes"]["uncertain"], 0, "{name}");
     }
+    // A waiting run cancelled: exited, exit unavailable, its action still
+    // pending in the view. It waits on nobody: uncertain, and no approval.
+    let cancelled = &expected("board-cancelled")["rounds"][0]["board"];
+    let row = &cancelled["runs"][0];
+    assert_eq!(row["runtime"], "exited");
+    assert_eq!(row["state"], "uncertain");
+    assert_eq!(row["pending_actions"], serde_json::json!([]));
+    assert_eq!(cancelled["notes"]["approvals"], 0);
+    assert_eq!(expected("walk-cancelled")["walk"], serde_json::json!([]));
 }

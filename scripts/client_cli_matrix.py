@@ -23,6 +23,9 @@ Cases:
   by `--max-events`, by `--idle-exit` and by SIGTERM, between which new runs
   start. Together they print every event exactly once, in order: nothing
   lost, nothing twice.
+- `watch_notices` (fake, keeping four events): a watcher from the start is
+  handed a retention gap and prints it; one that comes back does not print it
+  again, and prints each event once; a person sees `-- retention gap:`.
 - `watch_other_store` (fake): a position saved against one store and used
   against another is dropped with a notice, and the new store's stream is
   printed from its beginning, rather than `invalid_cursor` on every run.
@@ -45,7 +48,10 @@ Cases:
   (OpenCode `opt_1`/`allow_once`, Claude `allow` with no widening field,
   Codex `{"decision": "accept"}`).
 - `cancel` (opencode): a waiting run cancelled with `client cancel`, and
-  exited afterwards; `client steer` on a harness with no steering is refused
+  exited afterwards; the fake leaves its action pending on the exited run,
+  and the board reads it `uncertain` with no approval waiting (not "needs
+  approval"), the walk agrees, and an answer to it is refused
+  `run_not_running`; `client steer` on a harness with no steering is refused
   in the service's words.
 
 Mutants the script plays (the command line is sound; the test makes the
@@ -69,7 +75,9 @@ edit, `source_mutant.py`; the services still run from the checkout):
 - `answer-always-deny` (M4 of the review): every answer sends deny;
 - `approvals-gap-blind`: the walk is not completed after a gap;
 - `ledger-exits-0`: submit and reconcile exit 0 whatever the service said;
-- `watch-ignores-stream`: a saved position is used against any store.
+- `watch-ignores-stream`: a saved position is used against any store;
+- `watch-drops-notices` (M6 of the review's second round): gaps and epoch
+  changes are not printed.
 """
 import argparse
 import base64
@@ -473,9 +481,29 @@ def case_cancel(out, mutant):
                 seconds=60)
             check(view['cancellation']['receipt']['state'] == 'cancel_requested',
                   'the run carries the cancel', view.get('cancellation'))
+            # The fake leaves the action pending on the exited run (a host
+            # item the orchestrator tracks). It waits on nobody: the board
+            # must not say "needs approval", and the walk must agree.
+            leftover = [a['state'] for a in view.get('actions', [])]
+            board = cli.json('list')
+            row = board['runs'][0]
+            check(row['state'] == 'uncertain' and row['pending_actions'] == []
+                  and board['notes']['approvals'] == 0,
+                  'an exited run with a leftover pending action waits on nobody',
+                  f'{leftover} -> {row} {board["notes"]}')
+            human = cli.run('list', json_out=False)
+            check(human.returncode == 0 and 'needs approval' not in human.stdout
+                  and '0 approvals waiting' in human.stdout,
+                  'a person is not told an exited run needs approval', human.stdout)
+            check(cli.json('approvals')['waiting'] == [], 'the walk agrees: none waiting')
+            if 'pending' in leftover:
+                late = cli.run('answer', 'run-1', view['actions'][0]['action_id'], 'allow')
+                check(late.returncode == 3 and verbatim(late)['data']['details'].get('reason')
+                      == 'run_not_running', 'and the service refuses an answer to it', late.stdout)
             case.finish()
             return dict(cancel=cancelled['outcome']['receipt'],
-                        cancellation=view['cancellation'].get('outcome'), exit=view['exit'])
+                        cancellation=view['cancellation'].get('outcome'), exit=view['exit'],
+                        leftover_actions=leftover, board_state=row['state'])
     finally:
         case_cleanup.release(work)
 
@@ -652,6 +680,53 @@ def case_ledger_exit_codes(out, mutant):
         case_cleanup.release(work)
 
 
+def case_watch_notices(out, mutant):
+    """Retention gaps are said, once each, across a detach. A service that
+    keeps only its last four events hands a watcher from the start a gap,
+    not the events; the watcher must print it, and a watcher that comes back
+    must not print it again (a later, different gap is its own notice)."""
+    work = private_dir('pio-cn-')
+    daemon, socket, files = start_fake(work, out, 'notices', events={'retain_last': 4})
+    try:
+        cli = Cli(socket, work)
+        for identity in ('run-1', 'run-2', 'run-3'):
+            submit_run(cli, work, identity, 600)
+        # The stream keeps four events, so the runs are watched by their views.
+        exited = lambda identity: witness(socket, 'execution.inspect', {
+            'execution': identity})['result']['runtime'] == 'exited'
+        wait_for('three runs to finish', lambda: all(
+            exited(i) for i in ('run-1', 'run-2', 'run-3')))
+        state = work / 'watch.json'
+        printed = []
+
+        def lines(text):
+            return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+        first = cli.run('watch', '--state', str(state), '--idle-exit', '1')
+        check(first.returncode == 0, 'the first watcher ran', first.stderr)
+        printed += lines(first.stdout)
+        submit_run(cli, work, 'run-4', 600)
+        wait_for('run-4 to finish', lambda: exited('run-4'))
+        second = cli.run('watch', '--state', str(state), '--idle-exit', '1')
+        check(second.returncode == 0, 'the second watcher ran', second.stderr)
+        printed += lines(second.stdout)
+        gaps = [(l['gap']['to']['epoch'], l['gap']['to']['sequence']) for l in printed
+                if 'gap' in l]
+        check(gaps, 'a watcher that starts before the retained history prints the gap',
+              [sorted(l) for l in printed][:3])
+        check(len(gaps) == len(set(gaps)), 'each gap is printed once across a detach', gaps)
+        events = [(l['epoch'], l['sequence']) for l in printed if 'sequence' in l]
+        check(len(events) == len(set(events)), 'no event is printed twice', events)
+        human = cli.run('watch', '--state', str(work / 'human.json'), '--idle-exit', '1',
+                        json_out=False)
+        check(human.returncode == 0 and '-- retention gap:' in human.stdout,
+              'a person is told of the gap', human.stdout[:400])
+        return dict(gaps=gaps, events=len(events))
+    finally:
+        stop_fake(daemon, files)
+        case_cleanup.release(work)
+
+
 def case_watch_other_store(out, mutant):
     """A position saved against one store, used against another: the
     watcher says so and starts from the beginning, rather than failing
@@ -702,6 +777,7 @@ def case_watch_other_store(out, mutant):
 CASES = dict(submit_list_inspect_output=case_submit_list_inspect_output,
              watch_detach_resume=case_watch_detach_resume,
              watch_other_store=case_watch_other_store,
+             watch_notices=case_watch_notices,
              ledger_exit_codes=case_ledger_exit_codes,
              approvals_answer_and_refusals=case_approvals_answer_and_refusals,
              approvals_after_retention=case_approvals_after_retention,
@@ -729,6 +805,9 @@ SOURCE_MUTANTS = {
                             'let lost = if gaps > 0 {', 'let lost = if false {'),
     'ledger-exits-0': ('ledger_exit_codes', CLI,
                        'if status != 0 {', 'if status == 99 {'),
+    # M6 of the review: a watcher that prints no gap or epoch notice.
+    'watch-drops-notices': ('watch_notices', CLI,
+                            'None => print_notice(json, item)?,', 'None => {}'),
     'watch-ignores-stream': ('watch_other_store', CLI,
                              'if state.stream.is_some() || state.cursor.is_some() {\n'
                              '        let probe',

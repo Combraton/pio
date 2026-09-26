@@ -28,6 +28,8 @@ that field**:
 
 - `walk-drops-offer` removes `if_nobody_answers` from every walk row;
 - `board-exited-running` draws an exited run as `running`;
+- `board-exited-still-waiting` counts an exited run's leftover pending
+  action as waiting again (the defect of review round 2);
 - `board-liability-uncertain` makes unresolved usage alone `uncertain` again
   (the rule before the orchestrator's decision of 2026-09-26);
 - `blocks-nobody-unknown` fills an undecided tool use as `unknown` instead of
@@ -61,6 +63,10 @@ MUTANTS = {
                              '        return "finished";\n    }\n    "running"',
                              '        return "running";\n    }\n    "running"',
                              'state'),
+    'board-exited-still-waiting': ('crates/pio-client/src/board.rs',
+                                   '    if view["runtime"] == "exited" {\n        return vec![];\n    }\n',
+                                   '',
+                                   'state'),
     'board-liability-uncertain': ('crates/pio-client/src/board.rs',
                                   'if view["delivery"] == "ambiguous" || view["runtime"] == "unknown" {',
                                   'if view["delivery"] == "ambiguous" || view["runtime"] == "unknown"'
@@ -356,6 +362,41 @@ def record_codex_settlements(out, into):
             dict(kind='board', rounds=[final]), indent=1) + '\n')
 
 
+def record_cancelled(out, into):
+    """A waiting run cancelled on the OpenCode fake: exited, no exit status,
+    and its action still `pending` in the view. It waits on nobody, and the
+    board must not say it does (review of T1, round 2)."""
+    from approval_desk import ASKS, events_of, service
+    from opencode_host_matrix import poll
+    from public_api import command
+    with service(out, 'parity-cancelled', permission_request=ASKS) as case:
+        case.start()
+        case.submit(identity='run-1', delivery_timeout=300)
+        poll(lambda: case.inspect('run-1'),
+             lambda v: v['runtime'] == 'requires_action' and v['delivery'] == 'acknowledged',
+             seconds=120)
+        for attempt in range(5):
+            view = case.inspect('run-1')
+            envelope = command('execution.cancel', dict(kind='execution.execution', id='run-1'),
+                               {}, command_id=f'cancel-{attempt}', revision=view['revision'])
+            with case.client() as client:
+                answer = client.call(envelope)
+            if 'result' in answer:
+                break
+            assert answer['error']['data']['code'] == 'precondition_failed', answer
+        exited = poll(lambda: case.inspect('run-1'), lambda v: v['runtime'] == 'exited',
+                      seconds=120)
+        assert [a['state'] for a in exited['actions']] == ['pending'], exited['actions']
+        with case.client() as client:
+            final, _ = board_round(client)
+        events = events_of(case)
+        case.finish()
+    (into / 'board-cancelled.json').write_text(json.dumps(
+        dict(kind='board', rounds=[final]), indent=1) + '\n')
+    (into / 'walk-cancelled.json').write_text(json.dumps(
+        dict(kind='walk', events=events), indent=1) + '\n')
+
+
 def record(out, into):
     into.mkdir(parents=True, exist_ok=True)
     work = out / 'services'
@@ -366,6 +407,7 @@ def record(out, into):
         record_harness(work, into, name)
     record_desk(work, into)
     record_codex_settlements(work, into)
+    record_cancelled(work, into)
     for path in recordings(into):
         scrub(path)
         text = path.read_text()

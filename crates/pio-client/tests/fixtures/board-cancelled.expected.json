@@ -1,0 +1,46 @@
+{
+ "rounds": [
+  {
+   "board": {
+    "counts": {
+     "uncertain": 1
+    },
+    "cursor": "312eb2ab-2669-489c-ac9a-5b44dfd7b685:1:7",
+    "gaps": 0,
+    "groups": [
+     {
+      "runs": [
+       "run-1"
+      ],
+      "state": "uncertain"
+     }
+    ],
+    "notes": {
+     "approvals": 0,
+     "uncertain": 1
+    },
+    "runs": [
+     {
+      "admission": "admitted",
+      "delivery": "acknowledged",
+      "drawn_revision": 7,
+      "exit": "unavailable",
+      "glyph": "◇",
+      "id": "run-1",
+      "liability": "unresolved",
+      "markers": [
+       "usage unresolved"
+      ],
+      "pending_actions": [],
+      "revision": 7,
+      "runtime": "exited",
+      "state": "uncertain"
+     }
+    ]
+   },
+   "moved": [
+    "run-1"
+   ]
+  }
+ ]
+}

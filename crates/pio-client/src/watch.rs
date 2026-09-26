@@ -134,8 +134,9 @@ pub fn deliver_page(
     if let Some(stream) = page["stream"]["id"].as_str() {
         state.adopt(stream);
     }
+    let items = page["items"].as_array().cloned().unwrap_or_default();
     let mut events = 0;
-    for item in page["items"].as_array().into_iter().flatten() {
+    for (index, item) in items.iter().enumerate() {
         if !state.is_new(item) {
             continue;
         }
@@ -147,11 +148,19 @@ pub fn deliver_page(
         if item.get("event").is_some() {
             events += 1;
         }
-        if !keep_going || limit.is_some_and(|limit| events >= limit) {
+        let stop = !keep_going || limit.is_some_and(|limit| events >= limit);
+        // Stopped on the page's last item, the page is delivered: the
+        // cursor moves past it. Left at the page's start, a resumed read of
+        // a page that ended in a gap is answered with a new gap reaching
+        // further, whose notice prints again and folds events away.
+        if stop && index + 1 < items.len() {
             return Ok(PageEnd {
                 events,
                 finished: false,
             });
+        }
+        if stop {
+            break;
         }
     }
     if let Some(next) = page["next_cursor"].as_str() {
@@ -270,6 +279,44 @@ mod tests {
             [(2, 0), (2, 1), (2, 5), (2, 6)],
             "each item exactly once"
         );
+    }
+
+    #[test]
+    fn a_stop_on_the_last_item_moves_past_the_page() {
+        let page = json!({"stream": {"id": "s", "epoch": 1}, "next_cursor": "s:1:9", "items": [
+            {"event": {"stream": "s", "epoch": 1, "sequence": 3}},
+            {"gap": {"kind": "retention", "from": {"epoch": 1, "sequence": 4},
+                     "to": {"epoch": 1, "sequence": 9}, "snapshot": {"subjects": []}}}]});
+        let mut state = WatchState {
+            cursor: Some("s:1:2".into()),
+            ..WatchState::default()
+        };
+        // A signal arrives while the gap, the last item, is printed.
+        let mut stop_on_gap = |item: &Value| -> Result<bool> { Ok(item.get("gap").is_none()) };
+        let end = deliver_page(&mut state, None, &page, None, &mut stop_on_gap).unwrap();
+        assert_eq!(
+            end,
+            PageEnd {
+                events: 1,
+                finished: true
+            }
+        );
+        assert_eq!(
+            state.cursor.as_deref(),
+            Some("s:1:9"),
+            "past the page, not at its start"
+        );
+        // The same for a limit reached on the last item.
+        let mut state = WatchState {
+            cursor: Some("s:1:2".into()),
+            ..WatchState::default()
+        };
+        let events_only = json!({"stream": {"id": "s", "epoch": 1}, "next_cursor": "s:1:3",
+                                 "items": [{"event": {"stream": "s", "epoch": 1, "sequence": 3}}]});
+        let mut all = |_: &Value| -> Result<bool> { Ok(true) };
+        let end = deliver_page(&mut state, None, &events_only, Some(1), &mut all).unwrap();
+        assert!(end.finished);
+        assert_eq!(state.cursor.as_deref(), Some("s:1:3"));
     }
 
     #[test]

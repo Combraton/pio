@@ -279,7 +279,7 @@ def run_state(view):
     """
     if view is None:
         return 'unknown'
-    if any(a.get('state') == 'pending' for a in view.get('actions') or []):
+    if pending_actions(view):
         return 'needs approval'
     if view.get('delivery') == 'ambiguous' or view.get('runtime') == 'unknown':
         return 'uncertain'
@@ -296,6 +296,21 @@ def run_state(view):
     return 'running'
 
 
+def pending_actions(view):
+    """The actions a run is waiting on: `pending`, while it has not exited.
+
+    An exited run can answer nothing (the service refuses it
+    `run_not_running`), so an action it still shows pending is not waiting
+    on anyone: the walk's own rule. Found by the verifier (review of T1,
+    round 2): a waiting run cancelled on the OpenCode fake is exited with
+    its action still pending, and the board said "needs approval".
+    """
+    if (view or {}).get('runtime') == 'exited':
+        return []
+    return [a['action_id'] for a in (view or {}).get('actions') or []
+            if a.get('state') == 'pending']
+
+
 def row_markers(view):
     """What a row says beside its state. Usage lives here, never in it."""
     usage = (view or {}).get('usage') or {}
@@ -309,8 +324,7 @@ def board_view(board):
     for identity in sorted(board.seen):
         view = board.drawn.get(identity)
         state = run_state(view)
-        pending = [a['action_id'] for a in (view or {}).get('actions') or []
-                   if a.get('state') == 'pending']
+        pending = pending_actions(view)
         rows.append(dict(
             id=identity, revision=board.seen[identity], state=state, glyph=GLYPHS[state],
             drawn_revision=(view or {}).get('revision'),

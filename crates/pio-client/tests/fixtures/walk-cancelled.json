@@ -1,0 +1,236 @@
+{
+ "kind": "walk",
+ "events": [
+  {
+   "caused_by": [],
+   "command_id": "run-1",
+   "epoch": 1,
+   "operation_ref": "fe2a409a-c829-447b-a0ba-521ea58a3fa8",
+   "origin": "command",
+   "payload": {
+    "admission": "admitted",
+    "delivery_id": "run-1.delivery-1",
+    "runtime": "preparing"
+   },
+   "recorded_at": "2026-09-26T16:28:26Z",
+   "revision": 1,
+   "sequence": 1,
+   "stream": "312eb2ab-2669-489c-ac9a-5b44dfd7b685",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.admission.changed"
+  },
+  {
+   "caused_by": [],
+   "epoch": 1,
+   "origin": "provider",
+   "payload": {
+    "delivery": "acknowledged",
+    "delivery_id": "run-1.delivery-1",
+    "evidence": {
+     "class": "native_session_update",
+     "source": "pio-fake-opencode-acp/host"
+    }
+   },
+   "recorded_at": "2026-09-26T16:28:28Z",
+   "revision": 2,
+   "sequence": 2,
+   "stream": "312eb2ab-2669-489c-ac9a-5b44dfd7b685",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.delivery.observed"
+  },
+  {
+   "caused_by": [],
+   "epoch": 1,
+   "origin": "provider",
+   "payload": {
+    "runtime": "active"
+   },
+   "recorded_at": "2026-09-26T16:28:28Z",
+   "revision": 3,
+   "sequence": 3,
+   "stream": "312eb2ab-2669-489c-ac9a-5b44dfd7b685",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.runtime.changed"
+  },
+  {
+   "caused_by": [],
+   "epoch": 1,
+   "origin": "provider",
+   "payload": {
+    "action_id": "run-1.action-1",
+    "owner": "opencode",
+    "pio.combraton.dev/approval": {
+     "action_id": "run-1.action-1",
+     "answer_deadline_seconds": 300,
+     "approval_kind": null,
+     "classification": {
+      "auto_allowed": false,
+      "disposition": "surface_as_action",
+      "format": "pio-claude-request-classification/1",
+      "placement": "not_classifiable",
+      "reason": "no resolvable target; PIO cannot classify this request",
+      "target_label": null,
+      "target_sha256": null,
+      "tool_name": "execute",
+      "tool_use_id": "call_permission_0"
+     },
+     "command": null,
+     "grant_root_requested": null,
+     "if_nobody_answers": {
+      "always_option_taken": false,
+      "option_id": "opt_3",
+      "option_kind": "reject_once",
+      "option_kind_offered": true,
+      "option_kind_required": "reject_once",
+      "outcome": {
+       "optionId": "opt_3",
+       "outcome": "selected"
+      }
+     },
+     "message": null,
+     "method": null,
+     "network_approval": null,
+     "options": [
+      {
+       "kind": "allow_once",
+       "name": "Allow once",
+       "optionId": "opt_1"
+      },
+      {
+       "kind": "allow_always",
+       "name": "Always allow",
+       "optionId": "opt_2"
+      },
+      {
+       "kind": "reject_once",
+       "name": "Reject",
+       "optionId": "opt_3"
+      }
+     ],
+     "persist_offered": null,
+     "reason": null,
+     "requested_at": "2026-09-26T16:28:28Z",
+     "server": null
+    },
+    "runtime": "requires_action"
+   },
+   "recorded_at": "2026-09-26T16:28:28Z",
+   "revision": 4,
+   "sequence": 4,
+   "stream": "312eb2ab-2669-489c-ac9a-5b44dfd7b685",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.runtime.changed"
+  },
+  {
+   "caused_by": [],
+   "command_id": "cancel-0",
+   "epoch": 1,
+   "operation_ref": "34e1f5d7-efb9-4232-9cdf-3019a51ca689",
+   "origin": "command",
+   "payload": {
+    "receipt": {
+     "operation_ref": "34e1f5d7-efb9-4232-9cdf-3019a51ca689",
+     "state": "cancel_requested"
+    }
+   },
+   "recorded_at": "2026-09-26T16:28:28Z",
+   "revision": 5,
+   "sequence": 5,
+   "stream": "312eb2ab-2669-489c-ac9a-5b44dfd7b685",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.cancel.requested"
+  },
+  {
+   "caused_by": [],
+   "epoch": 1,
+   "origin": "provider",
+   "payload": {
+    "runtime": "unknown"
+   },
+   "recorded_at": "2026-09-26T16:28:38Z",
+   "revision": 6,
+   "sequence": 6,
+   "stream": "312eb2ab-2669-489c-ac9a-5b44dfd7b685",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.runtime.changed"
+  },
+  {
+   "caused_by": [],
+   "epoch": 1,
+   "origin": "provider",
+   "payload": {
+    "exit": "unavailable",
+    "pio.combraton.dev/native-declines": [],
+    "pio.combraton.dev/tool-uses": {
+     "audit": {
+      "containment": {
+       "mechanism": "harness_permission_rules_only",
+       "os_sandbox_observed": false
+      },
+      "declined_by_pio_count": 0,
+      "denied_by_caller_count": 0,
+      "denied_by_harness_count": 0,
+      "format": "pio-claude-tool-uses/7",
+      "liability": "unresolved",
+      "out_of_fixture_count": 0,
+      "out_of_fixture_effect_observed": false,
+      "result_observed": false,
+      "tool_uses": [
+       {
+        "decided_by": null,
+        "decision": null,
+        "denied": false,
+        "denied_by_harness": false,
+        "outcome": "unknown",
+        "placement": "not_classifiable",
+        "target_label": null,
+        "target_sha256": "3a57caa11d1e0c603f57d69f706a3204b3d7d8dc869d8ecfe715065a0ba53798",
+        "tool": "execute",
+        "tool_use_id": "call_permission_0"
+       }
+      ],
+      "turn_interrupted": false,
+      "unclassifiable_target_count": 1,
+      "unknown_outcome_count": 1,
+      "workspace_sha256": "98312029f523147e9ac7523873deba877808ad84907624887bbf55031126222e"
+     },
+     "harness_status": [
+      {
+       "kind": "execute",
+       "locations": [],
+       "status": "in_progress",
+       "tool_use_id": "call_permission_0"
+      }
+     ]
+    }
+   },
+   "recorded_at": "2026-09-26T16:28:38Z",
+   "revision": 7,
+   "sequence": 7,
+   "stream": "312eb2ab-2669-489c-ac9a-5b44dfd7b685",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.exit.observed"
+  }
+ ]
+}

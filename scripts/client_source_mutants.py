@@ -20,7 +20,9 @@ and B2. (The command line's own mutants, which need the binary, are in
   which takes a duplicate key the service refuses;
 - `watch-notices-repeat`: a follower checks only events against its saved
   position, so a gap or an epoch change is repeated when it resumes inside a
-  page.
+  page;
+- `watch-stop-keeps-page`: a follower stopped on a page's last item keeps
+  its cursor at the page's start.
 """
 import argparse
 import sys
@@ -68,6 +70,11 @@ MUTANTS = {
           '            continue;\n        }\n        let keep_going')],
         ['test', '--quiet', '-p', 'pio-client', '--lib', 'watch::'],
         ['a_follower_that_stops_inside_a_page_repeats_nothing_on_resuming', 'FAILED']),
+    'watch-stop-keeps-page': (
+        [('crates/pio-client/src/watch.rs', 'if stop && index + 1 < items.len() {',
+          'if stop {')],
+        ['test', '--quiet', '-p', 'pio-client', '--lib', 'watch::'],
+        ['a_stop_on_the_last_item_moves_past_the_page', 'FAILED']),
 }
 
 
