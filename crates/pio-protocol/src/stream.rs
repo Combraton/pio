@@ -144,6 +144,15 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
     // refused on its own so it cannot sit unused in a shipped configuration.
     let model = codex["thread"]["model"].as_str();
     let exception = codex["test_only_model_exception"].as_str();
+    // D10: the exception is compiled out of release builds. A real caller
+    // never sets either field, so that path is untouched; a configuration
+    // that tries to use the exception in a release build is refused with one
+    // clear reason rather than a check it could pass by guessing the token.
+    anyhow::ensure!(
+        cfg!(feature = "test-exceptions") || (model.is_none() && exception.is_none()),
+        "codex.thread.model and test_only_model_exception are test-only; this PIO build was \
+         compiled without the test-exceptions feature, so both are refused outright (D10)"
+    );
     anyhow::ensure!(
         model.is_none_or(|m| !m.is_empty()),
         "codex.thread.model must be a non-empty model name"
@@ -165,7 +174,12 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
     // decision, or the rehearsal's own token beside a labeled fake.
     if let Some(decision) = codex.get("features_off_decision") {
         let decision = decision.as_str().unwrap_or_default();
-        let rehearsal = codex["labeled_fake"] == true && decision == FEATURES_OFF_REHEARSAL;
+        // D10: the rehearsal token is test-only (it stands in for a real
+        // owner decision beside a labeled fake) and is compiled out of
+        // release builds; the owner's own dated decisions above are not.
+        let rehearsal = cfg!(feature = "test-exceptions")
+            && codex["labeled_fake"] == true
+            && decision == FEATURES_OFF_REHEARSAL;
         anyhow::ensure!(
             rehearsal || FEATURES_OFF_DECISIONS.contains(&decision),
             "codex.features_off_decision is not a recorded owner decision: {decision:?}"
@@ -177,7 +191,10 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
     // echoed: they are the owner's.
     if let Some(decision) = codex.get("plugins_off_decision") {
         let decision = decision.as_str().unwrap_or_default();
-        let rehearsal = codex["labeled_fake"] == true && decision == PLUGINS_OFF_REHEARSAL;
+        // D10: same as the features-off rehearsal token above.
+        let rehearsal = cfg!(feature = "test-exceptions")
+            && codex["labeled_fake"] == true
+            && decision == PLUGINS_OFF_REHEARSAL;
         anyhow::ensure!(
             rehearsal || PLUGINS_OFF_DECISIONS.contains(&decision),
             "codex.plugins_off_decision is not a recorded owner decision: {decision:?}"
@@ -736,6 +753,32 @@ mod tests {
             codex_host_config(dir.path(), &codex_config(dir.path(), plan, Value::Null)).unwrap();
         assert_eq!(plain["thread"]["model"], Value::Null);
     }
+
+    /// D10: the exception is compiled out of release builds. Built normally
+    /// (dev, test, CI and the live runners: `test-exceptions` on, the
+    /// default) a model beside the dated exception is admitted, exactly as
+    /// the test above proves; a real caller's plain configuration (no
+    /// model, no exception) is admitted either way. Built
+    /// `--no-default-features` — the release configuration — the same
+    /// exception configuration is refused with one clear reason.
+    #[test]
+    fn a_release_build_refuses_the_model_exception_outright() {
+        let dir = tempfile::tempdir().unwrap();
+        let plan = json!({"sandbox":"workspace-write","approvalPolicy":"on-request"});
+        let with_model = json!({"sandbox":"workspace-write","approvalPolicy":"on-request","model":"gpt-5.6-terra"});
+        let exception_config = codex_config(dir.path(), with_model, json!(MODEL_EXCEPTION));
+        let plain_config = codex_config(dir.path(), plan, Value::Null);
+        if cfg!(feature = "test-exceptions") {
+            assert!(codex_host_config(dir.path(), &exception_config).is_ok());
+        } else {
+            let error = codex_host_config(dir.path(), &exception_config).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("compiled without the test-exceptions feature"),
+                "{error:#}"
+            );
+        }
+        assert!(codex_host_config(dir.path(), &plain_config).is_ok());
+    }
     /// Codex's unmetered features off per launch (review of L3, rounds 3 and
     /// 4): only a recorded owner decision, the one of 2026-09-26, or the
     /// rehearsal's own token beside a labeled fake.
@@ -910,5 +953,26 @@ mod tests {
             assert_eq!(reader.read_line(&mut line).await.unwrap(), 0);
             task.await.unwrap().unwrap();
         }
+    }
+
+    /// D13: PIO enforces no budget of its own (every stop so far has been a
+    /// live runner's, external to the product); a real service must never
+    /// let a launch configuration claim otherwise. `enforced_bounds`, and
+    /// the other conformance-only controls beside it, are refused before
+    /// any of the three real services (`serve-codex`, `serve-claude`,
+    /// `serve-opencode`) ever reaches the shared engine that accepts them
+    /// structurally for the conformance participant.
+    #[test]
+    fn no_adapter_service_may_declare_enforced_bounds() {
+        for field in ["enforcement", "enforced_bounds", "echo_proves_delivery"] {
+            let protocol = json!({"executor":{"adapter":{field:["codex.tokens.total"]}}});
+            let error = refuse_conformance_only_controls(&protocol).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("conformance-only"),
+                "{field}: {error:#}"
+            );
+        }
+        // A configuration naming none of them is unaffected.
+        assert!(refuse_conformance_only_controls(&json!({"executor":{"adapter":{}}})).is_ok());
     }
 }

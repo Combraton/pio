@@ -341,7 +341,27 @@ pub fn qualify(
     if status != 0 || version.is_none() {
         refusals.push(json!({"reason":"version_unavailable","exit":status}));
     } else if version.as_deref() != Some(PINNED_VERSION) {
-        refusals.push(json!({"reason":"unsupported_version","observed":version}));
+        // D12: npm self-updates past PIO's pin (2.0.1 to 2.0.11 already
+        // happened once). The refusal names the pin, what is actually
+        // installed, and the zero-token commands that re-qualify a new
+        // version, so the reader never has to go looking for them.
+        refusals.push(json!({
+            "reason":"unsupported_version",
+            "observed":version,
+            "pinned":PINNED_VERSION,
+            "detail":format!(
+                "PIO pins OpenCode to an exact, re-qualified version ({PINNED_VERSION}); the \
+                 installed executable reports {}. This is a known pin (docs/VERSION-POLICY.md), \
+                 not a bug: npm tracks latest and PIO trusts only a version it has measured. To \
+                 re-qualify at zero model tokens: `pio opencode surface-identity --executable \
+                 <path> --work <scratch>` against the installed executable, compare it with the \
+                 committed adapters/opencode/<version>/surface-identity.json, then `pio opencode \
+                 qualify --executable <path> --work <scratch>` (add `--expected <file>` to diff \
+                 against the previous identity first); update PINNED_VERSION and the committed \
+                 identity from the result, then re-run the offline OpenCode matrix.",
+                version.as_deref().unwrap_or("(unparseable)")
+            ),
+        }));
     }
     if !refusals.is_empty() {
         return Ok(json!({
@@ -470,49 +490,61 @@ pub fn service_admission(work: &Path, opencode: &Value) -> Result<Value> {
     }
 
     // Every run passes an explicit model, because the configured default is a
-    // third-party gateway the owner has excluded from PIO entirely.
+    // third-party gateway the owner has excluded from PIO entirely — and the
+    // only way PIO ever supplies one is the dated, test-only exception below.
+    // D10: that exception is compiled out of release builds, so OpenCode
+    // admission has no path to succeed there at all; it is test scope only,
+    // and a release build says so with one clear reason rather than falling
+    // through to `model_required` as if a real caller could still fix it.
     let model = opencode["model"].as_str();
     let exception = opencode["test_only_model_exception"].as_str();
-    match model {
-        None => refusals.push(refusal("model_required", json!(MODEL_EXCEPTION))),
-        Some("") => refusals.push(refusal("model_must_be_a_non_empty_name", Value::Null)),
-        Some(model) => {
-            if exception != Some(MODEL_EXCEPTION) {
-                refusals.push(refusal(
-                    "model_requires_the_dated_test_only_exception",
-                    json!({"model":model,"required":MODEL_EXCEPTION}),
-                ));
-            }
-            // Owner decision, 2026-09-20: no PIO run uses this provider for
-            // any purpose. It is excluded here, not merely unevaluated, and
-            // it is named separately from the allowlist below so the record
-            // says *why* rather than only that it was not allowed.
-            if model.starts_with("juspay-grid/") {
-                refusals.push(refusal("provider_excluded_by_the_owner", json!(model)));
-            }
-            // Owner decision, 2026-09-21: the exception covers the MiniMax
-            // provider, so any model on the owner's plan may be used. Nothing
-            // else may — including `opencode/` free models, which is exactly
-            // what a silently downgraded session reports.
-            else if !model.starts_with(&format!("{ALLOWED_PROVIDER}/")) {
-                refusals.push(refusal(
-                    "provider_not_covered_by_the_exception",
-                    json!({"model":model,"allowed_provider":ALLOWED_PROVIDER}),
-                ));
-            }
-            // Owner decision, 2026-09-25 (moved from scripts/lead_run.py's
-            // L3 rehearsal into admission itself, D18, so every OpenCode
-            // run gets it, not only one driven through that script): a
-            // helper's `small_model`, or an `agent`/`mode` entry's own
-            // `model`, on a provider other than the session's spends there
-            // with nothing in the receipt to show it. Refused outright.
-            if let Some(dir) = opencode["config_dir"].as_str() {
-                match helper_provider_refusals(Path::new(dir), model) {
-                    Ok(found) => refusals.extend(found),
-                    Err(error) => refusals.push(refusal(
-                        "opencode_config_unreadable",
-                        json!(error.to_string()),
-                    )),
+    if !cfg!(feature = "test-exceptions") {
+        refusals.push(refusal(
+            "test_only_model_exception_not_compiled_in",
+            json!({"reason":"OpenCode admission requires the dated model exception on every run (the owner's default model is a forbidden gateway); this PIO build was compiled without the test-exceptions feature, so OpenCode is out of scope for release builds (D10)"}),
+        ));
+    } else {
+        match model {
+            None => refusals.push(refusal("model_required", json!(MODEL_EXCEPTION))),
+            Some("") => refusals.push(refusal("model_must_be_a_non_empty_name", Value::Null)),
+            Some(model) => {
+                if exception != Some(MODEL_EXCEPTION) {
+                    refusals.push(refusal(
+                        "model_requires_the_dated_test_only_exception",
+                        json!({"model":model,"required":MODEL_EXCEPTION}),
+                    ));
+                }
+                // Owner decision, 2026-09-20: no PIO run uses this provider for
+                // any purpose. It is excluded here, not merely unevaluated, and
+                // it is named separately from the allowlist below so the record
+                // says *why* rather than only that it was not allowed.
+                if model.starts_with("juspay-grid/") {
+                    refusals.push(refusal("provider_excluded_by_the_owner", json!(model)));
+                }
+                // Owner decision, 2026-09-21: the exception covers the MiniMax
+                // provider, so any model on the owner's plan may be used. Nothing
+                // else may — including `opencode/` free models, which is exactly
+                // what a silently downgraded session reports.
+                else if !model.starts_with(&format!("{ALLOWED_PROVIDER}/")) {
+                    refusals.push(refusal(
+                        "provider_not_covered_by_the_exception",
+                        json!({"model":model,"allowed_provider":ALLOWED_PROVIDER}),
+                    ));
+                }
+                // Owner decision, 2026-09-25 (moved from scripts/lead_run.py's
+                // L3 rehearsal into admission itself, D18, so every OpenCode
+                // run gets it, not only one driven through that script): a
+                // helper's `small_model`, or an `agent`/`mode` entry's own
+                // `model`, on a provider other than the session's spends there
+                // with nothing in the receipt to show it. Refused outright.
+                if let Some(dir) = opencode["config_dir"].as_str() {
+                    match helper_provider_refusals(Path::new(dir), model) {
+                        Ok(found) => refusals.extend(found),
+                        Err(error) => refusals.push(refusal(
+                            "opencode_config_unreadable",
+                            json!(error.to_string()),
+                        )),
+                    }
                 }
             }
         }

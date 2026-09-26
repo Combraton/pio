@@ -5,6 +5,15 @@ edition.workspace = true
 rust-version.workspace = true
 publish = false
 
+[features]
+# D10: the owner's dated, test-only model exception (OpenCode admission has
+# no other path to a model, so this is what makes OpenCode buildable at all).
+# On by default for dev, test, CI and the live runners; the release/packaged
+# build turns it off with `--no-default-features`, and OpenCode admission
+# then refuses every configuration with one clear reason.
+default = ["test-exceptions"]
+test-exceptions = []
+
 [dependencies]
 anyhow.workspace = true
 serde_json.workspace = true

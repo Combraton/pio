@@ -160,10 +160,17 @@ fn qualify_refuses_unsupported_version_without_running_codex_arguments() {
         qualify(&codex, &expected, path_var().as_deref(), &work).unwrap()
     });
     assert_eq!(record["qualified"], false);
-    assert_eq!(
-        record["refusals"],
-        json!([{"reason":"unsupported_version","observed":"0.147.0"}])
-    );
+    assert_eq!(record["refusals"][0]["reason"], "unsupported_version");
+    assert_eq!(record["refusals"][0]["observed"], "0.147.0");
+    // D12: the refusal names the pin, the installed version and how to
+    // re-qualify, so a reader is never left to go looking for them.
+    assert_eq!(record["refusals"][0]["pinned"], PINNED_VERSION);
+    let detail = record["refusals"][0]["detail"].as_str().unwrap();
+    assert!(detail.contains(PINNED_VERSION), "{detail}");
+    assert!(detail.contains("0.147.0"), "{detail}");
+    assert!(detail.contains("docs/VERSION-POLICY.md"), "{detail}");
+    assert!(detail.contains("pio codex qualify"), "{detail}");
+    assert_eq!(record["refusals"].as_array().unwrap().len(), 1);
     assert_eq!(record["schema"], json!({"skipped":"version_not_qualified"}));
     assert!(!work.join("schema").exists());
     // Only the version probe ran.

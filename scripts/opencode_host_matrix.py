@@ -704,9 +704,16 @@ def run_case(out, name):
         # This harness returns no acknowledgment identifier, so no proof class
         # is claimed. ADR 005 section 7.
         assert 'proof_class' not in delivery or delivery['proof_class'] is None, delivery
-        assert view['usage']['liability'] == 'resolved', view['usage']
+        # D4: `session/prompt`'s usage prices the last model step, not the
+        # turn (measured on L1b: an 11,514-token last step against a turn the
+        # store's steps put at 96,495). PIO cannot see the rest of a
+        # multi-step turn from the protocol, so the figure is kept but named
+        # for what it covers, and liability stays open rather than resolved.
+        assert view['usage']['liability'] == 'unresolved', view['usage']
+        assert [o['basis'] for o in view['usage']['observations']] == \
+            ['estimated'], view['usage']
         assert [o['measure'] for o in view['usage']['observations']] == \
-            ['opencode.tokens.total'], view['usage']
+            ['opencode.tokens.total.last_step_only'], view['usage']
         # The measure itself, on the host's own record. Found where the
         # harness put it — `usage`, not `_meta.usage` — and summed from
         # whatever counters are there rather than from a list written in

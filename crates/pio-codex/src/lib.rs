@@ -324,7 +324,28 @@ pub fn qualify(
     if status != 0 || version.is_none() {
         refusals.push(json!({"reason":"version_unavailable","exit":status}));
     } else if version.as_deref() != Some(PINNED_VERSION) {
-        refusals.push(json!({"reason":"unsupported_version","observed":version}));
+        // D12: Codex updates itself past PIO's pin (0.155.1 to 0.157.0
+        // already happened once, docs/work/m2/codex-qualification/README.md,
+        // "Re-qualification at 0.157.0"). The refusal names the pin, what is
+        // actually installed, and the zero-token commands that re-qualify a
+        // new version, so the reader never has to go looking for them.
+        refusals.push(json!({
+            "reason":"unsupported_version",
+            "observed":version,
+            "pinned":PINNED_VERSION,
+            "detail":format!(
+                "PIO pins Codex to an exact, re-qualified version ({PINNED_VERSION}); the \
+                 installed executable reports {}. This is a known pin (docs/VERSION-POLICY.md), \
+                 not a bug: Codex self-updates and PIO trusts only a version it has measured. \
+                 To re-qualify at zero model tokens: `pio codex qualify --executable <path> \
+                 --work <scratch>` against the installed executable (add `--expected <file>` to \
+                 diff against the previous identity first); if it refuses, regenerate the schema \
+                 with `pio codex schema-identity <dir>`, update PINNED_VERSION/PINNED_TAG/\
+                 PINNED_SOURCE and the committed adapters/codex/<version>/ identity from the \
+                 result, then re-run the offline Codex matrix and the static probes.",
+                version.as_deref().unwrap_or("(unparseable)")
+            ),
+        }));
     }
     if native_version != version {
         refusals.push(

@@ -12,6 +12,11 @@ serde_json.workspace = true
 libc.workspace = true
 pio-core = { path = "../pio-core" }
 pio-codex = { path = "../pio-codex" }
-pio-claude = { path = "../pio-claude" }
-pio-opencode = { path = "../pio-opencode" }
+# D10: pio-host uses none of pio-claude's/pio-opencode's test-only model
+# exception, so it never asks for that feature. `default-features = false`
+# here so this edge cannot force it on for a release build that disables it
+# elsewhere in the graph (Cargo unifies a dependency's enabled features
+# across every edge that reaches it in one build).
+pio-claude = { path = "../pio-claude", default-features = false }
+pio-opencode = { path = "../pio-opencode", default-features = false }
 uuid.workspace = true

@@ -5,6 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[features]
+# D10: the owner's dated, test-only model exception for M3 fixture runs. On
+# by default for dev, test, CI and the live runners; the release/packaged
+# build turns it off with `--no-default-features`, and Claude admission then
+# refuses a configured model with one clear reason instead of checking it.
+default = ["test-exceptions"]
+test-exceptions = []
+
 [dependencies]
 anyhow.workspace = true
 serde_json.workspace = true
