@@ -913,6 +913,57 @@ fn codex_widening_approval_decisions_are_invalid_and_never_reach_the_host() {
     );
 }
 
+/// D1: `execution.discovery.list` must report the running service's own
+/// harness, never Codex's by default, for every native adapter.
+#[test]
+fn discovery_reports_each_adapter_s_own_harness_not_codex_s() {
+    for (adapter, expected_id, expected_fake_harness) in [
+        (
+            "claude",
+            "claude-selected",
+            "PIO labeled fake Claude Code CLI (not Claude Code)",
+        ),
+        (
+            "opencode",
+            "opencode-selected",
+            "PIO labeled fake OpenCode ACP agent (not OpenCode)",
+        ),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let store = root.path().join("store");
+        std::fs::create_dir(&store).unwrap();
+        std::fs::set_permissions(&store, std::os::unix::fs::PermissionsExt::from_mode(0o700))
+            .unwrap();
+        let host = json!({"adapter":adapter,"labeled_fake":true,
+            "executable":"/bin/false","qualification_binding":null});
+        let mut cfg = config();
+        cfg["executor"] = json!({"host_id":format!("{adapter}-host")});
+        let p = Provider::with_host(&store, cfg, Some(host)).unwrap();
+        let discovery = p.native_discovery();
+        let installations = discovery["installations"].as_array().unwrap();
+        assert_eq!(installations.len(), 1, "{discovery}");
+        let installation = &installations[0];
+        assert_eq!(
+            installation["installation_id"],
+            json!(expected_id),
+            "{discovery}"
+        );
+        assert_eq!(
+            installation["harness"],
+            json!(expected_fake_harness),
+            "{discovery}"
+        );
+        assert_ne!(
+            installation["harness"].as_str().unwrap(),
+            "PIO labeled fake Codex app-server (not Codex)",
+            "{adapter} reported the Codex record"
+        );
+        // Never authenticated or usable, on a launch that never happened.
+        assert_eq!(installation["authentication"], "unknown");
+        assert_eq!(installation["usable"], false);
+    }
+}
+
 /// L3 (owner decision, 2026-09-25): on Codex a lead-tool spec may name the
 /// lead server's own tools to pre-allow, and nothing else is widened. The
 /// shape and credential refusals are OpenCode's; `pre_allowed_tools` must
