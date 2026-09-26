@@ -845,6 +845,10 @@ def run_case(out, name):
             assert requested['network_approval'] is True, requested
             assert (requested['classification']['placement'], requested['classification']['target_label']) \
                 == ('not_classifiable', None), requested
+            # 0.157.0's network ask names no command and no cwd (review of L3,
+            # round 4, R4-HC-5): the relay's exact-command check refuses it by
+            # itself, whatever the network flag says.
+            assert requested['command'] is None and requested['cwd_digest'] is None, requested
             with case.client() as c:
                 stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
                                                       'kinds': ['execution.execution']})['result']
@@ -953,6 +957,14 @@ def run_case(out, name):
                 [('before_turn', w) for w in waits], declined
             carried = carried_declines(case)
             assert [d['wait'] for d in carried] == waits, carried
+            # What the fake sent: Codex's shape in the thread/start window,
+            # the new thread's own id; before a thread exists, a defensive
+            # shape with none (review of L3, round 4, R4-HC-5).
+            thread = events_of(case, 'thread_started')[0]['thread_id']
+            sent = [(m['wait'], m['thread_id']) for m in case.markers_records()
+                    if m['kind'] == 'early_request_sent']
+            assert sent == [('initialize', None), ('account/read', None),
+                            ('thread/start', thread)], sent
             wire = answered_once(case)
             assert sorted(m['id'] for m in wire) == sorted(
                 f"fake-early-{w.replace('/', '-')}" for w in waits), wire

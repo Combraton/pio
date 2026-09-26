@@ -114,7 +114,20 @@ fn sandbox_projection(mode: &str) -> Value {
 /// R3-HC-3 and C3-2). With `exit_after_early`, its id: the fake then leaves
 /// `wait` unanswered and exits once the client has answered the request, so
 /// the client's wait fails after it has declined.
-fn early_request(scenario: &Value, wait: &str) -> Result<Option<String>> {
+///
+/// Only the `thread/start` window is a shape Codex 0.157.0 sends: an MCP
+/// server's elicitation comes from a thread, and carries that thread's id
+/// (`app-server/src/bespoke_event_handling.rs:912-917`), which is `thread`
+/// here. During `initialize` and `account/read` no thread exists yet, so a
+/// request there is **defensive**, a shape Codex does not send, played so the
+/// host is shown to decline it anyway; its `threadId` is null for want of a
+/// thread (review of L3, round 4, R4-HC-5).
+fn early_request(
+    scenario: &Value,
+    wait: &str,
+    thread: Option<&str>,
+    markers: &Option<PathBuf>,
+) -> Result<Option<String>> {
     let named = scenario["elicit_during"]
         .as_array()
         .is_some_and(|waits| waits.iter().any(|w| w == wait));
@@ -123,10 +136,14 @@ fn early_request(scenario: &Value, wait: &str) -> Result<Option<String>> {
     }
     let id = format!("fake-early-{}", wait.replace('/', "-"));
     emit(&json!({"method":"mcpServer/elicitation/request","id":id,
-                 "params":{"threadId":null,"turnId":null,"serverName":"someone","mode":"url",
+                 "params":{"threadId":thread,"turnId":null,"serverName":"someone","mode":"url",
                            "elicitationId":format!("fake-{wait}"),
                            "url":"https://example.invalid/early",
                            "message":"Sign in before we start"}}))?;
+    marker(
+        markers,
+        json!({"source":SOURCE,"kind":"early_request_sent","wait":wait,"thread_id":thread}),
+    )?;
     Ok((scenario["exit_after_early"] == true).then_some(id))
 }
 
@@ -327,7 +344,8 @@ pub fn run() -> Result<()> {
                 match method.as_str() {
                     "initialize" => {
                         initialized = true;
-                        if let Some(early) = early_request(&scenario, "initialize")? {
+                        if let Some(early) = early_request(&scenario, "initialize", None, &markers)?
+                        {
                             leave_after = Some(early);
                             continue;
                         }
@@ -337,7 +355,9 @@ pub fn run() -> Result<()> {
                     }
                     "initialized" => {}
                     "account/read" => {
-                        if let Some(early) = early_request(&scenario, "account/read")? {
+                        if let Some(early) =
+                            early_request(&scenario, "account/read", None, &markers)?
+                        {
                             leave_after = Some(early);
                             continue;
                         }
@@ -460,7 +480,9 @@ pub fn run() -> Result<()> {
                                 .context("thread/start result")?
                                 .remove("approvalsReviewer");
                         }
-                        if let Some(early) = early_request(&scenario, "thread/start")? {
+                        if let Some(early) =
+                            early_request(&scenario, "thread/start", Some(&thread_id), &markers)?
+                        {
                             leave_after = Some(early);
                             continue;
                         }
@@ -618,6 +640,15 @@ pub fn run() -> Result<()> {
                                 if scenario["approval_network"] == true {
                                     params["networkApprovalContext"] =
                                         json!({"host":"example.invalid","protocol":"https"});
+                                    // 0.157.0's network presentation sends no
+                                    // command, cwd or command actions
+                                    // (`app-server/src/bespoke_event_handling.rs:
+                                    // 741-745`; review of L3, round 4, R4-HC-5).
+                                    if let Some(fields) = params.as_object_mut() {
+                                        for field in ["command", "cwd", "commandActions"] {
+                                            fields.remove(field);
+                                        }
+                                    }
                                 }
                                 if scenario["approval_no_cwd"] == true
                                     && let Some(fields) = params.as_object_mut()
