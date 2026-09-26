@@ -344,8 +344,9 @@ PLANS = {
         harness='codex',
         approval='Owner approval, 2026-09-24 — L3; owner decisions of 2026-09-25 (issue '
                  '#12); owner decision of 2026-09-26, "More headroom": lead 150,000, child '
-                 '60,000, in flight 30,000, sequence cap 565,000 and stop 452,000, Codex cap '
-                 '1,090,000 and stop 872,000',
+                 '60,000, in flight 30,000; owner decision of 2026-09-26 (Q8, "Raise for '
+                 'attempt 2"): sequence cap 610,000 and stop 488,000, Codex cap 1,135,000 and '
+                 'stop 908,000, limits per run unchanged',
         # Owner decision, 2026-09-26 ("Per-launch override"): L3's Codex
         # threads are launched with Codex's five unmetered features off, per
         # launch, under this dated decision (pio-protocol
@@ -377,11 +378,15 @@ for _plan in PLANS.values():
 #
 # Codex (L3): the owner's sizing. Owner decision, 2026-09-26 ("More
 # headroom", answering Q5 on the 405,000 worst case): lead 150,000, child
-# 60,000, a step in flight 30,000, so the worst case is 450,000; the L3
-# sequence (M4-lead-codex) cap 565,000 with its stop at 452,000; the Codex
-# cap raised from 1,000,000 to 1,090,000 and its stop from 800,000 to
-# 872,000 (codex_live_run.CAP, STOP_AT). It replaces 2026-09-24's lead
-# 125,000, child 50,000, sequence cap 400,000 and stop 320,000. Codex's
+# 60,000, a step in flight 30,000, so the worst case is 450,000. It replaced
+# 2026-09-24's lead 125,000, child 50,000, sequence cap 400,000 and stop
+# 320,000. Owner decision, 2026-09-26 (Q8, "Raise for attempt 2"), after
+# L3's first live attempt charged 36,126: "L3 sequence cap 610,000, stop
+# 488,000 (36,126 + 450,000 = 486,126). Codex cap 1,135,000, stop 908,000
+# (457,576 + 450,000 = 907,576). Limits per run unchanged." So the L3
+# sequence (M4-lead-codex) cap is 610,000 with its stop at 488,000 (it was
+# 565,000 and 452,000), and the Codex cap 1,135,000 with its stop at
+# 908,000 (codex_live_run.CAP, STOP_AT; it was 1,090,000 and 872,000). Codex's
 # reported total covers every step of a turn (review 48, from M2's host
 # events), so it is what a run is charged, and it arrives after every step,
 # so the runner can stop a run by it. A step on this harness and model was
@@ -391,7 +396,7 @@ for _plan in PLANS.values():
 # in two steps.
 CODEX = dict(
     model='gpt-5.6-terra', model_provider='openai', sequence='M4-lead-codex',
-    sequence_cap=565_000, sequence_stop=452_000, lead_ceiling=150_000,
+    sequence_cap=610_000, sequence_stop=488_000, lead_ceiling=150_000,
     child_ceiling=60_000, in_flight=30_000, ledger='Codex ledger',
     live=codex_live_run,
     # Where the rehearsal's Codex comes from, in the receipt (owner decision
@@ -2608,20 +2613,7 @@ def run(args):
         subprocess.run(['cargo', 'build', '--locked', '--workspace'], cwd=ROOT, check=True)
         record['preflight'] = opencode_live_run.preflight(False, root=ROOT, binary=BINARY)
         book_path = live.ledger_path()
-        book = read_ledger(book_path)
-        for key in names.values():
-            if key in book['runs']:
-                raise SystemExit(f'the ledger already holds {key}; those tokens were '
-                                 'spent. Run again under --attempt instead.')
-        spent = sequence_charged(book)
-        # The stop is checked against what this attempt could spend at worst,
-        # not only against what has been spent: nothing checks it mid-run.
-        if spent + WORST_CASE > SEQUENCE_STOP:
-            raise SystemExit(f'stop: the lead sequence has charged {spent}; one more '
-                             f'attempt could spend {WORST_CASE}, past the '
-                             f'{SEQUENCE_STOP} stop')
-        if live.cumulative(book) + WORST_CASE >= live.STOP_AT:
-            raise SystemExit(f"stop: the {PLAN['harness']} cap would reach its stop")
+        record['ledger_before'] = live_precheck(read_ledger(book_path), names)
         root = live_tree(LEAD)
     args.root = root
     try:
@@ -4441,6 +4433,72 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
              live_only=True)
 
 
+def live_precheck(book, names, sequence_stop=None, harness_stop=None):
+    """The live run's ledger checks, before any tree exists: no name the
+    ledger already holds, and room under both stops for what this attempt
+    could spend at worst (nothing checks them mid-run). What was read, as
+    numbers."""
+    sequence_stop = SEQUENCE_STOP if sequence_stop is None else sequence_stop
+    harness_stop = live.STOP_AT if harness_stop is None else harness_stop
+    for key in names.values():
+        if key in book['runs']:
+            raise SystemExit(f'the ledger already holds {key}; those tokens were '
+                             'spent. Run again under --attempt instead.')
+    spent = sequence_charged(book)
+    # The stop is checked against what this attempt could spend at worst,
+    # not only against what has been spent: nothing checks it mid-run.
+    if spent + WORST_CASE > sequence_stop:
+        raise SystemExit(f'stop: the lead sequence has charged {spent}; one more '
+                         f'attempt could spend {WORST_CASE}, past the '
+                         f'{sequence_stop} stop')
+    cumulative = live.cumulative(book)
+    if cumulative + WORST_CASE >= harness_stop:
+        raise SystemExit(f"stop: the {PLAN['harness']} cap would reach its stop: "
+                         f'{cumulative} charged and {WORST_CASE} at worst reach {harness_stop}')
+    return dict(sequence_charged=spent, harness_charged=cumulative, worst_case=WORST_CASE,
+                sequence_stop=sequence_stop, harness_stop=harness_stop)
+
+
+def sizing_selftest():
+    """L3's second attempt against the owner's sizing of 2026-09-26 (Q8), on
+    a made-up ledger holding what the Codex ledger held after attempt 1:
+    the L3 sequence at 36,126 and Codex at 457,576. Attempt 2 fits; under
+    the sizing before Q8 it did not (the negative control); and once
+    attempt 2 has charged more than 1,874 the sequence stop refuses a
+    third, and more than 423 the Codex stop does."""
+    select_plan('L3')
+    other = 457_576 - 36_126
+    book = {'runs': {'M2-runs': dict(tokens=other, charged=other),
+                     'L3': dict(sequence=SEQUENCE, charged=36_126, tokens=36_126)}}
+    second = {LEAD: f'L3-attempt-2/{LEAD}',
+              **{f'{LEAD}.{c}': f'L3-attempt-2/{LEAD}.{c}' for c in CHILDREN}}
+    third = {k: v.replace('attempt-2', 'attempt-3') for k, v in second.items()}
+    seen = live_precheck(book, second)
+    assert (seen['sequence_charged'], seen['harness_charged']) == (36_126, 457_576), seen
+    assert (SEQUENCE_CAP, SEQUENCE_STOP, live.CAP, live.STOP_AT) == \
+        (610_000, 488_000, 1_135_000, 908_000), 'the owner sized L3 attempt 2 otherwise'
+
+    def refused(check):
+        try:
+            check()
+        except SystemExit as stop:
+            return str(stop)
+        raise AssertionError('not refused')
+    before_q8 = refused(lambda: live_precheck(book, second, 452_000, 872_000))
+    assert 'past the 452000 stop' in before_q8, before_q8
+    for charged, why in ((1_875, 'past the 488000 stop'), (1_874, 'reach 908000'),
+                         (36_126, 'past the 488000 stop')):
+        after = {'runs': dict(book['runs'], **{second[LEAD]: dict(
+            sequence=SEQUENCE, charged=charged, tokens=charged)})}
+        said = refused(lambda: live_precheck(after, third))
+        assert why in said, (charged, said)
+    after = {'runs': dict(book['runs'], **{second[LEAD]: dict(sequence=SEQUENCE, charged=423,
+                                                                tokens=423)})}
+    live_precheck(after, third)
+    print('sizing selftest: attempt 2 fits under 488,000 and 908,000; the sizing before Q8 '
+          'refused it; a third is refused once attempt 2 has charged more than 423')
+
+
 def names_of(record):
     """The ledger name of the lead in a receipt: its attempt's, if any."""
     return f"{record['attempt']}/{LEAD}" if record.get('attempt') else LEAD
@@ -4746,10 +4804,14 @@ def main():
                              'so a relay can answer them')
     parser.add_argument('--charge-selftest', action='store_true',
                         help="check the Codex charge's corners on made-up runs, and exit")
+    parser.add_argument('--sizing-selftest', action='store_true',
+                        help="check L3's live ledger checks against the owner's sizing, and exit")
     parser.add_argument('--inner', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.charge_selftest:
         return charge_selftest()
+    if args.sizing_selftest:
+        return sizing_selftest()
     select_plan(args.plan)
     if args.mutant and args.plan not in PLAN_MUTANTS.get(args.mutant, {args.plan}):
         raise SystemExit(f'mutant {args.mutant} belongs to plans '

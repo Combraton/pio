@@ -474,9 +474,12 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   own shell, another MCP server, a refused approval) is back, with the next
   step begun, before anything can see it, when the lead may be just under
   150,000 (review of L3, round 2, SB-1; `lead-shell-past-hold`). The worst
-  case is **450,000** (210,000 + 2 x 120,000), within the L3 sequence's
-  452,000 stop (cap 565,000) and, with Codex's 421,450 used, under the
-  872,000 Codex stop (cap 1,090,000): 871,450. Under the limits of
+  case is **450,000** (210,000 + 2 x 120,000). For the second attempt it is
+  within the L3 sequence's 488,000 stop (cap 610,000; owner, 2026-09-26, Q8)
+  after attempt 1's 36,126 (486,126), and, with Codex's 457,576 used, under
+  the 908,000 Codex stop (cap 1,135,000): 907,576 (`--sizing-selftest`).
+  Attempt 1 was checked against 452,000 (cap 565,000) and 872,000 (cap
+  1,090,000), with Codex's 421,450 used: 871,450. Under the limits of
   2026-09-24 (lead 125,000, child 50,000, sequence cap 400,000 and stop
   320,000, Codex cap 1,000,000 and stop 800,000) it was 405,000, past every
   one of them, and the live runner refused L3 until the owner decided the

@@ -292,6 +292,7 @@ jobs:
             || { cat target/l3-relay-server-unchecked.log; exit 1; }
           python3 scripts/lead_tool.py --selftest
           PYTHONPATH=scripts python3 scripts/lead_run.py --charge-selftest
+          PYTHONPATH=scripts python3 scripts/lead_run.py --sizing-selftest
           mkdir -p target/l3-relay
           PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --relay \
             --out target/l3-relay/out > target/l3-relay/runner.log 2>&1 &
