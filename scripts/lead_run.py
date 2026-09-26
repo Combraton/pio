@@ -149,8 +149,9 @@ does with a permission prompt.
 - `asked-silent` (L3) is `usage-suppressed` with both children asking a
   command approval first, which the desk answers: `alpha` must still be
   stopped for its silence;
-- `lead-heavy` (L3) has each of the lead's steps cost a whole step in flight
-  (30,000) and the lead read once more: its tool must withhold that result,
+- `lead-heavy` (L3) has each of the lead's steps cost nearly a whole step in
+  flight (29,000, so its total passes the hold before it reaches the
+  ceiling) and the lead read on: its tool must withhold a result,
   the runner stop the lead, and the lead end within its share;
 - `lead-tool-error-past-hold` and `lead-shell-past-hold` (L3) have the lead,
   past its hold, get a lead-tool error (an argument `read_run` does not take)
@@ -310,16 +311,18 @@ PLANS = {
         # alpha works for thirty seconds, so a read of it waits; beta reads a
         # placeholder `.env` file, so OpenCode asks and the desk relays.
         waits='alpha', asks='beta'),
-    # Owner approval, 2026-09-24 (L3 on Codex, sequence cap 400,000, stop
-    # 320,000), and the decisions of 2026-09-25: `gpt-5.6-terra`; each child
+    # Owner approval, 2026-09-24 (L3 on Codex), the decisions of 2026-09-25,
+    # and the sizing of 2026-09-26 (CODEX, below): `gpt-5.6-terra`; each child
     # runs one command, `sleep N && wc -l`; the lead's own two tools are
     # pre-allowed per launch; Codex re-pinned to 0.157.0. `alpha` sleeps long
     # enough to be steered while it runs, which is L3's claim: a steer under
     # the lead's grant, delivered to a running Codex turn.
     'L3': dict(
         harness='codex',
-        approval='Owner approval, 2026-09-24 — L3, sequence cap 400,000 and stop '
-                 '320,000; owner decisions of 2026-09-25 (issue #12)',
+        approval='Owner approval, 2026-09-24 — L3; owner decisions of 2026-09-25 (issue '
+                 '#12); owner decision of 2026-09-26, "More headroom": lead 150,000, child '
+                 '60,000, in flight 30,000, sequence cap 565,000 and stop 452,000, Codex cap '
+                 '1,090,000 and stop 872,000',
         files={'alpha.md': 7, 'beta.md': 4},
         briefs={'alpha.md': 'Run the shell command `sleep 30 && wc -l alpha.md`. Then '
                             'report the number of lines in alpha.md. Answer with the '
@@ -335,7 +338,13 @@ for _plan in PLANS.values():
 
 # --- What differs between the two harnesses a lead runs on, in one place.
 #
-# Codex (L3): the owner's sizing of 2026-09-24 and 2026-09-25. Codex's
+# Codex (L3): the owner's sizing. Owner decision, 2026-09-26 ("More
+# headroom", answering Q5 on the 405,000 worst case): lead 150,000, child
+# 60,000, a step in flight 30,000, so the worst case is 450,000; the L3
+# sequence (M4-lead-codex) cap 565,000 with its stop at 452,000; the Codex
+# cap raised from 1,000,000 to 1,090,000 and its stop from 800,000 to
+# 872,000 (codex_live_run.CAP, STOP_AT). It replaces 2026-09-24's lead
+# 125,000, child 50,000, sequence cap 400,000 and stop 320,000. Codex's
 # reported total covers every step of a turn (review 48, from M2's host
 # events), so it is what a run is charged, and it arrives after every step,
 # so the runner can stop a run by it. A step on this harness and model was
@@ -345,8 +354,8 @@ for _plan in PLANS.values():
 # in two steps.
 CODEX = dict(
     model='gpt-5.6-terra', model_provider='openai', sequence='M4-lead-codex',
-    sequence_cap=400_000, sequence_stop=320_000, lead_ceiling=125_000,
-    child_ceiling=50_000, in_flight=30_000, ledger='Codex ledger',
+    sequence_cap=565_000, sequence_stop=452_000, lead_ceiling=150_000,
+    child_ceiling=60_000, in_flight=30_000, ledger='Codex ledger',
     live=codex_live_run,
     # Where the rehearsal's Codex comes from, in the receipt (owner decision
     # for L3, 2026-09-25: the record says so).
@@ -449,6 +458,14 @@ CREDENTIAL_BRIEF = 'a spec with a credential value in it'
 
 def child_brief(name):
     return PLAN['briefs'][name]
+
+
+# The lead's step in the plays that take it past its hold: a thousand
+# tokens under a whole step in flight. With whole steps, and the hold one
+# step under the ceiling (120,000 and 150,000), the report that passes the
+# hold is the one that reaches the ceiling, and the ceiling's stop would
+# pre-empt the hold these plays exist to exercise.
+LEAD_PAST_HOLD_STEP = 29_000
 
 
 def lead_brief():
@@ -2167,14 +2184,22 @@ def scenario(mutant):
     loops = ([dict(tool='read_run', arguments=dict(name='alpha'), repeat=CALL_CEILING * 2)]
              if mutant == 'lead-loops' else [])
     if HARNESS == 'codex':
+        # The lead's plain calls (two starts, two reads) each nearly a whole
+        # step in flight in these plays (LEAD_PAST_HOLD_STEP): enough more
+        # reads that the one after them comes back with the lead's reported
+        # total past its hold, and still under its ceiling, whatever the
+        # sizing (one more at the hold of 120,000, none at 95,000).
+        past = [dict(tool='read_run', arguments=dict(name='alpha'))] * (
+            HOLD_ABOVE // LEAD_PAST_HOLD_STEP - len(starts + reads) + 1)
         extra = {
-            'lead-heavy': [dict(tool='read_run', arguments=dict(name='alpha'))],
+            'lead-heavy': past + [dict(tool='read_run', arguments=dict(name='alpha'))],
             # An argument read_run does not take: the tool raises TypeError.
-            'lead-tool-error-past-hold': [dict(tool='read_run',
+            'lead-tool-error-past-hold': past + [dict(tool='read_run',
+                                                      arguments=dict(name='alpha', wait=True))],
+            'tool-error-ungated': past + [dict(tool='read_run',
                                                arguments=dict(name='alpha', wait=True))],
-            'tool-error-ungated': [dict(tool='read_run', arguments=dict(name='alpha', wait=True))],
-            'lead-shell-past-hold': [dict(tool='!shell', command='wc -l alpha.md')],
-            'meter-ignores-items': [dict(tool='!shell', command='wc -l alpha.md')],
+            'lead-shell-past-hold': past + [dict(tool='!shell', command='wc -l alpha.md')],
+            'meter-ignores-items': past + [dict(tool='!shell', command='wc -l alpha.md')],
         }.get(mutant, [])
         return codex_scenario(mutant, starts + reads + loops + extra)
     return {
@@ -2211,18 +2236,19 @@ def codex_scenario(mutant, calls):
     if mutant in ('child-overspends', 'ceiling-cancel-never-sent', 'stop-charged-reported',
                   'child-renamed', 'child-renamed-unchecked', 'stopped-past-share',
                   'stopped-charge-capped', 'meter-dies'):
-        # alpha runs its command twice, each a 30,000-token step, the most
-        # the bound allows in flight (review of L3, round 3, SPEND-4). Codex
-        # reports each once its command has finished, so the second report,
-        # 60,000, crosses the child's ceiling and the runner stops alpha
-        # while its answering step is in flight; a child's model step here
-        # takes six seconds, longer than the stop takes to reach it (about
-        # 1.5 s against this service), as a real step does.
+        # alpha runs its command once more than its ceiling holds in steps,
+        # each a 30,000-token step, the most the bound allows in flight
+        # (review of L3, round 3, SPEND-4): three times at a ceiling of
+        # 60,000. Codex reports each once its command has finished, so the
+        # report that reaches the ceiling (60,000) arrives with the next step
+        # in flight, and the runner stops alpha then; a child's model step
+        # here takes six seconds, longer than the stop takes to reach it
+        # (about 1.5 s against this service), as a real step does.
         play.update(led_step_if=alpha, led_step=CODEX['in_flight'], led_commands_if=alpha,
-                    led_commands=2, led_step_ms=6000)
+                    led_commands=CHILD_CEILING // CODEX['in_flight'] + 1, led_step_ms=6000)
     if mutant in ('stopped-past-share', 'stopped-charge-capped'):
-        # And ignores the stop: it answers, a third step reported at 90,000,
-        # and exits by itself (SPEND-7).
+        # And ignores the stop: it runs its last command and answers, both
+        # reported (120,000 in all), and exits by itself (SPEND-7).
         play['led_ignores_interrupt_if'] = alpha
     if mutant == 'step-past-in-flight':
         # One step of 40,000: under the ceiling, past the in-flight bound.
@@ -2249,11 +2275,12 @@ def codex_scenario(mutant, calls):
         # takes three steps of its own unless stopped.
         play.update(spawn_agent_if=alpha, subagent_steps=3, subagent_step_ms=1500)
     if mutant in ('stop-ignored', 'not-exited-charged-share'):
-        # alpha's first step alone is 90,000, past its ceiling; it
+        # alpha's first step alone is past its ceiling, and by more than its
+        # share less a step (100,000 against 60,000 and 120,000); it
         # acknowledges the interrupt and goes on, answering two and a half
         # minutes later, so it is still running when its usage is read.
-        play.update(led_heavy_if=alpha, led_heavy_step=90_000, led_ignores_interrupt_if=alpha,
-                    led_answer_ms=150_000)
+        play.update(led_heavy_if=alpha, led_heavy_step=CHILD_SHARE - CODEX['in_flight'] + 10_000,
+                    led_ignores_interrupt_if=alpha, led_answer_ms=150_000)
     if mutant == 'lead-asked-in-openai-form':
         # The lead's tool approval in a mode the 0.157.0 schema allows and
         # PIO does not recognise, asked despite the pre-allowance, and only
@@ -2267,7 +2294,7 @@ def codex_scenario(mutant, calls):
         play['led_permissions_if'] = beta
     if mutant in ('lead-heavy', 'lead-tool-error-past-hold', 'tool-error-ungated',
                   'lead-shell-past-hold', 'meter-ignores-items'):
-        play['lead_usage_step'] = CODEX['in_flight']
+        play['lead_usage_step'] = LEAD_PAST_HOLD_STEP
     if mutant in ('usage-suppressed', 'asked-silent'):
         # No run reports anything, and alpha works past the silence bound,
         # so the lead waiting on it and alpha itself must be stopped.
@@ -4481,7 +4508,8 @@ def main():
             # completed response; review of L3, round 2, SB-4): its report is
             # its first step alone, and the step in flight is the charge's.
             reported = record['usage'][f'{LEAD}.alpha']['reported_total']
-            assert reported == CHILD_CEILING + 10_000, record['usage'][f'{LEAD}.alpha']
+            reaching = -(-CHILD_CEILING // CODEX['in_flight']) * CODEX['in_flight']
+            assert reported == reaching, record['usage'][f'{LEAD}.alpha']
             # Cut off before it answered, alpha answered nothing: its
             # preamble's 30 is not taken for a count (review of L3, round 2,
             # V-7).
@@ -4577,7 +4605,8 @@ def main():
         if args.mutant == 'stopped-past-share':
             # Stopped at 60,000, answered anyway, and charged its report and
             # a step, past its share, uncapped.
-            assert spent['reported_total'] == 3 * CODEX['in_flight'], spent
+            assert spent['reported_total'] == (CHILD_CEILING // CODEX['in_flight'] + 2) \
+                * CODEX['in_flight'], spent
             assert spent['charged'] == spent['reported_total'] + CODEX['in_flight'] > CHILD_SHARE, spent
             assert row_of("Every run's charge covers what it could have spent")['holds'] is True
         if args.mutant == 'stopped-charge-capped':

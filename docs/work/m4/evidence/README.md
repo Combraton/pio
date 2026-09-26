@@ -408,25 +408,29 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   managed configuration or a command-line override is not read.
 - **The sizing.** Codex reports a step once its tool has finished (M2 R5,
   R6), so a report that crosses a ceiling arrives with the next step begun.
-  From the code, each run can reach its ceiling plus two steps: a child
-  50,000 + 2 x 30,000 = 110,000, and the lead 125,000 + 2 x 30,000 =
-  185,000. The lead's tool withholds any response (a result, an error or an
-  unknown tool) once the lead has reported more than 95,000, and the meter
-  stops the lead when a result its tool never saw comes back past 95,000;
-  that keeps a lead that uses only its tool within 155,000 (`lead-heavy`,
+  From the code, each run can reach its ceiling plus two steps. The limits
+  are the owner's of 2026-09-26 ("More headroom"): a child 60,000 + 2 x
+  30,000 = 120,000, and the lead 150,000 + 2 x 30,000 = 210,000. The lead's
+  tool withholds any response (a result, an error or an unknown tool) once
+  the lead has reported more than 120,000, and the meter stops the lead
+  when a result its tool never saw comes back past 120,000; that keeps a
+  lead that uses only its tool within 180,000 (`lead-heavy`,
   `lead-tool-error-past-hold`). But a result the tool never sees (Codex's
   own shell, another MCP server, a refused approval) is back, with the next
   step begun, before anything can see it, when the lead may be just under
-  125,000 (review of L3, round 2, SB-1; `lead-shell-past-hold`). The worst
-  case is **405,000** (185,000 + 2 x 110,000), past the 320,000 stop, the
-  400,000 cap and, with Codex's 421,450 used, the 800,000 Codex stop, so
-  **the live runner refuses to start L3** until the owner decides the
-  sizing. The limits are the owner's and are unchanged. That figure holds
-  only with sub-agents off (below). With them on, each run could also start
-  sub-agents in one step before its stop lands, each with a step in flight:
-  **675,000** for multi-agent V2 (three resident per run, 405,000 + 3 x 3
-  x 30,000) and **945,000** for V1 (six), from Codex's source at
-  rust-v0.157.0 and not measured. The bound rests on a step being at most
+  150,000 (review of L3, round 2, SB-1; `lead-shell-past-hold`). The worst
+  case is **450,000** (210,000 + 2 x 120,000), within the L3 sequence's
+  452,000 stop (cap 565,000) and, with Codex's 421,450 used, under the
+  872,000 Codex stop (cap 1,090,000): 871,450. Under the limits of
+  2026-09-24 (lead 125,000, child 50,000, sequence cap 400,000 and stop
+  320,000, Codex cap 1,000,000 and stop 800,000) it was 405,000, past every
+  one of them, and the live runner refused L3 until the owner decided the
+  sizing. That figure holds only with Codex's unmetered features off
+  (below). With sub-agents on, each run could also start sub-agents in one
+  step before its stop lands, each with a step in flight: **720,000** for
+  multi-agent V2 (three resident per run, 450,000 + 3 x 3 x 30,000) and
+  **990,000** for V1 (six), from Codex's source at rust-v0.157.0 and not
+  measured. The bound rests on a step being at most
   30,000; the runner now checks every report against that, stops a run
   whose step is larger, and charges its largest step in flight
   (`step-past-in-flight`; round 3, SPEND-4). Codex retries a dropped stream

@@ -9,9 +9,10 @@ task output, configuration copies and paths stay under $HOME/pio-m2-live/private
 holds digests, identities and observed facts only.
 
 Stops (owner plan): no run starts if cumulative observed Codex usage has reached
-800,000 tokens, which is 80% of the 1,000,000 Codex cap; a run whose observed
-usage exceeds its own limit is interrupted with `execution.cancel`; a run that
-ends without a usage report stops the sequence.
+the stop, 80% of the Codex cap; a run whose observed usage exceeds its own limit
+is interrupted with `execution.cancel`; a run that ends without a usage report
+stops the sequence. The cap was 1,000,000 with its stop at 800,000; the owner
+raised it on 2026-09-26 to 1,090,000, stop 872,000, for L3 ("More headroom").
 
 Model (owner decision, 2026-09-19): R1 runs with the user's configuration
 untouched and no model passed, under a 50,000 token limit and with no retry on
@@ -44,8 +45,10 @@ HOME = Path(os.environ['HOME'])
 LIVE = HOME / 'pio-m2-live'
 CONTENT = 'pio.combraton.dev/content'
 FEATURES = ['execution.controller', 'execution.output', 'execution.discovery', 'execution.workspaces', 'execution.usage', 'execution.actions', 'execution.steering']
-CAP = 1_000_000
-STOP_AT = 800_000
+# The Codex cap and its stop, for every Codex run: owner decision,
+# 2026-09-26 ("More headroom", for L3), raised from 1,000,000 and 800,000.
+CAP = 1_090_000
+STOP_AT = 872_000
 RUN_LIMIT = 250_000
 # Must equal `pio_protocol::stream::MODEL_EXCEPTION`.
 MODEL_EXCEPTION = 'owner-2026-09-19-m2-fixture-runs'
