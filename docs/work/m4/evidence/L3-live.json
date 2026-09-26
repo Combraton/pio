@@ -1,0 +1,2320 @@
+{
+  "answered": {
+    "alpha": null,
+    "beta": null
+  },
+  "approvals": {
+    "l3": "Owner approval, 2026-09-24 \u2014 L3; owner decisions of 2026-09-25 (issue #12); owner decision of 2026-09-26, \"More headroom\": lead 150,000, child 60,000, in flight 30,000, sequence cap 565,000 and stop 452,000, Codex cap 1,090,000 and stop 872,000",
+    "lead_tool": "owner-2026-09-22-m4b-lead-tool",
+    "model_exception": "owner-2026-09-19-m2-fixture-runs"
+  },
+  "bound": {
+    "assumes": [
+      "Codex's reported total covers every step of a turn (review 48), and a run's usage is the sum over its threads (round 3)",
+      "a step on this harness and model is at most 30,000 tokens (measured about 22,000 to 24,500, M2 R4 to R6); the runner checks every report and stops a run whose step is larger, and charges its largest step in flight (review of L3, round 3, SPEND-4)",
+      "every unmetered, default-on feature of Codex 0.157.0 is off on every L3 thread (sub-agents, memories, goals, standalone web search and image generation), by the owner's own config.toml or per launch under a recorded owner decision; the runner refuses to start otherwise (round 4, U1). Behind that, a run whose sub-agent appears anyway is stopped at once and charged a step on each of its threads (round 3, SPEND-2), a turn Codex starts by itself on a run's thread after the run's own has ended is interrupted by the host, read for three seconds after that turn, and its run charged as cut short (round 4, SPEND-9), and a memory pipeline that writes anyway fails the memory row (round 3, S6). A setting from a managed configuration (requirements.toml, MDM, cloud) is not read, and could override either route",
+      "Codex's remote compaction makes a model call whose usage goes to analytics and the rollout budget, not the thread's total (core/src/compact_remote_v2.rs:304-310, 374; rust-v0.157.0). It runs when a step's context passes the model's auto-compact limit, 90% of gpt-5.6-terra's 272,000-token window, 244,800 (models-manager/models.json; protocol/src/openai_models.rs:525-536): a step that large is already past the one the bound assumes, and its run is stopped and charged its largest step in flight. The owner's model_auto_compact_token_limit, which could lower the limit, is not read; with it lowered, compaction would spend outside this bound (not measured)",
+      "at each thread's start Codex sends one request with generate: false, its instructions and tools, over the WebSocket transport, to warm it (core/src/session_startup_prewarm.rs:306-320; core/src/client.rs:1966, 2071-2120), and records no usage for it: whether it is billed, and for how much, is not established; one per thread, three an attempt, outside this bound",
+      "what Codex asks the model only when a client asks it to, which PIO never does, cannot occur: a review (review/start), a thread title (an ephemeral thread whose source is thread_title, core/src/session/session.rs:1643-1646), a realtime conversation, a compaction on request; nor the guardian reviewer, which runs only when approvalsReviewer is not user, which every run asserts from thread/start's answer before its first turn",
+      "a tool of the owner's own MCP servers, apps or plugins, which Codex loads on every thread, runs outside Codex, and what it spends is not in Codex's report; a call to one asks first unless the owner's settings pre-approve it (not read), and an ask fails the desk row",
+      "Codex retries a dropped stream up to 5 times on each transport, so up to 10 on the step that falls back from WebSocket to HTTPS, and a failed request up to 4 times, by default (model-provider-info/src/lib.rs:64-65, 487-498; core/src/responses_retry.rs:96-111, rust-v0.157.0); the owner's model_providers settings can raise either, up to 100, and are not read. The first WebSocket retry of a step is not surfaced in a release build (responses_retry.rs:119-121). Codex records usage only on a completed response, so what a dropped attempt is billed, if anything, is never reported: the receipt counts each retry Codex surfaced (willRetry) per run and charges none, and this bound leaves them out (not measured; round 4, SPEND-10)",
+      "Codex reports a step once its tool has finished, before the next step calls a tool (M2 R5, R6), and the report reaches the runner's meter within 1.5 s",
+      "a model step takes longer than a stop takes to reach Codex (about 1.5 s against the labeled fake)",
+      "Codex honours turn/interrupt (M2), before the tool's 30 s hold ends"
+    ],
+    "call_ceiling": 16,
+    "child": "at most its ceiling, plus the step that crossed it (reported only after its command) and the step in flight when the stop lands",
+    "child_ceiling": 60000,
+    "child_share": 120000,
+    "estimate": "Codex's own running total for the thread, reported after every step",
+    "hold_above": 120000,
+    "in_flight": 30000,
+    "lead": "at most its ceiling, plus the step that crossed it (reported only after its tool) and the step in flight when the stop lands. Its tool withholds any response once it has reported more than 120000, and the meter stops it when a result its tool never saw comes back past 120000: that keeps a lead using only its tool within its ceiling plus one step, but a result its tool never sees starts a step before anything can stop it",
+    "lead_ceiling": 150000,
+    "lead_share": 210000,
+    "unmetered": {
+      "features": [
+        "sub-agents",
+        "memories",
+        "goals",
+        "standalone web search",
+        "image generation"
+      ],
+      "memories_on": "on the order of 900,000 input tokens an attempt: Phase 1 sends up to two of the owner's idle sessions per app-server to the extraction model, three app-servers an attempt, and Phase 2 runs a consolidation agent (rust-v0.157.0, not measured)",
+      "off": "450000: with every one of them off on every thread, by the owner's own config.toml or per launch under a recorded owner decision (pio_codex::features_off), the bound above stands; the live runner refuses to start otherwise, naming each feature not off and the key that decided it (review of L3, round 4, U1)",
+      "subagents_on": {
+        "v1": 990000,
+        "v2": 720000
+      },
+      "subagents_on_how": "450000 plus, for each of the 3 runs, a step in flight on every sub-agent it could start in one step before the stop lands: three for multi-agent V2, six for V1 (rust-v0.157.0, not measured)"
+    },
+    "usage_silence": 150,
+    "worst_case": 450000
+  },
+  "budget": 2,
+  "charge": {
+    "codex_cap": 1090000,
+    "codex_charged": 457576,
+    "ledger": "Codex ledger",
+    "lines": {
+      "L3": {
+        "at": "2026-09-26T08:54:13Z",
+        "charge_basis": "reported_total",
+        "charged": 36126,
+        "meter_estimate": 36126,
+        "model": "gpt-5.6-terra",
+        "observed_is": "the thread's total, which covers every step",
+        "observed_total_tokens": 36126,
+        "sequence": "M4-lead-codex",
+        "tokens": 36126
+      },
+      "L3.alpha": {
+        "at": "2026-09-26T08:54:13Z",
+        "charge_basis": "never submitted",
+        "charged": 0,
+        "model": "gpt-5.6-terra",
+        "sequence": "M4-lead-codex",
+        "tokens": 0
+      },
+      "L3.beta": {
+        "at": "2026-09-26T08:54:13Z",
+        "charge_basis": "never submitted",
+        "charged": 0,
+        "model": "gpt-5.6-terra",
+        "sequence": "M4-lead-codex",
+        "tokens": 0
+      }
+    },
+    "measured_against": "charged",
+    "reservations_left": [],
+    "sequence_cap": 565000,
+    "sequence_charged": 36126,
+    "sequence_stop": 452000,
+    "stop_reached": false
+  },
+  "codex_features": {
+    "exec_permission_approvals": null,
+    "exec_permission_approvals_key": null,
+    "exists": true,
+    "read": "config.toml",
+    "request_permissions_tool": null,
+    "request_permissions_tool_key": null
+  },
+  "commit": "8be3803b2e616f87c0b0e0e7d2777da3bc8512ab",
+  "credential_check": {
+    "id": "e664aa75-ec1b-401f-a4aa-eea0a8403265",
+    "jsonrpc": "2.0",
+    "result": {
+      "acknowledgment": {
+        "command_digest": "sha256:84be82a028579091311fb9a2ebd8c5bb6d7c6e3205b6c98f74c08a89c0b339c3",
+        "command_id": "credential-check",
+        "effect_refs": [],
+        "operation_ref": "d068cb3f-e4b2-4567-8b39-3a216532bdcf",
+        "revision": 1,
+        "subject": {
+          "id": "credential-check",
+          "kind": "execution.execution"
+        }
+      },
+      "outcome": {
+        "admission": "refused",
+        "alternative": "Lead tool refused: [{\"detail\":null,\"reason\":\"lead_tool_carries_a_credential_value\"}]",
+        "execution": {
+          "id": "credential-check",
+          "kind": "execution.execution"
+        },
+        "reason": "capability_unavailable"
+      },
+      "replay": false
+    }
+  },
+  "desk": "Orchestrator's dated go, 2026-09-26, under the owner's delegation of 2026-09-26 (live runs within caps run once gates from a fresh clone of the exact head pass and CI is green on it). NOT the owner's words: the owner is not at the desk. The committed relay answers only the owner's advance decisions of 2026-09-25 (item 3); any other request lapses to PIO's single decline after 300 s. Head 8be3803: gates from a fresh clone green (101 mutants die, 3 hold), CI 10/10. Not independently verified: verification is paused until the TUI phase (owner, 2026-09-26). Sizing and per-launch feature overrides per owner decisions of 2026-09-26.",
+  "desk_answered_by": "answer files",
+  "desk_items": [],
+  "dirty": false,
+  "exit_path": true,
+  "failed": [
+    "Each run was on the plan's model before its turn started",
+    "Every run asserted that approvals go to the user",
+    "Only the lead got the tool",
+    "The lead's own two tools were pre-allowed, and nothing else",
+    "The lead started its two runs through the tool",
+    "The submits landed",
+    "origin.initiator is bound",
+    "The children ran",
+    "A third start is refused by PIO",
+    "L3 has exactly two children that ran",
+    "A steer while the child runs",
+    "A steer on an exited run",
+    "Each steer names the grant that sent it",
+    "Each child reported the true count",
+    "The lead relayed the true counts",
+    "A read_run waited for its run: until it exited, or to the wait limit",
+    "Codex's memory pipeline wrote nothing during the run"
+  ],
+  "features_off_sent": {
+    "L3": {
+      "agents.enabled": false,
+      "features.goals": false,
+      "features.image_generation": false,
+      "features.memories": false,
+      "features.memory_tool": false,
+      "features.multi_agent": false,
+      "features.multi_agent_v2": false,
+      "web_search": "disabled"
+    }
+  },
+  "finished_at": "2026-09-26T08:55:42Z",
+  "format": "pio-lead-run/2",
+  "grant": {
+    "id": "f3f027d5-c83c-4f7f-8181-62d1cef93269",
+    "terms": {
+      "audience": "conformance-provider",
+      "delegation": {
+        "allowed": false,
+        "max_depth": 0
+      },
+      "holder": "lead",
+      "resources": [
+        {
+          "id_prefix": "L3.",
+          "kind": "execution.execution"
+        }
+      ],
+      "rights": [
+        "execution.submit",
+        "execution.steer",
+        "execution.read",
+        "core.events.read"
+      ]
+    }
+  },
+  "grant_attach": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "owner_authority_required"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "772e1c92-e618-4c98-8788-efaa629932f3",
+    "jsonrpc": "2.0"
+  },
+  "harness": {
+    "mcp_approvals": "when Codex asks before an MCP tool call, what it offers and how it reads the answer: read from its source at rust-v0.157.0 (codex-rs/core/src/mcp_tool_call.rs), not measured. The file differs from rust-v0.155.1; the functions that decide, build the request and read the answer do not (requires_mcp_tool_approval_for_mode, maybe_request_mcp_tool_approval, custom_mcp_tool_approval_mode, build_mcp_tool_approval_elicitation_request, _meta, _question and _fallback_message, parse_mcp_tool_approval_elicitation_response, normalize_approval_decision_for_mode). request_mcp_tool_user_approval, which sends the request, changed (analytics on a refused answer), and so did the persistence helpers PIO never triggers",
+    "name": "codex",
+    "pinned": {
+      "source": "00c972ed5d6ff6499317fd41b7f23605b8e6850d",
+      "tag": "rust-v0.157.0",
+      "version": "0.157.0"
+    },
+    "qualification": {
+      "drift": 0,
+      "native": {
+        "label": "~/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
+        "sha256": "ad0be20d04e2ba6146ecdb51d7f8b7b0fe15420a15dc9b0057518d858f1f3714"
+      },
+      "node": {
+        "label": "~/.hermes/node/bin/node",
+        "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+        "version": "v22.23.0"
+      },
+      "pinned": {
+        "source": "00c972ed5d6ff6499317fd41b7f23605b8e6850d",
+        "tag": "rust-v0.157.0",
+        "version": "0.157.0"
+      },
+      "qualified": true,
+      "schema_listing": "ccd71240f33d42fb14bfef7f8932c5dbb41cd36272635e673337aedc4edb0cdc",
+      "service_node_matches": true,
+      "version": "0.157.0",
+      "wrapper": {
+        "label": "~/.local/lib/node_modules/@openai/codex/bin/codex.js",
+        "package_version": "0.157.0",
+        "sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70"
+      }
+    },
+    "shapes": "0.157.0's generated app-server schema: ThreadItem mcpToolCall and commandExecution, McpServerElicitationRequestParams; the labeled fake follows it"
+  },
+  "lead": "L3",
+  "lead_answer": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "right_missing"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "e2a9da8c-1e2c-4fa2-95e7-0dc67c807c22",
+    "jsonrpc": "2.0"
+  },
+  "lead_reads_itself": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "out_of_scope"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "fd659a3d-d795-4c84-be14-d96a4526215f",
+    "jsonrpc": "2.0"
+  },
+  "lead_submit": {
+    "admission": "admitted",
+    "delivery_id": "L3.delivery-1",
+    "execution": {
+      "id": "L3",
+      "kind": "execution.execution"
+    }
+  },
+  "live_tree": {
+    "probe": false,
+    "releasable": true,
+    "why": null
+  },
+  "memory_after": {
+    "memories": {
+      "entries": {
+        "MEMORY.md": {
+          "kind": "file",
+          "mtime": 1790334124,
+          "size": 147255
+        },
+        "extensions": {
+          "kind": "dir",
+          "mtime": 1778434533,
+          "size": null
+        },
+        "extensions/ad_hoc": {
+          "kind": "dir",
+          "mtime": 1788278305,
+          "size": null
+        },
+        "extensions/ad_hoc/instructions.md": {
+          "kind": "file",
+          "mtime": 1778434533,
+          "size": 733
+        },
+        "extensions/ad_hoc/notes": {
+          "kind": "dir",
+          "mtime": 1788278305,
+          "size": null
+        },
+        "extensions/ad_hoc/notes/sha256:cdeed07cd72f": {
+          "kind": "file",
+          "mtime": 1788278305,
+          "size": 933
+        },
+        "memory_summary.md": {
+          "kind": "file",
+          "mtime": 1790334192,
+          "size": 8793
+        },
+        "raw_memories.md": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 196239
+        },
+        "rollout_summaries": {
+          "kind": "dir",
+          "mtime": 1790333911,
+          "size": null
+        },
+        "rollout_summaries/sha256:02b502a85ddd": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3520
+        },
+        "rollout_summaries/sha256:17c494b049c9": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5263
+        },
+        "rollout_summaries/sha256:1a5686e6b8b6": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5980
+        },
+        "rollout_summaries/sha256:1bb943b1032b": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5982
+        },
+        "rollout_summaries/sha256:1e52a6850e82": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 4222
+        },
+        "rollout_summaries/sha256:2371abf81103": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1284
+        },
+        "rollout_summaries/sha256:24f0ad34bf7b": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5368
+        },
+        "rollout_summaries/sha256:3140b3926e88": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3351
+        },
+        "rollout_summaries/sha256:31f7b7eb091b": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1534
+        },
+        "rollout_summaries/sha256:33e26279fbbf": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 7871
+        },
+        "rollout_summaries/sha256:38e120ce9e12": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 7513
+        },
+        "rollout_summaries/sha256:3ae42a21e569": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3328
+        },
+        "rollout_summaries/sha256:3cf953076d78": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3814
+        },
+        "rollout_summaries/sha256:3f9ce41d9d1b": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 8538
+        },
+        "rollout_summaries/sha256:432d230daa04": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5496
+        },
+        "rollout_summaries/sha256:4474383ad596": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6236
+        },
+        "rollout_summaries/sha256:470bbf7b280e": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3860
+        },
+        "rollout_summaries/sha256:4a2240f5b64f": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 7786
+        },
+        "rollout_summaries/sha256:4a877ffa83e1": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5637
+        },
+        "rollout_summaries/sha256:50c7a1f41037": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6634
+        },
+        "rollout_summaries/sha256:52f5568d6ffa": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 2893
+        },
+        "rollout_summaries/sha256:544b868217ca": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3195
+        },
+        "rollout_summaries/sha256:59410e02b379": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3635
+        },
+        "rollout_summaries/sha256:5ade84de1f4b": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3707
+        },
+        "rollout_summaries/sha256:5b86598236c4": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6875
+        },
+        "rollout_summaries/sha256:70756c973be4": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6038
+        },
+        "rollout_summaries/sha256:797a6d19360e": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 7865
+        },
+        "rollout_summaries/sha256:7ffebb90d615": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1198
+        },
+        "rollout_summaries/sha256:8a135c5aad82": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1248
+        },
+        "rollout_summaries/sha256:926ab11aefde": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3664
+        },
+        "rollout_summaries/sha256:955df6bc7dc0": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3983
+        },
+        "rollout_summaries/sha256:9afc4d3b48eb": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3417
+        },
+        "rollout_summaries/sha256:9b11bb2f819d": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 8128
+        },
+        "rollout_summaries/sha256:9b9ff79e76d4": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3186
+        },
+        "rollout_summaries/sha256:9bc5fe70ea94": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3976
+        },
+        "rollout_summaries/sha256:9ffe32abd492": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1765
+        },
+        "rollout_summaries/sha256:a220efb07fd3": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5410
+        },
+        "rollout_summaries/sha256:a93b3dcc3958": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 4111
+        },
+        "rollout_summaries/sha256:b10a0695d93e": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 7545
+        },
+        "rollout_summaries/sha256:bcc78c480da9": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3762
+        },
+        "rollout_summaries/sha256:bd9345224b32": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6606
+        },
+        "rollout_summaries/sha256:beb6a828751e": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1394
+        },
+        "rollout_summaries/sha256:c12ff7d3b18e": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 4232
+        },
+        "rollout_summaries/sha256:ceff374d45ee": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6186
+        },
+        "rollout_summaries/sha256:dc2c6f8aa620": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3734
+        },
+        "rollout_summaries/sha256:ec4162f2645c": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1501
+        },
+        "rollout_summaries/sha256:f25681028350": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5624
+        },
+        "skills": {
+          "kind": "dir",
+          "mtime": 1789533370,
+          "size": null
+        },
+        "skills/sha256:1ed24c229b42": {
+          "kind": "dir",
+          "mtime": 1787326465,
+          "size": null
+        },
+        "skills/sha256:31c31db30d6d": {
+          "kind": "dir",
+          "mtime": 1787202233,
+          "size": null
+        },
+        "skills/sha256:3756f5c22224": {
+          "kind": "dir",
+          "mtime": 1787576964,
+          "size": null
+        },
+        "skills/sha256:3756f5c22224/SKILL.md": {
+          "kind": "file",
+          "mtime": 1790305904,
+          "size": 4706
+        },
+        "skills/sha256:506c71141ef5": {
+          "kind": "dir",
+          "mtime": 1785500106,
+          "size": null
+        },
+        "skills/sha256:506c71141ef5/SKILL.md": {
+          "kind": "file",
+          "mtime": 1785500106,
+          "size": 3617
+        },
+        "skills/sha256:7de3ffd395c6": {
+          "kind": "dir",
+          "mtime": 1780935572,
+          "size": null
+        },
+        "skills/sha256:7de3ffd395c6/SKILL.md": {
+          "kind": "file",
+          "mtime": 1783363050,
+          "size": 4299
+        },
+        "skills/sha256:9d1b796d4248": {
+          "kind": "dir",
+          "mtime": 1781753983,
+          "size": null
+        },
+        "skills/sha256:9d1b796d4248/SKILL.md": {
+          "kind": "file",
+          "mtime": 1781753983,
+          "size": 4562
+        },
+        "skills/sha256:a07e71387b70": {
+          "kind": "dir",
+          "mtime": 1784051583,
+          "size": null
+        },
+        "skills/sha256:a07e71387b70/SKILL.md": {
+          "kind": "file",
+          "mtime": 1784051583,
+          "size": 6414
+        },
+        "skills/sha256:ce0204d1b9ca": {
+          "kind": "dir",
+          "mtime": 1789533370,
+          "size": null
+        },
+        "skills/sha256:ce0204d1b9ca/SKILL.md": {
+          "kind": "file",
+          "mtime": 1790334229,
+          "size": 6846
+        }
+      },
+      "git": {
+        "bytes": 344547,
+        "files": 91,
+        "newest": 1790334242
+      }
+    },
+    "memories_1.sqlite": {
+      "mtime": 1790412940,
+      "size": 782336
+    },
+    "memories_1.sqlite-shm": null,
+    "memories_1.sqlite-wal": null,
+    "memories_v2": null,
+    "memories_v2_1.sqlite": null,
+    "memories_v2_1.sqlite-shm": null,
+    "memories_v2_1.sqlite-wal": null
+  },
+  "memory_before": {
+    "memories": {
+      "entries": {
+        "MEMORY.md": {
+          "kind": "file",
+          "mtime": 1790334124,
+          "size": 147255
+        },
+        "extensions": {
+          "kind": "dir",
+          "mtime": 1778434533,
+          "size": null
+        },
+        "extensions/ad_hoc": {
+          "kind": "dir",
+          "mtime": 1788278305,
+          "size": null
+        },
+        "extensions/ad_hoc/instructions.md": {
+          "kind": "file",
+          "mtime": 1778434533,
+          "size": 733
+        },
+        "extensions/ad_hoc/notes": {
+          "kind": "dir",
+          "mtime": 1788278305,
+          "size": null
+        },
+        "extensions/ad_hoc/notes/sha256:cdeed07cd72f": {
+          "kind": "file",
+          "mtime": 1788278305,
+          "size": 933
+        },
+        "memory_summary.md": {
+          "kind": "file",
+          "mtime": 1790334192,
+          "size": 8793
+        },
+        "raw_memories.md": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 196239
+        },
+        "rollout_summaries": {
+          "kind": "dir",
+          "mtime": 1790333911,
+          "size": null
+        },
+        "rollout_summaries/sha256:02b502a85ddd": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3520
+        },
+        "rollout_summaries/sha256:17c494b049c9": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5263
+        },
+        "rollout_summaries/sha256:1a5686e6b8b6": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5980
+        },
+        "rollout_summaries/sha256:1bb943b1032b": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5982
+        },
+        "rollout_summaries/sha256:1e52a6850e82": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 4222
+        },
+        "rollout_summaries/sha256:2371abf81103": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1284
+        },
+        "rollout_summaries/sha256:24f0ad34bf7b": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5368
+        },
+        "rollout_summaries/sha256:3140b3926e88": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3351
+        },
+        "rollout_summaries/sha256:31f7b7eb091b": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1534
+        },
+        "rollout_summaries/sha256:33e26279fbbf": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 7871
+        },
+        "rollout_summaries/sha256:38e120ce9e12": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 7513
+        },
+        "rollout_summaries/sha256:3ae42a21e569": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3328
+        },
+        "rollout_summaries/sha256:3cf953076d78": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3814
+        },
+        "rollout_summaries/sha256:3f9ce41d9d1b": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 8538
+        },
+        "rollout_summaries/sha256:432d230daa04": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5496
+        },
+        "rollout_summaries/sha256:4474383ad596": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6236
+        },
+        "rollout_summaries/sha256:470bbf7b280e": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3860
+        },
+        "rollout_summaries/sha256:4a2240f5b64f": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 7786
+        },
+        "rollout_summaries/sha256:4a877ffa83e1": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5637
+        },
+        "rollout_summaries/sha256:50c7a1f41037": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6634
+        },
+        "rollout_summaries/sha256:52f5568d6ffa": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 2893
+        },
+        "rollout_summaries/sha256:544b868217ca": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3195
+        },
+        "rollout_summaries/sha256:59410e02b379": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3635
+        },
+        "rollout_summaries/sha256:5ade84de1f4b": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3707
+        },
+        "rollout_summaries/sha256:5b86598236c4": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6875
+        },
+        "rollout_summaries/sha256:70756c973be4": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6038
+        },
+        "rollout_summaries/sha256:797a6d19360e": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 7865
+        },
+        "rollout_summaries/sha256:7ffebb90d615": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1198
+        },
+        "rollout_summaries/sha256:8a135c5aad82": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1248
+        },
+        "rollout_summaries/sha256:926ab11aefde": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3664
+        },
+        "rollout_summaries/sha256:955df6bc7dc0": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3983
+        },
+        "rollout_summaries/sha256:9afc4d3b48eb": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3417
+        },
+        "rollout_summaries/sha256:9b11bb2f819d": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 8128
+        },
+        "rollout_summaries/sha256:9b9ff79e76d4": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3186
+        },
+        "rollout_summaries/sha256:9bc5fe70ea94": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3976
+        },
+        "rollout_summaries/sha256:9ffe32abd492": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1765
+        },
+        "rollout_summaries/sha256:a220efb07fd3": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5410
+        },
+        "rollout_summaries/sha256:a93b3dcc3958": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 4111
+        },
+        "rollout_summaries/sha256:b10a0695d93e": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 7545
+        },
+        "rollout_summaries/sha256:bcc78c480da9": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3762
+        },
+        "rollout_summaries/sha256:bd9345224b32": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6606
+        },
+        "rollout_summaries/sha256:beb6a828751e": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1394
+        },
+        "rollout_summaries/sha256:c12ff7d3b18e": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 4232
+        },
+        "rollout_summaries/sha256:ceff374d45ee": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 6186
+        },
+        "rollout_summaries/sha256:dc2c6f8aa620": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 3734
+        },
+        "rollout_summaries/sha256:ec4162f2645c": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 1501
+        },
+        "rollout_summaries/sha256:f25681028350": {
+          "kind": "file",
+          "mtime": 1790333911,
+          "size": 5624
+        },
+        "skills": {
+          "kind": "dir",
+          "mtime": 1789533370,
+          "size": null
+        },
+        "skills/sha256:1ed24c229b42": {
+          "kind": "dir",
+          "mtime": 1787326465,
+          "size": null
+        },
+        "skills/sha256:31c31db30d6d": {
+          "kind": "dir",
+          "mtime": 1787202233,
+          "size": null
+        },
+        "skills/sha256:3756f5c22224": {
+          "kind": "dir",
+          "mtime": 1787576964,
+          "size": null
+        },
+        "skills/sha256:3756f5c22224/SKILL.md": {
+          "kind": "file",
+          "mtime": 1790305904,
+          "size": 4706
+        },
+        "skills/sha256:506c71141ef5": {
+          "kind": "dir",
+          "mtime": 1785500106,
+          "size": null
+        },
+        "skills/sha256:506c71141ef5/SKILL.md": {
+          "kind": "file",
+          "mtime": 1785500106,
+          "size": 3617
+        },
+        "skills/sha256:7de3ffd395c6": {
+          "kind": "dir",
+          "mtime": 1780935572,
+          "size": null
+        },
+        "skills/sha256:7de3ffd395c6/SKILL.md": {
+          "kind": "file",
+          "mtime": 1783363050,
+          "size": 4299
+        },
+        "skills/sha256:9d1b796d4248": {
+          "kind": "dir",
+          "mtime": 1781753983,
+          "size": null
+        },
+        "skills/sha256:9d1b796d4248/SKILL.md": {
+          "kind": "file",
+          "mtime": 1781753983,
+          "size": 4562
+        },
+        "skills/sha256:a07e71387b70": {
+          "kind": "dir",
+          "mtime": 1784051583,
+          "size": null
+        },
+        "skills/sha256:a07e71387b70/SKILL.md": {
+          "kind": "file",
+          "mtime": 1784051583,
+          "size": 6414
+        },
+        "skills/sha256:ce0204d1b9ca": {
+          "kind": "dir",
+          "mtime": 1789533370,
+          "size": null
+        },
+        "skills/sha256:ce0204d1b9ca/SKILL.md": {
+          "kind": "file",
+          "mtime": 1790334229,
+          "size": 6846
+        }
+      },
+      "git": {
+        "bytes": 344547,
+        "files": 91,
+        "newest": 1790334242
+      }
+    },
+    "memories_1.sqlite": {
+      "mtime": 1790351289,
+      "size": 782336
+    },
+    "memories_1.sqlite-shm": null,
+    "memories_1.sqlite-wal": null,
+    "memories_v2": null,
+    "memories_v2_1.sqlite": null,
+    "memories_v2_1.sqlite-shm": null,
+    "memories_v2_1.sqlite-wal": null
+  },
+  "metering": {
+    "error": null,
+    "passes": 568,
+    "seconds": 63.4,
+    "source": "core.events.read, one query a pass"
+  },
+  "meters": {
+    "L3": {
+      "bytes": 36412,
+      "calls": 1,
+      "ceiling": 150000,
+      "continued": [],
+      "estimate": 36126,
+      "host_total": 36126,
+      "largest_step": 20957,
+      "silenced": false,
+      "stopped": null,
+      "subagents": [],
+      "threads": {
+        "01a0dcec-d61a-7093-819a-0c314d23edb7": 36126
+      },
+      "tool_log_calls": 0,
+      "turn_status": "completed"
+    },
+    "L3.alpha": {
+      "bytes": 0,
+      "calls": 0,
+      "ceiling": 60000,
+      "continued": [],
+      "estimate": 0,
+      "host_total": 0,
+      "largest_step": 0,
+      "silenced": false,
+      "stopped": null,
+      "subagents": [],
+      "threads": {},
+      "tool_log_calls": null,
+      "turn_status": null
+    },
+    "L3.beta": {
+      "bytes": 0,
+      "calls": 0,
+      "ceiling": 60000,
+      "continued": [],
+      "estimate": 0,
+      "host_total": 0,
+      "largest_step": 0,
+      "silenced": false,
+      "stopped": null,
+      "subagents": [],
+      "threads": {},
+      "tool_log_calls": null,
+      "turn_status": null
+    }
+  },
+  "mode": "live",
+  "model": "gpt-5.6-terra",
+  "mutant": null,
+  "no_sleep": {
+    "command": "caffeinate -i -s -w 67700",
+    "held": true,
+    "held_to_the_end": true,
+    "power": "Now drawing from 'AC Power'"
+  },
+  "no_such_execution": [
+    "L3.alpha",
+    "L3.beta"
+  ],
+  "owner_service_after": [
+    "4a78b1821d08a04888792ecc690198f073f3c75edd6b03daa2942b161613ea3f"
+  ],
+  "owner_service_before": [
+    "4a78b1821d08a04888792ecc690198f073f3c75edd6b03daa2942b161613ea3f"
+  ],
+  "preflight": {
+    "binary_newer_than_every_source": true,
+    "binary_sha256": "6e42495835b278d7c44ab03d71a7e30851acd01a7484f6123582924200ff4637",
+    "checked": true,
+    "commit": "8be3803b2e616f87c0b0e0e7d2777da3bc8512ab",
+    "dirty": false,
+    "newest_source": "crates/pio-protocol/src/stream.rs"
+  },
+  "probes_admitted": {},
+  "qualification_check": {
+    "checked": true,
+    "holds": true,
+    "pinned": {
+      "source": "00c972ed5d6ff6499317fd41b7f23605b8e6850d",
+      "tag": "rust-v0.157.0",
+      "version": "0.157.0"
+    }
+  },
+  "reserved": {
+    "L3": {
+      "at": "2026-09-26T08:54:13Z",
+      "charge_basis": "reserved",
+      "charged": 210000,
+      "model": "gpt-5.6-terra",
+      "sequence": "M4-lead-codex",
+      "tokens": 210000,
+      "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
+    },
+    "L3.alpha": {
+      "at": "2026-09-26T08:54:13Z",
+      "charge_basis": "reserved",
+      "charged": 120000,
+      "model": "gpt-5.6-terra",
+      "sequence": "M4-lead-codex",
+      "tokens": 120000,
+      "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
+    },
+    "L3.beta": {
+      "at": "2026-09-26T08:54:13Z",
+      "charge_basis": "reserved",
+      "charged": 120000,
+      "model": "gpt-5.6-terra",
+      "sequence": "M4-lead-codex",
+      "tokens": 120000,
+      "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
+    }
+  },
+  "root": "~/pio-m4-live/L3-c1e9d2fd",
+  "rows": [
+    {
+      "expected": "admitted",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": "admitted",
+      "proven": true,
+      "row": "The lead was admitted"
+    },
+    {
+      "expected": "acknowledged",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": "acknowledged",
+      "proven": true,
+      "row": "The lead's delivery was acknowledged"
+    },
+    {
+      "expected": {
+        "cancellation": null,
+        "exit": {
+          "code": 0
+        },
+        "runtime": "exited"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "no cancel: a turn that was interrupted did not exit normally",
+      "observed": {
+        "cancellation": null,
+        "exit": {
+          "code": 0
+        },
+        "runtime": "exited"
+      },
+      "proven": true,
+      "row": "The lead exited normally"
+    },
+    {
+      "expected": {
+        "L3": {
+          "before_turn": true,
+          "matches": true,
+          "provider": "openai",
+          "reported": "gpt-5.6-terra",
+          "requested": "gpt-5.6-terra"
+        },
+        "L3.alpha": {
+          "before_turn": true,
+          "matches": true,
+          "provider": "openai",
+          "reported": "gpt-5.6-terra",
+          "requested": "gpt-5.6-terra"
+        },
+        "L3.beta": {
+          "before_turn": true,
+          "matches": true,
+          "provider": "openai",
+          "reported": "gpt-5.6-terra",
+          "requested": "gpt-5.6-terra"
+        }
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "model_checked: thread/start's own answer, before turn_start_sent; the host refuses a mismatch before the first turn",
+      "observed": {
+        "L3": {
+          "before_turn": true,
+          "matches": true,
+          "provider": "openai",
+          "reported": "gpt-5.6-terra",
+          "requested": "gpt-5.6-terra"
+        },
+        "L3.alpha": {
+          "before_turn": false,
+          "matches": null,
+          "provider": null,
+          "reported": null,
+          "requested": null
+        },
+        "L3.beta": {
+          "before_turn": false,
+          "matches": null,
+          "provider": null,
+          "reported": null,
+          "requested": null
+        }
+      },
+      "proven": false,
+      "row": "Each run was on the plan's model before its turn started"
+    },
+    {
+      "expected": "qualified, no schema drift, the service's Node the qualified one, and the wrapper, native binary and Node digests, version, pin and schema listing equal to the committed record for serve-codex's pin",
+      "holds": true,
+      "kind": "row",
+      "note": "from serve-codex's own qualification record in the store; a labeled fake has none, so a rehearsal decides nothing here unless a record is there",
+      "observed": {
+        "committed": {
+          "drift": 0,
+          "native": {
+            "label": "~/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
+            "sha256": "ad0be20d04e2ba6146ecdb51d7f8b7b0fe15420a15dc9b0057518d858f1f3714"
+          },
+          "node": {
+            "label": "~/.hermes/node/bin/node",
+            "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+            "version": "v22.23.0"
+          },
+          "pinned": {
+            "source": "00c972ed5d6ff6499317fd41b7f23605b8e6850d",
+            "tag": "rust-v0.157.0",
+            "version": "0.157.0"
+          },
+          "qualified": true,
+          "schema_listing": "ccd71240f33d42fb14bfef7f8932c5dbb41cd36272635e673337aedc4edb0cdc",
+          "service_node_matches": null,
+          "version": "0.157.0",
+          "wrapper": {
+            "label": "~/.local/lib/node_modules/@openai/codex/bin/codex.js",
+            "package_version": "0.157.0",
+            "sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70"
+          }
+        },
+        "ran": {
+          "drift": 0,
+          "native": {
+            "label": "~/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
+            "sha256": "ad0be20d04e2ba6146ecdb51d7f8b7b0fe15420a15dc9b0057518d858f1f3714"
+          },
+          "node": {
+            "label": "~/.hermes/node/bin/node",
+            "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+            "version": "v22.23.0"
+          },
+          "pinned": {
+            "source": "00c972ed5d6ff6499317fd41b7f23605b8e6850d",
+            "tag": "rust-v0.157.0",
+            "version": "0.157.0"
+          },
+          "qualified": true,
+          "schema_listing": "ccd71240f33d42fb14bfef7f8932c5dbb41cd36272635e673337aedc4edb0cdc",
+          "service_node_matches": true,
+          "version": "0.157.0",
+          "wrapper": {
+            "label": "~/.local/lib/node_modules/@openai/codex/bin/codex.js",
+            "package_version": "0.157.0",
+            "sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70"
+          }
+        },
+        "rehearsal": false
+      },
+      "proven": true,
+      "row": "Codex qualified at the pinned identity"
+    },
+    {
+      "expected": {
+        "L3": "user",
+        "L3.alpha": "user",
+        "L3.beta": "user"
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "approvalsReviewer is never set; any other answer ends the run before its first turn",
+      "observed": {
+        "L3": "user",
+        "L3.alpha": null,
+        "L3.beta": null
+      },
+      "proven": false,
+      "row": "Every run asserted that approvals go to the user"
+    },
+    {
+      "expected": {
+        "L3": [
+          [
+            "pio-lead"
+          ]
+        ],
+        "L3.alpha": [
+          []
+        ],
+        "L3.beta": [
+          []
+        ]
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L3": [
+          [
+            "pio-lead"
+          ]
+        ],
+        "L3.alpha": [],
+        "L3.beta": []
+      },
+      "proven": false,
+      "row": "Only the lead got the tool"
+    },
+    {
+      "expected": {
+        "asked_about_the_tool": {
+          "declined_by_pio": [],
+          "surfaced": []
+        },
+        "pre_allowed": {
+          "L3": [
+            {
+              "pio-lead": {
+                "default_tools_approval_mode": null,
+                "tools": {
+                  "read_run": {
+                    "approval_mode": "approve"
+                  },
+                  "start_run": {
+                    "approval_mode": "approve"
+                  }
+                }
+              }
+            }
+          ],
+          "L3.alpha": [
+            {}
+          ],
+          "L3.beta": [
+            {}
+          ]
+        }
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "in the lead's thread config only; never written to the owner's",
+      "observed": {
+        "asked_about_the_tool": {
+          "declined_by_pio": [],
+          "surfaced": []
+        },
+        "pre_allowed": {
+          "L3": [
+            {
+              "pio-lead": {
+                "default_tools_approval_mode": null,
+                "tools": {
+                  "read_run": {
+                    "approval_mode": "approve"
+                  },
+                  "start_run": {
+                    "approval_mode": "approve"
+                  }
+                }
+              }
+            }
+          ],
+          "L3.alpha": [],
+          "L3.beta": []
+        }
+      },
+      "proven": false,
+      "row": "The lead's own two tools were pre-allowed, and nothing else"
+    },
+    {
+      "expected": 1,
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": 1,
+      "proven": true,
+      "row": "The tool was launched exactly once"
+    },
+    {
+      "expected": [
+        "initialize",
+        "notifications/initialized",
+        "tools/list"
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        "initialize",
+        "notifications/initialized",
+        "tools/list"
+      ],
+      "proven": true,
+      "row": "The tool reached the lead"
+    },
+    {
+      "expected": [
+        [
+          "alpha",
+          true
+        ],
+        [
+          "beta",
+          true
+        ]
+      ],
+      "holds": false,
+      "kind": "row",
+      "note": "",
+      "observed": [],
+      "proven": false,
+      "row": "The lead started its two runs through the tool"
+    },
+    {
+      "expected": [
+        "f3f027d5-c83c-4f7f-8181-62d1cef93269"
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        "f3f027d5-c83c-4f7f-8181-62d1cef93269"
+      ],
+      "proven": true,
+      "row": "Every tool request carried the grant"
+    },
+    {
+      "expected": {
+        "L3.alpha": "admitted",
+        "L3.beta": "admitted"
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L3.alpha": null,
+        "L3.beta": null
+      },
+      "proven": false,
+      "row": "The submits landed"
+    },
+    {
+      "expected": {
+        "L3.alpha": {
+          "call_budget": 0,
+          "depth": 1,
+          "initiator": {
+            "id": "L3",
+            "kind": "execution.execution"
+          }
+        },
+        "L3.beta": {
+          "call_budget": 0,
+          "depth": 1,
+          "initiator": {
+            "id": "L3",
+            "kind": "execution.execution"
+          }
+        }
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L3.alpha": null,
+        "L3.beta": null
+      },
+      "proven": false,
+      "row": "origin.initiator is bound"
+    },
+    {
+      "expected": {
+        "L3.alpha": {
+          "cancellation": null,
+          "delivery": "acknowledged",
+          "exit": {
+            "code": 0
+          },
+          "runtime": "exited"
+        },
+        "L3.beta": {
+          "cancellation": null,
+          "delivery": "acknowledged",
+          "exit": {
+            "code": 0
+          },
+          "runtime": "exited"
+        }
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "to the end of their turns: a child that was cancelled did not",
+      "observed": {
+        "L3.alpha": {
+          "cancellation": null,
+          "delivery": null,
+          "exit": null,
+          "runtime": null
+        },
+        "L3.beta": {
+          "cancellation": null,
+          "delivery": null,
+          "exit": null,
+          "runtime": null
+        }
+      },
+      "proven": false,
+      "row": "The children ran"
+    },
+    {
+      "expected": {
+        "code": "call_budget_spent",
+        "lead_running": true,
+        "started": false
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "",
+      "observed": null,
+      "proven": false,
+      "row": "A third start is refused by PIO"
+    },
+    {
+      "expected": [
+        "L3.alpha",
+        "L3.beta"
+      ],
+      "holds": false,
+      "kind": "row",
+      "note": "",
+      "observed": [],
+      "proven": false,
+      "row": "L3 has exactly two children that ran"
+    },
+    {
+      "expected": "recorded under the grant while the turn was active and delivered, then acknowledged by Codex (provider_ack_id); behavior not observed",
+      "holds": false,
+      "kind": "row",
+      "note": "L3's claim: delivery under the lead's authority, not obedience",
+      "observed": {
+        "delivery": null,
+        "steer": null
+      },
+      "proven": false,
+      "row": "A steer while the child runs"
+    },
+    {
+      "expected": "not_supported on any harness, once the turn is over",
+      "holds": false,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "delivery_at_steer": null,
+        "refused": "not_found",
+        "runtime_after_steer": null,
+        "runtime_at_steer": null
+      },
+      "proven": false,
+      "row": "A steer on an exited run"
+    },
+    {
+      "expected": [
+        {
+          "grant": "f3f027d5-c83c-4f7f-8181-62d1cef93269",
+          "holder": "lead",
+          "recorded_by": "pio"
+        },
+        {
+          "grant": "f3f027d5-c83c-4f7f-8181-62d1cef93269",
+          "holder": "lead",
+          "recorded_by": "pio"
+        }
+      ],
+      "holds": false,
+      "kind": "row",
+      "note": "",
+      "observed": [],
+      "proven": false,
+      "row": "Each steer names the grant that sent it"
+    },
+    {
+      "expected": {
+        "code": "permission_denied",
+        "reason": "right_missing"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "aimed at a child it may read, so only the missing right can refuse it",
+      "observed": {
+        "code": "permission_denied",
+        "reason": "right_missing"
+      },
+      "proven": true,
+      "row": "The lead may not answer an approval"
+    },
+    {
+      "expected": {
+        "code": "permission_denied",
+        "reason": "owner_authority_required"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "code": "permission_denied",
+        "reason": "owner_authority_required"
+      },
+      "proven": true,
+      "row": "A grant cannot attach the tool"
+    },
+    {
+      "expected": {
+        "admission": "refused",
+        "named": true,
+        "reason": "capability_unavailable"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "admission": "refused",
+        "named": true,
+        "reason": "capability_unavailable"
+      },
+      "proven": true,
+      "row": "A tool spec carrying a credential is refused"
+    },
+    {
+      "expected": {
+        "code": "permission_denied",
+        "reason": "out_of_scope"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "the grant covers L3. and not L3",
+      "observed": {
+        "code": "permission_denied",
+        "reason": "out_of_scope"
+      },
+      "proven": true,
+      "row": "The lead cannot read its own run"
+    },
+    {
+      "expected": {
+        "alpha.md": 7,
+        "beta.md": 4
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "the last message each child completed after its last command, not its preamble; none if it never answered",
+      "observed": {
+        "alpha.md": null,
+        "beta.md": null
+      },
+      "proven": false,
+      "row": "Each child reported the true count"
+    },
+    {
+      "expected": {
+        "alpha.md": 7,
+        "beta.md": 4
+      },
+      "holds": false,
+      "kind": "row",
+      "note": "",
+      "observed": {},
+      "proven": false,
+      "row": "The lead relayed the true counts"
+    },
+    {
+      "expected": "each relayed and answered at the desk, decided by the caller, sent as the single-use kind, never always, none lapsed, and nothing declined by PIO by itself",
+      "holds": null,
+      "kind": "row",
+      "note": "0 approval(s) asked; none asked is inconclusive; a lapse is the host's single-use reject after the delivery timeout, and it fails L3; so does any request PIO declined by itself, and a run whose exit did not carry that list; inconclusive",
+      "observed": {
+        "decisions": [],
+        "declined_by_pio": {
+          "L3": []
+        },
+        "desk": {},
+        "lapsed": []
+      },
+      "proven": false,
+      "row": "Every approval was decided at the desk"
+    },
+    {
+      "expected": null,
+      "holds": null,
+      "kind": "record",
+      "note": "each request the host answered with an error, never put to a caller: what was asked (method, server, mode, Codex's approval kind, tool name) and why; never an argument, a form, a URL or a message",
+      "observed": {
+        "L3": [],
+        "L3.alpha": "not carried: the run has no exit event",
+        "L3.beta": "not carried: the run has no exit event"
+      },
+      "proven": false,
+      "row": "What PIO declined by itself"
+    },
+    {
+      "expected": "a read of L3.alpha that took at least 20 s and returned exited, or one that returned still running after the tool's 55 s limit",
+      "holds": false,
+      "kind": "row",
+      "note": "seconds as the lead tool measured each call",
+      "observed": [],
+      "proven": false,
+      "row": "A read_run waited for its run: until it exited, or to the wait limit"
+    },
+    {
+      "expected": null,
+      "holds": null,
+      "kind": "record",
+      "note": "each an `error` notification with willRetry true on the run's own thread, counted from the host's events; the first WebSocket retry of a step is not surfaced in a release build (core/src/responses_retry.rs:119-121, rust-v0.157.0), so this can undercount by one a step. Not charged: Codex records usage only on a completed response, so a dropped attempt reports nothing, and nothing PIO observes says what, if anything, it was billed; the bound lists it as outside (not measured)",
+      "observed": {
+        "L3": 0,
+        "L3.alpha": 0,
+        "L3.beta": 0
+      },
+      "proven": false,
+      "row": "Stream retries Codex reported"
+    },
+    {
+      "expected": null,
+      "holds": null,
+      "kind": "record",
+      "note": "the fake in a rehearsal; the owner's Codex live",
+      "observed": [],
+      "proven": false,
+      "row": "What Codex asked, and what was sent"
+    },
+    {
+      "expected": "no stop; the lead made at most 16 tool calls; every bound stayed under its ceiling",
+      "holds": true,
+      "kind": "row",
+      "note": "estimate Codex's own running total for the thread, reported after every step",
+      "observed": {
+        "L3": {
+          "bytes": 36412,
+          "calls": 1,
+          "ceiling": 150000,
+          "continued": [],
+          "estimate": 36126,
+          "host_total": 36126,
+          "largest_step": 20957,
+          "silenced": false,
+          "stopped": null,
+          "subagents": [],
+          "threads": {
+            "01a0dcec-d61a-7093-819a-0c314d23edb7": 36126
+          },
+          "tool_log_calls": 0,
+          "turn_status": "completed"
+        },
+        "L3.alpha": {
+          "bytes": 0,
+          "calls": 0,
+          "ceiling": 60000,
+          "continued": [],
+          "estimate": 0,
+          "host_total": 0,
+          "largest_step": 0,
+          "silenced": false,
+          "stopped": null,
+          "subagents": [],
+          "threads": {},
+          "tool_log_calls": null,
+          "turn_status": null
+        },
+        "L3.beta": {
+          "bytes": 0,
+          "calls": 0,
+          "ceiling": 60000,
+          "continued": [],
+          "estimate": 0,
+          "host_total": 0,
+          "largest_step": 0,
+          "silenced": false,
+          "stopped": null,
+          "subagents": [],
+          "threads": {},
+          "tool_log_calls": null,
+          "turn_status": null
+        }
+      },
+      "proven": true,
+      "row": "Every run stayed within its ceilings"
+    },
+    {
+      "expected": "every response of its tool passed the gate, none was handed back past 120000, and a result its tool never saw that came back past 120000 was met by a stop",
+      "holds": true,
+      "kind": "row",
+      "note": "the lead tool's own gate records, and the lead's host events in the order the host wrote them",
+      "observed": {
+        "handed_back_past_hold": [],
+        "responses": 0,
+        "stopped_for_one": false,
+        "ungated": [],
+        "untooled": [
+          {
+            "item_type": "mcpToolCall",
+            "server": "cua_repl",
+            "status": "completed",
+            "total": 0
+          }
+        ]
+      },
+      "proven": true,
+      "row": "Every result the lead got was checked against its hold"
+    },
+    {
+      "expected": "for each run the runner stopped: the host sent turn/interrupt, Codex acknowledged it, and the turn ended interrupted (cancellation cancelled)",
+      "holds": null,
+      "kind": "row",
+      "note": "the host's own control_sent and control_response, not PIO's cancel_requested; no stop, nothing to judge; inconclusive",
+      "observed": {},
+      "proven": false,
+      "row": "Every stop the runner made reached Codex"
+    },
+    {
+      "expected": "for every run that ran: at least what it reported, its meter saw or its threads reported, plus a step in flight on each of its threads if it was stopped, interrupted or still ran, and its whole share if it still ran, reported nothing or went silent",
+      "holds": true,
+      "kind": "row",
+      "note": "a step in flight: 30000, or the largest seen, if larger; worked out from the views, the meters and the host's own usage events, not from the charge",
+      "observed": {
+        "runs": {
+          "L3": {
+            "allowance": 30000,
+            "at_least": 36126,
+            "charged": 36126,
+            "cut_short": false,
+            "meter": 36126,
+            "reported": 36126,
+            "running": false,
+            "silenced": false,
+            "stopped": false,
+            "threads_sum": 36126
+          }
+        }
+      },
+      "proven": true,
+      "row": "Every run's charge covers what it could have spent"
+    },
+    {
+      "expected": "no model step, on any thread of any run, past 30000 tokens",
+      "holds": true,
+      "kind": "row",
+      "note": "each report's last step and the rise between reports, from the host's own usage events; a run past it is stopped",
+      "observed": {
+        "L3": {
+          "largest": 20957,
+          "steps": 2
+        }
+      },
+      "proven": true,
+      "row": "Every step stayed within the in-flight bound"
+    },
+    {
+      "expected": "no thread but its own on any run: no plan has a sub-agent",
+      "holds": true,
+      "kind": "row",
+      "note": "the host's other_thread events, and the list each exit carries (pio.combraton.dev/other-threads); an exit without it is not nothing",
+      "observed": {
+        "not_carried": [],
+        "threads": {
+          "L3": []
+        }
+      },
+      "proven": true,
+      "row": "No run spawned a sub-agent"
+    },
+    {
+      "expected": "each such run stopped by the runner, for its sub-agent",
+      "holds": null,
+      "kind": "row",
+      "note": "none spawned, nothing to judge; inconclusive",
+      "observed": {},
+      "proven": false,
+      "row": "Every run that spawned a sub-agent was stopped when it appeared"
+    },
+    {
+      "expected": "no turn started on any run's own thread after its turn had ended",
+      "holds": true,
+      "kind": "row",
+      "note": "the host's continuation_started events and the list each exit carries (pio.combraton.dev/continuations); such a turn is interrupted by the host and its run charged a step in flight",
+      "observed": {
+        "not_carried": [],
+        "turns": {
+          "L3": []
+        }
+      },
+      "proven": true,
+      "row": "No run took a turn of its own after its turn ended"
+    },
+    {
+      "expected": "every run charged at most the share reserved for it, and all of them at most the worst case",
+      "holds": true,
+      "kind": "row",
+      "note": "lead share 210000, child share 120000, worst case 450000",
+      "observed": {
+        "runs": {
+          "L3": {
+            "charged": 36126,
+            "share": 210000
+          }
+        },
+        "total": 36126,
+        "worst_case": 450000
+      },
+      "proven": true,
+      "row": "Every run's charge stayed within its reserved share"
+    },
+    {
+      "expected": "a positive amount per run that ran",
+      "holds": true,
+      "kind": "row",
+      "note": "Codex's own total, the sum over the run's threads, which covers every step: what a run that ended by itself is charged; a run cut short is charged it plus a step in flight on each of its threads, and one not seen exited at least its share (review of L3, round 3)",
+      "observed": {
+        "L3": 36126
+      },
+      "proven": true,
+      "row": "Every run reported its usage"
+    },
+    {
+      "expected": "the same processes before and after",
+      "holds": true,
+      "kind": "row",
+      "note": "the owner's own OpenCode service, by process; none running is inconclusive",
+      "observed": {
+        "after": [
+          "4a78b1821d08a04888792ecc690198f073f3c75edd6b03daa2942b161613ea3f"
+        ],
+        "before": [
+          "4a78b1821d08a04888792ecc690198f073f3c75edd6b03daa2942b161613ea3f"
+        ]
+      },
+      "proven": true,
+      "row": "The owner's OpenCode service was untouched"
+    },
+    {
+      "expected": "for every run, nothing removed or changed, nothing outside the project tables, and any project added is under the fixture root",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L3": {
+          "existed_before": true,
+          "exists_after": true,
+          "format": "pio-codex-config-diff/1",
+          "other_changes": false,
+          "projects_added": [
+            {
+              "location": "fixture",
+              "path_sha256": "78f424fafd650c5eaa47357806585b9a126034d5625e4521d1323a74cf1bb4dc",
+              "trust_level": "trusted"
+            }
+          ],
+          "projects_changed": [],
+          "projects_removed": [],
+          "raw_sha256": {
+            "after": "00d722033194d0633ef1f2deca69e5c0d667faa70616addb3a8f7ca66a6421a6",
+            "before": "4e7a17828f5514e9ec7229e7d07ee1ee0793f1e2270afdbb3358a1e9ea225e5e"
+          },
+          "unchanged": false
+        }
+      },
+      "proven": true,
+      "row": "The owner's Codex configuration changed only by the fixture's trust entry"
+    },
+    {
+      "expected": "releasable, and a probe removed",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "probe": false,
+        "releasable": true,
+        "why": null
+      },
+      "proven": true,
+      "row": "The live tree can be released"
+    },
+    {
+      "expected": {},
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {},
+      "proven": true,
+      "row": "The runner's own steps raised no error"
+    },
+    {
+      "expected": "no memory file or database added, removed or changed",
+      "holds": false,
+      "kind": "row",
+      "note": "Codex's own background pipeline, which [features] memories starts at a root thread's first turn: its files and databases by name (a digest for any name Codex did not choose), size and time, never content. A change means it ran, and its model calls report nowhere PIO reads and are outside every meter",
+      "observed": {
+        "changes": [
+          {
+            "after": {
+              "mtime": 1790412940,
+              "size": 782336
+            },
+            "before": {
+              "mtime": 1790351289,
+              "size": 782336
+            },
+            "path": "memories_1.sqlite"
+          }
+        ],
+        "memories": {
+          "key": "features.memory_tool",
+          "off": true,
+          "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+          "value": false,
+          "why": "features.memory_tool = false, per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+        }
+      },
+      "proven": false,
+      "row": "Codex's memory pipeline wrote nothing during the run"
+    },
+    {
+      "expected": "released",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": "released",
+      "proven": true,
+      "row": "The service was released, and nothing it started survived"
+    }
+  ],
+  "sequence": "M4-lead-codex",
+  "sequence_cap": 565000,
+  "sequence_stop": 452000,
+  "spoken": {
+    "alpha": "",
+    "beta": "",
+    "lead": "I\u2019ll start the two requested lead runs and poll only those runs to completion.\nI can\u2019t access a `pio-lead` tool in this session, so I can\u2019t obtain the requested numbers without violating your constraint."
+  },
+  "started_at": "2026-09-26T08:54:13Z",
+  "steer_exited": {
+    "delivery_at_steer": null,
+    "refused": "not_found",
+    "runtime_after_steer": null,
+    "runtime_at_steer": null
+  },
+  "steer_running": null,
+  "store_read": {
+    "read": false,
+    "reason": "Codex's own total covers every step (review 48); no store is read"
+  },
+  "third": null,
+  "tool_log": [
+    {
+      "event": "started",
+      "grant": "f3f027d5-c83c-4f7f-8181-62d1cef93269",
+      "lead": "L3"
+    },
+    {
+      "event": "request",
+      "grant": "f3f027d5-c83c-4f7f-8181-62d1cef93269",
+      "method": "initialize"
+    },
+    {
+      "event": "request",
+      "grant": "f3f027d5-c83c-4f7f-8181-62d1cef93269",
+      "method": "notifications/initialized"
+    },
+    {
+      "event": "request",
+      "grant": "f3f027d5-c83c-4f7f-8181-62d1cef93269",
+      "method": "tools/list"
+    }
+  ],
+  "unmetered": {
+    "decision": "owner-2026-09-26-l3-codex-unmetered-features-off",
+    "exists": true,
+    "features": {
+      "goals": {
+        "key": "features.goals",
+        "off": true,
+        "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+        "value": false,
+        "why": "features.goals = false, per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+      },
+      "image generation": {
+        "key": "features.image_generation",
+        "off": true,
+        "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+        "value": false,
+        "why": "features.image_generation = false, per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+      },
+      "memories": {
+        "key": "features.memory_tool",
+        "off": true,
+        "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+        "value": false,
+        "why": "features.memory_tool = false, per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+      },
+      "standalone web search": {
+        "key": "web_search",
+        "off": true,
+        "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+        "value": "disabled",
+        "why": "web_search = \"disabled\", per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+      },
+      "sub-agents": {
+        "key": "agents.enabled",
+        "multi_agent": false,
+        "off": true,
+        "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+        "value": false,
+        "why": "agents.enabled = false, per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+      }
+    },
+    "owner_keys": {
+      "features.memories": true
+    },
+    "read": "config.toml"
+  },
+  "usage": {
+    "L3": {
+      "allowance": 30000,
+      "basis": "reported_total",
+      "charged": 36126,
+      "cut_short": false,
+      "host_files": {
+        "largest": 20957,
+        "others": [],
+        "sum": 36126
+      },
+      "meter_estimate": 36126,
+      "reported_total": 36126,
+      "seen": 36126,
+      "share": 210000,
+      "stopped_by_the_runner": false,
+      "subagents": [],
+      "threads": {
+        "01a0dcec-d61a-7093-819a-0c314d23edb7": 36126
+      }
+    }
+  },
+  "views": {
+    "L3": {
+      "admission": "admitted",
+      "completions": [],
+      "deliveries": [
+        {
+          "delivery": "acknowledged",
+          "delivery_id": "L3.delivery-1",
+          "determined_at": "2026-09-26T08:55:04Z",
+          "evidence": {
+            "class": "native_turn_acknowledged",
+            "source": "codex-app-server/host"
+          },
+          "history": [
+            {
+              "delivery": "pending",
+              "recorded_at": "2026-09-26T08:55:04Z"
+            }
+          ],
+          "proof_class": "provider_ack_id"
+        }
+      ],
+      "delivery": "acknowledged",
+      "effects": [
+        "L3.delivery-1"
+      ],
+      "evaluation": "not_requested",
+      "execution": {
+        "id": "L3",
+        "kind": "execution.execution"
+      },
+      "exit": {
+        "code": 0
+      },
+      "host": {
+        "generation": 1,
+        "id": "codex-host"
+      },
+      "next_cursor": "25b3375f-c9bd-4169-88fb-93e80d7688ef:1:9",
+      "obligations": [],
+      "origin": {
+        "call_budget": 2,
+        "depth": 0,
+        "initiator": {
+          "id": "L3",
+          "kind": "execution.execution"
+        }
+      },
+      "recovery": [],
+      "result": "absent",
+      "revision": 7,
+      "runtime": "exited",
+      "usage": {
+        "liability": "resolved",
+        "observations": [
+          {
+            "amount": 36126,
+            "basis": "observed",
+            "invocation_id": "17b1f400-f60f-403b-b6a9-4c3adc9223ab",
+            "measure": "codex.tokens.total",
+            "recorded_at": "2026-09-26T08:55:37Z"
+          }
+        ]
+      },
+      "workspace": {
+        "checkpoints": [],
+        "lease": {
+          "base": "f3bf02164a27903c4a15efcfb4dbabbc17fac7c5",
+          "cleanup": "retain",
+          "lease_epoch": 1,
+          "lease_id": "L3.workspace",
+          "repository": "~/pio-m4-live/L3-c1e9d2fd/fixtures/lead",
+          "writer": "owner"
+        }
+      }
+    },
+    "L3.alpha": {},
+    "L3.attached": {},
+    "L3.beta": {},
+    "L3.third": {},
+    "credential-check": {
+      "admission": "refused",
+      "alternative": "Lead tool refused: [{\"detail\":null,\"reason\":\"lead_tool_carries_a_credential_value\"}]",
+      "completions": [],
+      "deliveries": [],
+      "delivery": "failed_before_delivery",
+      "effects": [],
+      "evaluation": "not_requested",
+      "execution": {
+        "id": "credential-check",
+        "kind": "execution.execution"
+      },
+      "exit": "unavailable",
+      "host": {
+        "generation": 1,
+        "id": "codex-host"
+      },
+      "next_cursor": "25b3375f-c9bd-4169-88fb-93e80d7688ef:1:9",
+      "obligations": [],
+      "reason": "capability_unavailable",
+      "recovery": [],
+      "result": "absent",
+      "revision": 1,
+      "runtime": "not_started",
+      "usage": {
+        "liability": "none",
+        "observations": []
+      },
+      "workspace": {
+        "checkpoints": [],
+        "lease": {
+          "base": "f3bf02164a27903c4a15efcfb4dbabbc17fac7c5",
+          "cleanup": "retain",
+          "lease_epoch": 1,
+          "lease_id": "credential-check.workspace",
+          "repository": "~/pio-m4-live/L3-c1e9d2fd/fixtures/lead",
+          "writer": "owner"
+        }
+      }
+    }
+  },
+  "wc_l": {
+    "alpha.md": 7,
+    "beta.md": 4
+  }
+}

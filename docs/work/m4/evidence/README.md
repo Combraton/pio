@@ -300,6 +300,49 @@ does). It answers only `L1b.beta` · `read` · `<fixture>/beta.env` ·
 prints it and exits, so the request goes to the owner live. It exited on
 `RUNNER EXITED` after answering one request.
 
+## `L3-live.json`
+
+The first live L3, on 2026-09-26 from 08:54:14 to 08:55:48Z, at clean head `8be3803`, on AC power. It ran on the orchestrator's dated go under the owner's delegation of 2026-09-26. It is **not independently verified**: the owner paused independent verification until the TUI phase. The receipt's `desk` field is that go line, not the owner's words; the owner was not at the desk.
+
+**It failed, and it failed early.** The lead's only messages were "I'll start the two requested lead runs and poll only those runs to completion." and then "I can't access a `pio-lead` tool in this session, so I can't obtain the requested numbers without violating your constraint." It took two model steps and never called `start_run`. So no child ran, and every row about the children, the steers, the reads and the relayed counts fails.
+
+**Why** (read from Codex's source at `rust-v0.157.0`, not measured):
+- `gpt-5.6-terra`'s catalog entry sets `tool_mode: "code_mode_only"` (`models-manager/models.json:676`). The model's tool mode wins over any feature flag (`core/src/tools/mod.rs:73-95`).
+- In that mode, the model sees only `exec` and `wait` at top level (`core/src/tools/spec_plan.rs:369-404`).
+- Every tool from an ordinary MCP server is deferred (`core/src/mcp_tool_exposure.rs:90-94`) and is never named in `exec`'s description (`code-mode-protocol/src/description.rs:291-356`). PIO's tool was reachable only as `tools.mcp__pio_lead__start_run(...)` inside an `exec` script, and nothing told the model that.
+- Codex did start the server: the lead tool logged `initialize`, `notifications/initialized` and `tools/list`, and then no `tools/call`.
+- A server can opt out of deferral with `omit_tools_from = ["code_mode","deferred"]` (`spec_plan.rs:255-270`). That is PIO's own setting on its own server, and the next attempt sends it, with `required = true`.
+
+**The rehearsal could not see this.** The labeled fake lists the lead tool's tools and scripts the lead's calls directly; it does not model which tools a model can see. Once more, a fake that sends the shape PIO expects cannot test PIO.
+
+**The lead's one tool call** went to `cua_repl`, from the owner's Codex plugins.
+- It is the one MCP tool its plugin manifest keeps visible in code mode.
+- It is marked read-only, so Codex approves it without asking (`core/src/mcp_tool_call.rs:2436-2461`). No request reached PIO, and nothing was declined.
+- It returned the plugin's instructions and a list of applications on the machine to the model. Nothing of that is in this receipt.
+
+Whether the owner's plugins stay on for PIO's test runs is the owner's decision.
+
+**What held:**
+- the model and provider checked before the turn;
+- approvals to the user;
+- only the lead got the tool, pre-allowed and nothing else;
+- every run within its ceilings and its share;
+- every step within the in-flight bound (largest 20,957);
+- no sub-agent and no turn after the turn;
+- no stream retry;
+- the owner's Codex configuration changed only by the fixture's trust entry;
+- the owner's OpenCode service untouched;
+- the service released, with nothing surviving.
+
+**Charged 36,126,** from Codex's own total. The Codex ledger now stands at 457,576.
+
+**The memory row failed conservatively, on a change the pipeline did not make.**
+- `memories_1.sqlite` kept its size, but its modification time moved.
+- Codex opens every one of its runtime databases at app-server start, whatever features are on, and rewrites a header on connect (`state/src/sqlite.rs:251-310`).
+- `goals_1.sqlite` changed in the same second, although Goals was off too.
+- The pipeline itself is gated on the thread's configuration, which carried the per-launch override (`memories/write/src/start.rs:34`).
+- The row will be corrected so that a size-preserving change it cannot attribute is inconclusive, not a failure.
+
 ## `L3-rehearsal.json`
 
 L3 rehearsed against the labeled Codex fake by `scripts/lead_run.py --rehearse
