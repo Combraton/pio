@@ -1,0 +1,40 @@
+{
+ "arrival": [],
+ "decided": [
+  {
+   "action_id": "run-1.action-1",
+   "basis": null,
+   "decided_by": "caller",
+   "decision": "deny",
+   "origin": "command",
+   "record": {
+    "decided_by": "caller",
+    "decision": "deny"
+   },
+   "run": "run-1",
+   "sent": null,
+   "sequence": 9
+  },
+  {
+   "action_id": "run-2.action-1",
+   "basis": "deadline_lapsed",
+   "decided_by": "pio",
+   "decision": "deny",
+   "origin": "provider",
+   "record": {
+    "after_seconds": 8,
+    "always_option_taken": false,
+    "basis": "deadline_lapsed",
+    "decided_by": "pio",
+    "decision": "deny",
+    "option_id": "opt_3",
+    "option_kind": "reject_once",
+    "reason": "no caller answered within the delivery timeout"
+   },
+   "run": "run-2",
+   "sent": null,
+   "sequence": 13
+  }
+ ],
+ "walk": []
+}

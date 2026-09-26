@@ -1,0 +1,110 @@
+{
+ "kind": "blocks",
+ "harness": "claude",
+ "reads": [
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "eyJtZXNzYWdlIjp7ImNvbnRlbnQiOlt7ImlkIjoidG9vbHVfZmFrZV9hc2siLCJpbnB1dCI6eyJjb21tYW5kIjoiZ2l0IHRhZyBwaW8tYXBwcm92YWwtbWFya2VyIn0sIm5hbWUiOiJCYXNoIiwidHlwZSI6InRvb2xfdXNlIn1dLCJyb2xlIjoiYXNzaXN0YW50In0sInR5cGUiOiJhc3Npc3RhbnQifQo=",
+  "eyJtZXNzYWdlIjp7ImNvbnRlbnQiOlt7ImlkIjoidG9vbHVfZmFrZV8wIiwiaW5wdXQiOnsiY29tbWFuZCI6IndjIC1sIFJFQURNRS5tZCJ9LCJuYW1lIjoiQmFzaCIsInR5cGUiOiJ0b29sX3VzZSJ9LHsiaWQiOiJ0b29sdV9mYWtlXzEiLCJpbnB1dCI6eyJmaWxlX3BhdGgiOiJSRUFETUUubWQifSwibmFtZSI6IlJlYWQiLCJ0eXBlIjoidG9vbF91c2UifV0sInJvbGUiOiJhc3Npc3RhbnQifSwidHlwZSI6ImFzc2lzdGFudCJ9CnsibWVzc2FnZSI6eyJjb250ZW50IjpbeyJ0ZXh0IjoiZmFrZSB0dXJuIGNvbXBsZXRlIiwidHlwZSI6InRleHQifV0sInJvbGUiOiJhc3Npc3RhbnQifSwidHlwZSI6ImFzc2lzdGFudCJ9Cg==",
+  ""
+ ],
+ "exit": {
+  "caused_by": [],
+  "epoch": 1,
+  "origin": "provider",
+  "payload": {
+   "exit": {
+    "code": 0
+   },
+   "pio.combraton.dev/native-declines": [],
+   "pio.combraton.dev/tool-uses": {
+    "audit": {
+     "containment": {
+      "mechanism": "harness_permission_rules_only",
+      "os_sandbox_observed": false
+     },
+     "declined_by_pio_count": 0,
+     "denied_by_caller_count": 0,
+     "denied_by_harness_count": 0,
+     "format": "pio-claude-tool-uses/7",
+     "liability": "unresolved",
+     "out_of_fixture_count": 0,
+     "out_of_fixture_effect_observed": false,
+     "result_observed": true,
+     "tool_uses": [
+      {
+       "decided_by": "caller",
+       "decision": "allow",
+       "denied": false,
+       "denied_by_harness": false,
+       "outcome": "performed",
+       "placement": "not_classifiable",
+       "target_label": null,
+       "target_sha256": "3a57caa11d1e0c603f57d69f706a3204b3d7d8dc869d8ecfe715065a0ba53798",
+       "tool": "Bash",
+       "tool_use_id": "toolu_fake_ask"
+      },
+      {
+       "decided_by": null,
+       "decision": null,
+       "denied": false,
+       "denied_by_harness": false,
+       "outcome": "performed",
+       "placement": "not_classifiable",
+       "target_label": null,
+       "target_sha256": "9a5a2e4903c0af9f9a383c2945484f280010897b820e16f741f1d57af6fb1668",
+       "tool": "Bash",
+       "tool_use_id": "toolu_fake_0"
+      },
+      {
+       "decided_by": null,
+       "decision": null,
+       "denied": false,
+       "denied_by_harness": false,
+       "outcome": "performed",
+       "placement": "inside_fixture",
+       "target_label": "<fixture>/README.md",
+       "target_sha256": "78fd0b5b7a88f681ad8f8d5ec35419e8a6d49e121bc9c2b56de271537153a300",
+       "tool": "Read",
+       "tool_use_id": "toolu_fake_1"
+      }
+     ],
+     "turn_interrupted": false,
+     "unclassifiable_target_count": 2,
+     "unknown_outcome_count": 0,
+     "workspace_sha256": "b7d026af56b3653566db1ef49c9a0a87d78f158e63c4e5025a9942925b147a9c"
+    },
+    "harness_status": null
+   }
+  },
+  "recorded_at": "2026-09-26T15:16:55Z",
+  "revision": 8,
+  "sequence": 8,
+  "stream": "46070d60-876f-4ace-b0c6-a44743edd1ce",
+  "subject": {
+   "id": "run-1",
+   "kind": "execution.execution"
+  },
+  "type": "execution.exit.observed"
+ }
+}

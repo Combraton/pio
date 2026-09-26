@@ -1,0 +1,1484 @@
+{
+ "kind": "board",
+ "rounds": [
+  {
+   "pages": [
+    {
+     "filtered": true,
+     "items": [
+      {
+       "gap": {
+        "from": {
+         "epoch": 1,
+         "sequence": 1
+        },
+        "kind": "retention",
+        "snapshot": {
+         "as_of": {
+          "epoch": 1,
+          "sequence": 35
+         },
+         "subjects": [
+          {
+           "revision": 6,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-1.delivery-1",
+              "determined_at": "2026-09-26T15:16:47Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:46Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-1.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-1",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 6,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-1",
+            "kind": "execution.execution"
+           }
+          },
+          {
+           "revision": 5,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-2.delivery-1",
+              "determined_at": "2026-09-26T15:16:47Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:46Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-2.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-2",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 5,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-2",
+            "kind": "execution.execution"
+           }
+          },
+          {
+           "revision": 6,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-3.delivery-1",
+              "determined_at": "2026-09-26T15:16:48Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:46Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-3.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-3",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 6,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-3",
+            "kind": "execution.execution"
+           }
+          },
+          {
+           "revision": 6,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-4.delivery-1",
+              "determined_at": "2026-09-26T15:16:48Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:46Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-4.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-4",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 6,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-4",
+            "kind": "execution.execution"
+           }
+          },
+          {
+           "revision": 6,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-5.delivery-1",
+              "determined_at": "2026-09-26T15:16:48Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:47Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-5.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-5",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 6,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-5",
+            "kind": "execution.execution"
+           }
+          },
+          {
+           "revision": 6,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-6.delivery-1",
+              "determined_at": "2026-09-26T15:16:48Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:47Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-6.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-6",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 6,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-6",
+            "kind": "execution.execution"
+           }
+          }
+         ]
+        },
+        "to": {
+         "epoch": 1,
+         "sequence": 35
+        }
+       }
+      }
+     ],
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:35",
+     "stream": {
+      "epoch": 1,
+      "id": "c5a76d89-3bab-4406-b578-b3240b45c85d"
+     }
+    },
+    {
+     "filtered": false,
+     "items": [],
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:35",
+     "stream": {
+      "epoch": 1,
+      "id": "c5a76d89-3bab-4406-b578-b3240b45c85d"
+     }
+    }
+   ],
+   "views": {
+    "run-1": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-1.delivery-1",
+       "determined_at": "2026-09-26T15:16:47Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:46Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-1.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-1",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:35",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-2": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-2.delivery-1",
+       "determined_at": "2026-09-26T15:16:47Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:46Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-2.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-2",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:35",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 5,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-3": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-3.delivery-1",
+       "determined_at": "2026-09-26T15:16:48Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:46Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-3.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-3",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:35",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-4": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-4.delivery-1",
+       "determined_at": "2026-09-26T15:16:48Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:46Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-4.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-4",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:35",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-5": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-5.delivery-1",
+       "determined_at": "2026-09-26T15:16:48Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:47Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-5.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-5",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:35",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-6": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-6.delivery-1",
+       "determined_at": "2026-09-26T15:16:48Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:47Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-6.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-6",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:35",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    }
+   }
+  },
+  {
+   "pages": [
+    {
+     "filtered": true,
+     "items": [
+      {
+       "gap": {
+        "from": {
+         "epoch": 1,
+         "sequence": 36
+        },
+        "kind": "retention",
+        "snapshot": {
+         "as_of": {
+          "epoch": 1,
+          "sequence": 40
+         },
+         "subjects": [
+          {
+           "revision": 6,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-1.delivery-1",
+              "determined_at": "2026-09-26T15:16:47Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:46Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-1.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-1",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 6,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-1",
+            "kind": "execution.execution"
+           }
+          },
+          {
+           "revision": 5,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-2.delivery-1",
+              "determined_at": "2026-09-26T15:16:47Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:46Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-2.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-2",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 5,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-2",
+            "kind": "execution.execution"
+           }
+          },
+          {
+           "revision": 6,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-3.delivery-1",
+              "determined_at": "2026-09-26T15:16:48Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:46Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-3.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-3",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 6,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-3",
+            "kind": "execution.execution"
+           }
+          },
+          {
+           "revision": 6,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-4.delivery-1",
+              "determined_at": "2026-09-26T15:16:48Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:46Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-4.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-4",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 6,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-4",
+            "kind": "execution.execution"
+           }
+          },
+          {
+           "revision": 6,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-5.delivery-1",
+              "determined_at": "2026-09-26T15:16:48Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:47Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-5.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-5",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 6,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-5",
+            "kind": "execution.execution"
+           }
+          },
+          {
+           "revision": 6,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-6.delivery-1",
+              "determined_at": "2026-09-26T15:16:48Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:47Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-6.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-6",
+             "kind": "execution.execution"
+            },
+            "exit": {
+             "code": 0
+            },
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 6,
+            "runtime": "exited",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-6",
+            "kind": "execution.execution"
+           }
+          },
+          {
+           "revision": 5,
+           "state": {
+            "admission": "admitted",
+            "completions": [],
+            "deliveries": [
+             {
+              "delivery": "delivered",
+              "delivery_id": "run-7.delivery-1",
+              "determined_at": "2026-09-26T15:16:50Z",
+              "evidence": {
+               "class": "child_release_marker",
+               "source": "fake-host/process"
+              },
+              "history": [
+               {
+                "delivery": "pending",
+                "evidence": {
+                 "class": "release_not_observed",
+                 "source": "fake-host/process"
+                },
+                "recorded_at": "2026-09-26T15:16:50Z"
+               }
+              ]
+             }
+            ],
+            "delivery": "delivered",
+            "effects": [
+             "run-7.delivery-1"
+            ],
+            "evaluation": "not_requested",
+            "execution": {
+             "id": "run-7",
+             "kind": "execution.execution"
+            },
+            "exit": "unavailable",
+            "host": {
+             "generation": 1,
+             "id": "durable-fake-host"
+            },
+            "recovery": [],
+            "result": "absent",
+            "revision": 5,
+            "runtime": "active",
+            "usage": {
+             "liability": "none",
+             "observations": []
+            }
+           },
+           "subject": {
+            "id": "run-7",
+            "kind": "execution.execution"
+           }
+          }
+         ]
+        },
+        "to": {
+         "epoch": 1,
+         "sequence": 40
+        }
+       }
+      }
+     ],
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:40",
+     "stream": {
+      "epoch": 1,
+      "id": "c5a76d89-3bab-4406-b578-b3240b45c85d"
+     }
+    },
+    {
+     "filtered": false,
+     "items": [],
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:40",
+     "stream": {
+      "epoch": 1,
+      "id": "c5a76d89-3bab-4406-b578-b3240b45c85d"
+     }
+    }
+   ],
+   "views": {
+    "run-1": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-1.delivery-1",
+       "determined_at": "2026-09-26T15:16:47Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:46Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-1.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-1",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:40",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-2": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-2.delivery-1",
+       "determined_at": "2026-09-26T15:16:47Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:46Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-2.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-2",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:40",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 5,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-3": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-3.delivery-1",
+       "determined_at": "2026-09-26T15:16:48Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:46Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-3.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-3",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:40",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-4": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-4.delivery-1",
+       "determined_at": "2026-09-26T15:16:48Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:46Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-4.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-4",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:40",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-5": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-5.delivery-1",
+       "determined_at": "2026-09-26T15:16:48Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:47Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-5.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-5",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:40",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-6": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-6.delivery-1",
+       "determined_at": "2026-09-26T15:16:48Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:47Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-6.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-6",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:40",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-7": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-7.delivery-1",
+       "determined_at": "2026-09-26T15:16:50Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:50Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-7.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-7",
+      "kind": "execution.execution"
+     },
+     "exit": "unavailable",
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "c5a76d89-3bab-4406-b578-b3240b45c85d:1:40",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 5,
+     "runtime": "active",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    }
+   }
+  }
+ ]
+}

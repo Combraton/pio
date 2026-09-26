@@ -1,0 +1,119 @@
+{
+ "kind": "blocks",
+ "harness": "opencode",
+ "reads": [
+  "",
+  "eyJ0eXBlIjoic2Vzc2lvbl91cGRhdGUiLCJ1cGRhdGUiOnsiY29udGVudCI6eyJ0ZXh0IjoiZmFrZSB0dXJuIHN0YXJ0ZWQiLCJ0eXBlIjoidGV4dCJ9LCJzZXNzaW9uVXBkYXRlIjoiYWdlbnRfbWVzc2FnZV9jaHVuayJ9fQo=",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "eyJ0eXBlIjoic2Vzc2lvbl91cGRhdGUiLCJ1cGRhdGUiOnsia2luZCI6ImV4ZWN1dGUiLCJsb2NhdGlvbnMiOltdLCJyYXdJbnB1dCI6e30sInNlc3Npb25VcGRhdGUiOiJ0b29sX2NhbGwiLCJzdGF0dXMiOiJwZW5kaW5nIiwidGl0bGUiOiJydW4gYSBjb21tYW5kIiwidG9vbENhbGxJZCI6ImNhbGxfcGVybWlzc2lvbl8wIn19CnsidHlwZSI6InNlc3Npb25fdXBkYXRlIiwidXBkYXRlIjp7ImtpbmQiOiJleGVjdXRlIiwibG9jYXRpb25zIjpbXSwicmF3SW5wdXQiOnsiY29tbWFuZCI6ImdpdCB0YWcgcGlvLWFwcHJvdmFsLW1hcmtlciJ9LCJzZXNzaW9uVXBkYXRlIjoidG9vbF9jYWxsX3VwZGF0ZSIsInN0YXR1cyI6ImluX3Byb2dyZXNzIiwidGl0bGUiOiJydW4gYSBjb21tYW5kIiwidG9vbENhbGxJZCI6ImNhbGxfcGVybWlzc2lvbl8wIn19Cg==",
+  "eyJ0eXBlIjoic2Vzc2lvbl91cGRhdGUiLCJ1cGRhdGUiOnsia2luZCI6ImV4ZWN1dGUiLCJsb2NhdGlvbnMiOltdLCJyYXdJbnB1dCI6e30sInNlc3Npb25VcGRhdGUiOiJ0b29sX2NhbGwiLCJzdGF0dXMiOiJwZW5kaW5nIiwidGl0bGUiOiJydW4gYSBjb21tYW5kIiwidG9vbENhbGxJZCI6ImNhbGxfMCJ9fQp7InR5cGUiOiJzZXNzaW9uX3VwZGF0ZSIsInVwZGF0ZSI6eyJraW5kIjoiZXhlY3V0ZSIsImxvY2F0aW9ucyI6W10sInJhd0lucHV0Ijp7ImNvbW1hbmQiOiJ3YyAtbCBSRUFETUUubWQifSwic2Vzc2lvblVwZGF0ZSI6InRvb2xfY2FsbF91cGRhdGUiLCJzdGF0dXMiOiJpbl9wcm9ncmVzcyIsInRpdGxlIjoicnVuIGEgY29tbWFuZCIsInRvb2xDYWxsSWQiOiJjYWxsXzAifX0KeyJ0eXBlIjoic2Vzc2lvbl91cGRhdGUiLCJ1cGRhdGUiOnsic2Vzc2lvblVwZGF0ZSI6InRvb2xfY2FsbF91cGRhdGUiLCJzdGF0dXMiOiJjb21wbGV0ZWQiLCJ0b29sQ2FsbElkIjoiY2FsbF8wIn19CnsidHlwZSI6InNlc3Npb25fdXBkYXRlIiwidXBkYXRlIjp7ImtpbmQiOiJyZWFkIiwibG9jYXRpb25zIjpbXSwicmF3SW5wdXQiOnt9LCJzZXNzaW9uVXBkYXRlIjoidG9vbF9jYWxsIiwic3RhdHVzIjoicGVuZGluZyIsInRpdGxlIjoicmVhZCBhIGZpbGUiLCJ0b29sQ2FsbElkIjoiY2FsbF8xIn19CnsidHlwZSI6InNlc3Npb25fdXBkYXRlIiwidXBkYXRlIjp7ImtpbmQiOiJyZWFkIiwibG9jYXRpb25zIjpbeyJwYXRoIjoiUkVBRE1FLm1kIn1dLCJyYXdJbnB1dCI6eyJmaWxlX3BhdGgiOiJSRUFETUUubWQifSwic2Vzc2lvblVwZGF0ZSI6InRvb2xfY2FsbF91cGRhdGUiLCJzdGF0dXMiOiJpbl9wcm9ncmVzcyIsInRpdGxlIjoicmVhZCBhIGZpbGUiLCJ0b29sQ2FsbElkIjoiY2FsbF8xIn19CnsidHlwZSI6InNlc3Npb25fdXBkYXRlIiwidXBkYXRlIjp7InNlc3Npb25VcGRhdGUiOiJ0b29sX2NhbGxfdXBkYXRlIiwic3RhdHVzIjoiY29tcGxldGVkIiwidG9vbENhbGxJZCI6ImNhbGxfMSJ9fQp7InR5cGUiOiJzZXNzaW9uX3VwZGF0ZSIsInVwZGF0ZSI6eyJjb250ZW50Ijp7InRleHQiOiJmYWtlIHR1cm4gY2h1bmsgMCIsInR5cGUiOiJ0ZXh0In0sInNlc3Npb25VcGRhdGUiOiJhZ2VudF9tZXNzYWdlX2NodW5rIn19CnsidHlwZSI6InNlc3Npb25fdXBkYXRlIiwidXBkYXRlIjp7ImNvbnRlbnQiOnsidGV4dCI6ImZha2UgdHVybiBjaHVuayAxIiwidHlwZSI6InRleHQifSwic2Vzc2lvblVwZGF0ZSI6ImFnZW50X21lc3NhZ2VfY2h1bmsifX0KeyJ0eXBlIjoic2Vzc2lvbl91cGRhdGUiLCJ1cGRhdGUiOnsiY29udGVudCI6eyJ0ZXh0IjoiZmFrZSB0dXJuIGNodW5rIDIiLCJ0eXBlIjoidGV4dCJ9LCJzZXNzaW9uVXBkYXRlIjoiYWdlbnRfbWVzc2FnZV9jaHVuayJ9fQp7InR5cGUiOiJzZXNzaW9uX3VwZGF0ZSIsInVwZGF0ZSI6eyJjb250ZW50Ijp7InRleHQiOiJmYWtlIHR1cm4gY2h1bmsgMyIsInR5cGUiOiJ0ZXh0In0sInNlc3Npb25VcGRhdGUiOiJhZ2VudF9tZXNzYWdlX2NodW5rIn19CnsidHlwZSI6InNlc3Npb25fdXBkYXRlIiwidXBkYXRlIjp7ImNvbnRlbnQiOnsidGV4dCI6ImZha2UgdHVybiBjaHVuayA0IiwidHlwZSI6InRleHQifSwic2Vzc2lvblVwZGF0ZSI6ImFnZW50X21lc3NhZ2VfY2h1bmsifX0KeyJ0eXBlIjoic2Vzc2lvbl91cGRhdGUiLCJ1cGRhdGUiOnsiY29udGVudCI6eyJ0ZXh0IjoiZmFrZSB0dXJuIGNodW5rIDUiLCJ0eXBlIjoidGV4dCJ9LCJzZXNzaW9uVXBkYXRlIjoiYWdlbnRfbWVzc2FnZV9jaHVuayJ9fQp7InR5cGUiOiJzZXNzaW9uX3VwZGF0ZSIsInVwZGF0ZSI6eyJjb3N0Ijp7ImFtb3VudCI6MCwiY3VycmVuY3kiOiJVU0QifSwic2Vzc2lvblVwZGF0ZSI6InVzYWdlX3VwZGF0ZSIsInNpemUiOjIwNDgwMCwidXNlZCI6MjU2fX0K",
+  ""
+ ],
+ "exit": {
+  "caused_by": [],
+  "epoch": 1,
+  "origin": "provider",
+  "payload": {
+   "exit": {
+    "code": 0
+   },
+   "pio.combraton.dev/native-declines": [],
+   "pio.combraton.dev/tool-uses": {
+    "audit": {
+     "containment": {
+      "mechanism": "harness_permission_rules_only",
+      "os_sandbox_observed": false
+     },
+     "declined_by_pio_count": 0,
+     "denied_by_caller_count": 0,
+     "denied_by_harness_count": 0,
+     "format": "pio-claude-tool-uses/7",
+     "liability": "unresolved",
+     "out_of_fixture_count": 0,
+     "out_of_fixture_effect_observed": false,
+     "result_observed": true,
+     "tool_uses": [
+      {
+       "decided_by": "caller",
+       "decision": "allow",
+       "denied": false,
+       "denied_by_harness": false,
+       "outcome": "performed",
+       "placement": "not_classifiable",
+       "target_label": null,
+       "target_sha256": "3a57caa11d1e0c603f57d69f706a3204b3d7d8dc869d8ecfe715065a0ba53798",
+       "tool": "execute",
+       "tool_use_id": "call_permission_0"
+      },
+      {
+       "decided_by": null,
+       "decision": null,
+       "denied": false,
+       "denied_by_harness": false,
+       "outcome": "performed",
+       "placement": "not_classifiable",
+       "target_label": null,
+       "target_sha256": "9a5a2e4903c0af9f9a383c2945484f280010897b820e16f741f1d57af6fb1668",
+       "tool": "execute",
+       "tool_use_id": "call_0"
+      },
+      {
+       "decided_by": null,
+       "decision": null,
+       "denied": false,
+       "denied_by_harness": false,
+       "outcome": "performed",
+       "placement": "inside_fixture",
+       "target_label": "<fixture>/README.md",
+       "target_sha256": "d1028a85cf5fb4ee1e6475ded2a7623e31285e6c8cb04433b033f3e181879498",
+       "tool": "read",
+       "tool_use_id": "call_1"
+      }
+     ],
+     "turn_interrupted": false,
+     "unclassifiable_target_count": 2,
+     "unknown_outcome_count": 0,
+     "workspace_sha256": "3791a314523cc56fed0738505f141684755226dbab1895c435e87bcc50575b07"
+    },
+    "harness_status": [
+     {
+      "kind": "execute",
+      "locations": [],
+      "status": "in_progress",
+      "tool_use_id": "call_permission_0"
+     },
+     {
+      "kind": "execute",
+      "locations": [],
+      "status": "completed",
+      "tool_use_id": "call_0"
+     },
+     {
+      "kind": "read",
+      "locations": [
+       {
+        "path": "README.md"
+       }
+      ],
+      "status": "completed",
+      "tool_use_id": "call_1"
+     }
+    ]
+   }
+  },
+  "recorded_at": "2026-09-26T15:16:53Z",
+  "revision": 8,
+  "sequence": 8,
+  "stream": "865f54f1-fe77-4d3c-83cb-be974a11fc67",
+  "subject": {
+   "id": "run-1",
+   "kind": "execution.execution"
+  },
+  "type": "execution.exit.observed"
+ }
+}

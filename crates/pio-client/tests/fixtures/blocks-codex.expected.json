@@ -1,0 +1,21 @@
+{
+ "audited": false,
+ "blocks": [
+  [
+   "text",
+   "fake agent reply"
+  ],
+  [
+   "tool",
+   "item-approval"
+  ]
+ ],
+ "tools": {
+  "item-approval": {
+   "decided_by": "unknown",
+   "kind": "commandExecution",
+   "placement": "not yet classified",
+   "tool_use_id": "item-approval"
+  }
+ }
+}

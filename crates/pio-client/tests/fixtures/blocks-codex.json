@@ -1,0 +1,42 @@
+{
+ "kind": "blocks",
+ "harness": "codex",
+ "reads": [
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "eyJtZXRob2QiOiJpdGVtL2FnZW50TWVzc2FnZS9kZWx0YSIsInBhcmFtcyI6eyJkZWx0YSI6ImZha2UgYWdlbnQgcmVwbHkiLCJpdGVtSWQiOiJpdGVtLWFnZW50IiwidGhyZWFkSWQiOiJmYWtlLXRocmVhZC0zMjc2MyIsInR1cm5JZCI6ImZha2UtdHVybi0xIn19Cg==",
+  "eyJtZXRob2QiOiJpdGVtL2NvbXBsZXRlZCIsInBhcmFtcyI6eyJpdGVtIjp7ImNvbW1hbmQiOiJlY2hvIGZpeHR1cmUiLCJjb21tYW5kQWN0aW9ucyI6W10sImN3ZCI6Ii9wcml2YXRlL3RtcC9waW8tY3gteDlvMzM5bmovZml4dHVyZXMvcnVuLTEiLCJpZCI6Iml0ZW0tYXBwcm92YWwiLCJzdGF0dXMiOiJmYWlsZWQiLCJ0eXBlIjoiY29tbWFuZEV4ZWN1dGlvbiJ9LCJ0aHJlYWRJZCI6ImZha2UtdGhyZWFkLTMyNzYzIiwidHVybklkIjoiZmFrZS10dXJuLTEifX0K",
+  ""
+ ],
+ "exit": {
+  "caused_by": [],
+  "epoch": 1,
+  "origin": "provider",
+  "payload": {
+   "exit": {
+    "code": 0
+   },
+   "pio.combraton.dev/continuations": [],
+   "pio.combraton.dev/native-declines": [],
+   "pio.combraton.dev/other-threads": []
+  },
+  "recorded_at": "2026-09-26T15:17:00Z",
+  "revision": 8,
+  "sequence": 8,
+  "stream": "eaac22ea-1dfa-472c-b950-320012bb7254",
+  "subject": {
+   "id": "run-1",
+   "kind": "execution.execution"
+  },
+  "type": "execution.exit.observed"
+ }
+}

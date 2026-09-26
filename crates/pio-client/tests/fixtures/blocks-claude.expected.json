@@ -1,0 +1,44 @@
+{
+ "audited": true,
+ "blocks": [
+  [
+   "tool",
+   "toolu_fake_ask"
+  ],
+  [
+   "tool",
+   "toolu_fake_0"
+  ],
+  [
+   "tool",
+   "toolu_fake_1"
+  ],
+  [
+   "text",
+   "fake turn complete"
+  ]
+ ],
+ "tools": {
+  "toolu_fake_0": {
+   "decided_by": "nobody was asked",
+   "kind": "Bash",
+   "outcome": "performed",
+   "placement": "not_classifiable",
+   "tool_use_id": "toolu_fake_0"
+  },
+  "toolu_fake_1": {
+   "decided_by": "nobody was asked",
+   "kind": "Read",
+   "outcome": "performed",
+   "placement": "inside_fixture",
+   "tool_use_id": "toolu_fake_1"
+  },
+  "toolu_fake_ask": {
+   "decided_by": "caller",
+   "kind": "Bash",
+   "outcome": "performed",
+   "placement": "not_classifiable",
+   "tool_use_id": "toolu_fake_ask"
+  }
+ }
+}

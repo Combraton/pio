@@ -1,0 +1,23 @@
+{
+ "arrival": [],
+ "decided": [
+  {
+   "action_id": "work.action-1",
+   "basis": "expired_with_turn",
+   "decided_by": "nobody",
+   "decision": null,
+   "origin": "provider",
+   "record": {
+    "basis": "expired_with_turn",
+    "decided_by": "nobody",
+    "decision": null,
+    "reason": "the turn ended before any answer reached the harness; nothing was sent",
+    "sent": false
+   },
+   "run": "work",
+   "sent": false,
+   "sequence": 6
+  }
+ ],
+ "walk": []
+}

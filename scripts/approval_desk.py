@@ -42,6 +42,7 @@ namespaced keys, so "the only difference is the keys" is a claim the run can
 fail.
 """
 import argparse
+import calendar
 import contextlib
 import json
 import re
@@ -187,14 +188,45 @@ def due(row, assume=None):
     Every release harness sets one now; `None` stays the honest answer for
     a request that carries no deadline, rather than an invented countdown.
     `assume` substitutes a default for a missing one.
+
+    Seconds since the epoch. `requested_at` is UTC, so it is read as UTC:
+    `time.mktime` read it as local time, which moved every deadline by the
+    machine's offset and changed no order, so no proof noticed. The Rust
+    port (`pio_client::walk`) reads it as UTC, and the parity check needs
+    the same number from both.
     """
-    seconds = row['answer_deadline_seconds']
+    seconds = row.get('answer_deadline_seconds')
     if seconds is None:
         if assume is None:
             return None
         seconds = assume
     stamp = time.strptime(row['requested_at'][:19], '%Y-%m-%dT%H:%M:%S')
-    return time.mktime(stamp) + seconds
+    return calendar.timegm(stamp) + seconds
+
+
+def decisions(events):
+    """Every decision on the stream, in stream order, whoever made it.
+
+    One shape for all of them: the caller's answer, PIO's lapse and decline,
+    Codex settling a request itself (`decided_by: harness`) and a request
+    that ended with its turn (`decided_by: nobody`). The last two, and PIO's
+    own, carry `decision: null` and `sent: false` where nothing was sent;
+    the record is shown as the service wrote it. A payload without the key
+    decided nothing this walk can name, so its decider is `unknown`.
+    """
+    out = []
+    for event in events:
+        if event['type'] != 'execution.action.answered':
+            continue
+        record = event['payload'].get(DECISION)
+        known = record or {}
+        out.append(dict(run=event['subject']['id'],
+                        action_id=event['payload'].get('action_id'),
+                        sequence=event['sequence'], origin=event['origin'],
+                        decided_by=known.get('decided_by', 'unknown'),
+                        decision=known.get('decision'), sent=known.get('sent'),
+                        basis=known.get('basis'), record=record))
+    return out
 
 
 def host_kinds(case):
@@ -371,6 +403,10 @@ def pass_one(out, mutant=None):
         assert 'answered_at' in lapsed, lapsed
         # And the walk, drawn again from the same fold, is empty.
         assert walk(events) == [], walk(events)
+        # What stays is who decided each: the caller one, PIO the other.
+        decided = [(d['run'], d['decided_by'], d['origin']) for d in decisions(events)]
+        assert decided == [(later['run'], 'caller', 'command'),
+                           (soon['run'], 'pio', 'provider')], decided
 
         record = dict(runs=2, ordered_by='deadline',
                       order=[r['run'] for r in rows],

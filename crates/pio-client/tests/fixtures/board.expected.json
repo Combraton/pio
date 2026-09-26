@@ -1,0 +1,271 @@
+{
+ "rounds": [
+  {
+   "board": {
+    "counts": {
+     "finished": 6
+    },
+    "cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:37",
+    "gaps": 0,
+    "groups": [
+     {
+      "runs": [
+       "run-1",
+       "run-2",
+       "run-3",
+       "run-4",
+       "run-5",
+       "run-6"
+      ],
+      "state": "finished"
+     }
+    ],
+    "notes": {
+     "approvals": 0,
+     "uncertain": 0
+    },
+    "runs": [
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 6,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-1",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 6,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-2",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 6,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-3",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 7,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-4",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 7,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 6,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-5",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 6,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-6",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     }
+    ]
+   },
+   "moved": [
+    "run-1",
+    "run-2",
+    "run-3",
+    "run-4",
+    "run-5",
+    "run-6"
+   ]
+  },
+  {
+   "board": {
+    "counts": {
+     "finished": 6,
+     "running": 1
+    },
+    "cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:40",
+    "gaps": 0,
+    "groups": [
+     {
+      "runs": [
+       "run-7"
+      ],
+      "state": "running"
+     },
+     {
+      "runs": [
+       "run-1",
+       "run-2",
+       "run-3",
+       "run-4",
+       "run-5",
+       "run-6"
+      ],
+      "state": "finished"
+     }
+    ],
+    "notes": {
+     "approvals": 0,
+     "uncertain": 0
+    },
+    "runs": [
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 6,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-1",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 6,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-2",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 6,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-3",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 7,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-4",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 7,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 6,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-5",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 6,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-6",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 3,
+      "exit": "unavailable",
+      "glyph": "●",
+      "id": "run-7",
+      "liability": "none",
+      "pending_actions": [],
+      "revision": 3,
+      "runtime": "active",
+      "state": "running"
+     }
+    ]
+   },
+   "moved": [
+    "run-7"
+   ]
+  }
+ ]
+}

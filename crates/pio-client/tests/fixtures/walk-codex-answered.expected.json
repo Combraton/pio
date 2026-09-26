@@ -1,0 +1,20 @@
+{
+ "arrival": [],
+ "decided": [
+  {
+   "action_id": "run-1.action-1",
+   "basis": null,
+   "decided_by": "caller",
+   "decision": "accept",
+   "origin": "command",
+   "record": {
+    "decided_by": "caller",
+    "decision": "accept"
+   },
+   "run": "run-1",
+   "sent": null,
+   "sequence": 5
+  }
+ ],
+ "walk": []
+}

@@ -1,0 +1,1345 @@
+{
+ "kind": "board",
+ "rounds": [
+  {
+   "pages": [
+    {
+     "filtered": false,
+     "items": [
+      {
+       "event": {
+        "caused_by": [],
+        "command_id": "run-1",
+        "epoch": 1,
+        "operation_ref": "6ff65716-a04c-4ed3-81ab-427221d94ee9",
+        "origin": "command",
+        "payload": {
+         "admission": "admitted",
+         "delivery_id": "run-1.delivery-1",
+         "runtime": "preparing"
+        },
+        "recorded_at": "2026-09-26T15:16:41Z",
+        "revision": 1,
+        "sequence": 1,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.admission.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "pending",
+         "delivery_id": "run-1.delivery-1",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:41Z",
+        "revision": 2,
+        "sequence": 2,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-1.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:41Z",
+        "revision": 3,
+        "sequence": 3,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "command_id": "run-2",
+        "epoch": 1,
+        "operation_ref": "81bb0e68-54d2-4cb8-9ebd-eba41f26e325",
+        "origin": "command",
+        "payload": {
+         "admission": "admitted",
+         "delivery_id": "run-2.delivery-1",
+         "runtime": "preparing"
+        },
+        "recorded_at": "2026-09-26T15:16:41Z",
+        "revision": 1,
+        "sequence": 4,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.admission.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "pending",
+         "delivery_id": "run-2.delivery-1",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 2,
+        "sequence": 5,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-2.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 3,
+        "sequence": 6,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "command_id": "run-3",
+        "epoch": 1,
+        "operation_ref": "20923e7e-4a00-40f8-a335-0774f58ef294",
+        "origin": "command",
+        "payload": {
+         "admission": "admitted",
+         "delivery_id": "run-3.delivery-1",
+         "runtime": "preparing"
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 1,
+        "sequence": 7,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-3",
+         "kind": "execution.execution"
+        },
+        "type": "execution.admission.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "pending",
+         "delivery_id": "run-3.delivery-1",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 2,
+        "sequence": 8,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-3",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-3.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 3,
+        "sequence": 9,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-3",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "command_id": "run-4",
+        "epoch": 1,
+        "operation_ref": "ac401b6e-251e-4149-b0c9-2d1ae65fec4a",
+        "origin": "command",
+        "payload": {
+         "admission": "admitted",
+         "delivery_id": "run-4.delivery-1",
+         "runtime": "preparing"
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 1,
+        "sequence": 10,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-4",
+         "kind": "execution.execution"
+        },
+        "type": "execution.admission.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "pending",
+         "delivery_id": "run-4.delivery-1",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 2,
+        "sequence": 11,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-4",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "pending",
+         "delivery_id": "run-4.delivery-1",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 3,
+        "sequence": 12,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-4",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "command_id": "run-5",
+        "epoch": 1,
+        "operation_ref": "51adc2bb-0a97-4359-ac26-3e4a05c7d477",
+        "origin": "command",
+        "payload": {
+         "admission": "admitted",
+         "delivery_id": "run-5.delivery-1",
+         "runtime": "preparing"
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 1,
+        "sequence": 13,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-5",
+         "kind": "execution.execution"
+        },
+        "type": "execution.admission.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-4.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 4,
+        "sequence": 14,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-4",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "pending",
+         "delivery_id": "run-5.delivery-1",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 2,
+        "sequence": 15,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-5",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-5.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 3,
+        "sequence": 16,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-5",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "command_id": "run-6",
+        "epoch": 1,
+        "operation_ref": "47ae922a-3b54-44c5-b486-064d461a594f",
+        "origin": "command",
+        "payload": {
+         "admission": "admitted",
+         "delivery_id": "run-6.delivery-1",
+         "runtime": "preparing"
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 1,
+        "sequence": 17,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-6",
+         "kind": "execution.execution"
+        },
+        "type": "execution.admission.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "pending",
+         "delivery_id": "run-6.delivery-1",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:42Z",
+        "revision": 2,
+        "sequence": 18,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-6",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-6.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 3,
+        "sequence": 19,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-6",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-1.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 4,
+        "sequence": 20,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-1.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 5,
+        "sequence": 21,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "exit": {
+          "code": 0
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 6,
+        "sequence": 22,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.exit.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-2.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 4,
+        "sequence": 23,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-2.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 5,
+        "sequence": 24,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "exit": {
+          "code": 0
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 6,
+        "sequence": 25,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.exit.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-3.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 4,
+        "sequence": 26,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-3",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-3.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 5,
+        "sequence": 27,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-3",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "exit": {
+          "code": 0
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 6,
+        "sequence": 28,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-3",
+         "kind": "execution.execution"
+        },
+        "type": "execution.exit.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-4.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 5,
+        "sequence": 29,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-4",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-4.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 6,
+        "sequence": 30,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-4",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "exit": {
+          "code": 0
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 7,
+        "sequence": 31,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-4",
+         "kind": "execution.execution"
+        },
+        "type": "execution.exit.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-5.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:43Z",
+        "revision": 4,
+        "sequence": 32,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-5",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-5.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:44Z",
+        "revision": 5,
+        "sequence": 33,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-5",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "exit": {
+          "code": 0
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:44Z",
+        "revision": 6,
+        "sequence": 34,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-5",
+         "kind": "execution.execution"
+        },
+        "type": "execution.exit.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-6.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:44Z",
+        "revision": 4,
+        "sequence": 35,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-6",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-6.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:44Z",
+        "revision": 5,
+        "sequence": 36,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-6",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "exit": {
+          "code": 0
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:44Z",
+        "revision": 6,
+        "sequence": 37,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-6",
+         "kind": "execution.execution"
+        },
+        "type": "execution.exit.observed"
+       }
+      }
+     ],
+     "next_cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:37",
+     "stream": {
+      "epoch": 1,
+      "id": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5"
+     }
+    },
+    {
+     "filtered": false,
+     "items": [],
+     "next_cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:37",
+     "stream": {
+      "epoch": 1,
+      "id": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5"
+     }
+    }
+   ],
+   "views": {
+    "run-1": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-1.delivery-1",
+       "determined_at": "2026-09-26T15:16:43Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:41Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-1.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-1",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:37",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-2": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-2.delivery-1",
+       "determined_at": "2026-09-26T15:16:43Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:42Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-2.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-2",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:37",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-3": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-3.delivery-1",
+       "determined_at": "2026-09-26T15:16:43Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:42Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-3.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-3",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:37",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-4": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-4.delivery-1",
+       "determined_at": "2026-09-26T15:16:43Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:42Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-4.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-4",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:37",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 7,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-5": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-5.delivery-1",
+       "determined_at": "2026-09-26T15:16:44Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:42Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-5.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-5",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:37",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    },
+    "run-6": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-6.delivery-1",
+       "determined_at": "2026-09-26T15:16:44Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:42Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-6.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-6",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:37",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 6,
+     "runtime": "exited",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    }
+   }
+  },
+  {
+   "pages": [
+    {
+     "filtered": false,
+     "items": [
+      {
+       "event": {
+        "caused_by": [],
+        "command_id": "run-7",
+        "epoch": 1,
+        "operation_ref": "56f4dd63-9df1-4f99-aaa8-6fbbd6da08c4",
+        "origin": "command",
+        "payload": {
+         "admission": "admitted",
+         "delivery_id": "run-7.delivery-1",
+         "runtime": "preparing"
+        },
+        "recorded_at": "2026-09-26T15:16:45Z",
+        "revision": 1,
+        "sequence": 38,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-7",
+         "kind": "execution.execution"
+        },
+        "type": "execution.admission.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "pending",
+         "delivery_id": "run-7.delivery-1",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:45Z",
+        "revision": 2,
+        "sequence": 39,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-7",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "delivered",
+         "delivery_id": "run-7.delivery-1",
+         "evidence": {
+          "class": "child_release_marker",
+          "source": "fake-host/process"
+         }
+        },
+        "recorded_at": "2026-09-26T15:16:45Z",
+        "revision": 3,
+        "sequence": 40,
+        "stream": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5",
+        "subject": {
+         "id": "run-7",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      }
+     ],
+     "next_cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:40",
+     "stream": {
+      "epoch": 1,
+      "id": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5"
+     }
+    },
+    {
+     "filtered": false,
+     "items": [],
+     "next_cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:40",
+     "stream": {
+      "epoch": 1,
+      "id": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5"
+     }
+    }
+   ],
+   "views": {
+    "run-7": {
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "delivered",
+       "delivery_id": "run-7.delivery-1",
+       "determined_at": "2026-09-26T15:16:45Z",
+       "evidence": {
+        "class": "child_release_marker",
+        "source": "fake-host/process"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "evidence": {
+          "class": "release_not_observed",
+          "source": "fake-host/process"
+         },
+         "recorded_at": "2026-09-26T15:16:45Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "delivered",
+     "effects": [
+      "run-7.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-7",
+      "kind": "execution.execution"
+     },
+     "exit": "unavailable",
+     "host": {
+      "generation": 1,
+      "id": "durable-fake-host"
+     },
+     "next_cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:40",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 3,
+     "runtime": "active",
+     "usage": {
+      "liability": "none",
+      "observations": []
+     }
+    }
+   }
+  }
+ ]
+}

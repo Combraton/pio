@@ -1,0 +1,23 @@
+{
+ "arrival": [],
+ "decided": [
+  {
+   "action_id": "work.action-1",
+   "basis": "settled_by_harness",
+   "decided_by": "harness",
+   "decision": null,
+   "origin": "provider",
+   "record": {
+    "basis": "settled_by_harness",
+    "decided_by": "harness",
+    "decision": null,
+    "reason": "the harness settled the request itself; PIO sent no answer",
+    "sent": false
+   },
+   "run": "work",
+   "sent": false,
+   "sequence": 5
+  }
+ ],
+ "walk": []
+}

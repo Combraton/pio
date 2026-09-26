@@ -104,12 +104,23 @@ class Transcript:
         if whole_spool:
             self.tail, self.blocks, self.tools = b'', [], {}
         self.offset = result['next_offset']
+        self.feed(data)
+        return len(data)
+
+    def feed(self, data):
+        """Bytes as they were read, into blocks. A line cut across two reads
+        waits in `tail` for its end. No I/O, so the Rust port
+        (`pio_client::blocks`) is checked against it on recorded reads."""
         self.tail += data
         *lines, self.tail = self.tail.split(b'\n')
         for line in lines:
             if line.strip():
                 self.absorb(json.loads(line), self.guess)
-        return len(data)
+
+    def view(self):
+        """What the screen shows: the blocks in order, and each tool use
+        with where it landed and who decided, as far as anything says."""
+        return dict(blocks=[list(block) for block in self.blocks], tools=self.tools)
 
     def absorb(self, record, guess=False):
         """One spooled record becomes blocks on the screen.

@@ -1,0 +1,77 @@
+{
+ "arrival": [
+  {
+   "action_id": "run-1.action-1",
+   "answer_deadline_seconds": 300,
+   "approval_kind": null,
+   "arrived": 4,
+   "classification": {
+    "auto_allowed": false,
+    "disposition": "surface_as_action",
+    "format": "pio-claude-request-classification/1",
+    "placement": "not_classifiable",
+    "reason": "no resolvable target; PIO cannot classify this request",
+    "target_label": null,
+    "target_sha256": null,
+    "tool_name": "Bash",
+    "tool_use_id": "toolu_fake_ask"
+   },
+   "command": null,
+   "due": 1790436115,
+   "grant_root_requested": null,
+   "if_nobody_answers": {
+    "behavior": "deny",
+    "single_use": true,
+    "suggestions_offered": 1,
+    "widening_fields_sent": []
+   },
+   "message": null,
+   "method": null,
+   "network_approval": null,
+   "options": null,
+   "persist_offered": null,
+   "reason": null,
+   "requested_at": "2026-09-26T15:16:55Z",
+   "run": "run-1",
+   "server": null
+  }
+ ],
+ "decided": [],
+ "walk": [
+  {
+   "action_id": "run-1.action-1",
+   "answer_deadline_seconds": 300,
+   "approval_kind": null,
+   "arrived": 4,
+   "classification": {
+    "auto_allowed": false,
+    "disposition": "surface_as_action",
+    "format": "pio-claude-request-classification/1",
+    "placement": "not_classifiable",
+    "reason": "no resolvable target; PIO cannot classify this request",
+    "target_label": null,
+    "target_sha256": null,
+    "tool_name": "Bash",
+    "tool_use_id": "toolu_fake_ask"
+   },
+   "command": null,
+   "due": 1790436115,
+   "grant_root_requested": null,
+   "if_nobody_answers": {
+    "behavior": "deny",
+    "single_use": true,
+    "suggestions_offered": 1,
+    "widening_fields_sent": []
+   },
+   "message": null,
+   "method": null,
+   "network_approval": null,
+   "options": null,
+   "persist_offered": null,
+   "reason": null,
+   "requested_at": "2026-09-26T15:16:55Z",
+   "run": "run-1",
+   "server": null
+  }
+ ]
+}

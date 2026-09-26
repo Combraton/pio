@@ -1,0 +1,905 @@
+{
+ "kind": "board",
+ "rounds": [
+  {
+   "pages": [
+    {
+     "filtered": false,
+     "items": [
+      {
+       "event": {
+        "caused_by": [],
+        "command_id": "run-1",
+        "epoch": 1,
+        "operation_ref": "4bf2c8a3-9f51-4ccd-97be-3d72651d1c47",
+        "origin": "command",
+        "payload": {
+         "admission": "admitted",
+         "delivery_id": "run-1.delivery-1",
+         "runtime": "preparing"
+        },
+        "recorded_at": "2026-09-26T15:17:00Z",
+        "revision": 1,
+        "sequence": 1,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.admission.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "acknowledged",
+         "delivery_id": "run-1.delivery-1",
+         "evidence": {
+          "class": "native_session_update",
+          "source": "pio-fake-opencode-acp/host"
+         }
+        },
+        "recorded_at": "2026-09-26T15:17:00Z",
+        "revision": 2,
+        "sequence": 2,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "runtime": "active"
+        },
+        "recorded_at": "2026-09-26T15:17:00Z",
+        "revision": 3,
+        "sequence": 3,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.runtime.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "action_id": "run-1.action-1",
+         "owner": "opencode",
+         "pio.combraton.dev/approval": {
+          "action_id": "run-1.action-1",
+          "answer_deadline_seconds": 300,
+          "approval_kind": null,
+          "classification": {
+           "auto_allowed": false,
+           "disposition": "surface_as_action",
+           "format": "pio-claude-request-classification/1",
+           "placement": "not_classifiable",
+           "reason": "no resolvable target; PIO cannot classify this request",
+           "target_label": null,
+           "target_sha256": null,
+           "tool_name": "execute",
+           "tool_use_id": "call_permission_0"
+          },
+          "command": null,
+          "grant_root_requested": null,
+          "if_nobody_answers": {
+           "always_option_taken": false,
+           "option_id": "opt_3",
+           "option_kind": "reject_once",
+           "option_kind_offered": true,
+           "option_kind_required": "reject_once",
+           "outcome": {
+            "optionId": "opt_3",
+            "outcome": "selected"
+           }
+          },
+          "message": null,
+          "method": null,
+          "network_approval": null,
+          "options": [
+           {
+            "kind": "allow_once",
+            "name": "Allow once",
+            "optionId": "opt_1"
+           },
+           {
+            "kind": "allow_always",
+            "name": "Always allow",
+            "optionId": "opt_2"
+           },
+           {
+            "kind": "reject_once",
+            "name": "Reject",
+            "optionId": "opt_3"
+           }
+          ],
+          "persist_offered": null,
+          "reason": null,
+          "requested_at": "2026-09-26T15:17:00Z",
+          "server": null
+         },
+         "runtime": "requires_action"
+        },
+        "recorded_at": "2026-09-26T15:17:00Z",
+        "revision": 4,
+        "sequence": 4,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.runtime.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "command_id": "run-2",
+        "epoch": 1,
+        "operation_ref": "a6dba74c-06eb-4406-8236-aa309e0bfba8",
+        "origin": "command",
+        "payload": {
+         "admission": "admitted",
+         "delivery_id": "run-2.delivery-1",
+         "runtime": "preparing"
+        },
+        "recorded_at": "2026-09-26T15:17:01Z",
+        "revision": 1,
+        "sequence": 5,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.admission.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "delivery": "acknowledged",
+         "delivery_id": "run-2.delivery-1",
+         "evidence": {
+          "class": "native_session_update",
+          "source": "pio-fake-opencode-acp/host"
+         }
+        },
+        "recorded_at": "2026-09-26T15:17:01Z",
+        "revision": 2,
+        "sequence": 6,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.delivery.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "runtime": "active"
+        },
+        "recorded_at": "2026-09-26T15:17:01Z",
+        "revision": 3,
+        "sequence": 7,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.runtime.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "action_id": "run-2.action-1",
+         "owner": "opencode",
+         "pio.combraton.dev/approval": {
+          "action_id": "run-2.action-1",
+          "answer_deadline_seconds": 8,
+          "approval_kind": null,
+          "classification": {
+           "auto_allowed": false,
+           "disposition": "surface_as_action",
+           "format": "pio-claude-request-classification/1",
+           "placement": "not_classifiable",
+           "reason": "no resolvable target; PIO cannot classify this request",
+           "target_label": null,
+           "target_sha256": null,
+           "tool_name": "execute",
+           "tool_use_id": "call_permission_0"
+          },
+          "command": null,
+          "grant_root_requested": null,
+          "if_nobody_answers": {
+           "always_option_taken": false,
+           "option_id": "opt_3",
+           "option_kind": "reject_once",
+           "option_kind_offered": true,
+           "option_kind_required": "reject_once",
+           "outcome": {
+            "optionId": "opt_3",
+            "outcome": "selected"
+           }
+          },
+          "message": null,
+          "method": null,
+          "network_approval": null,
+          "options": [
+           {
+            "kind": "allow_once",
+            "name": "Allow once",
+            "optionId": "opt_1"
+           },
+           {
+            "kind": "allow_always",
+            "name": "Always allow",
+            "optionId": "opt_2"
+           },
+           {
+            "kind": "reject_once",
+            "name": "Reject",
+            "optionId": "opt_3"
+           }
+          ],
+          "persist_offered": null,
+          "reason": null,
+          "requested_at": "2026-09-26T15:17:01Z",
+          "server": null
+         },
+         "runtime": "requires_action"
+        },
+        "recorded_at": "2026-09-26T15:17:01Z",
+        "revision": 4,
+        "sequence": 8,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.runtime.changed"
+       }
+      }
+     ],
+     "next_cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:8",
+     "stream": {
+      "epoch": 1,
+      "id": "15cd160a-4f37-4b04-ba7b-3999db35f7ae"
+     }
+    },
+    {
+     "filtered": false,
+     "items": [],
+     "next_cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:8",
+     "stream": {
+      "epoch": 1,
+      "id": "15cd160a-4f37-4b04-ba7b-3999db35f7ae"
+     }
+    }
+   ],
+   "views": {
+    "run-1": {
+     "actions": [
+      {
+       "action_id": "run-1.action-1",
+       "owner": "opencode",
+       "requested_at": "2026-09-26T15:17:00Z",
+       "state": "pending"
+      }
+     ],
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "acknowledged",
+       "delivery_id": "run-1.delivery-1",
+       "determined_at": "2026-09-26T15:17:00Z",
+       "evidence": {
+        "class": "native_session_update",
+        "source": "pio-fake-opencode-acp/host"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "recorded_at": "2026-09-26T15:17:00Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "acknowledged",
+     "effects": [
+      "run-1.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-1",
+      "kind": "execution.execution"
+     },
+     "exit": "unavailable",
+     "host": {
+      "generation": 1,
+      "id": "opencode-host"
+     },
+     "next_cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:8",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 4,
+     "runtime": "requires_action",
+     "runtime_detail": {
+      "action_id": "run-1.action-1",
+      "owner": "opencode"
+     },
+     "usage": {
+      "liability": "none",
+      "observations": []
+     },
+     "workspace": {
+      "checkpoints": [],
+      "lease": {
+       "base": "73905f387f519b50e7db0995aa77ff690fd8ad2b",
+       "cleanup": "retain",
+       "lease_epoch": 1,
+       "lease_id": "run-1.workspace",
+       "repository": "/private/tmp/pio-oc-n3iy6s5_/fixtures/run-1",
+       "writer": "owner"
+      }
+     }
+    },
+    "run-2": {
+     "actions": [
+      {
+       "action_id": "run-2.action-1",
+       "owner": "opencode",
+       "requested_at": "2026-09-26T15:17:01Z",
+       "state": "pending"
+      }
+     ],
+     "admission": "admitted",
+     "completions": [],
+     "deliveries": [
+      {
+       "delivery": "acknowledged",
+       "delivery_id": "run-2.delivery-1",
+       "determined_at": "2026-09-26T15:17:01Z",
+       "evidence": {
+        "class": "native_session_update",
+        "source": "pio-fake-opencode-acp/host"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "recorded_at": "2026-09-26T15:17:01Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "acknowledged",
+     "effects": [
+      "run-2.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-2",
+      "kind": "execution.execution"
+     },
+     "exit": "unavailable",
+     "host": {
+      "generation": 1,
+      "id": "opencode-host"
+     },
+     "next_cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:8",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 4,
+     "runtime": "requires_action",
+     "runtime_detail": {
+      "action_id": "run-2.action-1",
+      "owner": "opencode"
+     },
+     "usage": {
+      "liability": "none",
+      "observations": []
+     },
+     "workspace": {
+      "checkpoints": [],
+      "lease": {
+       "base": "4feff31e8708a0456bb96cb52f3938f54ded1b23",
+       "cleanup": "retain",
+       "lease_epoch": 1,
+       "lease_id": "run-2.workspace",
+       "repository": "/private/tmp/pio-oc-n3iy6s5_/fixtures/run-2",
+       "writer": "owner"
+      }
+     }
+    }
+   }
+  },
+  {
+   "pages": [
+    {
+     "filtered": false,
+     "items": [
+      {
+       "event": {
+        "caused_by": [],
+        "command_id": "run-1.answer",
+        "epoch": 1,
+        "operation_ref": "1696d08a-5123-4486-b1df-28ebc99d79ed",
+        "origin": "command",
+        "payload": {
+         "action_id": "run-1.action-1",
+         "pio.combraton.dev/decision": {
+          "decided_by": "caller",
+          "decision": "deny"
+         },
+         "response_effect": "run-1.response-1"
+        },
+        "recorded_at": "2026-09-26T15:17:01Z",
+        "revision": 5,
+        "sequence": 9,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.action.answered"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "amount": 256,
+         "basis": "estimated",
+         "invocation_id": "8ea69019-17ff-495a-96e4-6f1e80b22d3a",
+         "measure": "opencode.tokens.total.last_step_only",
+         "recorded_at": "2026-09-26T15:17:01Z"
+        },
+        "recorded_at": "2026-09-26T15:17:01Z",
+        "revision": 6,
+        "sequence": 10,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.usage.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "runtime": "unknown"
+        },
+        "recorded_at": "2026-09-26T15:17:01Z",
+        "revision": 7,
+        "sequence": 11,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.runtime.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "exit": {
+          "code": 0
+         },
+         "pio.combraton.dev/native-declines": [],
+         "pio.combraton.dev/tool-uses": {
+          "audit": {
+           "containment": {
+            "mechanism": "harness_permission_rules_only",
+            "os_sandbox_observed": false
+           },
+           "declined_by_pio_count": 0,
+           "denied_by_caller_count": 1,
+           "denied_by_harness_count": 0,
+           "format": "pio-claude-tool-uses/7",
+           "liability": "none_observed",
+           "out_of_fixture_count": 0,
+           "out_of_fixture_effect_observed": false,
+           "result_observed": true,
+           "tool_uses": [
+            {
+             "decided_by": "caller",
+             "decision": "deny",
+             "denied": true,
+             "denied_by_harness": false,
+             "outcome": "denied_by_caller",
+             "placement": "not_classifiable",
+             "target_label": null,
+             "target_sha256": "3a57caa11d1e0c603f57d69f706a3204b3d7d8dc869d8ecfe715065a0ba53798",
+             "tool": "execute",
+             "tool_use_id": "call_permission_0"
+            }
+           ],
+           "turn_interrupted": false,
+           "unclassifiable_target_count": 0,
+           "unknown_outcome_count": 0,
+           "workspace_sha256": "25a60c349f0ed93ccaa28a92920d2db6ecde0d0f8d87f62482d971d860404bc4"
+          },
+          "harness_status": [
+           {
+            "kind": "execute",
+            "locations": [],
+            "status": "in_progress",
+            "tool_use_id": "call_permission_0"
+           }
+          ]
+         }
+        },
+        "recorded_at": "2026-09-26T15:17:01Z",
+        "revision": 8,
+        "sequence": 12,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-1",
+         "kind": "execution.execution"
+        },
+        "type": "execution.exit.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "action_id": "run-2.action-1",
+         "pio.combraton.dev/decision": {
+          "after_seconds": 8,
+          "always_option_taken": false,
+          "basis": "deadline_lapsed",
+          "decided_by": "pio",
+          "decision": "deny",
+          "option_id": "opt_3",
+          "option_kind": "reject_once",
+          "reason": "no caller answered within the delivery timeout"
+         }
+        },
+        "recorded_at": "2026-09-26T15:17:09Z",
+        "revision": 5,
+        "sequence": 13,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.action.answered"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "amount": 256,
+         "basis": "estimated",
+         "invocation_id": "ff8e8957-82f6-48b7-9a77-59220ff5ba4b",
+         "measure": "opencode.tokens.total.last_step_only",
+         "recorded_at": "2026-09-26T15:17:09Z"
+        },
+        "recorded_at": "2026-09-26T15:17:09Z",
+        "revision": 6,
+        "sequence": 14,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.usage.observed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "runtime": "unknown"
+        },
+        "recorded_at": "2026-09-26T15:17:09Z",
+        "revision": 7,
+        "sequence": 15,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.runtime.changed"
+       }
+      },
+      {
+       "event": {
+        "caused_by": [],
+        "epoch": 1,
+        "origin": "provider",
+        "payload": {
+         "exit": {
+          "code": 0
+         },
+         "pio.combraton.dev/native-declines": [],
+         "pio.combraton.dev/tool-uses": {
+          "audit": {
+           "containment": {
+            "mechanism": "harness_permission_rules_only",
+            "os_sandbox_observed": false
+           },
+           "declined_by_pio_count": 1,
+           "denied_by_caller_count": 0,
+           "denied_by_harness_count": 0,
+           "format": "pio-claude-tool-uses/7",
+           "liability": "none_observed",
+           "out_of_fixture_count": 0,
+           "out_of_fixture_effect_observed": false,
+           "result_observed": true,
+           "tool_uses": [
+            {
+             "decided_by": "pio",
+             "decision": "deny",
+             "denied": true,
+             "denied_by_harness": false,
+             "outcome": "declined_by_pio",
+             "placement": "not_classifiable",
+             "target_label": null,
+             "target_sha256": "3a57caa11d1e0c603f57d69f706a3204b3d7d8dc869d8ecfe715065a0ba53798",
+             "tool": "execute",
+             "tool_use_id": "call_permission_0"
+            }
+           ],
+           "turn_interrupted": false,
+           "unclassifiable_target_count": 0,
+           "unknown_outcome_count": 0,
+           "workspace_sha256": "4750b07611f6349f0dd3640e7a7bcb16e1a33e7ed48079fae145413023279102"
+          },
+          "harness_status": [
+           {
+            "kind": "execute",
+            "locations": [],
+            "status": "in_progress",
+            "tool_use_id": "call_permission_0"
+           }
+          ]
+         }
+        },
+        "recorded_at": "2026-09-26T15:17:09Z",
+        "revision": 8,
+        "sequence": 16,
+        "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+        "subject": {
+         "id": "run-2",
+         "kind": "execution.execution"
+        },
+        "type": "execution.exit.observed"
+       }
+      }
+     ],
+     "next_cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:16",
+     "stream": {
+      "epoch": 1,
+      "id": "15cd160a-4f37-4b04-ba7b-3999db35f7ae"
+     }
+    },
+    {
+     "filtered": false,
+     "items": [],
+     "next_cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:16",
+     "stream": {
+      "epoch": 1,
+      "id": "15cd160a-4f37-4b04-ba7b-3999db35f7ae"
+     }
+    }
+   ],
+   "views": {
+    "run-1": {
+     "actions": [
+      {
+       "action_id": "run-1.action-1",
+       "answered_at": "2026-09-26T15:17:01Z",
+       "owner": "opencode",
+       "requested_at": "2026-09-26T15:17:00Z",
+       "response_effect": "run-1.response-1",
+       "state": "answered"
+      }
+     ],
+     "admission": "admitted",
+     "completions": [],
+     "containment": {
+      "mechanism": "harness_permission_rules_only",
+      "os_sandbox_observed": false
+     },
+     "deliveries": [
+      {
+       "delivery": "acknowledged",
+       "delivery_id": "run-1.delivery-1",
+       "determined_at": "2026-09-26T15:17:00Z",
+       "evidence": {
+        "class": "native_session_update",
+        "source": "pio-fake-opencode-acp/host"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "recorded_at": "2026-09-26T15:17:00Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "acknowledged",
+     "effects": [
+      "run-1.delivery-1",
+      "run-1.response-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-1",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "opencode-host"
+     },
+     "next_cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:16",
+     "obligations": [
+      {
+       "deadline": null,
+       "expects": "evidence",
+       "id": "run-1.response-1.evidence",
+       "state": "open"
+      }
+     ],
+     "recovery": [],
+     "result": "absent",
+     "revision": 8,
+     "runtime": "exited",
+     "usage": {
+      "liability": "unresolved",
+      "observations": [
+       {
+        "amount": 256,
+        "basis": "estimated",
+        "invocation_id": "8ea69019-17ff-495a-96e4-6f1e80b22d3a",
+        "measure": "opencode.tokens.total.last_step_only",
+        "recorded_at": "2026-09-26T15:17:01Z"
+       }
+      ]
+     },
+     "workspace": {
+      "checkpoints": [],
+      "lease": {
+       "base": "73905f387f519b50e7db0995aa77ff690fd8ad2b",
+       "cleanup": "retain",
+       "lease_epoch": 1,
+       "lease_id": "run-1.workspace",
+       "repository": "/private/tmp/pio-oc-n3iy6s5_/fixtures/run-1",
+       "writer": "owner"
+      }
+     }
+    },
+    "run-2": {
+     "actions": [
+      {
+       "action_id": "run-2.action-1",
+       "answered_at": "2026-09-26T15:17:09Z",
+       "owner": "opencode",
+       "requested_at": "2026-09-26T15:17:01Z",
+       "state": "answered"
+      }
+     ],
+     "admission": "admitted",
+     "completions": [],
+     "containment": {
+      "mechanism": "harness_permission_rules_only",
+      "os_sandbox_observed": false
+     },
+     "deliveries": [
+      {
+       "delivery": "acknowledged",
+       "delivery_id": "run-2.delivery-1",
+       "determined_at": "2026-09-26T15:17:01Z",
+       "evidence": {
+        "class": "native_session_update",
+        "source": "pio-fake-opencode-acp/host"
+       },
+       "history": [
+        {
+         "delivery": "pending",
+         "recorded_at": "2026-09-26T15:17:01Z"
+        }
+       ]
+      }
+     ],
+     "delivery": "acknowledged",
+     "effects": [
+      "run-2.delivery-1"
+     ],
+     "evaluation": "not_requested",
+     "execution": {
+      "id": "run-2",
+      "kind": "execution.execution"
+     },
+     "exit": {
+      "code": 0
+     },
+     "host": {
+      "generation": 1,
+      "id": "opencode-host"
+     },
+     "next_cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:16",
+     "obligations": [],
+     "recovery": [],
+     "result": "absent",
+     "revision": 8,
+     "runtime": "exited",
+     "usage": {
+      "liability": "unresolved",
+      "observations": [
+       {
+        "amount": 256,
+        "basis": "estimated",
+        "invocation_id": "ff8e8957-82f6-48b7-9a77-59220ff5ba4b",
+        "measure": "opencode.tokens.total.last_step_only",
+        "recorded_at": "2026-09-26T15:17:09Z"
+       }
+      ]
+     },
+     "workspace": {
+      "checkpoints": [],
+      "lease": {
+       "base": "4feff31e8708a0456bb96cb52f3938f54ded1b23",
+       "cleanup": "retain",
+       "lease_epoch": 1,
+       "lease_id": "run-2.workspace",
+       "repository": "/private/tmp/pio-oc-n3iy6s5_/fixtures/run-2",
+       "writer": "owner"
+      }
+     }
+    }
+   }
+  }
+ ]
+}

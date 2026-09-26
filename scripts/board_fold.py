@@ -191,30 +191,42 @@ class Board:
             result = answer.get('result')
             if result is None:
                 raise AssertionError(f'core.events.read refused: {answer}')
-            for item in result['items']:
-                if 'gap' in item:
-                    # A retention gap hands back a snapshot rather than a
-                    # hole: subject, revision and state for each.
-                    self.gaps.append(item['gap'])
-                    for entry in item['gap']['snapshot']['subjects']:
-                        identity = entry['subject']['id']
-                        if entry['revision'] > self.seen.get(identity, -1):
-                            self.seen[identity] = entry['revision']
-                            moved.add(identity)
-                    continue
-                event = item['event']
-                subject = event['subject']
-                if subject['kind'] != 'execution.execution':
-                    continue
-                identity = subject['id']
-                if event['revision'] > self.seen.get(identity, -1):
-                    self.seen[identity] = event['revision']
-                    moved.add(identity)
-            self.cursor = result['next_cursor']
+            moved |= self.absorb(result)
             if not result['items']:
                 break
             payload = {'limit': 1000, 'kinds': ['execution.execution'],
                        'cursor': self.cursor}
+        return moved
+
+    def absorb(self, result):
+        """One page of the stream (a `core.events.read` result or a
+        notification's params): which subjects moved. No I/O, so the Rust
+        port (`pio_client::board`) is checked against it on recorded pages."""
+        moved = set()
+        for item in result['items']:
+            if 'gap' in item:
+                # A retention gap hands back a snapshot rather than a
+                # hole: subject, revision and state for each.
+                self.gaps.append(item['gap'])
+                for entry in item['gap']['snapshot']['subjects']:
+                    identity = entry['subject']['id']
+                    if entry['revision'] > self.seen.get(identity, -1):
+                        self.seen[identity] = entry['revision']
+                        moved.add(identity)
+                continue
+            if 'event' not in item:
+                # An epoch change says the stream restarted its numbering;
+                # it names no subject.
+                continue
+            event = item['event']
+            subject = event['subject']
+            if subject['kind'] != 'execution.execution':
+                continue
+            identity = subject['id']
+            if event['revision'] > self.seen.get(identity, -1):
+                self.seen[identity] = event['revision']
+                moved.add(identity)
+        self.cursor = result['next_cursor']
         return moved
 
     def fold_peek(self):
@@ -234,6 +246,73 @@ class Board:
             if 'result' in answer:
                 self.drawn[identity] = answer['result']
         return targets
+
+
+# --- what the board draws -----------------------------------------------------
+
+# The design's one vocabulary (M4-DESIGN-INPUT.md): a glyph and a word for
+# every run, so meaning never rides on color alone.
+GLYPHS = {'needs approval': '\u25d0', 'uncertain': '\u25c7', 'unknown': '\u25c7',
+          'running': '\u25cf', 'refused': '\u2715', 'failed': '\u2715',
+          'cancelled': '\u2715', 'finished': '\u25cb'}
+# The order the board groups runs in: what needs the person first.
+GROUPS = ['needs approval', 'uncertain', 'unknown', 'running', 'refused', 'failed',
+          'cancelled', 'finished']
+
+
+def run_state(view):
+    """One word for one run, from its view alone, first match wins.
+
+    A run seen on the stream but not (yet) read has no view, and is
+    `unknown` rather than a guess. `uncertain` is the violet state: delivery
+    ambiguous, usage liability unresolved, or a runtime PIO cannot see.
+    """
+    if view is None:
+        return 'unknown'
+    if any(a.get('state') == 'pending' for a in view.get('actions') or []):
+        return 'needs approval'
+    usage = view.get('usage') or {}
+    if view.get('delivery') == 'ambiguous' or usage.get('liability') == 'unresolved' \
+            or view.get('runtime') == 'unknown':
+        return 'uncertain'
+    if view.get('admission') == 'refused':
+        return 'refused'
+    if view.get('delivery') in ('not_delivered', 'failed_before_delivery'):
+        return 'failed'
+    if (view.get('cancellation') or {}).get('outcome') == 'cancelled':
+        return 'cancelled'
+    if view.get('runtime') == 'exited':
+        return 'finished'
+    return 'running'
+
+
+def board_view(board):
+    """The board as the screen draws it: one row per run the caller can see,
+    grouped by state, with the counts and the two attention notes."""
+    rows = []
+    for identity in sorted(board.seen):
+        view = board.drawn.get(identity)
+        state = run_state(view)
+        pending = [a['action_id'] for a in (view or {}).get('actions') or []
+                   if a.get('state') == 'pending']
+        rows.append(dict(
+            id=identity, revision=board.seen[identity], state=state, glyph=GLYPHS[state],
+            drawn_revision=(view or {}).get('revision'),
+            admission=(view or {}).get('admission'), runtime=(view or {}).get('runtime'),
+            delivery=(view or {}).get('delivery'),
+            liability=((view or {}).get('usage') or {}).get('liability'),
+            exit=(view or {}).get('exit'), pending_actions=pending))
+    counts = {}
+    for row in rows:
+        counts[row['state']] = counts.get(row['state'], 0) + 1
+    return dict(
+        runs=rows,
+        groups=[dict(state=state, runs=[r['id'] for r in rows if r['state'] == state])
+                for state in GROUPS if counts.get(state)],
+        counts=counts,
+        notes=dict(approvals=sum(len(r['pending_actions']) for r in rows),
+                   uncertain=counts.get('uncertain', 0) + counts.get('unknown', 0)),
+        cursor=board.cursor, gaps=len(board.gaps))
 
 
 def start_service(root, out, events=None, name='daemon', executor=None,
@@ -380,6 +459,12 @@ def run(out, naive=False):
         # inspected exactly once, and never again.
         settled = {f'run-{i}': board.draws.get(f'run-{i}') for i in range(1, RUNS + 1)}
         assert set(settled.values()) == {1}, settled
+        # And what it draws of them: every settled run finished, from its
+        # view, with no approval waiting and nothing uncertain.
+        drawn = board_view(board)
+        states = {r['id']: r['state'] for r in drawn['runs']}
+        assert all(states[f'run-{i}'] == 'finished' for i in range(1, RUNS + 1)), states
+        assert drawn['notes'] == dict(approvals=0, uncertain=0), drawn['notes']
 
         pushed = board_caller.drain(0.5)
         notified = [n for n in pushed if n.get('method') == 'core.events.notify']
@@ -422,6 +507,7 @@ def run(out, naive=False):
             operations_used=sorted({'core.events.read', 'core.events.subscribe',
                                     'execution.inspect'}),
             new_operations_needed=[],
+            board=drawn,
         )
         (out / 'board-fold.json').write_text(json.dumps(record, indent=2, sort_keys=True) + '\n')
         print(json.dumps({k: record[k] for k in (

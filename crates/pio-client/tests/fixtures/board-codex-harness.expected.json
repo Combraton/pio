@@ -1,0 +1,45 @@
+{
+ "rounds": [
+  {
+   "board": {
+    "counts": {
+     "finished": 1
+    },
+    "cursor": "80712366-a608-48aa-8af7-10092c97c851:1:8",
+    "gaps": 0,
+    "groups": [
+     {
+      "runs": [
+       "work"
+      ],
+      "state": "finished"
+     }
+    ],
+    "notes": {
+     "approvals": 0,
+     "uncertain": 0
+    },
+    "runs": [
+     {
+      "admission": "admitted",
+      "delivery": "acknowledged",
+      "drawn_revision": 8,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "work",
+      "liability": "resolved",
+      "pending_actions": [],
+      "revision": 8,
+      "runtime": "exited",
+      "state": "finished"
+     }
+    ]
+   },
+   "moved": [
+    "work"
+   ]
+  }
+ ]
+}

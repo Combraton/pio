@@ -1,0 +1,257 @@
+{
+ "kind": "walk",
+ "events": [
+  {
+   "caused_by": [],
+   "command_id": "run-1",
+   "epoch": 1,
+   "operation_ref": "bbd9b427-665e-4fba-9e80-79aa7df9d7bd",
+   "origin": "command",
+   "payload": {
+    "admission": "admitted",
+    "delivery_id": "run-1.delivery-1",
+    "runtime": "preparing"
+   },
+   "recorded_at": "2026-09-26T15:16:54Z",
+   "revision": 1,
+   "sequence": 1,
+   "stream": "46070d60-876f-4ace-b0c6-a44743edd1ce",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.admission.changed"
+  },
+  {
+   "caused_by": [],
+   "epoch": 1,
+   "origin": "provider",
+   "payload": {
+    "delivery": "acknowledged",
+    "delivery_id": "run-1.delivery-1",
+    "evidence": {
+     "class": "native_replay_echo",
+     "source": "pio-fake-claude-cli/host"
+    }
+   },
+   "recorded_at": "2026-09-26T15:16:54Z",
+   "revision": 2,
+   "sequence": 2,
+   "stream": "46070d60-876f-4ace-b0c6-a44743edd1ce",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.delivery.observed"
+  },
+  {
+   "caused_by": [],
+   "epoch": 1,
+   "origin": "provider",
+   "payload": {
+    "runtime": "active"
+   },
+   "recorded_at": "2026-09-26T15:16:54Z",
+   "revision": 3,
+   "sequence": 3,
+   "stream": "46070d60-876f-4ace-b0c6-a44743edd1ce",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.runtime.changed"
+  },
+  {
+   "caused_by": [],
+   "epoch": 1,
+   "origin": "provider",
+   "payload": {
+    "action_id": "run-1.action-1",
+    "owner": "claude",
+    "pio.combraton.dev/approval": {
+     "action_id": "run-1.action-1",
+     "answer_deadline_seconds": 300,
+     "approval_kind": null,
+     "classification": {
+      "auto_allowed": false,
+      "disposition": "surface_as_action",
+      "format": "pio-claude-request-classification/1",
+      "placement": "not_classifiable",
+      "reason": "no resolvable target; PIO cannot classify this request",
+      "target_label": null,
+      "target_sha256": null,
+      "tool_name": "Bash",
+      "tool_use_id": "toolu_fake_ask"
+     },
+     "command": null,
+     "grant_root_requested": null,
+     "if_nobody_answers": {
+      "behavior": "deny",
+      "single_use": true,
+      "suggestions_offered": 1,
+      "widening_fields_sent": []
+     },
+     "message": null,
+     "method": null,
+     "network_approval": null,
+     "options": null,
+     "persist_offered": null,
+     "reason": null,
+     "requested_at": "2026-09-26T15:16:55Z",
+     "server": null
+    },
+    "runtime": "requires_action"
+   },
+   "recorded_at": "2026-09-26T15:16:55Z",
+   "revision": 4,
+   "sequence": 4,
+   "stream": "46070d60-876f-4ace-b0c6-a44743edd1ce",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.runtime.changed"
+  },
+  {
+   "caused_by": [],
+   "command_id": "run-1.answer",
+   "epoch": 1,
+   "operation_ref": "4cbc5c8d-514c-4838-8873-79b57188fe62",
+   "origin": "command",
+   "payload": {
+    "action_id": "run-1.action-1",
+    "pio.combraton.dev/decision": {
+     "decided_by": "caller",
+     "decision": "allow"
+    },
+    "response_effect": "run-1.response-1"
+   },
+   "recorded_at": "2026-09-26T15:16:55Z",
+   "revision": 5,
+   "sequence": 5,
+   "stream": "46070d60-876f-4ace-b0c6-a44743edd1ce",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.action.answered"
+  },
+  {
+   "caused_by": [],
+   "epoch": 1,
+   "origin": "provider",
+   "payload": {
+    "runtime": "unknown"
+   },
+   "recorded_at": "2026-09-26T15:16:55Z",
+   "revision": 6,
+   "sequence": 6,
+   "stream": "46070d60-876f-4ace-b0c6-a44743edd1ce",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.runtime.changed"
+  },
+  {
+   "caused_by": [],
+   "epoch": 1,
+   "origin": "provider",
+   "payload": {
+    "amount": 128,
+    "basis": "observed",
+    "invocation_id": "eb5a4286-fd0b-43de-8ef2-1cfddba3d6cb",
+    "measure": "claude.tokens.total",
+    "recorded_at": "2026-09-26T15:16:55Z"
+   },
+   "recorded_at": "2026-09-26T15:16:55Z",
+   "revision": 7,
+   "sequence": 7,
+   "stream": "46070d60-876f-4ace-b0c6-a44743edd1ce",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.usage.observed"
+  },
+  {
+   "caused_by": [],
+   "epoch": 1,
+   "origin": "provider",
+   "payload": {
+    "exit": {
+     "code": 0
+    },
+    "pio.combraton.dev/native-declines": [],
+    "pio.combraton.dev/tool-uses": {
+     "audit": {
+      "containment": {
+       "mechanism": "harness_permission_rules_only",
+       "os_sandbox_observed": false
+      },
+      "declined_by_pio_count": 0,
+      "denied_by_caller_count": 0,
+      "denied_by_harness_count": 0,
+      "format": "pio-claude-tool-uses/7",
+      "liability": "unresolved",
+      "out_of_fixture_count": 0,
+      "out_of_fixture_effect_observed": false,
+      "result_observed": true,
+      "tool_uses": [
+       {
+        "decided_by": "caller",
+        "decision": "allow",
+        "denied": false,
+        "denied_by_harness": false,
+        "outcome": "performed",
+        "placement": "not_classifiable",
+        "target_label": null,
+        "target_sha256": "3a57caa11d1e0c603f57d69f706a3204b3d7d8dc869d8ecfe715065a0ba53798",
+        "tool": "Bash",
+        "tool_use_id": "toolu_fake_ask"
+       },
+       {
+        "decided_by": null,
+        "decision": null,
+        "denied": false,
+        "denied_by_harness": false,
+        "outcome": "performed",
+        "placement": "not_classifiable",
+        "target_label": null,
+        "target_sha256": "9a5a2e4903c0af9f9a383c2945484f280010897b820e16f741f1d57af6fb1668",
+        "tool": "Bash",
+        "tool_use_id": "toolu_fake_0"
+       },
+       {
+        "decided_by": null,
+        "decision": null,
+        "denied": false,
+        "denied_by_harness": false,
+        "outcome": "performed",
+        "placement": "inside_fixture",
+        "target_label": "<fixture>/README.md",
+        "target_sha256": "78fd0b5b7a88f681ad8f8d5ec35419e8a6d49e121bc9c2b56de271537153a300",
+        "tool": "Read",
+        "tool_use_id": "toolu_fake_1"
+       }
+      ],
+      "turn_interrupted": false,
+      "unclassifiable_target_count": 2,
+      "unknown_outcome_count": 0,
+      "workspace_sha256": "b7d026af56b3653566db1ef49c9a0a87d78f158e63c4e5025a9942925b147a9c"
+     },
+     "harness_status": null
+    }
+   },
+   "recorded_at": "2026-09-26T15:16:55Z",
+   "revision": 8,
+   "sequence": 8,
+   "stream": "46070d60-876f-4ace-b0c6-a44743edd1ce",
+   "subject": {
+    "id": "run-1",
+    "kind": "execution.execution"
+   },
+   "type": "execution.exit.observed"
+  }
+ ]
+}

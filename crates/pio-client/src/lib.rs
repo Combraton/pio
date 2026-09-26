@@ -5,7 +5,11 @@
 //! store, not the provider, not a host — so anything built on it (the `pio
 //! client` commands and the M4 terminal screen) reads and writes only
 //! through the public API. `tests/dependencies.rs` holds that line.
+pub mod blocks;
+pub mod board;
 pub mod client;
+pub mod replay;
+pub mod walk;
 pub mod wire;
 
 pub use client::{

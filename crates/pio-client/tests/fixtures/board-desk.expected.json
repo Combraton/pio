@@ -1,0 +1,120 @@
+{
+ "rounds": [
+  {
+   "board": {
+    "counts": {
+     "needs approval": 2
+    },
+    "cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:8",
+    "gaps": 0,
+    "groups": [
+     {
+      "runs": [
+       "run-1",
+       "run-2"
+      ],
+      "state": "needs approval"
+     }
+    ],
+    "notes": {
+     "approvals": 2,
+     "uncertain": 0
+    },
+    "runs": [
+     {
+      "admission": "admitted",
+      "delivery": "acknowledged",
+      "drawn_revision": 4,
+      "exit": "unavailable",
+      "glyph": "◐",
+      "id": "run-1",
+      "liability": "none",
+      "pending_actions": [
+       "run-1.action-1"
+      ],
+      "revision": 4,
+      "runtime": "requires_action",
+      "state": "needs approval"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "acknowledged",
+      "drawn_revision": 4,
+      "exit": "unavailable",
+      "glyph": "◐",
+      "id": "run-2",
+      "liability": "none",
+      "pending_actions": [
+       "run-2.action-1"
+      ],
+      "revision": 4,
+      "runtime": "requires_action",
+      "state": "needs approval"
+     }
+    ]
+   },
+   "moved": [
+    "run-1",
+    "run-2"
+   ]
+  },
+  {
+   "board": {
+    "counts": {
+     "uncertain": 2
+    },
+    "cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:16",
+    "gaps": 0,
+    "groups": [
+     {
+      "runs": [
+       "run-1",
+       "run-2"
+      ],
+      "state": "uncertain"
+     }
+    ],
+    "notes": {
+     "approvals": 0,
+     "uncertain": 2
+    },
+    "runs": [
+     {
+      "admission": "admitted",
+      "delivery": "acknowledged",
+      "drawn_revision": 8,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "◇",
+      "id": "run-1",
+      "liability": "unresolved",
+      "pending_actions": [],
+      "revision": 8,
+      "runtime": "exited",
+      "state": "uncertain"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "acknowledged",
+      "drawn_revision": 8,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "◇",
+      "id": "run-2",
+      "liability": "unresolved",
+      "pending_actions": [],
+      "revision": 8,
+      "runtime": "exited",
+      "state": "uncertain"
+     }
+    ]
+   },
+   "moved": [
+    "run-1",
+    "run-2"
+   ]
+  }
+ ]
+}

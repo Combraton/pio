@@ -1,0 +1,36 @@
+{
+ "arrival": [],
+ "decided": [
+  {
+   "action_id": "run-3.action-1",
+   "basis": "out_of_scope",
+   "decided_by": "pio",
+   "decision": "deny",
+   "origin": "provider",
+   "record": {
+    "always_option_taken": false,
+    "basis": "out_of_scope",
+    "classification": {
+     "auto_allowed": false,
+     "disposition": "decline",
+     "format": "pio-claude-request-classification/1",
+     "placement": "outside_fixture",
+     "reason": "target_outside_the_fixture_workspace",
+     "target_label": "<outside>",
+     "target_sha256": "9855dd171fbbfcf99a466fb1eb802b0d6624de3b65aa67838fbbbf3b041315a4",
+     "tool_name": "read",
+     "tool_use_id": "call_permission_0"
+    },
+    "decided_by": "pio",
+    "decision": "deny",
+    "option_id": "opt_3",
+    "option_kind": "reject_once",
+    "reason": "target_outside_the_fixture_workspace"
+   },
+   "run": "run-3",
+   "sent": null,
+   "sequence": 4
+  }
+ ],
+ "walk": []
+}

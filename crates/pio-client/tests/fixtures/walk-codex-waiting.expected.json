@@ -1,0 +1,65 @@
+{
+ "arrival": [
+  {
+   "action_id": "run-1.action-1",
+   "answer_deadline_seconds": 300,
+   "approval_kind": "command",
+   "arrived": 4,
+   "classification": {
+    "placement": "inside_fixture",
+    "subject": "cwd",
+    "target_label": "<fixture>/",
+    "target_sha256": "f5cea47f5635fe3cc32138ba98df83ad1aee7d757b858b7fc0462af1b0a08cb2"
+   },
+   "command": "echo fixture",
+   "due": 1790436116,
+   "grant_root_requested": null,
+   "if_nobody_answers": {
+    "always_option_taken": false,
+    "decided_by": "pio",
+    "decision": "decline"
+   },
+   "message": null,
+   "method": "item/commandExecution/requestApproval",
+   "network_approval": false,
+   "options": null,
+   "persist_offered": null,
+   "reason": null,
+   "requested_at": "2026-09-26T15:16:56Z",
+   "run": "run-1",
+   "server": null
+  }
+ ],
+ "decided": [],
+ "walk": [
+  {
+   "action_id": "run-1.action-1",
+   "answer_deadline_seconds": 300,
+   "approval_kind": "command",
+   "arrived": 4,
+   "classification": {
+    "placement": "inside_fixture",
+    "subject": "cwd",
+    "target_label": "<fixture>/",
+    "target_sha256": "f5cea47f5635fe3cc32138ba98df83ad1aee7d757b858b7fc0462af1b0a08cb2"
+   },
+   "command": "echo fixture",
+   "due": 1790436116,
+   "grant_root_requested": null,
+   "if_nobody_answers": {
+    "always_option_taken": false,
+    "decided_by": "pio",
+    "decision": "decline"
+   },
+   "message": null,
+   "method": "item/commandExecution/requestApproval",
+   "network_approval": false,
+   "options": null,
+   "persist_offered": null,
+   "reason": null,
+   "requested_at": "2026-09-26T15:16:56Z",
+   "run": "run-1",
+   "server": null
+  }
+ ]
+}
