@@ -1,6 +1,8 @@
 //! stream/1 framing over the local Unix socket: one JSON-RPC 2.0 frame per
 //! line, requests answered by id, unsolicited notifications kept rather than
 //! dropped. Nothing here knows an operation; `client` does.
+#[cfg(test)]
+use crate::encoding::canonical;
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -132,44 +134,6 @@ impl From<serde_json::Error> for Failure {
 }
 
 pub type Reply<T = Value> = std::result::Result<T, Failure>;
-
-/// The canonical encoding the service digests a command intent with: object
-/// keys sorted by UTF-16 code units, no whitespace (JCS for encoding/1's
-/// value domain, which has no floats).
-pub fn canonical(value: &Value) -> Vec<u8> {
-    fn write(value: &Value, out: &mut String) {
-        match value {
-            Value::Object(map) => {
-                out.push('{');
-                let mut keys: Vec<&String> = map.keys().collect();
-                keys.sort_by_cached_key(|k| k.encode_utf16().collect::<Vec<_>>());
-                for (index, key) in keys.into_iter().enumerate() {
-                    if index > 0 {
-                        out.push(',');
-                    }
-                    out.push_str(&serde_json::to_string(key).unwrap_or_default());
-                    out.push(':');
-                    write(&map[key], out);
-                }
-                out.push('}');
-            }
-            Value::Array(items) => {
-                out.push('[');
-                for (index, item) in items.iter().enumerate() {
-                    if index > 0 {
-                        out.push(',');
-                    }
-                    write(item, out);
-                }
-                out.push(']');
-            }
-            other => out.push_str(&serde_json::to_string(other).unwrap_or_default()),
-        }
-    }
-    let mut out = String::new();
-    write(value, &mut out);
-    out.into_bytes()
-}
 
 /// `sha256:<hex>` of some bytes, the Protocol's digest form.
 pub fn digest(bytes: &[u8]) -> String {

@@ -18,7 +18,7 @@ struct Ledger {
 }
 impl Ledger {
     fn open(root: &Path) -> Result<Self> {
-        pio_host::secure_root(root)?;
+        secure_root(root)?;
         ensure!(
             !root.join("journal.sqlite3").exists(),
             "caller store must be separate from service store"
@@ -99,10 +99,32 @@ impl Ledger {
         Ok(())
     }
 }
-/// The service's strict encoding/1 parse, for a request file: the ledger
-/// must hold exactly the bytes' meaning the service will digest.
+/// The caller's own directory: created 0700 if absent, and refused unless
+/// it is a real directory this user owns that nobody else can read. The
+/// same rule the service applies to its store, kept here so the command
+/// line needs nothing from the service's crates.
+fn secure_root(root: &Path) -> Result<()> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    if !root.exists() {
+        std::fs::create_dir(root)?;
+        std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700))?;
+    }
+    let meta = std::fs::symlink_metadata(root)?;
+    ensure!(
+        meta.is_dir()
+            && !meta.file_type().is_symlink()
+            && meta.uid() == unsafe { libc::geteuid() }
+            && meta.mode() & 0o077 == 0,
+        "unsafe caller store directory"
+    );
+    Ok(())
+}
+
+/// The strict encoding/1 parse, for a request file: the ledger must hold
+/// exactly what the service will read, so it refuses what the service
+/// refuses (a duplicate key, a float, an unsafe integer, a noncharacter).
 fn parse(bytes: &[u8]) -> Result<Value> {
-    Ok(pio_protocol::encoding::parse(bytes)?)
+    Ok(pio_client::encoding::parse(bytes)?)
 }
 
 /// A session for the ledger. Authentication or negotiation refused is an
@@ -190,6 +212,26 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_caller_store_others_can_read_is_refused() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(Ledger::open(root.path()).is_err());
+        let fresh = root.path().join("fresh");
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        Ledger::open(&fresh).unwrap();
+        let mode = std::fs::metadata(&fresh).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700);
+    }
+
+    #[test]
+    fn a_request_file_is_parsed_as_strictly_as_the_service_parses_it() {
+        assert!(parse(br#"{"operation":"execution.submit","command_id":"c"}"#).is_ok());
+        assert!(parse(br#"{"command_id":"c","command_id":"d"}"#).is_err());
+        assert!(parse(br#"{"timeouts":{"delivery":1.5}}"#).is_err());
+    }
+
     #[test]
     fn request_identity_precedes_io_and_conflicts_cannot_replace_it() {
         let root = tempfile::tempdir().unwrap();

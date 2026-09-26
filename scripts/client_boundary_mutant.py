@@ -1,60 +1,87 @@
 #!/usr/bin/env python3
-"""The mutant for pio-client's public-wire boundary.
+"""The mutants for the public-wire boundary of pio-client and the CLI.
 
-`crates/pio-client/tests/dependencies.rs` fails if pio-client reaches a PIO
-service crate by any path. This proves that test can fail: in a clean
-worktree of HEAD it gives pio-client the dependency the boundary forbids and
-requires the test to fail **naming it**, so a test that passes for some other
-reason (or never runs) does not count.
+`crates/pio-client/tests/dependencies.rs` fails if pio-client, or the
+command-line code on it, reaches a PIO service crate. Each mutant here goes
+round it one way, in a clean worktree of HEAD (see `source_mutant.py`), and
+the named check must fail **for that reason**. The verifier's two bypasses
+of the first cut are B1 and B2.
 
-    client_boundary_mutant.py [--dependency pio-core|pio-protocol|pio-host]
+    client_boundary_mutant.py [--mutant NAME]...     (all of them by default)
 
-`pio-protocol` is reached through its own dependency on pio-core as well, so
-that variant also shows a transitive edge is caught.
+- `direct-pio-core`: pio-client depends on pio-core;
+- `transitive-pio-protocol`: on pio-protocol, which reaches pio-core too;
+- `B1-optional-feature`: an optional pio-core behind a feature, re-exported;
+- `B2-path-include`: a service source file compiled in with a module path;
+- `cli-borrows-service`: the command-line code names pio_protocol;
+- `ledger-lenient`: the caller ledger parses its request with serde_json,
+  which takes a duplicate key the service refuses.
 """
 import argparse
-import os
-import shutil
-import subprocess
-import tempfile
+import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-FORBIDDEN = {'pio-core': '{ path = "../pio-core" }',
-             'pio-protocol': '{ path = "../pio-protocol", default-features = false }',
-             'pio-host': '{ path = "../pio-host" }'}
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import source_mutant
+
+CLIENT_TOML = 'crates/pio-client/Cargo.toml'
+CLIENT_LIB = 'crates/pio-client/src/lib.rs'
+BOUNDARY = ['test', '--quiet', '-p', 'pio-client', '--test', 'dependencies']
+REACH = 'reaches PIO service internals through'
+
+MUTANTS = {
+    'direct-pio-core': (
+        [(CLIENT_TOML, None, 'pio-core = { path = "../pio-core" }\n')],
+        BOUNDARY, [REACH, '"pio-core"']),
+    'transitive-pio-protocol': (
+        [(CLIENT_TOML, None,
+          'pio-protocol = { path = "../pio-protocol", default-features = false }\n')],
+        BOUNDARY, [REACH, '"pio-protocol"', '"pio-host"']),
+    'B1-optional-feature': (
+        [(CLIENT_TOML, None, 'pio-core = { path = "../pio-core", optional = true }\n\n'
+                             '[features]\nleak = ["dep:pio-core"]\n'),
+         (CLIENT_LIB, None, '#[cfg(feature = "leak")]\npub use pio_core;\n')],
+        BOUNDARY, [REACH, 'outside its allow-list', 'pio-core (by path)']),
+    'B2-path-include': (
+        [(CLIENT_LIB, None, '#[' + 'path = "../../pio-protocol/src/encoding.rs"]\n'
+                            '#[allow(dead_code)]\nmod leak;\n')],
+        BOUNDARY, ['sources reach outside the crate', 'encoding.rs']),
+    'cli-borrows-service': (
+        [('crates/pio-cli/src/client_cli.rs', 'use crate::ledger;\n',
+          'use crate::ledger;\n#[allow(unused_imports)]\nuse pio_protocol as _service;\n')],
+        BOUNDARY, ['the command line reaches past the public client', 'pio_protocol']),
+    'ledger-lenient': (
+        [('crates/pio-cli/src/ledger.rs', 'Ok(pio_client::encoding::parse(bytes)?)',
+          'Ok(serde_json::from_slice(bytes)?)')],
+        ['test', '--quiet', '-p', 'pio-cli', '--bin', 'pio', 'ledger::'],
+        ['a_request_file_is_parsed_as_strictly_as_the_service_parses_it', 'FAILED']),
+}
+
+
+def run(name):
+    edits, test, needles = MUTANTS[name]
+    with source_mutant.mutated(edits) as tree:
+        # Not --locked: a mutant that adds a dependency changes the graph,
+        # which is the point.
+        result = source_mutant.cargo(tree, *test, check=False)
+    output = result.stdout + result.stderr
+    if result.returncode == 0:
+        raise SystemExit(f'mutant {name} SURVIVED: {" ".join(test)} passed')
+    missing = [n for n in needles if n not in output]
+    if missing:
+        raise SystemExit(f'mutant {name}: the test failed, but not for the named reason '
+                         f'(missing {missing}):\n{output[-3000:]}')
+    said = next((l.strip() for l in output.splitlines() if needles[0] in l), needles[0])
+    print(f'mutant {name} killed: {said[:300]}')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--dependency', choices=sorted(FORBIDDEN), default='pio-core')
+    parser.add_argument('--mutant', choices=sorted(MUTANTS), action='append')
     args = parser.parse_args()
-    scratch = Path(tempfile.mkdtemp(prefix='pio-bm-', dir='/tmp')).resolve()
-    tree = scratch / 'tree'
-    try:
-        subprocess.run(['git', 'worktree', 'add', '--detach', '--force', str(tree), 'HEAD'],
-                       cwd=ROOT, check=True, capture_output=True)
-        manifest = tree / 'crates/pio-client/Cargo.toml'
-        manifest.write_text(manifest.read_text()
-                            + f'{args.dependency} = {FORBIDDEN[args.dependency]}\n')
-        env = dict(os.environ, CARGO_TARGET_DIR=str(ROOT / 'target/fold-mutant'))
-        # Not --locked: the mutant changes the graph, which is the point.
-        result = subprocess.run(['cargo', 'test', '--quiet', '-p', 'pio-client',
-                                 '--test', 'dependencies'],
-                                cwd=tree, env=env, capture_output=True, text=True)
-    finally:
-        subprocess.run(['git', 'worktree', 'remove', '--force', str(tree)], cwd=ROOT,
-                       capture_output=True)
-        shutil.rmtree(scratch, ignore_errors=True)
-    output = result.stdout + result.stderr
-    if result.returncode == 0:
-        raise SystemExit(f'mutant {args.dependency} SURVIVED: the boundary test passed')
-    said = [l.strip() for l in output.splitlines() if 'reaches PIO service internals' in l]
-    if not any(f'"{args.dependency}"' in line for line in said):
-        raise SystemExit(f'mutant {args.dependency}: the test failed, but not on the '
-                         f'boundary:\n{output[-2000:]}')
-    print(f'mutant {args.dependency} killed: {said[0]}')
+    for name in args.mutant or list(MUTANTS):
+        run(name)
 
 
 if __name__ == '__main__':

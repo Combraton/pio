@@ -2,7 +2,8 @@
 //! authenticated stream/1 session. Every answer is the service's own: a
 //! result is returned as the service shaped it, and a refusal as
 //! [`Failure::Refused`] carrying the error object verbatim.
-use crate::wire::{Connection, Credential, Failure, Refusal, Reply, canonical, digest};
+use crate::encoding::canonical;
+use crate::wire::{Connection, Credential, Failure, Refusal, Reply, digest};
 use anyhow::Context;
 use base64::Engine;
 use serde_json::{Value, json};

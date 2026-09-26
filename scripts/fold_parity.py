@@ -23,7 +23,8 @@ answer on it (`<name>.expected.json`, written by `--write-expected`).
     fold_parity.py --out DIR --mutant NAME     a Rust fold with one field broken
 
 `--mutant` builds the Rust fold from a clean worktree of HEAD with one named
-edit applied, and requires the parity check to fail **on that field**:
+edit applied (`source_mutant.py`), and requires the parity check to fail **on
+that field**:
 
 - `walk-drops-offer` removes `if_nobody_answers` from every walk row;
 - `board-exited-running` draws an exited run as `running`;
@@ -45,6 +46,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import source_mutant
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / 'crates/pio-client/tests/fixtures'
@@ -396,19 +398,13 @@ def scrub(path):
 
 # --- mutants ------------------------------------------------------------------
 
-def mutant_binary(name, scratch):
+def mutant_fold(name):
     """The fold example built from a clean worktree of HEAD with one edit."""
     relative, old, new, _ = MUTANTS[name]
-    tree = scratch / 'tree'
-    subprocess.run(['git', 'worktree', 'add', '--detach', '--force', str(tree), 'HEAD'],
-                   cwd=ROOT, check=True, capture_output=True)
-    source = tree / relative
-    text = source.read_text()
-    assert text.count(old) == 1, f'mutant {name}: the edit no longer applies to {relative}'
-    source.write_text(text.replace(old, new))
-    # One target directory for every mutant build, inside the repository's
-    # own (ignored) target: the dependencies compile once, not per mutant.
-    return fold_binary(tree, ROOT / 'target/fold-mutant')
+    with source_mutant.mutated([(relative, old, new)]) as tree:
+        source_mutant.cargo(tree, 'build', '--quiet', '--locked', '-p', 'pio-client',
+                            '--example', 'fold')
+    return source_mutant.TARGET / 'debug/examples/fold'
 
 
 def main():
@@ -426,37 +422,26 @@ def main():
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
 
-    scratch, binary = None, None
-    try:
-        if args.mutant:
-            scratch = Path(tempfile.mkdtemp(prefix='pio-fpm-', dir='/tmp')).resolve()
-            binary = mutant_binary(args.mutant, scratch)
+    binary = mutant_fold(args.mutant) if args.mutant else fold_binary()
+    paths = recordings(FIXTURES)
+    if args.record:
+        fresh = out / 'recorded'
+        record(out, fresh)
+        if args.write_fixtures:
+            for old in FIXTURES.glob('*.json'):
+                old.unlink()
+            for path in recordings(fresh):
+                shutil.copy(path, FIXTURES / path.name)
+            paths = recordings(FIXTURES)
         else:
-            binary = fold_binary()
-        paths = recordings(FIXTURES)
-        if args.record:
-            fresh = out / 'recorded'
-            record(out, fresh)
-            if args.write_fixtures:
-                for old in FIXTURES.glob('*.json'):
-                    old.unlink()
-                for path in recordings(fresh):
-                    shutil.copy(path, FIXTURES / path.name)
-                paths = recordings(FIXTURES)
-            else:
-                paths += recordings(fresh)
-        if args.write_expected:
-            for path in recordings(FIXTURES):
-                expected = python_fold(json.loads(path.read_text()))
-                (FIXTURES / f'{path.stem}.expected.json').write_text(
-                    json.dumps(expected, indent=1, sort_keys=True, ensure_ascii=False) + '\n')
-        assert paths, f'no recordings in {FIXTURES}'
-        results = compare(binary, paths, out)
-    finally:
-        if scratch:
-            subprocess.run(['git', 'worktree', 'remove', '--force', str(scratch / 'tree')],
-                           cwd=ROOT, capture_output=True)
-            shutil.rmtree(scratch, ignore_errors=True)
+            paths += recordings(fresh)
+    if args.write_expected:
+        for path in recordings(FIXTURES):
+            expected = python_fold(json.loads(path.read_text()))
+            (FIXTURES / f'{path.stem}.expected.json').write_text(
+                json.dumps(expected, indent=1, sort_keys=True, ensure_ascii=False) + '\n')
+    assert paths, f'no recordings in {FIXTURES}'
+    results = compare(binary, paths, out)
 
     kinds = sorted({r['kind'] for r in results})
     record_ = dict(format='pio-fold-parity/1', mutant=args.mutant, kinds=kinds,

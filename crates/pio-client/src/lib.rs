@@ -8,6 +8,7 @@
 pub mod blocks;
 pub mod board;
 pub mod client;
+pub mod encoding;
 pub mod replay;
 pub mod walk;
 pub mod watch;
@@ -17,4 +18,5 @@ pub use client::{
     CONTENT, Client, Command, Fence, Options, OutputChunk, Pinned, Position, Reconcile,
     decision_word, execution,
 };
-pub use wire::{Credential, Failure, Refusal, Reply, canonical, digest};
+pub use encoding::canonical;
+pub use wire::{Credential, Failure, Refusal, Reply, digest};
