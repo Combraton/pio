@@ -303,15 +303,18 @@ prints it and exits, so the request goes to the owner live. It exited on
 ## `L3-rehearsal.json`
 
 L3 rehearsed against the labeled Codex fake by `scripts/lead_run.py --rehearse
---plan L3` at clean head `be7c552` (`dirty: false`), after round 3 of the
-review of L3. **Zero tokens, no model call.** The fake is
-`pio codex fake-app-server` (`pio-fake-app-server`): it speaks 0.157.0's
-app-server shapes and runs no model, tool or command, and `serve-codex` does
-not qualify a labeled fake. Plan: owner approval of 2026-09-24 (sequence cap
-400,000, stop 320,000) and the decisions of 2026-09-25 (issue #12).
+--plan L3` at clean head `fff09be` (`dirty: false`), after round 4 of the
+review of L3 and the owner's decisions of 2026-09-26. **Zero tokens, no model
+call.** The fake is `pio codex fake-app-server` (`pio-fake-app-server`): it
+speaks 0.157.0's app-server shapes and runs no model, tool or command, and
+`serve-codex` does not qualify a labeled fake. Plan: owner approval of
+2026-09-24, the decisions of 2026-09-25 (issue #12), and the owner's
+decisions of 2026-09-26: L3's sizing ("More headroom": lead 150,000, child
+60,000, sequence cap 565,000 and stop 452,000) and Codex's five unmetered
+features off per launch.
 
-**43 rows and two records: 39 rows hold, none failed, and four are
-inconclusive**, the four this rehearsal cannot observe:
+**44 rows and three records: 41 rows hold, none failed, and three are
+inconclusive**, the three this rehearsal cannot observe:
 
 - **Codex qualified at the pinned identity**: the labeled fake has no
   qualification record (`qualification_check`: not checked). Live, a record
@@ -325,29 +328,36 @@ inconclusive**, the four this rehearsal cannot observe:
 - **Every run that spawned a sub-agent was stopped when it appeared**: none
   spawned one. `subagent-spawned` holds it and `subagent-not-stopped` fails
   it.
-- **The owner's OpenCode service was untouched**: no OpenCode service ran
-  before or after, so nothing was observed (`owner-service-absent`).
+
+The owner's OpenCode service row held on this machine: a service of the
+owner's was running before and after, unchanged. Where none runs, as on CI,
+it is inconclusive (`owner-service-absent`).
 
 What L3 shows, as the fake plays it:
 
+- Codex's five unmetered features are off on every thread per launch,
+  under the owner's decision `owner-2026-09-26-l3-codex-unmetered-features-off`,
+  which the L3 plan sends: the receipt's route for sub-agents, memories,
+  goals, standalone web search and image generation is "per launch" for
+  each, and every thread's `thread/start` config carried exactly the eight
+  keys of `pio_codex::features_off` (`features_off_sent`, read back by the
+  host from its own request). The Codex home here has no `config.toml`, so
+  no owner key was read; live, the owner's are read by those keys alone
+  (`memories = true`, nothing else, on 2026-09-26), and without the decision
+  the runner refuses for all five (`decision-absent`).
 - The lead tool is on the lead's thread only. The host read back from its
   own `thread/start` request exactly `start_run` and `read_run` at
   `approval_mode: approve` and no server-wide default; the children's
   threads carried no server. Nothing was asked about the lead's tool, by
-  any path, and PIO declined nothing by itself, before or during a turn
-  (record: empty for all three runs).
+  any path, and PIO declined nothing by itself, before, during or after a
+  turn (record: empty for all three runs).
 - Each thread's model and provider (`gpt-5.6-terra`, `openai`) were checked
   from `thread/start`'s answer before its first turn. `approvalsReviewer` is
   `user` on all three.
-- The Codex home here has no `config.toml`, so the widening features, the
-  sub-agent keys and `memories` all read as unset (`codex_features`,
-  `subagents`); live, it is the owner's, and the live check on sub-agents
-  applies (a rehearsal records it and does not refuse). No agents-off keys
-  were sent (`agents_off_sent`), since no decision was given.
 - The lead's steer on `L3.alpha` was recorded under its grant while the turn
   was `active` and `acknowledged`, and acknowledged with `provider_ack_id`.
   Behavior is `not_observed`.
-- The lead's `read_run` of `alpha` took 27.9 s and returned `exited`.
+- The lead's `read_run` of `alpha` took 30.4 s and returned `exited`.
 - Each child said what it was about to run before its command, as measured
   on this model (``Running `sleep 30 && wc -l alpha.md`.``), then answered;
   the count row read each child's last message after its last command: 7
@@ -358,23 +368,25 @@ What L3 shows, as the fake plays it:
   answered `allow` by the rehearsal, and was sent as
   `{"decision": "accept"}`.
 - The lead's tool answered four calls, each through its gate (one gate
-  line each in its log); none was handed back past the hold, and no result
-  reached the lead that its tool never saw.
+  line each in its log); none was handed back past the hold (120,000), and
+  no result reached the lead that its tool never saw.
 - Every model step was 4,096 tokens, within the 30,000 the bound assumes in
   flight (the host's own usage events: the lead 5 steps, each child 2). No
-  run had a thread but its own, and every exit carried its list of other
-  threads (empty). No execution under the lead but the plan's three.
+  run had a thread but its own, no run took a turn of its own after its turn
+  had ended (each host read its run's thread for three seconds after the
+  turn), and every exit carried both lists (empty). No stream retry was
+  reported. No execution under the lead but the plan's three.
 - Codex's memory state did not change (there is none in a labeled fake's
-  home).
+  home, and memories were off per launch).
 - Codex's runs were metered on the event stream and on each run's own host
-  events by a thread of their own: 202 passes in 42.7 s. No stop and no
+  events by a thread of their own: 320 passes in 48.3 s. No stop and no
   silence.
 - The charge is Codex's reported totals, 20,480 + 8,192 + 8,192 = 36,864,
-  on the rehearsal's own ledger: each at least what the run could have
-  spent, and each within its share. The reservations, written immediately
-  before the lead's submit (185,000 + 110,000 + 110,000 = 405,000), were
-  replaced and none is left. Every submit made an execution, and no probe
-  was admitted.
+  on the rehearsal's own ledger, read with each run's host events afresh:
+  each at least what the run could have spent, and each within its share.
+  The reservations, written immediately before the lead's submit (210,000 +
+  120,000 + 120,000 = 450,000), were replaced and none is left. Every
+  submit made an execution, and no probe was admitted.
 
 **What only the live run can show.** These are the places where
 `lead_run.py` takes a different branch live, or where a row that holds here
