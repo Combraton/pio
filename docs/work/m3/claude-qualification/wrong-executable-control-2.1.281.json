@@ -1,0 +1,25 @@
+{
+  "format": "pio-claude-qualification/1",
+  "isolated_config_dir": true,
+  "pinned": {
+    "version": "2.1.281"
+  },
+  "qualified": false,
+  "refusals": [
+    {
+      "observed": "codex-cli",
+      "reason": "unsupported_version"
+    }
+  ],
+  "resolution": {
+    "binary_sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+    "resolved": "~/.local/lib/node_modules/@openai/codex/bin/codex.js",
+    "resolved_parent": "bin",
+    "selected": "~/.local/bin/codex"
+  },
+  "selected": "~/.local/bin/codex",
+  "surface": {
+    "skipped": "version_not_qualified"
+  },
+  "version": "codex-cli"
+}

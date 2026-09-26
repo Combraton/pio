@@ -41,6 +41,8 @@ CASES = [
     'unqualified_executable_refused',
     'missing_credential_route_refused',
     'permission_mode_not_the_configured_default_refused',
+    'service_runs_under_the_product_default_when_none_is_configured',
+    'service_refuses_a_stream_identity_drift_at_init',
     'surface_drift_refused',
     # Through the service, which is the only place these can be observed.
     'service_turn_completes',
@@ -606,6 +608,82 @@ def run_case(out, name):
         assert status == 0, record
         assert record['permission_mode']['allowed'] is True, record
 
+    elif name == 'service_runs_under_the_product_default_when_none_is_configured':
+        # D2. Most installations configure no `permissions.defaultMode`, and
+        # admission refused every one of them. Absent is the product default,
+        # measured as `default`; the flag does not accept that name, so the
+        # run passes no mode flag and the `init` echo is compared with it.
+        case = ServiceCase(out, name, settings={'permissions': {'allow': ['Bash(cat)']}},
+                           permission_mode='default')
+        status, record = case.admit()
+        assert status == 0, record
+        guard = record['permission_mode']
+        assert guard['allowed'] is True and guard['configured'] == 'default', guard
+        assert guard['configured_source'] == 'product_default', guard
+        # Asking for anything else under that default is still refused.
+        other = Case(out, f'{name}-acceptEdits', settings={'permissions': {}},
+                     permission_mode='acceptEdits')
+        status, refused = other.admit()
+        assert status == 3 and refused['permission_mode']['allowed'] is False, refused
+        other.cleanup()
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        assert view['exit'] == {'code': 0}, view
+        received = case.markers_of('turn_received')
+        assert len(received) == 1 and received[0]['permission_mode_flag'] is None, received
+        started = [e for e in case.host_events() if e['kind'] == 'session_started']
+        assert len(started) == 1, case.host_events()
+        assert started[0]['requested_permission_mode'] == 'default', started
+        assert started[0]['effective_permission_mode'] == 'default', started
+        assert started[0]['effective_mode_matches_requested'] is True, started
+
+    elif name == 'service_refuses_a_stream_identity_drift_at_init':
+        # D11. The pinned stream identity was enforced only by
+        # re-qualification and tests; a harness whose `init` had moved ran as
+        # if it had not. The fake here sends one `init` key the pinned release
+        # never sent, and then asks for a permission. The host must refuse at
+        # `init`, record what it saw by digest, and answer no tool use.
+        case = ServiceCase(out, name, scenario={
+            'init': {'key_from_a_later_release': True},
+            'permission_request': {'tool_name': 'Bash', 'input': {'command': 'git tag x'}}})
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited', seconds=120)
+        events = case.host_events()
+        checked = [e for e in events if e['kind'] == 'stream_identity_checked']
+        assert len(checked) == 1, [e['kind'] for e in events]
+        identity = checked[0]['identity']
+        assert identity['matches'] is False, identity
+        assert identity['observed_sha256'] != identity['pinned_sha256'], identity
+        assert identity['drift'] == [{'field': 'init_keys', 'added': ['key_from_a_later_release'],
+                                      'removed': [], 'reordered': False}], identity
+        refused = [e for e in events if e['kind'] == 'stream_identity_refused']
+        assert len(refused) == 1, [e['kind'] for e in events]
+        assert refused[0]['refusal']['reason'] == 'stream_drift', refused
+        assert refused[0]['refusal']['observed_sha256'] == identity['observed_sha256'], refused
+        assert refused[0]['usage'] == 'unknown', refused
+        # Refused at `init`: nothing after it was acted on, and the harness
+        # never got an answer to anything.
+        # Not `kinds`: that name is this module's message helper, and binding
+        # it here would make it local to every case.
+        order = [e['kind'] for e in events]
+        assert order.index('stream_identity_checked') < order.index('stream_identity_refused'), order
+        for later in ('action_requested', 'request_declined_by_pio', 'control_applied',
+                      'request_denied_by_default', 'turn_completed', 'host_error'):
+            assert later not in order, order
+        assert case.markers_of('permission_decision') == [], case.markers_of('permission_decision')
+        # What the caller sees: the echo proved delivery, the run ended with no
+        # exit code claimed, and usage is unknown rather than none.
+        assert view['delivery'] == 'acknowledged', view
+        assert view['exit'] == 'unavailable', view
+        assert view['usage']['liability'] == 'unresolved', view['usage']
+        assert view['usage']['observations'] == [], view['usage']
+        # The child is stopped, not left running.
+        poll(lambda: case.harness_processes(), lambda p: not p, seconds=60)
+        (case.out / 'events.json').write_text(json.dumps(events, indent=2))
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
     elif name == 'surface_drift_refused':
         # A genuine drift, not merely an unqualified executable: pin the fake's
         # own surface as the baseline, then move one help and show the refusal
@@ -644,12 +722,13 @@ def run_case(out, name):
         case.start()
         case.submit()
         view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
-        # The replay echo is the delivery proof, and it reached the journal as
+        # The replay echo is the delivery evidence, and it reached the journal as
         # a delivery with its own evidence class rather than an inference.
         assert view['delivery'] == 'acknowledged', view
         delivery = view['deliveries'][0]
         assert delivery['evidence']['class'] == 'native_replay_echo', delivery
-        assert delivery['proof_class'] == 'provider_ack_id', delivery
+        # The echo returns no identifier, so it earns no proof class (D7).
+        assert 'proof_class' not in delivery, delivery
         assert delivery['evidence']['source'] == 'pio-fake-claude-cli/host', delivery
         assert view['exit'] == {'code': 0}, view
         # Containment is recorded on every execution, not only when something

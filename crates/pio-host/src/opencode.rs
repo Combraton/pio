@@ -849,10 +849,13 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     // ACP sends no denial list of its own, so the refusals PIO knows about are
     // the ones it or the caller decided. A tool call refused that way never
     // ran, so it is an attempt rather than an effect — the defect R6 found in
-    // the Claude host, which was still open here.
+    // the Claude host, which was still open here. And the same branch as D3
+    // there: a turn whose prompt never answered (a kill, a crash) cannot say
+    // whether a use nobody refused ran, so it is `unknown`, not `performed`.
+    let refused = Value::Array(refused.clone());
     let tool_uses = pio_claude::tool_use_records(
         &tool_use_messages,
-        &Value::Array(refused.clone()),
+        result.as_ref().map(|_| &refused),
         &decided,
         &cwd,
         &cwd,

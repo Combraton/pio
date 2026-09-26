@@ -1,4 +1,4 @@
-//! Claude Code 2.1.278 qualification. Binds the user-selected executable, the
+//! Claude Code qualification, pinned to 2.1.281. Binds the user-selected executable, the
 //! binary it actually resolves to, and the command-line surface it exposes,
 //! before any native work. Qualification runs the executable only with an
 //! isolated `CLAUDE_CONFIG_DIR`; it never reads the user's credentials, never
@@ -11,13 +11,14 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub const PINNED_VERSION: &str = "2.1.278";
+pub const PINNED_VERSION: &str = "2.1.281";
 
-/// Command-line surface captured from the qualified 2.1.278 executable. Claude
+/// Command-line surface captured from the qualified executable, at zero
+/// tokens, under `adapters/claude/<PINNED_VERSION>`. Claude
 /// Code publishes no schemas, so the interface PIO can pin is the surface it
 /// drives. See [ADR 004](../../../docs/decisions/004-claude-code-adapter.md).
 pub const QUALIFIED_SURFACE: &str =
-    include_str!("../../../adapters/claude/2.1.278/surface-identity.json");
+    include_str!("../../../adapters/claude/2.1.281/surface-identity.json");
 
 /// Helps that make up the surface identity. The top-level help plus every
 /// subcommand PIO might touch, so a self-update that changes the interface
@@ -31,7 +32,7 @@ pub const SURFACE_COMMANDS: &[&str] = &[
 /// Stream identity captured from the qualified executable at zero tokens. A
 /// help digest cannot see the wire, so the pinned interface is both artefacts.
 pub const QUALIFIED_STREAM: &str =
-    include_str!("../../../adapters/claude/2.1.278/stream-identity.json");
+    include_str!("../../../adapters/claude/2.1.281/stream-identity.json");
 
 /// Fields of the stream identity that must match exactly for a qualified run.
 pub const STREAM_IDENTITY_FIELDS: &[&str] = &[
@@ -403,6 +404,31 @@ pub fn auth_route(exe: &Path, env: &ChildEnv) -> Result<Value> {
 /// The one permission mode PIO may never request, whatever anything else says.
 pub const FORBIDDEN_MODE: &str = "bypassPermissions";
 
+/// The mode Claude Code runs in when no `permissions.defaultMode` is
+/// configured, which is most installations: what `system/init` reports with
+/// an empty configuration and no flag, from the pinned stream identity.
+/// Measured `default` on 2.1.278 and again on 2.1.281 (ADR 004 §4).
+pub fn product_default_permission_mode() -> String {
+    let stream: Value = serde_json::from_str(QUALIFIED_STREAM).expect("pinned stream identity");
+    stream["product_default_permission_mode"]
+        .as_str()
+        .expect("the pinned stream identity names the product default mode")
+        .to_owned()
+}
+
+/// The arguments that request `requested`. The product default's name,
+/// `default`, is one `--permission-mode` does not accept, so requesting it
+/// passes **no** mode flag: the harness then runs in its own default, which
+/// is exactly what was requested, and the `system/init` echo is compared with
+/// it after delivery like any other mode.
+pub fn permission_mode_args(requested: &str) -> Vec<String> {
+    if requested == product_default_permission_mode() {
+        Vec::new()
+    } else {
+        vec!["--permission-mode".to_owned(), requested.to_owned()]
+    }
+}
+
 /// Refuse a requested permission mode that is not exactly the user's configured
 /// default (owner guard, carried from ADR 003 §6 and the Codex thread-settings
 /// guard). The breadth ordering of Claude Code's six modes is **not
@@ -410,13 +436,20 @@ pub const FORBIDDEN_MODE: &str = "bypassPermissions";
 /// placing `dontAsk`, which auto-denies everything that would prompt, above
 /// `acceptEdits`. Rather than encode a guess as a safety property, this guard
 /// compares for equality. A mode joins a narrower-than set only with a
-/// measurement. An absent or unreadable default refuses rather than assuming
-/// the product's own default, which is likewise unmeasured.
+/// measurement.
+///
+/// An **absent** default is the product's own, which is the state of most
+/// installations and was measured: `system/init` reports `default` with an
+/// empty configuration and no flag. It used to be refused, so PIO could not
+/// run on an ordinary install (D2); it is now compared like any configured
+/// value, and `configured_source` says which it was. An unreadable value
+/// still refuses.
 pub fn permission_mode_guard(settings: &Value, requested: &str) -> Value {
     let mut unresolved = Vec::new();
     if requested == FORBIDDEN_MODE {
         unresolved.push(json!({"setting":"requested","reason":"PIO never requests this mode","value":requested}));
     }
+    let mut source = "user_settings";
     let configured = match &settings["permissions"]["defaultMode"] {
         Value::String(mode) if mode == FORBIDDEN_MODE => {
             unresolved.push(json!({"setting":"permissions.defaultMode","reason":"PIO never requests this mode, even when it is configured","value":mode}));
@@ -424,8 +457,8 @@ pub fn permission_mode_guard(settings: &Value, requested: &str) -> Value {
         }
         Value::String(mode) => Some(mode.clone()),
         Value::Null => {
-            unresolved.push(json!({"setting":"permissions.defaultMode","reason":"absent; measured, the product default reports as `default`, which --permission-mode does not accept"}));
-            None
+            source = "product_default";
+            Some(product_default_permission_mode())
         }
         other => {
             unresolved.push(json!({"setting":"permissions.defaultMode","reason":"not a plain string","value":other}));
@@ -439,8 +472,9 @@ pub fn permission_mode_guard(settings: &Value, requested: &str) -> Value {
             "configured":configured,"requested":requested}));
     }
     json!({
-        "format":"pio-claude-permission-guard/1",
+        "format":"pio-claude-permission-guard/2",
         "configured":configured,
+        "configured_source":configured.as_ref().map(|_| source),
         "requested":requested,
         "unresolved":unresolved,
         "allowed":unresolved.is_empty() && matches,
@@ -545,6 +579,82 @@ pub fn stream_drift(expected: &Value, actual: &Value) -> Vec<Value> {
         .filter(|field| expected[**field] != actual[**field])
         .map(|field| json!({"field":field,"expected":&expected[*field],"actual":&actual[*field]}))
         .collect()
+}
+
+/// The fields of the stream identity a live `system/init` is held to on
+/// every run: its key set and its capability list. The rest of the identity
+/// (the product defaults, the message sequence, the handshake) is measured
+/// by re-qualification, not by one run.
+pub const INIT_IDENTITY_FIELDS: &[&str] = &["init_keys", "capabilities"];
+
+/// The key a labeled fake adds to everything it emits. A labeled fake's
+/// `init` may carry it beyond the pinned set; a real harness's may not.
+pub const FAKE_LABEL_KEY: &str = "source";
+
+fn sorted_strings(value: &Value) -> Vec<String> {
+    let mut list: Vec<String> = value
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    list.sort();
+    list
+}
+
+/// Compare one run's `system/init` with the pinned stream identity (D11).
+///
+/// Before this the product never looked: the stream identity was pinned and
+/// compared by re-qualification and by tests, and a self-updated harness
+/// whose `init` had moved ran exactly as if it had not. The host now refuses
+/// such a run at `init`, which is the first message, so before any tool use
+/// is answered. The record carries the observed and the pinned digests, so a
+/// refusal says what was seen and not only that something differed.
+pub fn init_identity(init: &Value, pinned: &Value, labeled_fake: bool) -> Value {
+    let mut keys: Vec<String> = init
+        .as_object()
+        .map(|fields| fields.keys().cloned().collect())
+        .unwrap_or_default();
+    if labeled_fake {
+        keys.retain(|key| key != FAKE_LABEL_KEY);
+    }
+    keys.sort();
+    let observed = json!({"init_keys":keys,"capabilities":init["capabilities"]});
+    let expected = json!({"init_keys":pinned["init_keys"],"capabilities":pinned["capabilities"]});
+    let digest = |value: &Value| {
+        format!(
+            "sha256:{}",
+            sha256_hex(serde_json::to_string(value).unwrap_or_default().as_bytes())
+        )
+    };
+    let mut drift = Vec::new();
+    for field in INIT_IDENTITY_FIELDS {
+        if observed[*field] == expected[*field] {
+            continue;
+        }
+        let seen = sorted_strings(&observed[*field]);
+        let want = sorted_strings(&expected[*field]);
+        drift.push(json!({
+            "field":field,
+            "added":seen.iter().filter(|k| !want.contains(k)).collect::<Vec<_>>(),
+            "removed":want.iter().filter(|k| !seen.contains(k)).collect::<Vec<_>>(),
+            // Same members, different order: capabilities are compared as
+            // the harness lists them.
+            "reordered":seen == want,
+        }));
+    }
+    json!({
+        "format":"pio-claude-init-identity/1",
+        "pinned_version":pinned["version"],
+        "compared":INIT_IDENTITY_FIELDS,
+        "observed_sha256":digest(&observed),
+        "pinned_sha256":digest(&expected),
+        "drift":drift,
+        "matches":drift.is_empty(),
+    })
 }
 
 fn inner_request_id(request: &Value) -> Result<String> {
@@ -907,9 +1017,17 @@ fn target_label(resolved: &Option<String>, workspace: &Path, placement: &str) ->
 /// command never produces a permission request — it never reaches PIO at all.
 /// A target outside the fixture is therefore an **observed effect with
 /// unresolved liability**, not a declined request. ADR 004 §5.
+///
+/// `denials` is the final `result`'s denial list, or `None` when no final
+/// `result` arrived (a forced kill, a crash, a harness that left early). Then
+/// what the harness refused under its own rules is unknown, and so is whether
+/// any use nobody denied actually ran: such a use is `unknown`, never
+/// `performed`, and leaves the liability unresolved. A use PIO or a caller
+/// denied is denied either way — PIO sent that deny itself — and is never
+/// `performed`.
 pub fn tool_use_records(
     messages: &[Value],
-    denials: &Value,
+    denials: Option<&Value>,
     decided: &Value,
     workspace: &Path,
     cwd: &Path,
@@ -919,8 +1037,9 @@ pub fn tool_use_records(
     // along and ignored it: R6 reported an out-of-fixture effect with
     // unresolved liability for a read the harness refused outright, and R3
     // counted a denied compound command among its effects.
+    let result_observed = denials.is_some();
     let denied: Vec<&str> = denials
-        .as_array()
+        .and_then(Value::as_array)
         .map(|list| {
             list.iter()
                 .filter_map(|d| d["tool_use_id"].as_str())
@@ -938,7 +1057,7 @@ pub fn tool_use_records(
             let input = &block["input"];
             let (resolved, placement) = classify_target(input, &workspace, &cwd);
             let digest_source = resolved.clone().unwrap_or_else(|| input.to_string());
-            let refused = block["id"].as_str().is_some_and(|id| denied.contains(&id));
+            let listed = block["id"].as_str().is_some_and(|id| denied.contains(&id));
             // Who decided. `result.permission_denials` names every refusal
             // without saying whose it was, so a denial PIO forwarded on a
             // caller's behalf looked exactly like one the harness made on its
@@ -948,10 +1067,17 @@ pub fn tool_use_records(
                 .as_str()
                 .map(|id| decided[id].clone())
                 .unwrap_or(Value::Null);
+            // A deny PIO sent, on its own account or a caller's, is a refusal
+            // whether or not a `result` ever confirmed it. Before this, a turn
+            // killed before its `result` recorded PIO's own decline as
+            // `performed` (D3).
+            let refused = listed || decision["decision"] == "deny";
             let outcome = match (refused, decision["by"].as_str()) {
                 (true, Some("caller")) => "denied_by_caller",
                 (true, Some("pio")) => "declined_by_pio",
                 (true, _) => "attempted_and_denied",
+                // No `result`, so nothing says whether it ran.
+                (false, _) if !result_observed => "unknown",
                 (false, _) => "performed",
             };
             records.push(json!({
@@ -963,7 +1089,7 @@ pub fn tool_use_records(
                 // Refused. It never ran, so it is not an effect and carries no
                 // liability, whoever decided.
                 "denied": refused,
-                "denied_by_harness": refused && decision["by"].is_null(),
+                "denied_by_harness": listed && decision["by"].is_null(),
                 "decided_by": decision["by"].clone(),
                 // What was decided, not only by whom. Recorded because a
                 // receipt that names a decider and not a decision leaves the
@@ -994,8 +1120,9 @@ pub fn tool_use_records(
         .iter()
         .filter(|r| r["outcome"] == "declined_by_pio")
         .count();
+    let unknown = records.iter().filter(|r| r["outcome"] == "unknown").count();
     json!({
-        "format":"pio-claude-tool-uses/5",
+        "format":"pio-claude-tool-uses/6",
         "containment":{
             "mechanism":"harness_permission_rules_only",
             "os_sandbox_observed":false,
@@ -1011,7 +1138,15 @@ pub fn tool_use_records(
         "out_of_fixture_effect_observed":outside > 0,
         "out_of_fixture_count":outside,
         "unclassifiable_target_count":unclassified,
-        "liability":if outside > 0 || unclassified > 0 { "unresolved" } else { "none_observed" },
+        // Whether the final `result` arrived, and how many uses it left
+        // undecided because it did not.
+        "result_observed":result_observed,
+        "unknown_outcome_count":unknown,
+        "liability":if outside > 0 || unclassified > 0 || unknown > 0 {
+            "unresolved"
+        } else {
+            "none_observed"
+        },
     })
 }
 

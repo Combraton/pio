@@ -20,6 +20,12 @@ Every child process runs with a cleared environment — only PATH, HOME and
 CLAUDE_CONFIG_DIR are passed, never a credential variable. The user's own
 configuration is read only to observe the route and is verified byte-identical
 before and after. Exit 0 clean, 3 on drift, 4 if the user's configuration moved.
+
+`--isolated` goes further: **no** child sees the user's configuration. The
+version, the helps and `auth status` run with a scratch `HOME` and
+`CLAUDE_CONFIG_DIR`, as the Rust qualification does, so the user's route is
+not observed and their files are not snapshotted; the summary says so rather
+than reporting a comparison it never made.
 """
 import argparse
 import hashlib
@@ -54,6 +60,8 @@ INITIALIZE = {'type': 'control_request', 'request_id': 'req_init_probe',
 
 # Set once by main(); every launch uses the selected executable.
 EXECUTABLE = None
+# Set once by main(): every child gets an isolated configuration directory.
+ISOLATED = False
 
 
 def sha(data):
@@ -77,6 +85,8 @@ def env_for(home, config_dir=None):
     env = {'PATH': BASE_PATH, 'HOME': str(home)}
     if 'USER' in os.environ:
         env['USER'] = os.environ['USER']
+    if config_dir is None and ISOLATED:
+        config_dir = home
     if config_dir is not None:
         env['CLAUDE_CONFIG_DIR'] = str(config_dir)
     return env
@@ -246,7 +256,7 @@ def drift(expected, actual, fields):
 
 
 def main():
-    global EXECUTABLE
+    global EXECUTABLE, ISOLATED
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--executable', type=Path, default=shutil.which('claude'))
@@ -254,15 +264,24 @@ def main():
     parser.add_argument('--adapters', type=Path, default=Path('adapters/claude'))
     parser.add_argument('--update-baseline', action='store_true',
                         help='write the surface and stream identities instead of comparing')
+    parser.add_argument('--isolated', action='store_true',
+                        help='no child sees the user configuration: the route is not observed')
     args = parser.parse_args()
     assert args.executable, 'no claude executable selected'
     EXECUTABLE = Path(args.executable)
+    ISOLATED = args.isolated
     args.out.mkdir(parents=True, exist_ok=True)
     private = args.out / 'private'
     private.mkdir(mode=0o700, exist_ok=True)
 
-    real_home = Path.home()
-    config = [real_home / p for p in USER_CONFIG]
+    if ISOLATED:
+        real_home = private / 'isolated-home'
+        shutil.rmtree(real_home, ignore_errors=True)
+        real_home.mkdir()
+        config = []
+    else:
+        real_home = Path.home()
+        config = [real_home / p for p in USER_CONFIG]
     before = {p.name: sha(p.read_bytes()) for p in config if p.exists()}
 
     resolved = EXECUTABLE.resolve()
@@ -355,7 +374,9 @@ def main():
                         version_output=version_output,
                         resolved_path_carries_version=resolved.parent.name == version),
         cli_surface=measured_surface, stream_identity=stream_identity,
-        configured_route=auth_route(EXECUTABLE, real_home),
+        isolated=ISOLATED,
+        configured_route=(dict(skipped='isolated: no child saw the user configuration')
+                          if ISOLATED else auth_route(EXECUTABLE, real_home)),
         # Differs from the line above in exactly one thing: the configuration
         # the harness can see. Both carry USER, so a refusal here cannot be an
         # artefact of the environment rather than of the missing credential.
@@ -364,7 +385,7 @@ def main():
         stream=dict(product_defaults=defaults, requested_mode=requested, init_timing=timing,
                     prompt_tool_only=tool_only, attached=attached, unattached=unattached),
         findings=findings, qualified=not findings,
-        user_configuration_unchanged=before == after,
+        user_configuration_unchanged=('not_observed' if ISOLATED else before == after),
         user_configuration_files=sorted(before))
     (args.out / 'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
     print(json.dumps(summary, indent=2, sort_keys=True))

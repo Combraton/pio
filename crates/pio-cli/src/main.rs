@@ -323,12 +323,12 @@ fn run() -> Result<()> {
                         serde_json::to_string_pretty(&pio_claude::tool_use_records(
                             &messages,
                             // The transcript carries the result, and the result
-                            // names what the harness refused.
-                            &messages
+                            // names what the harness refused. A transcript
+                            // without one leaves undecided uses unknown.
+                            messages
                                 .iter()
                                 .find(|m| m["type"] == "result")
-                                .map(|m| m["permission_denials"].clone())
-                                .unwrap_or(serde_json::Value::Null),
+                                .map(|m| &m["permission_denials"]),
                             // A transcript alone cannot say who decided a
                             // refusal, so none is attributed here.
                             &serde_json::Value::Null,

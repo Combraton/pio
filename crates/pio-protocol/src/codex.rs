@@ -141,6 +141,18 @@ fn content_reference<'a>(method: &str, p: &'a Value) -> Option<&'a Value> {
     }
 }
 
+/// Why a steer to a Claude Code run is refused, in the words a caller sees.
+///
+/// Decided for v0.1 (the orchestrator, 2026-09-26, G4): PIO does not steer a
+/// Claude Code run mid-turn. The harness would accept a second message on
+/// stdin, but whether it steers the running turn, queues it for the next or
+/// drops it is not measured (ADR 004 §10), and the Claude host runs one turn,
+/// so a queued message would never be run and must not be shown as
+/// delivered. The steer is refused with this reason instead of the generic
+/// one, which wrongly implied a running, acknowledged Claude turn would do.
+pub const CLAUDE_STEER_REFUSAL: &str = "not_supported_mid_turn: PIO v0.1 does not steer a Claude Code run; \
+     a message to a running run is neither delivered nor queued. Cancel the run and submit a new one.";
+
 /// What differs between harnesses, in one place.
 ///
 /// Both hosts emit the same normalized events; only these strings differ, so
@@ -207,6 +219,8 @@ pub const PROFILES: &[Profile] = &[
         fake_source: "pio-fake-claude-cli",
         real_source: "claude-code",
         // The replay echo: the exact message PIO sent, returned by the harness.
+        // Evidence of receipt, but no identifier the harness returned, so no
+        // proof class (D7; ADR 005 §7), the same as OpenCode's.
         delivery_evidence: "native_replay_echo",
         ack_proof_field: "replay_matches_sent",
         usage_measure: "claude.tokens.total",
@@ -252,6 +266,17 @@ pub const PROFILES: &[Profile] = &[
 
 pub fn profile(adapter: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.adapter == adapter)
+}
+
+/// The proof class an acknowledgment earns. Only an identifier the harness
+/// returned is a `provider_ack_id` (EXECUTION §3.1, ADR 005 §7): Codex's turn
+/// id. Claude Code's replay echo and OpenCode's first session update are
+/// evidence of receipt, recorded by their evidence class, and carry none.
+/// Claude's used to get one (D7).
+pub fn delivery_proof(profile: &Profile, acknowledgment: &Value) -> Option<&'static str> {
+    acknowledgment[profile.ack_proof_field]
+        .is_string()
+        .then_some("provider_ack_id")
 }
 
 impl Provider {
@@ -480,8 +505,15 @@ impl Provider {
                 if self.content_available(&message).is_none() {
                     return Err(invalid(CONTENT_PATH));
                 }
-                if !live {
-                    let alternative = "Steering needs an acknowledged, running native turn";
+                // G4: never a Claude Code run, running or not.
+                let refusal = if ns == "claude" {
+                    Some(CLAUDE_STEER_REFUSAL)
+                } else if !live {
+                    Some("Steering needs an acknowledged, running native turn")
+                } else {
+                    None
+                };
+                if let Some(alternative) = refusal {
                     push(
                         &mut e["view"]["steering"],
                         json!({"steer_id":steer_id,"request":"not_supported","recorded_at":self.now,"alternative":alternative}),
@@ -879,8 +911,7 @@ impl Provider {
                     let reconcile = e["view"]["delivery"] == "ambiguous";
                     // Only a harness that returned an identifier gets a
                     // proof class. ADR 005 §7.
-                    let proof = (profile.ack_proof_field != "first_session_update")
-                        .then_some("provider_ack_id");
+                    let proof = delivery_proof(profile, event);
                     self.delivery_observed(
                         e,
                         "acknowledged",
@@ -1318,9 +1349,9 @@ impl Provider {
                     e["view"]["containment"]["denied_by_harness_reason"] =
                         "the harness refused it under its own rules; PIO was not asked".into();
                 }
-                if record["out_of_fixture_effect_observed"] == true
-                    || record["unclassifiable_target_count"].as_u64().unwrap_or(0) > 0
-                {
+                // The record's own verdict: an out-of-fixture or unclassifiable
+                // use, or one whose outcome no `result` settled (D3).
+                if record["liability"] == "unresolved" {
                     e["view"]["effects_liability"] = "unresolved".into();
                 }
             }

@@ -148,7 +148,7 @@ So OpenCode gives PIO **no delivery acknowledgment**, and this is a real differe
 | Harness | What proves delivery | Proof class |
 | --- | --- | --- |
 | Codex | the `turn/start` response, carrying a turn id | `provider_ack_id` |
-| Claude Code | the replay echo of the exact message sent | `provider_ack_id` |
+| Claude Code | the replay echo of the exact message sent | none (corrected 2026-09-26, D7: the echo returns no identifier; evidence class `native_replay_echo`) |
 | **OpenCode** | **nothing the harness sends says "I received it"** | **none** |
 
 The strongest honest statement is that the first `session/update` after a prompt shows the harness acting on it. That is evidence of receipt, but it is **not an identifier the provider returned**, so PIO records delivery as `acknowledged` with evidence class `native_session_update` and **no proof class**, rather than borrowing a proof class it has not earned.
