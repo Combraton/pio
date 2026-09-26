@@ -1,4 +1,9 @@
 {
+  "agents_off_sent": {
+    "L3": null,
+    "L3.alpha": null,
+    "L3.beta": null
+  },
   "answered": {
     "alpha": "7",
     "beta": "4"
@@ -10,8 +15,11 @@
   },
   "bound": {
     "assumes": [
-      "Codex's reported total covers every step of a turn (review 48)",
-      "a step on this harness and model is at most 30,000 tokens (measured about 22,000 to 24,500, M2 R4 to R6)",
+      "Codex's reported total covers every step of a turn (review 48), and a run's usage is the sum over its threads (round 3)",
+      "a step on this harness and model is at most 30,000 tokens (measured about 22,000 to 24,500, M2 R4 to R6); the runner checks every report and stops a run whose step is larger, and charges its largest step in flight (review of L3, round 3, SPEND-4)",
+      "no run has a sub-agent: sub-agents are off, and a run whose sub-agent appears anyway is stopped at once and charged a step on each of its threads (round 3, SPEND-2)",
+      "Codex's memory pipeline, which [features] memories starts in the background at a root thread's first turn, makes model calls that report nowhere PIO reads (Phase 1 extraction of up to two of the owner's recent idle sessions, a Phase 2 consolidation agent): they are outside this bound, and the memory row shows whether it wrote (round 3, S6)",
+      "Codex retries a dropped stream up to 5 times and a failed request up to 4 by default (model-provider-info, rust-v0.157.0) and records usage only on a completed response: what a dropped attempt is billed, if anything, is never reported and is not in this bound (not measured)",
       "Codex reports a step once its tool has finished, before the next step calls a tool (M2 R5, R6), and the report reaches the runner's meter within 1.5 s",
       "a model step takes longer than a stop takes to reach Codex (about 1.5 s against the labeled fake)",
       "Codex honours turn/interrupt (M2), before the tool's 30 s hold ends"
@@ -26,6 +34,14 @@
     "lead": "at most its ceiling, plus the step that crossed it (reported only after its tool) and the step in flight when the stop lands. Its tool withholds any response once it has reported more than 95000, and the meter stops it when a result its tool never saw comes back past 95000: that keeps a lead using only its tool within its ceiling plus one step, but a result its tool never sees starts a step before anything can stop it",
     "lead_ceiling": 125000,
     "lead_share": 185000,
+    "subagents": {
+      "off": "405000: with sub-agents off, by [agents] enabled = false in the owner's configuration or per launch under a recorded owner decision, Codex offers no collaboration tool and the bound above stands",
+      "on": {
+        "v1": 945000,
+        "v2": 675000
+      },
+      "on_how": "405000 plus, for each of the 3 runs, a step in flight on every sub-agent it could start in one step before the stop lands: three for multi-agent V2, six for V1 (rust-v0.157.0, not measured); the live runner refuses to start with sub-agents on"
+    },
     "usage_silence": 150,
     "worst_case": 405000
   },
@@ -36,7 +52,7 @@
     "ledger": "rehearsal ledger",
     "lines": {
       "L3": {
-        "at": "2026-09-25T22:15:36Z",
+        "at": "2026-09-26T01:38:01Z",
         "charge_basis": "reported_total",
         "charged": 20480,
         "meter_estimate": 20480,
@@ -47,7 +63,7 @@
         "tokens": 20480
       },
       "L3.alpha": {
-        "at": "2026-09-25T22:15:36Z",
+        "at": "2026-09-26T01:38:01Z",
         "charge_basis": "reported_total",
         "charged": 8192,
         "meter_estimate": 8192,
@@ -58,7 +74,7 @@
         "tokens": 8192
       },
       "L3.beta": {
-        "at": "2026-09-25T22:15:36Z",
+        "at": "2026-09-26T01:38:01Z",
         "charge_basis": "reported_total",
         "charged": 8192,
         "meter_estimate": 8192,
@@ -78,20 +94,22 @@
   },
   "codex_features": {
     "exec_permission_approvals": null,
+    "exec_permission_approvals_key": null,
     "exists": false,
     "read": "config.toml",
-    "request_permissions_tool": null
+    "request_permissions_tool": null,
+    "request_permissions_tool_key": null
   },
-  "commit": "294037cc897ad48b6c06977484941d2c0f9486d9",
+  "commit": "be7c55262432850a0e1c016f0793df522e7c0997",
   "credential_check": {
-    "id": "28d89e9e-6cf6-425b-8b8c-0d393974c7d6",
+    "id": "27b23435-11df-498e-8c2a-a0f8368b539d",
     "jsonrpc": "2.0",
     "result": {
       "acknowledgment": {
-        "command_digest": "sha256:23a6c0e796bffad7ab9651ac5bb7892107f29b0ace076f36965bc3931073edef",
+        "command_digest": "sha256:68cc162e50e67c4ceba809bc408665fc36c862f50f6c36d30d0c59c78c208a04",
         "command_id": "credential-check",
         "effect_refs": [],
-        "operation_ref": "50dc104d-0a21-4e07-97f7-cd8a71d1b279",
+        "operation_ref": "b8ce6eb3-ccca-4964-87f8-2afcee4b8860",
         "revision": 1,
         "subject": {
           "id": "credential-check",
@@ -120,7 +138,7 @@
         "decision": "allow",
         "words": "rehearsal: the runner answers; no owner is asked"
       },
-      "answered_by_desk_at": "2026-09-25T22:15:44Z",
+      "answered_by_desk_at": "2026-09-26T01:38:10Z",
       "approval": {
         "action_id": "L3.beta.action-1",
         "answer_deadline_seconds": 300,
@@ -129,7 +147,7 @@
           "placement": "inside_fixture",
           "subject": "cwd",
           "target_label": "<fixture>/",
-          "target_sha256": "2aa53020f5790b77d095a9898819f00f6d82b8c0185e87ae89008c440ff11576"
+          "target_sha256": "dea4e20ded23333d878f5294bef168b642f82acd2e1c1f96c0f6a062476294cd"
         },
         "command": "/bin/zsh -lc 'sleep 5 && wc -l beta.md'",
         "grant_root_requested": null,
@@ -144,11 +162,11 @@
         "options": null,
         "persist_offered": null,
         "reason": null,
-        "requested_at": "2026-09-25T22:15:43Z",
+        "requested_at": "2026-09-26T01:38:09Z",
         "server": null
       },
-      "relayed_at": "2026-09-25T22:15:44Z",
-      "requested_at": "2026-09-25T22:15:43Z",
+      "relayed_at": "2026-09-26T01:38:10Z",
+      "requested_at": "2026-09-26T01:38:09Z",
       "run": "L3.beta",
       "sent": "answered",
       "state": "answered"
@@ -157,10 +175,10 @@
   "dirty": false,
   "exit_path": true,
   "failed": [],
-  "finished_at": "2026-09-25T22:16:19Z",
+  "finished_at": "2026-09-26T01:38:49Z",
   "format": "pio-lead-run/2",
   "grant": {
-    "id": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+    "id": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
     "terms": {
       "audience": "conformance-provider",
       "delegation": {
@@ -194,7 +212,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "717fad44-f07e-4c81-8ff9-b3654068c308",
+    "id": "ded730fe-750b-4a70-b338-33e27fa1a541",
     "jsonrpc": "2.0"
   },
   "harness": {
@@ -219,7 +237,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "ed0d2a8f-4525-4657-8aaf-913940b82e24",
+    "id": "94df4cdc-1425-493f-9da9-370ca62e2c8a",
     "jsonrpc": "2.0"
   },
   "lead_reads_itself": {
@@ -234,7 +252,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "f40e22b3-bbdd-49d6-b596-c63fb15f23fd",
+    "id": "235e1ef1-c465-455f-a738-4dfa22146159",
     "jsonrpc": "2.0"
   },
   "lead_submit": {
@@ -251,10 +269,30 @@
     "removed": true,
     "why": null
   },
+  "memory_after": {
+    "memories": null,
+    "memories_1.sqlite": null,
+    "memories_1.sqlite-shm": null,
+    "memories_1.sqlite-wal": null,
+    "memories_v2": null,
+    "memories_v2_1.sqlite": null,
+    "memories_v2_1.sqlite-shm": null,
+    "memories_v2_1.sqlite-wal": null
+  },
+  "memory_before": {
+    "memories": null,
+    "memories_1.sqlite": null,
+    "memories_1.sqlite-shm": null,
+    "memories_1.sqlite-wal": null,
+    "memories_v2": null,
+    "memories_v2_1.sqlite": null,
+    "memories_v2_1.sqlite-shm": null,
+    "memories_v2_1.sqlite-wal": null
+  },
   "metering": {
     "error": null,
-    "passes": 282,
-    "seconds": 41.0,
+    "passes": 202,
+    "seconds": 42.7,
     "source": "core.events.read, one query a pass"
   },
   "meters": {
@@ -263,34 +301,69 @@
       "calls": 4,
       "ceiling": 125000,
       "estimate": 20480,
+      "host_total": 20480,
+      "largest_step": 4096,
       "silenced": false,
       "stopped": null,
-      "tool_log_calls": 4
+      "subagents": [],
+      "threads": {
+        "fake-thread-43915": 20480
+      },
+      "tool_log_calls": 4,
+      "turn_status": "completed"
     },
     "L3.alpha": {
       "bytes": 1108,
       "calls": 0,
       "ceiling": 50000,
       "estimate": 8192,
+      "host_total": 8192,
+      "largest_step": 4096,
       "silenced": false,
       "stopped": null,
-      "tool_log_calls": null
+      "subagents": [],
+      "threads": {
+        "fake-thread-43956": 8192
+      },
+      "tool_log_calls": null,
+      "turn_status": "completed"
     },
     "L3.beta": {
       "bytes": 1099,
       "calls": 0,
       "ceiling": 50000,
       "estimate": 8192,
+      "host_total": 8192,
+      "largest_step": 4096,
       "silenced": false,
       "stopped": null,
-      "tool_log_calls": null
+      "subagents": [],
+      "threads": {
+        "fake-thread-43975": 8192
+      },
+      "tool_log_calls": null,
+      "turn_status": "completed"
+    },
+    "L3.third": {
+      "bytes": 0,
+      "calls": 0,
+      "ceiling": 50000,
+      "estimate": 0,
+      "host_total": 0,
+      "largest_step": 0,
+      "silenced": false,
+      "stopped": null,
+      "subagents": [],
+      "threads": {},
+      "tool_log_calls": null,
+      "turn_status": null
     }
   },
   "mode": "rehearsal",
   "model": "gpt-5.6-terra",
   "mutant": null,
   "no_sleep": {
-    "command": "caffeinate -i -s -w 84303",
+    "command": "caffeinate -i -s -w 43882",
     "held": true,
     "held_to_the_end": true,
     "power": "Now drawing from 'AC Power'"
@@ -309,7 +382,7 @@
   },
   "reserved": {
     "L3": {
-      "at": "2026-09-25T22:15:36Z",
+      "at": "2026-09-26T01:38:01Z",
       "charge_basis": "reserved",
       "charged": 185000,
       "model": "gpt-5.6-terra",
@@ -318,7 +391,7 @@
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     },
     "L3.alpha": {
-      "at": "2026-09-25T22:15:36Z",
+      "at": "2026-09-26T01:38:01Z",
       "charge_basis": "reserved",
       "charged": 110000,
       "model": "gpt-5.6-terra",
@@ -327,7 +400,7 @@
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     },
     "L3.beta": {
-      "at": "2026-09-25T22:15:36Z",
+      "at": "2026-09-26T01:38:01Z",
       "charge_basis": "reserved",
       "charged": 110000,
       "model": "gpt-5.6-terra",
@@ -336,7 +409,7 @@
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     }
   },
-  "root": "/private/tmp/pio-l1-79o3jxox",
+  "root": "/private/tmp/pio-l1-w8xrwaa1",
   "rows": [
     {
       "expected": "admitted",
@@ -616,13 +689,13 @@
     },
     {
       "expected": [
-        "7536e095-fe97-4192-a9a9-9ad6a3d26af9"
+        "b7b5d0e2-d6ed-420e-9a57-6786b176b60d"
       ],
       "holds": true,
       "kind": "row",
       "note": "",
       "observed": [
-        "7536e095-fe97-4192-a9a9-9ad6a3d26af9"
+        "b7b5d0e2-d6ed-420e-9a57-6786b176b60d"
       ],
       "proven": true,
       "row": "Every tool request carried the grant"
@@ -775,7 +848,7 @@
             "source": "pio-fake-app-server/host"
           },
           "proof_class": "provider_ack_id",
-          "recorded_at": "2026-09-25T22:15:39Z",
+          "recorded_at": "2026-09-26T01:38:04Z",
           "request": "recorded",
           "steer_id": "L3.alpha.steer-1"
         },
@@ -810,12 +883,12 @@
     {
       "expected": [
         {
-          "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+          "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
           "holder": "lead",
           "recorded_by": "pio"
         },
         {
-          "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+          "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
           "holder": "lead",
           "recorded_by": "pio"
         }
@@ -825,12 +898,12 @@
       "note": "",
       "observed": [
         {
-          "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+          "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
           "holder": "lead",
           "recorded_by": "pio"
         },
         {
-          "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+          "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
           "holder": "lead",
           "recorded_by": "pio"
         }
@@ -987,7 +1060,7 @@
         {
           "run": "L3.alpha",
           "runtime": "exited",
-          "seconds": 27.0
+          "seconds": 27.9
         }
       ],
       "proven": true,
@@ -1022,27 +1095,62 @@
           "calls": 4,
           "ceiling": 125000,
           "estimate": 20480,
+          "host_total": 20480,
+          "largest_step": 4096,
           "silenced": false,
           "stopped": null,
-          "tool_log_calls": 4
+          "subagents": [],
+          "threads": {
+            "fake-thread-43915": 20480
+          },
+          "tool_log_calls": 4,
+          "turn_status": "completed"
         },
         "L3.alpha": {
           "bytes": 1108,
           "calls": 0,
           "ceiling": 50000,
           "estimate": 8192,
+          "host_total": 8192,
+          "largest_step": 4096,
           "silenced": false,
           "stopped": null,
-          "tool_log_calls": null
+          "subagents": [],
+          "threads": {
+            "fake-thread-43956": 8192
+          },
+          "tool_log_calls": null,
+          "turn_status": "completed"
         },
         "L3.beta": {
           "bytes": 1099,
           "calls": 0,
           "ceiling": 50000,
           "estimate": 8192,
+          "host_total": 8192,
+          "largest_step": 4096,
           "silenced": false,
           "stopped": null,
-          "tool_log_calls": null
+          "subagents": [],
+          "threads": {
+            "fake-thread-43975": 8192
+          },
+          "tool_log_calls": null,
+          "turn_status": "completed"
+        },
+        "L3.third": {
+          "bytes": 0,
+          "calls": 0,
+          "ceiling": 50000,
+          "estimate": 0,
+          "host_total": 0,
+          "largest_step": 0,
+          "silenced": false,
+          "stopped": null,
+          "subagents": [],
+          "threads": {},
+          "tool_log_calls": null,
+          "turn_status": null
         }
       },
       "proven": true,
@@ -1073,43 +1181,99 @@
       "row": "Every stop the runner made reached Codex"
     },
     {
-      "expected": "for every run that ran: at least what it reported or its meter saw, plus a step in flight if it was stopped or still ran, and its whole share if it still ran, reported nothing or went silent",
+      "expected": "for every run that ran: at least what it reported, its meter saw or its threads reported, plus a step in flight on each of its threads if it was stopped, interrupted or still ran, and its whole share if it still ran, reported nothing or went silent",
       "holds": true,
       "kind": "row",
-      "note": "in flight: 30000 a step; worked out from the views and meters, not from the charge",
+      "note": "a step in flight: 30000, or the largest seen, if larger; worked out from the views, the meters and the host's own usage events, not from the charge",
       "observed": {
         "runs": {
           "L3": {
+            "allowance": 30000,
             "at_least": 20480,
             "charged": 20480,
+            "cut_short": false,
             "meter": 20480,
             "reported": 20480,
             "running": false,
             "silenced": false,
-            "stopped": false
+            "stopped": false,
+            "threads_sum": 20480
           },
           "L3.alpha": {
+            "allowance": 30000,
             "at_least": 8192,
             "charged": 8192,
+            "cut_short": false,
             "meter": 8192,
             "reported": 8192,
             "running": false,
             "silenced": false,
-            "stopped": false
+            "stopped": false,
+            "threads_sum": 8192
           },
           "L3.beta": {
+            "allowance": 30000,
             "at_least": 8192,
             "charged": 8192,
+            "cut_short": false,
             "meter": 8192,
             "reported": 8192,
             "running": false,
             "silenced": false,
-            "stopped": false
+            "stopped": false,
+            "threads_sum": 8192
           }
         }
       },
       "proven": true,
       "row": "Every run's charge covers what it could have spent"
+    },
+    {
+      "expected": "no model step, on any thread of any run, past 30000 tokens",
+      "holds": true,
+      "kind": "row",
+      "note": "each report's last step and the rise between reports, from the host's own usage events; a run past it is stopped",
+      "observed": {
+        "L3": {
+          "largest": 4096,
+          "steps": 5
+        },
+        "L3.alpha": {
+          "largest": 4096,
+          "steps": 2
+        },
+        "L3.beta": {
+          "largest": 4096,
+          "steps": 2
+        }
+      },
+      "proven": true,
+      "row": "Every step stayed within the in-flight bound"
+    },
+    {
+      "expected": "no thread but its own on any run: no plan has a sub-agent",
+      "holds": true,
+      "kind": "row",
+      "note": "the host's other_thread events, and the list each exit carries (pio.combraton.dev/other-threads); an exit without it is not nothing",
+      "observed": {
+        "not_carried": [],
+        "threads": {
+          "L3": [],
+          "L3.alpha": [],
+          "L3.beta": []
+        }
+      },
+      "proven": true,
+      "row": "No run spawned a sub-agent"
+    },
+    {
+      "expected": "each such run stopped by the runner, for its sub-agent",
+      "holds": null,
+      "kind": "row",
+      "note": "none spawned, nothing to judge; inconclusive",
+      "observed": {},
+      "proven": false,
+      "row": "Every run that spawned a sub-agent was stopped when it appeared"
     },
     {
       "expected": "every run charged at most the share reserved for it, and all of them at most the worst case",
@@ -1141,7 +1305,7 @@
       "expected": "a positive amount per run that ran",
       "holds": true,
       "kind": "row",
-      "note": "Codex's own total, which covers every step, and is what is charged",
+      "note": "Codex's own total, the sum over the run's threads, which covers every step: what a run that ended by itself is charged; a run cut short is charged it plus a step in flight on each of its threads, and one not seen exited at least its share (review of L3, round 3)",
       "observed": {
         "L3": 20480,
         "L3.alpha": 8192,
@@ -1151,12 +1315,15 @@
       "row": "Every run reported its usage"
     },
     {
-      "expected": true,
-      "holds": true,
+      "expected": "the same processes before and after",
+      "holds": null,
       "kind": "row",
-      "note": "",
-      "observed": true,
-      "proven": true,
+      "note": "the owner's own OpenCode service, by process; none running is inconclusive; inconclusive",
+      "observed": {
+        "after": [],
+        "before": []
+      },
+      "proven": false,
       "row": "The owner's OpenCode service was untouched"
     },
     {
@@ -1173,14 +1340,14 @@
           "projects_added": [
             {
               "location": "fixture",
-              "path_sha256": "2aa53020f5790b77d095a9898819f00f6d82b8c0185e87ae89008c440ff11576",
+              "path_sha256": "dea4e20ded23333d878f5294bef168b642f82acd2e1c1f96c0f6a062476294cd",
               "trust_level": "trusted"
             }
           ],
           "projects_changed": [],
           "projects_removed": [],
           "raw_sha256": {
-            "after": "962fcf086b6d17b43c76bbbb1cbb5dd59c743ef6d8bded523de73a1749956709",
+            "after": "086b8c8513afbf3218196716a1ca6887946e5fc66029dddc4e1d321956532d5b",
             "before": null
           },
           "unchanged": false
@@ -1194,8 +1361,8 @@
           "projects_changed": [],
           "projects_removed": [],
           "raw_sha256": {
-            "after": "962fcf086b6d17b43c76bbbb1cbb5dd59c743ef6d8bded523de73a1749956709",
-            "before": "962fcf086b6d17b43c76bbbb1cbb5dd59c743ef6d8bded523de73a1749956709"
+            "after": "086b8c8513afbf3218196716a1ca6887946e5fc66029dddc4e1d321956532d5b",
+            "before": "086b8c8513afbf3218196716a1ca6887946e5fc66029dddc4e1d321956532d5b"
           },
           "unchanged": true
         },
@@ -1208,8 +1375,8 @@
           "projects_changed": [],
           "projects_removed": [],
           "raw_sha256": {
-            "after": "962fcf086b6d17b43c76bbbb1cbb5dd59c743ef6d8bded523de73a1749956709",
-            "before": "962fcf086b6d17b43c76bbbb1cbb5dd59c743ef6d8bded523de73a1749956709"
+            "after": "086b8c8513afbf3218196716a1ca6887946e5fc66029dddc4e1d321956532d5b",
+            "before": "086b8c8513afbf3218196716a1ca6887946e5fc66029dddc4e1d321956532d5b"
           },
           "unchanged": true
         }
@@ -1241,6 +1408,18 @@
       "row": "The runner's own steps raised no error"
     },
     {
+      "expected": "no memory file or database added, removed or changed",
+      "holds": true,
+      "kind": "row",
+      "note": "Codex's own background pipeline, which [features] memories starts at a root thread's first turn: its files and databases by name (a digest for any name Codex did not choose), size and time, never content. A change means it ran, and its model calls report nowhere PIO reads and are outside every meter",
+      "observed": {
+        "changes": [],
+        "features_memories": null
+      },
+      "proven": true,
+      "row": "Codex's memory pipeline wrote nothing during the run"
+    },
+    {
       "expected": "released",
       "holds": true,
       "kind": "row",
@@ -1258,7 +1437,7 @@
     "beta": "Running `sleep 5 && wc -l beta.md`.\n4",
     "lead": "alpha.md: 7\nbeta.md: 4"
   },
-  "started_at": "2026-09-25T22:15:36Z",
+  "started_at": "2026-09-26T01:38:01Z",
   "steer_exited": {
     "alternative": "Steering needs an acknowledged, running native turn",
     "delivery_at_steer": "acknowledged",
@@ -1279,6 +1458,17 @@
     "read": false,
     "reason": "Codex's own total covers every step (review 48); no store is read"
   },
+  "subagents": {
+    "agents_enabled": null,
+    "decision": null,
+    "exists": false,
+    "memories": null,
+    "multi_agent": null,
+    "multi_agent_key": null,
+    "multi_agent_v2": null,
+    "off": null,
+    "read": "config.toml"
+  },
   "third": {
     "lead_runtime": "active",
     "result": {
@@ -1290,30 +1480,31 @@
       "started": false
     }
   },
+  "third_started": true,
   "tool_log": [
     {
       "event": "started",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "lead": "L3"
     },
     {
       "event": "request",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "method": "initialize"
     },
     {
       "event": "request",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "method": "notifications/initialized"
     },
     {
       "event": "request",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "method": "tools/list"
     },
     {
       "event": "request",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "method": "tools/call"
     },
     {
@@ -1323,19 +1514,19 @@
       },
       "call": 1,
       "event": "tool_call",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "result": {
         "admission": "admitted",
         "run": "L3.alpha",
         "started": true
       },
-      "seconds": 0.0,
+      "seconds": 0.1,
       "tool": "start_run"
     },
     {
       "call": 1,
       "event": "gate",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "held": false,
       "hold_above": 95000,
       "tool": "start_run",
@@ -1343,7 +1534,7 @@
     },
     {
       "event": "request",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "method": "tools/call"
     },
     {
@@ -1353,19 +1544,19 @@
       },
       "call": 2,
       "event": "tool_call",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "result": {
         "admission": "admitted",
         "run": "L3.beta",
         "started": true
       },
-      "seconds": 0.0,
+      "seconds": 0.1,
       "tool": "start_run"
     },
     {
       "call": 2,
       "event": "gate",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "held": false,
       "hold_above": 95000,
       "tool": "start_run",
@@ -1373,7 +1564,7 @@
     },
     {
       "event": "request",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "method": "tools/call"
     },
     {
@@ -1382,7 +1573,7 @@
       },
       "call": 3,
       "event": "tool_call",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "result": {
         "exit": {
           "code": 0
@@ -1391,13 +1582,13 @@
         "runtime": "exited",
         "text": "Running `sleep 30 && wc -l alpha.md`.\n7"
       },
-      "seconds": 27.0,
+      "seconds": 27.9,
       "tool": "read_run"
     },
     {
       "call": 3,
       "event": "gate",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "held": false,
       "hold_above": 95000,
       "tool": "read_run",
@@ -1405,7 +1596,7 @@
     },
     {
       "event": "request",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "method": "tools/call"
     },
     {
@@ -1414,7 +1605,7 @@
       },
       "call": 4,
       "event": "tool_call",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "result": {
         "exit": {
           "code": 0
@@ -1423,13 +1614,13 @@
         "runtime": "exited",
         "text": "Running `sleep 5 && wc -l beta.md`.\n4"
       },
-      "seconds": 0.2,
+      "seconds": 0.9,
       "tool": "read_run"
     },
     {
       "call": 4,
       "event": "gate",
-      "grant": "7536e095-fe97-4192-a9a9-9ad6a3d26af9",
+      "grant": "b7b5d0e2-d6ed-420e-9a57-6786b176b60d",
       "held": false,
       "hold_above": 95000,
       "tool": "read_run",
@@ -1438,28 +1629,46 @@
   ],
   "usage": {
     "L3": {
+      "allowance": 30000,
       "basis": "reported_total",
       "charged": 20480,
+      "cut_short": false,
       "meter_estimate": 20480,
       "reported_total": 20480,
       "share": 185000,
-      "stopped_by_the_runner": false
+      "stopped_by_the_runner": false,
+      "subagents": [],
+      "threads": {
+        "fake-thread-43915": 20480
+      }
     },
     "L3.alpha": {
+      "allowance": 30000,
       "basis": "reported_total",
       "charged": 8192,
+      "cut_short": false,
       "meter_estimate": 8192,
       "reported_total": 8192,
       "share": 110000,
-      "stopped_by_the_runner": false
+      "stopped_by_the_runner": false,
+      "subagents": [],
+      "threads": {
+        "fake-thread-43956": 8192
+      }
     },
     "L3.beta": {
+      "allowance": 30000,
       "basis": "reported_total",
       "charged": 8192,
+      "cut_short": false,
       "meter_estimate": 8192,
       "reported_total": 8192,
       "share": 110000,
-      "stopped_by_the_runner": false
+      "stopped_by_the_runner": false,
+      "subagents": [],
+      "threads": {
+        "fake-thread-43975": 8192
+      }
     }
   },
   "views": {
@@ -1470,7 +1679,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L3.delivery-1",
-          "determined_at": "2026-09-25T22:15:37Z",
+          "determined_at": "2026-09-26T01:38:02Z",
           "evidence": {
             "class": "native_turn_acknowledged",
             "source": "pio-fake-app-server/host"
@@ -1478,7 +1687,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-25T22:15:37Z"
+              "recorded_at": "2026-09-26T01:38:02Z"
             }
           ],
           "proof_class": "provider_ack_id"
@@ -1500,7 +1709,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "9dae7208-2d0d-4b02-9809-7a314487316b:1:32",
+      "next_cursor": "3f3ea4a5-3382-40f5-ad0a-db60fdad941d:1:31",
       "obligations": [],
       "origin": {
         "call_budget": 2,
@@ -1520,20 +1729,20 @@
           {
             "amount": 20480,
             "basis": "observed",
-            "invocation_id": "9c171f3a-736e-4b3b-b549-67694560850b",
+            "invocation_id": "3d8542d0-2c8c-4bed-9609-41939e095f1e",
             "measure": "codex.tokens.total",
-            "recorded_at": "2026-09-25T22:16:17Z"
+            "recorded_at": "2026-09-26T01:38:43Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "9bf8d5f6451948dad883747722f15df41fa2eae2",
+          "base": "45040c7ff2ad811d2b0b5d1e3c585c3be7dde99e",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.workspace",
-          "repository": "/private/tmp/pio-l1-79o3jxox/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-w8xrwaa1/fixtures/lead",
           "writer": "owner"
         }
       }
@@ -1545,7 +1754,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L3.alpha.delivery-1",
-          "determined_at": "2026-09-25T22:15:39Z",
+          "determined_at": "2026-09-26T01:38:04Z",
           "evidence": {
             "class": "native_turn_acknowledged",
             "source": "pio-fake-app-server/host"
@@ -1553,7 +1762,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-25T22:15:39Z"
+              "recorded_at": "2026-09-26T01:38:04Z"
             }
           ],
           "proof_class": "provider_ack_id"
@@ -1576,7 +1785,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "9dae7208-2d0d-4b02-9809-7a314487316b:1:32",
+      "next_cursor": "3f3ea4a5-3382-40f5-ad0a-db60fdad941d:1:31",
       "obligations": [],
       "origin": {
         "call_budget": 0,
@@ -1588,7 +1797,7 @@
       },
       "recovery": [],
       "result": "absent",
-      "revision": 10,
+      "revision": 9,
       "runtime": "exited",
       "steering": [
         {
@@ -1600,13 +1809,13 @@
             "source": "pio-fake-app-server/host"
           },
           "proof_class": "provider_ack_id",
-          "recorded_at": "2026-09-25T22:15:39Z",
+          "recorded_at": "2026-09-26T01:38:04Z",
           "request": "recorded",
           "steer_id": "L3.alpha.steer-1"
         },
         {
           "alternative": "Steering needs an acknowledged, running native turn",
-          "recorded_at": "2026-09-25T22:16:17Z",
+          "recorded_at": "2026-09-26T01:38:44Z",
           "request": "not_supported",
           "steer_id": "L3.alpha.steer-2"
         }
@@ -1617,31 +1826,32 @@
           {
             "amount": 8192,
             "basis": "observed",
-            "invocation_id": "073a05d7-b61e-4279-bd3b-6b77618c66f1",
+            "invocation_id": "0fb087be-1258-4440-b6b8-fbad8c4d76e9",
             "measure": "codex.tokens.total",
-            "recorded_at": "2026-09-25T22:16:12Z"
+            "recorded_at": "2026-09-26T01:38:37Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "9bf8d5f6451948dad883747722f15df41fa2eae2",
+          "base": "45040c7ff2ad811d2b0b5d1e3c585c3be7dde99e",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.alpha.workspace",
-          "repository": "/private/tmp/pio-l1-79o3jxox/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-w8xrwaa1/fixtures/lead",
           "writer": "lead"
         }
       }
     },
+    "L3.attached": {},
     "L3.beta": {
       "actions": [
         {
           "action_id": "L3.beta.action-1",
-          "answered_at": "2026-09-25T22:15:44Z",
+          "answered_at": "2026-09-26T01:38:10Z",
           "owner": "codex",
-          "requested_at": "2026-09-25T22:15:43Z",
+          "requested_at": "2026-09-26T01:38:09Z",
           "response_effect": "L3.beta.response-1",
           "state": "answered"
         }
@@ -1652,7 +1862,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L3.beta.delivery-1",
-          "determined_at": "2026-09-25T22:15:42Z",
+          "determined_at": "2026-09-26T01:38:07Z",
           "evidence": {
             "class": "native_turn_acknowledged",
             "source": "pio-fake-app-server/host"
@@ -1660,7 +1870,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-25T22:15:42Z"
+              "recorded_at": "2026-09-26T01:38:07Z"
             }
           ],
           "proof_class": "provider_ack_id"
@@ -1683,7 +1893,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "9dae7208-2d0d-4b02-9809-7a314487316b:1:32",
+      "next_cursor": "3f3ea4a5-3382-40f5-ad0a-db60fdad941d:1:31",
       "obligations": [],
       "origin": {
         "call_budget": 0,
@@ -1703,20 +1913,20 @@
           {
             "amount": 8192,
             "basis": "observed",
-            "invocation_id": "7e2ed7fe-6434-41c1-b6f3-817e3264e9e4",
+            "invocation_id": "30c941f1-e3c4-4780-974e-18534a7e8d19",
             "measure": "codex.tokens.total",
-            "recorded_at": "2026-09-25T22:15:46Z"
+            "recorded_at": "2026-09-26T01:38:12Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "9bf8d5f6451948dad883747722f15df41fa2eae2",
+          "base": "45040c7ff2ad811d2b0b5d1e3c585c3be7dde99e",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.beta.workspace",
-          "repository": "/private/tmp/pio-l1-79o3jxox/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-w8xrwaa1/fixtures/lead",
           "writer": "lead"
         }
       }
@@ -1737,7 +1947,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "9dae7208-2d0d-4b02-9809-7a314487316b:1:32",
+      "next_cursor": "3f3ea4a5-3382-40f5-ad0a-db60fdad941d:1:31",
       "obligations": [],
       "origin": {
         "call_budget": 0,
@@ -1759,11 +1969,11 @@
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "9bf8d5f6451948dad883747722f15df41fa2eae2",
+          "base": "45040c7ff2ad811d2b0b5d1e3c585c3be7dde99e",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.third.workspace",
-          "repository": "/private/tmp/pio-l1-79o3jxox/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-w8xrwaa1/fixtures/lead",
           "writer": "lead"
         }
       }

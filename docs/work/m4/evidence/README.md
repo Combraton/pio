@@ -303,15 +303,15 @@ prints it and exits, so the request goes to the owner live. It exited on
 ## `L3-rehearsal.json`
 
 L3 rehearsed against the labeled Codex fake by `scripts/lead_run.py --rehearse
---plan L3` at clean head `294037c` (`dirty: false`), after round 2 of the
+--plan L3` at clean head `be7c552` (`dirty: false`), after round 3 of the
 review of L3. **Zero tokens, no model call.** The fake is
 `pio codex fake-app-server` (`pio-fake-app-server`): it speaks 0.157.0's
 app-server shapes and runs no model, tool or command, and `serve-codex` does
 not qualify a labeled fake. Plan: owner approval of 2026-09-24 (sequence cap
 400,000, stop 320,000) and the decisions of 2026-09-25 (issue #12).
 
-**39 rows and two records: 37 rows hold, none failed, and two are
-inconclusive**, the two this rehearsal cannot observe:
+**43 rows and two records: 39 rows hold, none failed, and four are
+inconclusive**, the four this rehearsal cannot observe:
 
 - **Codex qualified at the pinned identity**: the labeled fake has no
   qualification record (`qualification_check`: not checked). Live, a record
@@ -322,6 +322,11 @@ inconclusive**, the two this rehearsal cannot observe:
   mutant `child-overspends` must hold it (alpha's interrupt sent,
   acknowledged, its turn interrupted) and `ceiling-cancel-never-sent` fails
   it.
+- **Every run that spawned a sub-agent was stopped when it appeared**: none
+  spawned one. `subagent-spawned` holds it and `subagent-not-stopped` fails
+  it.
+- **The owner's OpenCode service was untouched**: no OpenCode service ran
+  before or after, so nothing was observed (`owner-service-absent`).
 
 What L3 shows, as the fake plays it:
 
@@ -334,12 +339,15 @@ What L3 shows, as the fake plays it:
 - Each thread's model and provider (`gpt-5.6-terra`, `openai`) were checked
   from `thread/start`'s answer before its first turn. `approvalsReviewer` is
   `user` on all three.
-- The Codex home here has no `config.toml`, so both widening features read
-  as unset (`codex_features`); live, it is the owner's.
+- The Codex home here has no `config.toml`, so the widening features, the
+  sub-agent keys and `memories` all read as unset (`codex_features`,
+  `subagents`); live, it is the owner's, and the live check on sub-agents
+  applies (a rehearsal records it and does not refuse). No agents-off keys
+  were sent (`agents_off_sent`), since no decision was given.
 - The lead's steer on `L3.alpha` was recorded under its grant while the turn
   was `active` and `acknowledged`, and acknowledged with `provider_ack_id`.
   Behavior is `not_observed`.
-- The lead's `read_run` of `alpha` took 27.0 s and returned `exited`.
+- The lead's `read_run` of `alpha` took 27.9 s and returned `exited`.
 - Each child said what it was about to run before its command, as measured
   on this model (``Running `sleep 30 && wc -l alpha.md`.``), then answered;
   the count row read each child's last message after its last command: 7
@@ -352,8 +360,15 @@ What L3 shows, as the fake plays it:
 - The lead's tool answered four calls, each through its gate (one gate
   line each in its log); none was handed back past the hold, and no result
   reached the lead that its tool never saw.
-- Codex's runs were metered on the event stream by a thread of their own:
-  282 passes in 41.0 s. No stop and no silence.
+- Every model step was 4,096 tokens, within the 30,000 the bound assumes in
+  flight (the host's own usage events: the lead 5 steps, each child 2). No
+  run had a thread but its own, and every exit carried its list of other
+  threads (empty). No execution under the lead but the plan's three.
+- Codex's memory state did not change (there is none in a labeled fake's
+  home).
+- Codex's runs were metered on the event stream and on each run's own host
+  events by a thread of their own: 202 passes in 42.7 s. No stop and no
+  silence.
 - The charge is Codex's reported totals, 20,480 + 8,192 + 8,192 = 36,864,
   on the rehearsal's own ledger: each at least what the run could have
   spent, and each within its share. The reservations, written immediately
