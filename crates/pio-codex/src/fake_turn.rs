@@ -55,6 +55,54 @@ pub(crate) struct McpServer {
     tools: Vec<Value>,
     /// Tools approved for the rest of the session by a `persist` answer.
     remembered: Vec<String>,
+    /// Where Codex 0.157.0 would put this server's tools for the thread's
+    /// model (`exposure`), and whether that is the model's own tool list.
+    pub(crate) exposure: &'static str,
+    pub(crate) in_model_list: bool,
+}
+
+/// Whether the thread's model runs code-mode-only, as `gpt-5.6-terra`'s
+/// catalog entry says (`models-manager/models.json:676` at rust-v0.157.0;
+/// the model's tool mode wins over any feature, `core/src/tools/mod.rs:73-95`).
+/// Set at `thread/start` from the model it answers.
+pub(crate) static CODE_MODE_ONLY: AtomicBool = AtomicBool::new(false);
+
+/// How Codex 0.157.0 exposes one MCP server's tools, from its
+/// `omit_tools_from`, read from `core/src/tools/spec_plan.rs:234-266` and
+/// not measured: every surface but those omitted; then, with tool search on
+/// (`gpt-5.6-terra` supports it, `spec_plan.rs:624-626`), deferred rather
+/// than direct, unless the session is code-mode-only and code mode is
+/// omitted too; otherwise not deferred. The names are `ToolExposure`'s
+/// (`tools/src/tool_executor.rs:51-81`).
+pub(crate) fn exposure(omit: &[String], code_mode_only: bool) -> &'static str {
+    let off = |surface: &str| omit.iter().any(|s| s == surface);
+    let (mut direct, mut deferred, code_mode) =
+        (!off("direct"), !off("deferred"), !off("code_mode"));
+    if deferred && (!code_mode_only || code_mode) {
+        direct = false;
+    } else {
+        deferred = false;
+    }
+    match (direct, deferred, code_mode) {
+        (false, false, false) => "hidden",
+        (false, false, true) => "code_mode_only",
+        (true, false, false) => "direct_model_only",
+        (true, false, true) => "direct",
+        (false, true, false) => "deferred_model_only",
+        (false, true, true) => "deferred",
+        (true, true, _) => unreachable!("direct and deferred are exclusive"),
+    }
+}
+
+/// Whether the model has the tools in its own tool list. In a
+/// code-mode-only session only `DirectModelOnly` tools are: a `Direct` one
+/// is kept off the list and offered only inside `exec`
+/// (`spec_plan.rs:543`, `:761-772`), and a deferred one is found only by
+/// searching inside `exec` and never named (attempt 1 of L3's live run). In
+/// any other session the fake treats a server's tools as reachable, directly
+/// or by tool search.
+pub(crate) fn in_model_list(exposure: &str, code_mode_only: bool) -> bool {
+    !code_mode_only || exposure == "direct_model_only"
 }
 
 impl McpServer {
@@ -95,7 +143,19 @@ impl McpServer {
                 .map(str::to_owned),
             tools: vec![],
             remembered: vec![],
+            exposure: "direct",
+            in_model_list: true,
         };
+        let omit: Vec<String> = spec["omit_tools_from"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect();
+        let code_mode_only = CODE_MODE_ONLY.load(Ordering::SeqCst);
+        server.exposure = exposure(&omit, code_mode_only);
+        server.in_model_list = in_model_list(server.exposure, code_mode_only);
         server.request(
             "initialize",
             json!({"protocolVersion":"2025-06-18","capabilities":{},
@@ -730,6 +790,34 @@ fn play_lead(
     let forced_by = scenario["lead_asks_by"].as_str();
     let mut relay = Vec::new();
     play.begin();
+    let (visible, exposed) = {
+        let servers = servers.lock().expect("servers lock");
+        servers
+            .first()
+            .map(|server| (server.in_model_list, server.exposure))
+            .unwrap_or((false, "none"))
+    };
+    if !visible && !calls.is_empty() {
+        // The tools are not in the model's list: what L3's first live lead
+        // said, in two steps, before it ended its turn without a call.
+        play.marker(json!({"kind":"lead_tool_not_in_model_list","exposure":exposed}))?;
+        if !play.think() {
+            return Ok(());
+        }
+        play.say("I'll start the two requested lead runs and poll only those runs to completion.")?;
+        play.responded();
+        play.step(true)?;
+        if !play.think() {
+            return Ok(());
+        }
+        play.say(
+            "I can't access a `pio-lead` tool in this session, so I can't obtain the \
+             requested numbers without violating your constraint.",
+        )?;
+        play.responded();
+        play.step(false)?;
+        return play.turn.complete("completed");
+    }
     for (index, call) in calls.iter().enumerate() {
         let tool = call["tool"].as_str().unwrap_or_default();
         let repeat = call["repeat"].as_u64();

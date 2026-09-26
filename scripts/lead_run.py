@@ -228,6 +228,11 @@ does with a permission prompt.
   `child-renamed-unchecked` lets them through the tool, and the runner must
   still meter the renamed `alpha`, stop it at its ceiling, cancel it and
   charge both on lines of their own, so the ceilings row fails;
+- `lead-tool-deferred` (L3) sends the lead's tool without `omit_tools_from`,
+  as L3's first live run did: on `gpt-5.6-terra`, which runs code-mode-only,
+  Codex defers its tools behind `exec` and never names them, so the fake's
+  lead, like the live one, says it cannot access the tool and starts
+  nothing, and the start row fails;
 - `experimental-feature-on` (L3) turns on `features.exec_permission_approvals`
   in the rehearsal's own Codex configuration: the runner must refuse to
   start, before anything is reserved, and leave no tree and no receipt;
@@ -451,6 +456,23 @@ LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 PRE_ALLOWED = ('start_run', 'read_run')
 # The lead tool's MCP server name, as the lead's session knows it.
 LEAD_SERVER = 'pio-lead'
+# PIO's own settings in the lead tool's server table on Codex (L3's first
+# live run, 2026-09-26: the lead never saw its tool). `gpt-5.6-terra` runs
+# code-mode-only (`models-manager/models.json:676`, rust-v0.157.0): the model
+# sees `exec` and `wait`, and an ordinary MCP server's tools are deferred
+# behind `exec` and never named (`core/src/mcp_tool_exposure.rs:90-94`,
+# `core/src/tools/spec_plan.rs:234-266`). With `code_mode` and `deferred`
+# omitted they are `DirectModelOnly`, in the model's own tool list
+# (`tools/src/tool_executor.rs:68-72`; `spec_plan.rs:528-566`, `:761-772`).
+# `required` has Codex refuse `thread/start` if the server fails to start
+# (`codex-mcp/src/connection_manager/required.rs:15-58`, from
+# `core/src/session/mcp_runtime.rs:148`); `startup_timeout_sec` bounds its
+# start (`config/src/mcp_types.rs:250-256`, `:440-447`). The field names and
+# types are `config/src/mcp_types.rs:229-256` and `:372-385`; the surfaces'
+# names `protocol/src/config_types.rs:396-407`. The owner's lead-tool
+# approval (`owner-2026-09-22-m4b-lead-tool`) covers PIO's own server.
+LEAD_TOOL_SETTINGS = dict(omit_tools_from=['code_mode', 'deferred'], required=True,
+                          startup_timeout_sec=30)
 UNDER_GRANT = 'pio.combraton.dev/under-grant'
 APPROVAL = 'pio.combraton.dev/approval'
 DECISION = 'pio.combraton.dev/decision'
@@ -756,6 +778,10 @@ MUTANTS = {
     # check let through, the runner must still meter, stop and charge them:
     # the renamed alpha passes its ceiling.
     'child-renamed': 'The lead started its two runs through the tool',
+    # The lead's tool sent without `omit_tools_from`, as in L3's first live
+    # run: on a code-mode-only model its tools are deferred behind `exec`
+    # and never named, so the lead cannot call them (2026-09-26).
+    'lead-tool-deferred': 'The lead started its two runs through the tool',
     'child-renamed-unchecked': 'Every run stayed within its ceilings',
     # Shapes PIO declines by itself (review of L3, CH-2/F1): the lead's
     # approval asked in a mode PIO does not recognise, and a child's
@@ -910,6 +936,7 @@ PLAN_MUTANTS = {**{m: {'L3'} for m in (
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
                 'child-overspends': {'L3'}, 'child-renamed': {'L3'},
                 'child-renamed-unchecked': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
+                'lead-tool-deferred': {'L3'},
                 'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'},
                 'lead-asked-by-user-input': {'L3'},
                 'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'},
@@ -2702,6 +2729,13 @@ def watch(args, record, service, desk, meters, state):
         # Owner decision, 2026-09-25: the lead's own two tools are
         # pre-allowed, per launch, in the lead's thread config alone.
         spec['pre_allowed_tools'] = list(PRE_ALLOWED)
+    if HARNESS == 'codex':
+        # PIO's own server, in the model's own tool list, required, and
+        # given thirty seconds to start (LEAD_TOOL_SETTINGS). The mutant
+        # `lead-tool-deferred` sends it as L3's first live run did.
+        spec.update(LEAD_TOOL_SETTINGS)
+        if args.mutant == 'lead-tool-deferred':
+            spec.pop('omit_tools_from')
     state['spec'] = spec
     extensions = {CONTENT: dict(media_type='text/plain', text=BRIEF)}
     if args.mutant == 'lead-without-brief':
@@ -3622,6 +3656,37 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
     methods = [e['method'] for e in log if e.get('event') == 'request']
     rows.add('The tool reached the lead', methods[:3],
              ['initialize', 'notifications/initialized', 'tools/list'])
+    rows.add("Every line of the lead tool's log carries the time it was written",
+             dict(lines=len(log), stamped=len([e for e in log if e.get('at')])),
+             'every line, and at least one',
+             holds=lambda o: o['lines'] > 0 and o['stamped'] == o['lines'])
+    if HARNESS == 'codex':
+        # PIO's own server settings as the host sent them, read back from
+        # its own request, and the tool's server ready on the lead's thread,
+        # by Codex's own startup status, before its turn (L3's first live
+        # run, 2026-09-26).
+        def visibility(run):
+            events_of_run = host.get(run, [])
+            kinds = [e['kind'] for e in events_of_run]
+            sent = next((e.get('settings') for e in events_of_run
+                         if e['kind'] == 'mcp_servers_sent'), None) or {}
+            ready = next((e for e in events_of_run if e['kind'] == 'lead_tool_ready'), None)
+            return dict(
+                sent=sent.get(LEAD_SERVER),
+                ready=ready and ready.get('ready'),
+                before_turn=None if ready is None else 'turn_start_sent' in kinds
+                and kinds.index('lead_tool_ready') < kinds.index('turn_start_sent'))
+        rows.add("The lead's tool was in the model's own list, and ready before its turn",
+                 {run: visibility(run) for run in RUNS},
+                 {run: dict(sent=LEAD_TOOL_SETTINGS if run == LEAD else None,
+                            ready=True if run == LEAD else None,
+                            before_turn=True if run == LEAD else None) for run in RUNS},
+                 note="the lead tool's own server table as the host sent it: omit_tools_from "
+                      "code_mode and deferred keep its tools in gpt-5.6-terra's own tool list "
+                      '(code-mode-only; core/src/tools/spec_plan.rs:234-266 at rust-v0.157.0), '
+                      "and ready is Codex's mcpServer/startupStatus/updated on the lead's thread "
+                      'before turn/start' + ('; the fake computes the exposure from that source'
+                                            if rehearse else ''))
     calls = [e for e in log if e.get('event') == 'tool_call']
     rows.add('The lead started its two runs through the tool',
              sorted((e['arguments'].get('name'), e['result'].get('started'))

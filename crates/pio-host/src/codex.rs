@@ -447,6 +447,101 @@ fn response_error(message: &Value) -> Option<Value> {
     message.get("error").cloned()
 }
 
+/// The lead tool's own settings a spec may carry, sent in its server table
+/// as they are (rust-v0.157.0, `config/src/mcp_types.rs`: `required` at
+/// :233-235, `omit_tools_from` at :241-244 as `ToolExposureSurface`s,
+/// `code_mode`, `deferred` or `direct`, `protocol/src/config_types.rs:396-407`,
+/// and `startup_timeout_sec` at :250-256, read as seconds, `:440-447`).
+pub const LEAD_TOOL_SETTINGS: &[&str] = &["omit_tools_from", "required", "startup_timeout_sec"];
+/// Codex's notification of one MCP server's startup, per thread
+/// (`app-server/src/bespoke_event_handling.rs:202-228`, rust-v0.157.0):
+/// `starting`, then `ready`, `failed` or `cancelled`.
+pub const MCP_STARTUP: &str = "mcpServer/startupStatus/updated";
+
+/// Record one server's startup status, if `message` is one: which server,
+/// its status, whether it was this run's own thread, and Codex's failure
+/// reason where it gave one. Never the error text, which can hold a
+/// command, a path or a URL of the owner's. The server's name is kept in
+/// the host's own events; a receipt digests any name but the lead tool's.
+fn record_mcp_startup(
+    life: &mut Lifecycle,
+    message: &Value,
+    thread_id: &str,
+    phase: &str,
+) -> Result<Option<(String, String)>> {
+    if message["method"] != MCP_STARTUP {
+        return Ok(None);
+    }
+    let params = &message["params"];
+    let name = params["name"].as_str().unwrap_or_default().to_owned();
+    let status = params["status"].as_str().unwrap_or_default().to_owned();
+    let own = params["threadId"].is_null() || params["threadId"] == thread_id;
+    life.event(
+        json!({"kind":"mcp_startup","name":name,"status":status,"own_thread":own,
+                      "failure_reason":params["failureReason"],"phase":phase}),
+    )?;
+    Ok(own.then_some((name, status)))
+}
+
+/// Before the lead's turn: its tool's server `ready` on its own thread, or
+/// the run ends here having spent nothing. Bounded by the server's own
+/// startup timeout and ten seconds more (thirty seconds if none was set;
+/// `required = true` already has Codex refuse `thread/start` when a
+/// required server fails, `codex-mcp/src/connection_manager/required.rs:15-58`,
+/// called at session start, `core/src/session/mcp_runtime.rs:148`). A request
+/// meanwhile is declined by PIO, as in every wait before the turn.
+fn wait_lead_tool_ready(
+    life: &mut Lifecycle,
+    app: &mut AppServer,
+    thread_id: &str,
+    name: &str,
+    startup_timeout: Option<u64>,
+    mut ready: bool,
+) -> Result<()> {
+    let began = Instant::now();
+    let limit = Duration::from_secs(startup_timeout.unwrap_or(30) + 10);
+    let mut last = if ready {
+        Some("ready".to_owned())
+    } else {
+        None
+    };
+    let ended = |last: &Option<String>| matches!(last.as_deref(), Some("failed" | "cancelled"));
+    while !ready && !ended(&last) && began.elapsed() < limit {
+        let Some(message) = app.receive(Duration::from_millis(25))? else {
+            continue;
+        };
+        let Some(method) = message["method"].as_str() else {
+            continue;
+        };
+        if message.get("id").is_some() {
+            let mut record = native_decline(method, &message["params"]);
+            app.send(&json!({"id":message["id"],"error":{"code":-32000,
+                             "message":record["reason"]}}))?;
+            record["request_id"] = message["id"].clone();
+            record_early_decline(life, "mcp_startup", record)?;
+            continue;
+        }
+        if let Some((server, status)) =
+            record_mcp_startup(life, &message, thread_id, "before_turn")?
+            && server == name
+        {
+            ready = status == "ready";
+            last = Some(status);
+        }
+    }
+    life.event(
+        json!({"kind":"lead_tool_ready","name":name,"ready":ready,"status":last,
+                      "waited_ms":began.elapsed().as_millis() as u64}),
+    )?;
+    ensure!(
+        ready,
+        "lead_tool_not_ready: Codex did not report the lead tool's server ready on this thread \
+         (last status {last:?}) within {} s; no turn was started",
+        limit.as_secs()
+    );
+    Ok(())
+}
+
 /// How long the host keeps reading the run's own thread after its turn has
 /// ended (review of L3, round 4, SPEND-9). Codex 0.157.0 can start a turn
 /// on the same thread by itself once it is idle: a goal's continuation
@@ -632,18 +727,25 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
             "initialize",
             json!({"clientInfo":{"name":"pio","title":"PIO standalone execution host","version":env!("CARGO_PKG_VERSION")}}),
         )?;
-    let init = app.wait_response_declining(init, Duration::from_secs(60), native_decline, |r| {
-        record_early_decline(life, "initialize", r)
-    })?;
+    let init = app.wait_response_declining(
+        init,
+        Duration::from_secs(60),
+        native_decline,
+        |r| record_early_decline(life, "initialize", r),
+        |_| Ok(()),
+    )?;
     if let Some(error) = response_error(&init) {
         bail!("initialize refused: {error}");
     }
     app.notify("initialized")?;
     let account = app.request("account/read", json!({"refreshToken":false}))?;
-    let account =
-        app.wait_response_declining(account, Duration::from_secs(60), native_decline, |r| {
-            record_early_decline(life, "account/read", r)
-        })?;
+    let account = app.wait_response_declining(
+        account,
+        Duration::from_secs(60),
+        native_decline,
+        |r| record_early_decline(life, "account/read", r),
+        |_| Ok(()),
+    )?;
     // Only the authentication type; never email, plan or tokens.
     life.event(json!({"kind":"account","authentication_type":account["result"]["account"]["type"],"requires_openai_auth":account["result"]["requiresOpenaiAuth"],"error":response_error(&account)}),
         )?;
@@ -685,6 +787,24 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
             })
             .collect();
         let mut server = json!({"command":tool["command"],"args":tool["args"],"env":env});
+        // PIO's own server settings on Codex, where the spec carries them
+        // (validated at admission, `pio_protocol::codex`): which of the
+        // model's surfaces the server's tools are kept off, whether the
+        // thread fails to start without it, and how long Codex waits for it
+        // to start (`config/src/mcp_types.rs:229-256` at rust-v0.157.0).
+        // L3's lead sends `omit_tools_from = ["code_mode","deferred"]`: on
+        // `gpt-5.6-terra`, which runs code-mode-only
+        // (`models-manager/models.json:676`), every other MCP tool is
+        // deferred behind `exec` and never named to the model
+        // (`core/src/tools/spec_plan.rs:234-266`), which is how the lead of
+        // L3's first live run never saw its tool; with both surfaces
+        // omitted the tools are `DirectModelOnly`, in the model's own tool
+        // list (`tools/src/tool_executor.rs:68-72`).
+        for setting in LEAD_TOOL_SETTINGS {
+            if !tool[setting].is_null() {
+                server[setting] = tool[setting].clone();
+            }
+        }
         if let Some(names) = tool["pre_allowed_tools"].as_array() {
             let tools: serde_json::Map<String, Value> = names
                 .iter()
@@ -737,6 +857,17 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
             )
         })
         .collect();
+    // And each launched server's own settings, as sent (`LEAD_TOOL_SETTINGS`).
+    let settings: serde_json::Map<String, Value> = written
+        .iter()
+        .map(|(name, server)| {
+            let mut sent = serde_json::Map::new();
+            for setting in LEAD_TOOL_SETTINGS {
+                sent.insert((*setting).to_owned(), server[setting].clone());
+            }
+            (name.clone(), Value::Object(sent))
+        })
+        .collect();
     let pre_allowed: Value = written
         .values()
         .find_map(|server| server["tools"].as_object())
@@ -752,16 +883,25 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         .unwrap_or(Value::Null);
     life.event(
         json!({"kind":"mcp_servers_sent","names":names,"servers":servers,
-                      "pre_allowed_tools":pre_allowed}),
+                      "settings":settings,"pre_allowed_tools":pre_allowed}),
     )?;
+    let lead_server = life.spec["lead_tool"]["name"].as_str().map(str::to_owned);
+    let startup_timeout = life.spec["lead_tool"]["startup_timeout_sec"].as_u64();
     let thread = app.request("thread/start", params)?;
     // Codex attaches the thread's listener before it answers thread/start,
     // and launches the thread's MCP servers then: a request can arrive
-    // before the answer does.
-    let thread =
-        app.wait_response_declining(thread, Duration::from_secs(120), native_decline, |r| {
-            record_early_decline(life, "thread/start", r)
-        })?;
+    // before the answer does, and so can a server's startup status.
+    let mut early_notices = Vec::new();
+    let thread = app.wait_response_declining(
+        thread,
+        Duration::from_secs(120),
+        native_decline,
+        |r| record_early_decline(life, "thread/start", r),
+        |notice| {
+            early_notices.push(notice.clone());
+            Ok(())
+        },
+    )?;
     if let Some(error) = response_error(&thread) {
         bail!("thread_start_refused: {error}");
     }
@@ -809,6 +949,20 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         result["model"],
         result["modelProvider"]
     );
+    // Every server's startup status Codex sent while it started the thread,
+    // then, on the lead's thread, its tool ready before the turn (L3's first
+    // live run had the tool started and never offered to the model; this
+    // host did not look).
+    let mut lead_ready = false;
+    for notice in &early_notices {
+        let seen = record_mcp_startup(life, notice, &thread_id, "thread/start")?;
+        lead_ready |= seen.is_some_and(|(name, status)| {
+            Some(name.as_str()) == lead_server.as_deref() && status == "ready"
+        });
+    }
+    if let Some(name) = lead_server.as_deref() {
+        wait_lead_tool_ready(life, app, &thread_id, name, startup_timeout, lead_ready)?;
+    }
     life.park(child_identity)?;
     let brief = pio_core::spool::Spool::open(&life.root)?.read(
         life.spec["brief"]["digest"]
@@ -1029,6 +1183,13 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                 "serverRequest/resolved" => life.event(
                     json!({"kind":"request_resolved","request_id":message["params"]["requestId"]}),
                 )?,
+                // A server that starts during the turn (one Codex does not
+                // wait for at thread start) says so here: every server that
+                // started on the run's thread is recorded, the witness that
+                // nothing but the lead's tool ran beside it.
+                MCP_STARTUP => {
+                    record_mcp_startup(life, &message, &thread_id, "turn")?;
+                }
                 "turn/completed" => {
                     let turn = &message["params"]["turn"];
                     life.event(json!({"kind":"turn_completed","turn_id":turn["id"],"status":turn["status"],"error":turn["error"]}),

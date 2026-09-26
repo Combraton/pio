@@ -61,6 +61,15 @@
 //! ended, as a goal's continuation does (`fake_turn::continue_thread`:
 //! `continuation_steps`, `continuation_step`, `continuation_step_ms`), unless
 //! the thread's config turned goals off.
+//! A thread whose model is `gpt-5.6-terra`, or whose scenario says
+//! `tool_mode: "code_mode_only"`, is code-mode-only, as that model's catalog
+//! entry says: its lead has an MCP server's tools in its own list only where
+//! the server's `omit_tools_from` makes them `DirectModelOnly`, as Codex
+//! 0.157.0 computes it (`fake_turn::exposure`); otherwise it says it cannot
+//! access its tool, as L3's first live lead did, and calls nothing. Every
+//! launched server's startup status (`mcpServer/startupStatus/updated`,
+//! `starting` then `ready`) goes to the client, before the `thread/start`
+//! answer for a server marked `required` and after it for any other.
 //! `memory_pipeline` writes, at the first turn, what Codex's memory pipeline
 //! would under the Codex home (`memories/`, `memories_1.sqlite`), unless the
 //! thread's config turned memories off (`crate::features_off`).
@@ -98,6 +107,18 @@ fn write_trust(home: &Path, cwd: &str) -> Result<()> {
         }
         text.push_str(&format!("{table}\ntrust_level = \"trusted\"\n"));
         std::fs::write(path, text)?;
+    }
+    Ok(())
+}
+
+/// One MCP server's startup on a thread, as Codex 0.157.0 tells the
+/// client: `starting`, then `ready` (`McpServerStatusUpdatedNotification`,
+/// `app-server-protocol/src/protocol/v2/mcp.rs:357-363`).
+fn startup_status(thread: &str, name: &str) -> Result<()> {
+    for status in ["starting", "ready"] {
+        fake_turn::emit(&json!({"method":"mcpServer/startupStatus/updated",
+            "params":{"threadId":thread,"name":name,"status":status,
+                      "error":null,"failureReason":null}}))?;
     }
     Ok(())
 }
@@ -402,6 +423,21 @@ pub fn run() -> Result<()> {
                                 )
                             })
                             .collect();
+                        // And each server's own settings, as received.
+                        let settings: serde_json::Map<String, Value> =
+                            params["config"]["mcp_servers"]
+                                .as_object()
+                                .into_iter()
+                                .flatten()
+                                .map(|(name, spec)| {
+                                    (
+                                        name.clone(),
+                                        json!({"omit_tools_from":spec["omit_tools_from"],
+                                           "required":spec["required"],
+                                           "startup_timeout_sec":spec["startup_timeout_sec"]}),
+                                    )
+                                })
+                                .collect();
                         // And what it said of Codex's unmetered features, by
                         // the dotted keys a request override takes
                         // (`crate::features_off`): with `agents.enabled`
@@ -441,11 +477,31 @@ pub fn run() -> Result<()> {
                         marker(
                             &markers,
                             json!({"source":SOURCE,"kind":"thread_config_received","servers":received,
+                                   "settings":settings,
                                    "agents_enabled":agents,"multi_agent":config["features.multi_agent"],
                                    "multi_agent_v2":v2,"features_off":features_off}),
                         )?;
+                        // What Codex answers, which is not always what was
+                        // asked; the scenario can make it differ.
+                        let model = scenario["model_reported"]
+                            .as_str()
+                            .or(params["model"].as_str())
+                            .unwrap_or("pio-fake-model");
+                        // `gpt-5.6-terra` runs code-mode-only
+                        // (`models-manager/models.json:676`, rust-v0.157.0).
+                        fake_turn::CODE_MODE_ONLY.store(
+                            model == "gpt-5.6-terra" || scenario["tool_mode"] == "code_mode_only",
+                            std::sync::atomic::Ordering::SeqCst,
+                        );
                         // The servers this thread's own config names, launched
                         // and listed before the answer, as the M4b probe saw.
+                        // Each one's startup status goes to the client, per
+                        // thread (`app-server/src/bespoke_event_handling.rs:202-228`):
+                        // before the answer for a server marked `required`,
+                        // which Codex waits for at thread start
+                        // (`core/src/session/mcp_runtime.rs:148`), after it
+                        // for any other.
+                        let mut after_answer = Vec::new();
                         for (name, spec) in params["config"]["mcp_servers"]
                             .as_object()
                             .into_iter()
@@ -454,16 +510,17 @@ pub fn run() -> Result<()> {
                             let server = McpServer::launch(name, spec)?;
                             marker(
                                 &markers,
-                                json!({"source":SOURCE,"kind":"mcp_server_launched","name":name}),
+                                json!({"source":SOURCE,"kind":"mcp_server_launched","name":name,
+                                       "exposure":server.exposure,
+                                       "in_model_list":server.in_model_list}),
                             )?;
                             servers.lock().expect("servers lock").push(server);
+                            if spec["required"] == true {
+                                startup_status(&thread_id, name)?;
+                            } else {
+                                after_answer.push(name.clone());
+                            }
                         }
-                        // What Codex answers, which is not always what was
-                        // asked; the scenario can make it differ.
-                        let model = scenario["model_reported"]
-                            .as_str()
-                            .or(params["model"].as_str())
-                            .unwrap_or("pio-fake-model");
                         let provider = scenario["model_provider"].as_str().unwrap_or("pio-fake");
                         let thread_value =
                             json!({"id":thread_id,"modelProvider":provider,"preview":""});
@@ -505,6 +562,9 @@ pub fn run() -> Result<()> {
                         }
                         send(json!({"id":id,"result":result}))?;
                         send(json!({"method":"thread/started","params":{"thread":thread_value}}))?;
+                        for name in &after_answer {
+                            startup_status(&thread_id, name)?;
+                        }
                     }
                     "turn/start" => {
                         turns += 1;

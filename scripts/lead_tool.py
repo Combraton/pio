@@ -112,11 +112,20 @@ def credential():
 CREDENTIAL = credential()
 
 
+def stamp():
+    """Now, in UTC, to the millisecond."""
+    now = time.time()
+    return time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(now)) + f'.{int(now % 1 * 1000):03d}Z'
+
+
 def note(entry):
+    """One line of the tool's log, with the time it was written: L3's first
+    live log said the server was started and listed, and not when, so it
+    could not be set beside the lead's steps (2026-09-26)."""
     if not LOG:
         return
     with open(LOG, 'a') as handle:
-        handle.write(json.dumps(dict(entry, grant=GRANT)) + '\n')
+        handle.write(json.dumps(dict(entry, at=stamp(), grant=GRANT)) + '\n')
 
 
 def digest(data):

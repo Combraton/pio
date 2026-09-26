@@ -51,12 +51,50 @@ pub(crate) fn push(v: &mut Value, x: Value) {
 /// 2026-09-25, for L3's lead: its two tools, passed per launch, never written
 /// to the owner's configuration). Every other request still comes to the
 /// caller. OpenCode has no such setting, so its validator refuses the field.
+///
+/// And three settings of the server's own table on Codex, each sent as it
+/// is (`pio_host::codex::LEAD_TOOL_SETTINGS`; rust-v0.157.0,
+/// `config/src/mcp_types.rs:229-256`): `omit_tools_from`, the surfaces the
+/// server's tools are kept off, only `code_mode` and `deferred` (omitting
+/// `direct` would hide PIO's own tool from the model); `required`, a
+/// boolean; and `startup_timeout_sec`, whole seconds from 1 to 120. L3's
+/// lead sends `["code_mode","deferred"]`, `true` and `30`, so that
+/// `gpt-5.6-terra`, which runs code-mode-only, sees its two tools in its own
+/// tool list (review of L3's first live run, 2026-09-26).
 pub(crate) fn codex_lead_tool_refusals(tool: &Value) -> Vec<Value> {
     let mut common = tool.clone();
     let allowed = common
         .as_object_mut()
         .and_then(|o| o.remove("pre_allowed_tools"));
+    let settings: Vec<(&str, Value)> = ["omit_tools_from", "required", "startup_timeout_sec"]
+        .into_iter()
+        .filter_map(|name| {
+            common
+                .as_object_mut()
+                .and_then(|o| o.remove(name))
+                .map(|value| (name, value))
+        })
+        .collect();
     let mut refusals = pio_opencode::lead_tool_refusals(&common);
+    for (name, value) in settings {
+        let valid = match name {
+            "omit_tools_from" => value.as_array().is_some_and(|surfaces| {
+                let unique: std::collections::BTreeSet<_> =
+                    surfaces.iter().filter_map(Value::as_str).collect();
+                !surfaces.is_empty()
+                    && unique.len() == surfaces.len()
+                    && unique.iter().all(|s| ["code_mode", "deferred"].contains(s))
+            }),
+            "required" => value.is_boolean(),
+            _ => value
+                .as_u64()
+                .is_some_and(|seconds| (1..=120).contains(&seconds)),
+        };
+        if !valid {
+            refusals.push(json!({"reason":format!("lead_tool_{name}_not_accepted"),
+                                 "detail":value}));
+        }
+    }
     if let Some(allowed) = allowed {
         let names = allowed.as_array().filter(|names| {
             !names.is_empty()

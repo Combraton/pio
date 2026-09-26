@@ -477,3 +477,41 @@ fn thread_settings_guard_refuses_broader_than_configured_defaults() {
         );
     }
 }
+
+/// The fake's reading of how Codex 0.157.0 exposes an MCP server's tools
+/// (`core/src/tools/spec_plan.rs:234-266`, `:761-772`; not measured): on a
+/// code-mode-only model, only `DirectModelOnly` is in the model's own list.
+/// L3's first live run sent nothing (deferred, never named); its lead sends
+/// `code_mode` and `deferred` omitted. `code_mode` alone would do on this
+/// model, and `deferred` alone keeps the tools inside `exec`.
+#[test]
+fn a_server_s_tools_reach_a_code_mode_only_model_only_when_kept_out_of_code_mode() {
+    use crate::fake_turn::{exposure, in_model_list};
+    let omit = |surfaces: &[&str]| surfaces.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    for (surfaces, code_mode_only, expected, listed) in [
+        (&[][..], true, "deferred", false),
+        (
+            &["code_mode", "deferred"][..],
+            true,
+            "direct_model_only",
+            true,
+        ),
+        (&["code_mode"][..], true, "direct_model_only", true),
+        (&["deferred"][..], true, "direct", false),
+        (&["direct"][..], true, "deferred", false),
+        (&[][..], false, "deferred", true),
+        (
+            &["code_mode", "deferred"][..],
+            false,
+            "direct_model_only",
+            true,
+        ),
+    ] {
+        let found = exposure(&omit(surfaces), code_mode_only);
+        assert_eq!(
+            found, expected,
+            "{surfaces:?}, code-mode-only {code_mode_only}"
+        );
+        assert_eq!(in_model_list(found, code_mode_only), listed, "{surfaces:?}");
+    }
+}

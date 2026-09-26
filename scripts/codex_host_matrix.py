@@ -42,6 +42,10 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'file_change_grant_root', 'continuation_interrupted', 'subagent_turn_after_interrupt',
          'url_elicitation_with_approval_kind_declined', 'stream_retries_recorded']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
+# The lead tool's own server settings on Codex, as `lead_run.py` sends them
+# for L3 (after its first live run, 2026-09-26).
+LEAD_TOOL_SETTINGS = dict(omit_tools_from=['code_mode', 'deferred'], required=True,
+                          startup_timeout_sec=30)
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
 MODEL_CASES = {'model_checked_before_turn', 'model_mismatch_refused', 'provider_mismatch_refused'}
@@ -84,6 +88,8 @@ def witness(case, pre_allowed=False):
                 env=[dict(name='PIO_WITNESS_LOG', value=str(log))])
     if pre_allowed:
         spec['pre_allowed_tools'] = ['start_run', 'read_run']
+        # And PIO's own server settings, as L3's lead sends them.
+        spec.update(LEAD_TOOL_SETTINGS)
     return spec, log
 
 
@@ -472,6 +478,24 @@ def lead_tool_case(case, name):
         received = [m['servers'] for m in case.markers_records()
                     if m['kind'] == 'thread_config_received']
         assert by_json(received) == by_json([{}, want]), received
+        # The server's own settings, as sent and as received; and its
+        # startup status, which the fake sends before answering a thread
+        # whose server is required, seen by the host before the lead's turn.
+        settings = [e['settings'] for e in events_of(case, 'mcp_servers_sent')]
+        assert by_json(settings) == by_json([{}, {'pio-lead': LEAD_TOOL_SETTINGS}]), settings
+        received = [m['settings'] for m in case.markers_records()
+                    if m['kind'] == 'thread_config_received']
+        assert by_json(received) == by_json([{}, {'pio-lead': LEAD_TOOL_SETTINGS}]), received
+        startups = [(e['name'], e['status'], e['own_thread'], e['phase'])
+                    for e in events_of(case, 'mcp_startup')]
+        assert startups == [('pio-lead', 'starting', True, 'thread/start'),
+                            ('pio-lead', 'ready', True, 'thread/start')], startups
+        order = [json.loads(l)['kind'] for f in case.store.glob('codex-*.events.jsonl')
+                 for l in f.read_text().splitlines()
+                 if json.loads(l)['kind'] in ('lead_tool_ready', 'turn_start_sent')]
+        ready = events_of(case, 'lead_tool_ready')
+        assert [r['ready'] for r in ready] == [True] and order[:2] == \
+            ['lead_tool_ready', 'turn_start_sent'], (ready, order)
         seen = witnessed(log)
         assert [e.get('method') for e in seen if e['event'] == 'request'] == \
             ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'tools/call'], seen
