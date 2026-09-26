@@ -341,7 +341,27 @@ pub fn qualify(
     if status != 0 || version.is_none() {
         refusals.push(json!({"reason":"version_unavailable","exit":status}));
     } else if version.as_deref() != Some(PINNED_VERSION) {
-        refusals.push(json!({"reason":"unsupported_version","observed":version}));
+        // D12: npm self-updates past PIO's pin (2.0.1 to 2.0.11 already
+        // happened once). The refusal names the pin, what is actually
+        // installed, and the zero-token commands that re-qualify a new
+        // version, so the reader never has to go looking for them.
+        refusals.push(json!({
+            "reason":"unsupported_version",
+            "observed":version,
+            "pinned":PINNED_VERSION,
+            "detail":format!(
+                "PIO pins OpenCode to an exact, re-qualified version ({PINNED_VERSION}); the \
+                 installed executable reports {}. This is a known pin (docs/VERSION-POLICY.md), \
+                 not a bug: npm tracks latest and PIO trusts only a version it has measured. To \
+                 re-qualify at zero model tokens: `pio opencode surface-identity --executable \
+                 <path> --work <scratch>` against the installed executable, compare it with the \
+                 committed adapters/opencode/<version>/surface-identity.json, then `pio opencode \
+                 qualify --executable <path> --work <scratch>` (add `--expected <file>` to diff \
+                 against the previous identity first); update PINNED_VERSION and the committed \
+                 identity from the result, then re-run the offline OpenCode matrix.",
+                version.as_deref().unwrap_or("(unparseable)")
+            ),
+        }));
     }
     if !refusals.is_empty() {
         return Ok(json!({

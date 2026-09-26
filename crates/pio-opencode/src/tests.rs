@@ -66,6 +66,16 @@ fn a_version_that_is_not_the_pin_is_refused_without_running_further_arguments() 
     });
     assert_eq!(record["qualified"], false);
     assert_eq!(record["refusals"][0]["reason"], "unsupported_version");
+    assert_eq!(record["refusals"][0]["observed"], "9.9.9");
+    // D12: the refusal names the pin, the installed version and how to
+    // re-qualify, so a reader is never left to go looking for them.
+    assert_eq!(record["refusals"][0]["pinned"], PINNED_VERSION);
+    let detail = record["refusals"][0]["detail"].as_str().unwrap();
+    assert!(detail.contains(PINNED_VERSION), "{detail}");
+    assert!(detail.contains("9.9.9"), "{detail}");
+    assert!(detail.contains("docs/VERSION-POLICY.md"), "{detail}");
+    assert!(detail.contains("pio opencode qualify"), "{detail}");
+    assert_eq!(record["refusals"].as_array().unwrap().len(), 1);
     assert_eq!(record["surface"]["skipped"], "version_not_qualified");
 }
 

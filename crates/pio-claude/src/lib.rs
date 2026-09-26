@@ -339,7 +339,26 @@ pub fn qualify(
     if status != 0 || version.is_none() {
         refusals.push(json!({"reason":"version_unavailable","exit":status}));
     } else if version.as_deref() != Some(PINNED_VERSION) {
-        refusals.push(json!({"reason":"unsupported_version","observed":version}));
+        // D12: the Homebrew cask self-updates past PIO's pin (2.1.278 to
+        // 2.1.281 already happened once). The refusal names the pin, what is
+        // actually installed, and the zero-token command that re-qualifies a
+        // new version, so the reader never has to go looking for it.
+        refusals.push(json!({
+            "reason":"unsupported_version",
+            "observed":version,
+            "pinned":PINNED_VERSION,
+            "detail":format!(
+                "PIO pins Claude Code to an exact, re-qualified version ({PINNED_VERSION}); the \
+                 installed executable reports {}. This is a known pin (docs/VERSION-POLICY.md), \
+                 not a bug: the cask tracks latest and PIO trusts only a version it has \
+                 measured. To re-qualify at zero model tokens: `python3 scripts/\
+                 claude_requalify.py` against the installed cask (add `--isolated` to also skip \
+                 reading the owner's own configuration); on drift, update PINNED_VERSION and the \
+                 committed adapters/claude/<version>/ surface and stream identity from its \
+                 output, then re-run the offline Claude matrix.",
+                version.as_deref().unwrap_or("(unparseable)")
+            ),
+        }));
     }
     // Never run an unqualified executable with Claude-specific arguments.
     if !refusals.is_empty() {

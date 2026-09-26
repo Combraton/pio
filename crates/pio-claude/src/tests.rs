@@ -167,10 +167,17 @@ fn qualify_refuses_an_unsupported_version_without_running_claude_arguments() {
         .unwrap()
     });
     assert_eq!(record["qualified"], false);
-    assert_eq!(
-        record["refusals"],
-        json!([{"reason":"unsupported_version","observed":"2.1.279"}])
-    );
+    assert_eq!(record["refusals"][0]["reason"], "unsupported_version");
+    assert_eq!(record["refusals"][0]["observed"], "2.1.279");
+    // D12: the refusal names the pin, the installed version and how to
+    // re-qualify, so a reader is never left to go looking for them.
+    assert_eq!(record["refusals"][0]["pinned"], PINNED_VERSION);
+    let detail = record["refusals"][0]["detail"].as_str().unwrap();
+    assert!(detail.contains(PINNED_VERSION), "{detail}");
+    assert!(detail.contains("2.1.279"), "{detail}");
+    assert!(detail.contains("docs/VERSION-POLICY.md"), "{detail}");
+    assert!(detail.contains("claude_requalify.py"), "{detail}");
+    assert_eq!(record["refusals"].as_array().unwrap().len(), 1);
     assert_eq!(
         record["surface"],
         json!({"skipped":"version_not_qualified"})
