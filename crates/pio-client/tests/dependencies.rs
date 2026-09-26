@@ -220,7 +220,8 @@ fn pio_client_sources_reach_nothing_outside_the_crate() {
     for dir in ["src", "tests", "examples", "benches"] {
         for file in rust_files(&root.join(dir)) {
             for hit in reaches_outside(&std::fs::read_to_string(&file).unwrap()) {
-                found.push(format!("{}: {hit}", file.display()));
+                let shown = file.strip_prefix(root).unwrap_or(&file);
+                found.push(format!("{}: {hit}", shown.display()));
             }
         }
     }

@@ -95,24 +95,6 @@ jobs:
           PYTHONPATH=scripts python3 scripts/approval_desk.py --out target/desk-codex --harness codex
           PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-claude --harness claude
           PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-codex --harness codex
-      - name: The public client and the command line on it (M4 T1)
-        # pio-client may not reach a PIO service crate (its dependency test,
-        # and the mutant that must break it); its three folds must agree
-        # with the Python folds they were ported from, field for field, on
-        # the committed recordings and on fresh ones, and each fold's mutant
-        # must fail at its field; then `pio client` end to end against
-        # serve-fake and serve-opencode (labeled fake), with its mutants.
-        run: |
-          cargo test -p pio-client --locked --test dependencies --test folds
-          python3 scripts/client_source_mutants.py
-          python3 scripts/fold_parity.py --out target/fold-parity --record
-          for mutant in walk-drops-offer board-exited-running blocks-nobody-unknown; do
-            python3 scripts/fold_parity.py --out "target/fold-parity-$mutant" --mutant "$mutant"
-          done
-          python3 scripts/client_cli_matrix.py --out target/client-cli
-          for mutant in cross-run fresh-epoch forgot-last saved-page-end; do
-            python3 scripts/client_cli_matrix.py --out "target/client-cli-$mutant" --mutant "$mutant"
-          done
       - name: A lead that starts runs, and the scope it holds (M4b step 3)
         run: PYTHONPATH=scripts python3 scripts/lead_runs.py --out target/lead-runs
       - name: No private paths in any committed file
@@ -161,6 +143,68 @@ jobs:
         # alone, and 114 marker directories survived in $TMPDIR because
         # `permit_prefix` says a directory may be removed and removes
         # nothing. This is the check that says so without anyone looking.
+        if: always()
+        run: python3 scripts/check_case_leaks.py
+
+  client:
+    # M4 T1: the public client and the command line on it. Split from
+    # `runtime` (whose `cargo test` still runs pio-client's own tests) so its
+    # mutants cannot push that job past its timeout: each builds from a
+    # worktree of HEAD into one shared target. After the build, this job's
+    # steps took about two minutes locally at the fixes for the T1 review,
+    # from a cold mutant target.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: ubuntu-24.04
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Verify platform and install pinned toolchain
+        run: |
+          test "$(uname -m)" = '${{ matrix.arch }}'
+          rustup toolchain install 1.97.1 --profile minimal
+          rustc --version
+          cargo --version
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: The boundary, with every feature on, and its source mutants
+        # pio-client may not reach a PIO service crate by any path, nor may
+        # the command-line code on it; each mutant goes round that one way
+        # (the review's B1 and B2 among them) and must fail for its reason.
+        run: |
+          cargo test -p pio-client --locked --test dependencies --test folds
+          python3 scripts/client_source_mutants.py
+      - name: The folds in Rust against the Python folds, and their mutants
+        run: |
+          python3 scripts/fold_parity.py --out target/fold-parity --record
+          for mutant in walk-drops-offer board-exited-running board-liability-uncertain \
+                        blocks-nobody-unknown; do
+            python3 scripts/fold_parity.py --out "target/fold-parity-$mutant" --mutant "$mutant"
+          done
+      - name: pio client end to end, and its mutants
+        # serve-fake, and serve-opencode, serve-claude and serve-codex behind
+        # their labeled fakes. Four mutants the script plays and five built
+        # from the source (the review's M3 and M4 among them).
+        run: |
+          python3 scripts/client_cli_matrix.py --out target/client-cli
+          for mutant in cross-run fresh-epoch forgot-last saved-page-end \
+                        human-refusal-exits-0 answer-always-deny approvals-gap-blind \
+                        ledger-exits-0 watch-ignores-stream; do
+            python3 scripts/client_cli_matrix.py --out "target/client-cli-$mutant" --mutant "$mutant"
+          done
+      - name: No case left its store behind
         if: always()
         run: python3 scripts/check_case_leaks.py
 
