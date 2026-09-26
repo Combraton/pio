@@ -148,19 +148,19 @@ impl AppServer {
 
     /// Wait for the response to `id`, answering at once, with a JSON-RPC
     /// error, every server request that arrives meanwhile. `decline` builds
-    /// the record of each (its `reason` is the error's message), and the
-    /// records are returned with the response for the caller to keep. A
+    /// the record of each (its `reason` is the error's message), and `keep`
+    /// is handed each record as soon as its answer is sent, so a record
+    /// survives a wait that then fails (review of L3, round 3, R3-HC-3). A
     /// request that arrived during a wait used to be handed to a closure that
-    /// dropped it: never answered, never recorded (review of L3, round 2,
-    /// V-2/HR-6).
+    /// dropped it: never answered, never recorded (round 2, V-2/HR-6).
     pub fn wait_response_declining(
         &mut self,
         id: u64,
         timeout: Duration,
         mut decline: impl FnMut(&str, &Value) -> Value,
-    ) -> Result<(Value, Vec<Value>)> {
+        mut keep: impl FnMut(Value) -> Result<()>,
+    ) -> Result<Value> {
         let deadline = Instant::now() + timeout;
-        let mut declined = Vec::new();
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
@@ -170,7 +170,7 @@ impl AppServer {
                 if message.get("id") == Some(&json!(id))
                     && (message.get("result").is_some() || message.get("error").is_some())
                 {
-                    return Ok((message, declined));
+                    return Ok(message);
                 }
                 if let (Some(request), Some(method)) =
                     (message.get("id").cloned(), message["method"].as_str())
@@ -179,7 +179,7 @@ impl AppServer {
                     self.send(&json!({"id":request,"error":{"code":-32000,
                                       "message":record["reason"]}}))?;
                     record["request_id"] = request;
-                    declined.push(record);
+                    keep(record)?;
                 }
             }
         }

@@ -36,6 +36,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'command_approval_lapses', 'form_elicitation_declined', 'approval_cwd_through_a_link',
          'approval_cwd_past_path_max', 'subagent_thread_attributed',
          'subagent_interrupted_with_the_run', 'agents_off_decision_sent',
+         'early_declines_in_every_wait', 'early_decline_then_exit',
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
          'file_change_grant_root']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
@@ -621,6 +622,9 @@ def run_case(out, name):
                                     'subagent_step_ms': 300, 'subagent_asks': True,
                                     'delay_ms': 4000, 'usage_total': 42},
         agents_off_decision_sent={'spawn_agent': True, 'delay_ms': 500},
+        early_declines_in_every_wait={'elicit_during': ['initialize', 'account/read', 'thread/start'],
+                                      'delay_ms': 100},
+        early_decline_then_exit={'elicit_during': ['account/read'], 'exit_after_early': True},
         subagent_interrupted_with_the_run={'spawn_agent': True, 'subagent_steps': 2,
                                            'subagent_step_ms': 60000, 'delay_ms': 60000},
         early_elicitation_declined={'elicit_during_thread_start': True, 'delay_ms': 100},
@@ -795,8 +799,9 @@ def run_case(out, name):
             assert response['result']['outcome']['admission'] == 'admitted', response
             final = exited(case)
             declined = events_of(case, 'native_request_declined')
-            assert [(d['method'], d['phase'], d['server'], d['mode']) for d in declined] == \
-                [('mcpServer/elicitation/request', 'before_turn', 'someone', 'url')], declined
+            assert [(d['method'], d['phase'], d['wait'], d['server'], d['mode']) for d in declined] == \
+                [('mcpServer/elicitation/request', 'before_turn', 'thread/start', 'someone', 'url')], \
+                declined
             assert 'example.invalid' not in json.dumps(declined), declined
             carried = carried_declines(case)
             assert [(d['method'], d['phase']) for d in carried] == \
@@ -806,6 +811,43 @@ def run_case(out, name):
             received = [m for m in case.markers_records() if m['kind'] == 'turn_received']
             assert len(received) == 1 and final['exit'] == {'code': 0}, final
             return dict(outcome='pass', declined=declined[0]['phase'], exit=final['exit'])
+        if name == 'early_declines_in_every_wait':
+            # A request before each answer the host waits for before its
+            # first turn: initialize, account/read and thread/start, each
+            # declined once and recorded with its wait (review of L3, round
+            # 3, C3-2: only the thread/start wait was exercised).
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = exited(case)
+            waits = ['initialize', 'account/read', 'thread/start']
+            declined = events_of(case, 'native_request_declined')
+            assert [(d['phase'], d['wait']) for d in declined] == \
+                [('before_turn', w) for w in waits], declined
+            carried = carried_declines(case)
+            assert [d['wait'] for d in carried] == waits, carried
+            wire = answered_once(case)
+            assert sorted(m['id'] for m in wire) == sorted(
+                f"fake-early-{w.replace('/', '-')}" for w in waits), wire
+            assert final['exit'] == {'code': 0}, final
+            return dict(outcome='pass', waits=waits)
+        if name == 'early_decline_then_exit':
+            # The app-server declines-then-dies case: a request during
+            # account/read, answered by PIO, and then the app-server exits
+            # without answering account/read. The host's wait fails, and the
+            # decline it sent is still recorded (review of L3, round 3,
+            # R3-HC-3: it returned only with a successful response).
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            poll(lambda: events_of(case, 'host_error') or events_of(case, 'app_server_exited'),
+                 lambda found: bool(found), seconds=90)
+            declined = events_of(case, 'native_request_declined')
+            assert [(d['method'], d['wait'], d['phase']) for d in declined] == \
+                [('mcpServer/elicitation/request', 'account/read', 'before_turn')], declined
+            wire = answered_once(case)
+            assert [(m['id'], m['error']['code']) for m in wire] == \
+                [('fake-early-account-read', -32000)], wire
+            assert any(m['kind'] == 'exiting_after_early' for m in case.markers_records())
+            return dict(outcome='pass', recorded=declined[0]['wait'])
         if name == 'command_approval_lapses':
             # A command approval nobody answers: after the caller's two
             # seconds, one decline of PIO's, and the command never runs. In

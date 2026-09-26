@@ -48,6 +48,9 @@
 //! `subagent_steps`, `subagent_step`, `subagent_step_ms` and
 //! `subagent_asks`; none is spawned when the thread's config sets
 //! `agents.enabled = false` and does not turn `features.multi_agent_v2` on.
+//! `elicit_during` (a list of `initialize`, `account/read`, `thread/start`)
+//! sends a url-mode elicitation before answering each wait it names;
+//! `exit_after_early` then exits once the client has answered it.
 //! `memory_pipeline` writes, at the first turn, what Codex's memory pipeline
 //! would under the Codex home (`memories/`, `memories_1.sqlite`).
 use crate::fake_turn::{self, McpServer, Turn, Waiting, emit};
@@ -98,6 +101,27 @@ fn sandbox_projection(mode: &str) -> Value {
     }
 }
 
+/// A request sent before the answer to `wait`, where `elicit_during` names
+/// it (the waits a host has before its first turn, review of L3, round 3,
+/// R3-HC-3 and C3-2). With `exit_after_early`, its id: the fake then leaves
+/// `wait` unanswered and exits once the client has answered the request, so
+/// the client's wait fails after it has declined.
+fn early_request(scenario: &Value, wait: &str) -> Result<Option<String>> {
+    let named = scenario["elicit_during"]
+        .as_array()
+        .is_some_and(|waits| waits.iter().any(|w| w == wait));
+    if !named {
+        return Ok(None);
+    }
+    let id = format!("fake-early-{}", wait.replace('/', "-"));
+    emit(&json!({"method":"mcpServer/elicitation/request","id":id,
+                 "params":{"threadId":null,"turnId":null,"serverName":"someone","mode":"url",
+                           "elicitationId":format!("fake-{wait}"),
+                           "url":"https://example.invalid/early",
+                           "message":"Sign in before we start"}}))?;
+    Ok((scenario["exit_after_early"] == true).then_some(id))
+}
+
 pub fn run() -> Result<()> {
     let scenario: Value = std::env::var("PIO_CODEX_FAKE_SCENARIO")
         .ok()
@@ -145,6 +169,8 @@ pub fn run() -> Result<()> {
     // twice is a defect the host's own record cannot show (review of L3,
     // CH-3).
     let mut responses: std::collections::HashMap<String, u32> = Default::default();
+    // The early request whose answer ends the fake, where the scenario says.
+    let mut leave_after: Option<String> = None;
     loop {
         if scripted.as_ref().is_some_and(|turn| turn.finished()) {
             scripted = None;
@@ -198,6 +224,15 @@ pub fn run() -> Result<()> {
                                 json!({"source":SOURCE,"kind":"second_response","id":id}),
                             )?;
                         }
+                    }
+                    if leave_after.is_some()
+                        && id.as_ref().and_then(Value::as_str) == leave_after.as_deref()
+                    {
+                        marker(
+                            &markers,
+                            json!({"source":SOURCE,"kind":"exiting_after_early"}),
+                        )?;
+                        return Ok(());
                     }
                     // A reply a scripted turn is waiting for.
                     let key = id.as_ref().and_then(Value::as_str).map(str::to_owned);
@@ -257,12 +292,20 @@ pub fn run() -> Result<()> {
                 match method.as_str() {
                     "initialize" => {
                         initialized = true;
+                        if let Some(early) = early_request(&scenario, "initialize")? {
+                            leave_after = Some(early);
+                            continue;
+                        }
                         send(
                             json!({"id":id,"result":{"userAgent":SOURCE,"codexHome":home,"platformFamily":"unix","platformOs":std::env::consts::OS}}),
                         )?;
                     }
                     "initialized" => {}
                     "account/read" => {
+                        if let Some(early) = early_request(&scenario, "account/read")? {
+                            leave_after = Some(early);
+                            continue;
+                        }
                         let account = match scenario.get("account") {
                             Some(Value::Null) => Value::Null,
                             Some(Value::String(kind)) => json!({"type":kind}),
@@ -362,6 +405,10 @@ pub fn run() -> Result<()> {
                                 .as_object_mut()
                                 .context("thread/start result")?
                                 .remove("approvalsReviewer");
+                        }
+                        if let Some(early) = early_request(&scenario, "thread/start")? {
+                            leave_after = Some(early);
+                            continue;
                         }
                         if scenario["elicit_during_thread_start"] == true {
                             // A server asking something before the thread is
