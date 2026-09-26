@@ -1,3 +1,4 @@
+use crate::persistence::{EventLog, Tracked};
 use crate::{encoding, schemas};
 use anyhow::{Context, Result, ensure};
 use chrono::Utc;
@@ -89,14 +90,14 @@ impl Session {
             .is_some_and(|s| s.values().any(|v| v.iter().any(|x| x == f)))
     }
 }
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct Subject {
     pub subject: Value,
     pub revision: u64,
     pub state: Value,
     pub applied: u64,
 }
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct Bound {
     pub digest: String,
     pub generation: u64,
@@ -104,20 +105,20 @@ pub struct Bound {
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Data {
-    pub subjects: BTreeMap<String, Subject>,
-    pub commands: BTreeMap<String, Bound>,
+    pub subjects: Tracked<Subject>,
+    pub commands: Tracked<Bound>,
     pub generation: u64,
     pub oldest: u64,
     pub stream: String,
     pub epoch: u64,
     pub sequence: u64,
-    pub events: Vec<Value>,
+    pub events: EventLog,
     pub vouches: BTreeMap<u64, u64>,
     pub discarded: Option<(u64, u64)>,
     pub cap_revision: u64,
     pub predicates: Value,
-    pub effects: BTreeMap<String, Value>,
-    pub executions: BTreeMap<String, Value>,
+    pub effects: Tracked<Value>,
+    pub executions: Tracked<Value>,
 }
 pub struct Provider {
     pub root: std::path::PathBuf,
@@ -136,6 +137,11 @@ pub struct Provider {
     /// Last ADR 002 capacity refusal. The frozen public error for a refused
     /// commit is `unavailable` with nothing bound, so the reason is local.
     pub capacity_refusal: Option<Value>,
+    /// Test oracle for changed-key commits: after each commit, the committed
+    /// projection must equal the whole in-memory state. That is what a
+    /// whole-state commit wrote, so each commit journaled the same facts.
+    #[cfg(test)]
+    pub verify_commits: bool,
 }
 impl Provider {
     pub fn new(root: &Path, config: Value) -> Result<Self> {
@@ -283,6 +289,8 @@ impl Provider {
             authorities,
             provider_id,
             capacity_refusal: None,
+            #[cfg(test)]
+            verify_commits: true,
         };
         p.clock(true)?;
         p.data.generation += num(&p.config["dedupe"]["advance_on_start"]);
@@ -340,19 +348,31 @@ impl Provider {
     pub fn save_admission(&mut self) -> Result<()> {
         self.commit(true)
     }
+    /// Commits only the records changed since the last commit (ADR 002
+    /// changed-key amendment); the store compares each with its stored value.
     fn commit(&mut self, admission: bool) -> Result<()> {
-        let records = self.data.records()?;
+        let changes = self.data.take_changes()?;
         let result = if admission {
-            self.store.commit_admission(self.store_revision, &records)
+            self.store
+                .commit_admission_changes(self.store_revision, &changes)
         } else {
-            self.store.commit_protocol(self.store_revision, &records)
+            self.store.commit_changes(self.store_revision, &changes)
         };
         match result {
             Ok(revision) => {
                 self.store_revision = revision;
+                #[cfg(test)]
+                if self.verify_commits {
+                    assert_eq!(
+                        self.store.protocol_records()?,
+                        (revision, self.data.records()?),
+                        "a changed-key commit missed a change"
+                    );
+                }
                 Ok(())
             }
             Err(error) => {
+                self.data.restore_changes(changes);
                 if let Some(refusal) =
                     error.downcast_ref::<pio_core::projections::CapacityExceeded>()
                 {
