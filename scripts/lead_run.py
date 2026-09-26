@@ -163,11 +163,23 @@ does with a permission prompt.
   step in flight on each of its threads, and "No run spawned a sub-agent"
   fails; `subagent-not-stopped` skips the stop and
   `subagent-uncounted` charges `alpha`'s own thread alone, and each fails
-  the row that judges it; `subagents-off` turns sub-agents off per launch
-  under the fake's own token, and the row must hold;
-  `subagents-unguarded` and `subagents-multi-agent-only` apply the live
-  check to the rehearsal's own Codex home (its defaults, and `multi_agent =
-  false` alone), which must refuse;
+  the row that judges it;
+- `overrides-on` (L3) turns Codex's unmetered features off per launch under
+  the fake's own token, over a Codex home whose own configuration turns every
+  one of them on (aliases too): the preflight must find each off by the
+  override, every thread must carry the whole set, the child that would spawn
+  a sub-agent must not, no memory pipeline may write, and every row must hold;
+- `subagents-unguarded`, `subagents-multi-agent-only`, `memory-unguarded`,
+  `memory-alias`, `goals-unguarded`, `web-search-unguarded` and
+  `image-generation-unguarded` (L3) apply the live check to the rehearsal's
+  own Codex home, with every other unmetered feature off by its own keys:
+  sub-agents by Codex's default and with `multi_agent = false` alone,
+  memories on and on by its alias `memory_tool` after `memories = false`,
+  and goals, web search and image generation by Codex's defaults; each must
+  refuse, before anything is reserved, for its own feature and no other;
+  `override-misses-alias` sends the fake's token with a modelled override
+  that lacks `memory_tool`, beside the owner's `memory_tool = true`, which
+  still decides: it must refuse too (review of L3, round 4, U1);
 - `lead-exit-uncarried` (L3) drops the lead's list of what PIO declined, as
   if its exit carried none and it was not seen to exit: the pre-allowance
   row must be inconclusive, not held; `owner-service-absent` empties both
@@ -489,29 +501,65 @@ def select_plan(name):
             child='at most its ceiling, plus the step that crossed it (reported only after '
                   'its command) and the step in flight when the stop lands',
             usage_silence=USAGE_SILENCE,
-            subagents=dict(
-                off=f'{WORST_CASE}: with sub-agents off, by [agents] enabled = false in the '
-                    "owner's configuration or per launch under a recorded owner decision, "
-                    'Codex offers no collaboration tool and the bound above stands',
-                on=SUBAGENTS_ON,
-                on_how=f'{WORST_CASE} plus, for each of the {len(RUNS)} runs, a step in flight '
-                       'on every sub-agent it could start in one step before the stop lands: '
-                       'three for multi-agent V2, six for V1 (rust-v0.157.0, not measured); '
-                       'the live runner refuses to start with sub-agents on'),
+            unmetered=dict(
+                features=list(UNMETERED),
+                off=f'{WORST_CASE}: with every one of them off on every thread, by the '
+                    "owner's own config.toml or per launch under a recorded owner decision "
+                    '(pio_codex::features_off), the bound above stands; the live runner '
+                    'refuses to start otherwise, naming each feature not off and the key '
+                    'that decided it (review of L3, round 4, U1)',
+                subagents_on=SUBAGENTS_ON,
+                subagents_on_how=f'{WORST_CASE} plus, for each of the {len(RUNS)} runs, a '
+                                 'step in flight on every sub-agent it could start in one step '
+                                 'before the stop lands: three for multi-agent V2, six for V1 '
+                                 '(rust-v0.157.0, not measured)',
+                memories_on='on the order of 900,000 input tokens an attempt: Phase 1 sends '
+                            "up to two of the owner's idle sessions per app-server to the "
+                            'extraction model, three app-servers an attempt, and Phase 2 runs '
+                            'a consolidation agent (rust-v0.157.0, not measured)'),
             assumes=["Codex's reported total covers every step of a turn (review 48), and a "
                      "run's usage is the sum over its threads (round 3)",
                      'a step on this harness and model is at most 30,000 tokens '
                      '(measured about 22,000 to 24,500, M2 R4 to R6); the runner checks every '
                      'report and stops a run whose step is larger, and charges its largest '
                      'step in flight (review of L3, round 3, SPEND-4)',
-                     'no run has a sub-agent: sub-agents are off, and a run whose sub-agent '
-                     'appears anyway is stopped at once and charged a step on each of its '
-                     'threads (round 3, SPEND-2)',
-                     "Codex's memory pipeline, which [features] memories starts in the "
-                     "background at a root thread's first turn, makes model calls that report "
-                     'nowhere PIO reads (Phase 1 extraction of up to two of the owner\'s recent '
-                     'idle sessions, a Phase 2 consolidation agent): they are outside this '
-                     'bound, and the memory row shows whether it wrote (round 3, S6)',
+                     "every unmetered, default-on feature of Codex 0.157.0 is off on every "
+                     "L3 thread (sub-agents, memories, goals, standalone web search and image "
+                     "generation), by the owner's own config.toml or per launch under a "
+                     'recorded owner decision; the runner refuses to start otherwise (round 4, '
+                     'U1). Behind that, a run whose sub-agent appears anyway is stopped at once '
+                     'and charged a step on each of its threads (round 3, SPEND-2), and a '
+                     'memory pipeline that writes anyway fails the memory row (round 3, S6). A '
+                     'setting from a managed configuration (requirements.toml, MDM, cloud) '
+                     'is not read, and could override either route',
+                     "Codex's remote compaction makes a model call whose usage goes to "
+                     "analytics and the rollout budget, not the thread's total "
+                     '(core/src/compact_remote_v2.rs:304-310, 374; rust-v0.157.0). It runs '
+                     "when a step's context passes the model's auto-compact limit, 90% of "
+                     "gpt-5.6-terra's 272,000-token window, 244,800 "
+                     '(models-manager/models.json; protocol/src/openai_models.rs:525-536): a '
+                     'step that large is already past the one the bound assumes, and its run '
+                     'is stopped and charged its largest step in flight. The owner\'s '
+                     'model_auto_compact_token_limit, which could lower the limit, is not '
+                     'read; with it lowered, compaction would spend outside this bound (not '
+                     'measured)',
+                     "at each thread's start Codex sends one request with generate: false, "
+                     'its instructions and tools, over the WebSocket transport, to warm it '
+                     '(core/src/session_startup_prewarm.rs:306-320; core/src/client.rs:1966, '
+                     '2071-2120), and records no usage for it: whether it is billed, and for '
+                     'how much, is not established; one per thread, three an attempt, outside '
+                     'this bound',
+                     'what Codex asks the model only when a client asks it to, which PIO never '
+                     'does, cannot occur: a review (review/start), a thread title (an '
+                     'ephemeral thread whose source is thread_title, '
+                     'core/src/session/session.rs:1643-1646), a realtime conversation, a '
+                     "compaction on request; nor the guardian reviewer, which runs only when "
+                     'approvalsReviewer is not user, which every run asserts from '
+                     "thread/start's answer before its first turn",
+                     "a tool of the owner's own MCP servers, apps or plugins, which Codex "
+                     'loads on every thread, runs outside Codex, and what it spends is not in '
+                     "Codex's report; a call to one asks first unless the owner's settings "
+                     'pre-approve it (not read), and an ask fails the desk row',
                      'Codex retries a dropped stream up to 5 times and a failed request up to '
                      '4 by default (model-provider-info, rust-v0.157.0) and records usage only '
                      'on a completed response: what a dropped attempt is billed, if anything, '
@@ -538,6 +586,55 @@ def select_plan(name):
 
 
 select_plan('L1')
+
+# Not a row: the runner refuses to start, before anything is reserved, when
+# one of Codex's unmetered features is not off (review of L3, round 4, U1).
+UNMETERED_REFUSAL = "The runner refuses a Codex whose unmetered features are not all off"
+
+
+def all_off_but(*left, features=None):
+    """A Codex `config.toml` that turns each unmetered feature off by the
+    owner's own keys, except those named `left`, and then sets `features`."""
+    top = [] if 'standalone web search' in left else ['web_search = "disabled"']
+    table = {} if 'memories' in left else {'memories': False}
+    table.update({} if 'goals' in left else {'goals': False})
+    table.update({} if 'image generation' in left else {'image_generation': False})
+    table.update(features or {})
+    agents = [] if 'sub-agents' in left else ['[agents]', 'enabled = false']
+    lines = [*top, '[features]', *(f'{k} = {json.dumps(v)}' for k, v in table.items()), *agents]
+    return '\n'.join(lines) + '\n'
+
+
+# What each check mutant plants in the rehearsal's own Codex home.
+UNMETERED_PLANTED = {
+    'subagents-unguarded': all_off_but('sub-agents'),
+    'subagents-multi-agent-only': all_off_but('sub-agents', features={'multi_agent': False}),
+    'memory-unguarded': all_off_but('memories', features={'memories': True}),
+    'memory-alias': all_off_but('memories', features={'memories': False, 'memory_tool': True}),
+    'goals-unguarded': all_off_but('goals'),
+    'web-search-unguarded': all_off_but('standalone web search'),
+    'image-generation-unguarded': all_off_but('image generation'),
+    'override-misses-alias': '[features]\nmemory_tool = true\n',
+    # Every feature on in the owner's own configuration, each by its own key
+    # and its alias where it has one: the override must beat them all. It
+    # ends with a blank line, as the fake's trust entry expects, so that
+    # entry is the only change the configuration row sees.
+    'overrides-on': 'web_search = "live"\n[features]\nmemories = true\nmemory_tool = true\n'
+                    'goals = true\nimage_generation = true\nimagegenext = true\n'
+                    'multi_agent = true\nmulti_agent_v2 = true\n[agents]\nenabled = true\n\n'}
+# The mutants the live check applies to in a rehearsal, with the feature
+# each must be refused for, and the words that say why.
+UNMETERED_REFUSED = {
+    'subagents-unguarded': ('sub-agents', 'names multi-agent v2, so sub-agents are on'),
+    'subagents-multi-agent-only': ('sub-agents', 'names multi-agent v2, so sub-agents are on'),
+    'memory-unguarded': ('memories', "features.memories = true, the owner's config.toml"),
+    'memory-alias': ('memories', "features.memory_tool = true, the owner's config.toml"),
+    'goals-unguarded': ('goals', "Codex's default: on"),
+    'web-search-unguarded': ('standalone web search', "Codex's default: cached"),
+    'image-generation-unguarded': ('image generation', "Codex's default: on"),
+    'override-misses-alias': ('memories', "features.memory_tool = true, the owner's config.toml")}
+# The mutants that send the fake's own token.
+OVERRIDE_MUTANTS = ('overrides-on', 'override-misses-alias')
 
 MUTANTS = {
     'no-tool': 'Only the lead got the tool',
@@ -636,10 +733,19 @@ MUTANTS = {
     'subagent-spawned': 'No run spawned a sub-agent',
     'subagent-not-stopped': 'Every run that spawned a sub-agent was stopped when it appeared',
     'subagent-uncounted': "Every run's charge covers what it could have spent",
-    # The live check on sub-agents, applied to the rehearsal's own Codex
-    # home: its defaults, and `multi_agent = false` alone.
-    'subagents-unguarded': 'The runner refuses a Codex whose runs can spawn sub-agents',
-    'subagents-multi-agent-only': 'The runner refuses a Codex whose runs can spawn sub-agents',
+    # The live check on Codex's unmetered features, applied to the
+    # rehearsal's own Codex home, with every other feature off by the
+    # owner's own keys (review of L3, round 4, U1): sub-agents by Codex's
+    # default, and with `multi_agent = false` alone; memories on, and on by
+    # its alias `memory_tool` after `memories = false`; goals, standalone
+    # web search and image generation by Codex's defaults. And, under the
+    # fake's token, an override that forgot memories' alias beside the
+    # owner's `memory_tool = true`. Each is refused before anything is
+    # started or reserved, naming its feature and nothing else.
+    **{m: UNMETERED_REFUSAL for m in (
+        'subagents-unguarded', 'subagents-multi-agent-only', 'memory-unguarded', 'memory-alias',
+        'goals-unguarded', 'web-search-unguarded', 'image-generation-unguarded',
+        'override-misses-alias')},
     # A child's first step is 40,000, past the 30,000 the bound assumes in
     # flight: the runner must stop it, and the row fails (SPEND-4).
     'step-past-in-flight': 'Every step stayed within the in-flight bound',
@@ -685,13 +791,17 @@ HOLDING_MUTANTS = {'alpha-outlasts': 'A read_run waited for its run: until it ex
                    # L3: the committed record itself, planted: the row must
                    # hold, so it is not a row that can only fail.
                    'qualified-as-committed': 'Codex qualified at the pinned identity',
-                   # L3: sub-agents turned off per launch, under the labeled
-                   # fake's own token: the child that would spawn one does not.
-                   'subagents-off': 'No run spawned a sub-agent'}
+                   # L3: Codex's unmetered features off per launch, under the
+                   # labeled fake's own token, over an owner's configuration
+                   # that turns every one on: the child that would spawn a
+                   # sub-agent does not, and no memory pipeline runs.
+                   'overrides-on': 'No run spawned a sub-agent'}
 # The plans a mutant belongs to; any other mutant belongs to every plan.
 PLAN_MUTANTS = {**{m: {'L3'} for m in (
                     'subagent-spawned', 'subagent-not-stopped', 'subagent-uncounted',
-                    'subagents-unguarded', 'subagents-multi-agent-only', 'subagents-off',
+                    'subagents-unguarded', 'subagents-multi-agent-only', 'overrides-on',
+                    'memory-unguarded', 'memory-alias', 'goals-unguarded', 'web-search-unguarded',
+                    'image-generation-unguarded', 'override-misses-alias',
                     'step-past-in-flight', 'stopped-past-share', 'stopped-charge-capped',
                     'deadline-interrupted', 'interrupted-charged-reported',
                     'memory-pipeline-ran', 'meter-dies', 'lead-exit-uncarried')},
@@ -813,9 +923,6 @@ WIDENING_FEATURES = ('exec_permission_approvals', 'request_permissions_tool')
 # feature's keys in that order decides it (review of L3, round 3, SPEND-3).
 FEATURE_KEYS = {'exec_permission_approvals': ('exec_permission_approvals', 'request_permissions'),
                 'request_permissions_tool': ('request_permissions_tool',)}
-# Codex's sub-agents (review of L3, round 3, SPEND-2): `multi_agent` and its
-# legacy alias `collab` (legacy.rs, rust-v0.157.0).
-AGENT_KEYS = {'multi_agent': ('multi_agent', 'collab')}
 # A labeled fake's own token for turning Codex's unmetered features off per
 # launch (sub-agents among them); a real Codex takes only a recorded owner
 # decision (pio-protocol stream.rs, FEATURES_OFF_DECISIONS, empty until the
@@ -833,7 +940,7 @@ def feature_setting(features, feature):
     """What Codex would make of one feature from a `[features]` table, and
     the key that decided it: `None` where no key names it (Codex's default)
     or the deciding key holds something Codex would not read as a switch."""
-    keys = sorted(k for k in {**FEATURE_KEYS, **AGENT_KEYS}[feature] if k in features)
+    keys = sorted(k for k in FEATURE_KEYS[feature] if k in features)
     if not keys:
         return None, None
     value = features[keys[-1]]
@@ -862,52 +969,137 @@ def codex_features(codex_home):
     return record
 
 
-def codex_agents(codex_home):
-    """Whether this Codex can spawn sub-agents on L3's threads, from the
-    keys that decide it and nothing else: `[features]` `multi_agent` (or its
-    alias `collab`) and `multi_agent_v2`, and `[agents]` `enabled`.
+# Codex 0.157.0's unmetered, default-on features (review of L3, round 4,
+# U1): each spends outside every report PIO reads. Sub-agents run threads of
+# their own; the memory pipeline sends the owner's idle sessions to a model
+# and runs a consolidation agent at a root thread's first turn (on the order
+# of 900,000 input tokens an attempt); a goal starts continuation turns by
+# itself after turn/completed; standalone web search (`web.run`) makes its
+# own model call and records no usage; image generation calls a separate
+# endpoint and records none. The keys and their sources at rust-v0.157.0
+# are in `crates/pio-codex/src/lib.rs` (`features_off`).
+UNMETERED = ('sub-agents', 'memories', 'goals', 'standalone web search', 'image generation')
+# The keys the preflight reads, and nothing else: each feature's own and
+# its legacy aliases (`features/src/legacy.rs`), `[agents] enabled`, and the
+# top-level `web_search`.
+UNMETERED_KEYS = ('features.multi_agent', 'features.collab', 'features.multi_agent_v2',
+                  'agents.enabled', 'features.memories', 'features.memory_tool',
+                  'features.goals', 'web_search', 'features.web_search',
+                  'features.web_search_cached', 'features.web_search_request',
+                  'features.image_generation', 'features.imagegenext')
+WEB_SEARCH_MODES = ('disabled', 'cached', 'indexed', 'live')
 
-    At rust-v0.157.0 a thread's multi-agent version is, in order: V2 if
-    `features.multi_agent_v2` is on; Disabled if `agents.enabled` is false;
-    else the model catalog's version; else V1 if `multi_agent` is on
-    (`Config::multi_agent_version_override`, `multi_agent_version_for_model`).
-    `gpt-5.6-terra`'s bundled catalog entry says `v2`, so `multi_agent =
-    false` alone leaves it on; only `agents.enabled = false`, with
-    `multi_agent_v2` not on, turns it off whatever the catalog says."""
+
+def unmetered_keys(codex_home):
+    """The keys that decide Codex's unmetered features, and nothing else,
+    from `config.toml`: whatever else the file holds is parsed and not kept.
+    A `[features] multi_agent_v2` table is kept by its `enabled` alone. An
+    unreadable file refuses: nothing it says can be known."""
     path = Path(codex_home) / 'config.toml'
-    record = dict(read=path.name, exists=path.exists(), multi_agent=None, multi_agent_key=None,
-                  multi_agent_v2=None, agents_enabled=None, memories=None)
     if not path.exists():
-        return record
+        return path, {}
     try:
         config = tomllib.loads(path.read_text())
-    except tomllib.TOMLDecodeError as error:
-        raise SystemExit(f'refusing to start: {path.name} is unreadable, so whether Codex '
-                         f'can spawn sub-agents cannot be checked: {error}')
-    features = config.get('features') if isinstance(config.get('features'), dict) else {}
-    record['multi_agent'], record['multi_agent_key'] = feature_setting(features, 'multi_agent')
-    v2 = features.get('multi_agent_v2')
-    record['multi_agent_v2'] = v2 if isinstance(v2, bool) else (
-        v2.get('enabled') if isinstance(v2, dict) and isinstance(v2.get('enabled'), bool) else None)
-    # And whether Codex's memory pipeline is on, which starts in the
-    # background at a root thread's first turn (S6); recorded, not refused.
-    record['memories'] = features.get('memories') if isinstance(features.get('memories'), bool) \
-        else None
-    agents = config.get('agents') if isinstance(config.get('agents'), dict) else {}
-    record['agents_enabled'] = agents.get('enabled') if isinstance(agents.get('enabled'), bool) \
-        else None
-    return record
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as error:
+        raise SystemExit(f"refusing to start: {path.name} is unreadable, so whether Codex's "
+                         f'unmetered features are off cannot be checked: {error}')
+    found = {}
+    for dotted in UNMETERED_KEYS:
+        table, _, name = dotted.rpartition('.')
+        holder = config.get(table) if table else config
+        if isinstance(holder, dict) and name in holder:
+            value = holder[name]
+            if dotted == 'features.multi_agent_v2' and isinstance(value, dict):
+                value = dict(table=True, enabled=value.get('enabled'))
+            found[dotted] = value
+    return path, found
 
 
-def subagents_off(settings, decision):
-    """How sub-agents are off for L3, or None if they are not: by the owner's
-    own configuration (`[agents] enabled = false`, `multi_agent_v2` not on),
-    or by a decision that turns them off per launch."""
-    if settings['agents_enabled'] is False and settings['multi_agent_v2'] is not True:
-        return "the owner's configuration: [agents] enabled = false, multi_agent_v2 not on"
-    if decision:
-        return f'per launch, under the decision {decision!r}'
-    return None
+def unmetered_features(codex_home, override=None, decision=None):
+    """Whether each of Codex's unmetered features is off on L3's threads, and
+    by which route: the owner's own `config.toml`, the per-launch override
+    under a recorded decision, or Codex's default.
+
+    The override's keys are laid over the owner's, as Codex merges a request
+    override over the file (`app-server/src/config_manager.rs:446-452`), and
+    each feature is then resolved as rust-v0.157.0 resolves it: a feature's
+    keys, its own and its legacy aliases, applied in sorted order, the last
+    deciding (`Features::apply_map`); `imagegenext` ignored beside
+    `image_generation` (`features/src/lib.rs:645`); `web_search` deciding
+    the mode before any feature (`core/src/config/mod.rs:2659-2670`); and
+    sub-agents off only with `agents.enabled` false and `multi_agent_v2`
+    not on (`core/src/config/mod.rs:1562-1570`), since `gpt-5.6-terra`'s
+    catalog entry names multi-agent v2. A key Codex would not read as a
+    switch, or a mode it does not have, is not off."""
+    path, owner = unmetered_keys(codex_home)
+    merged = {k: (v, 'owner') for k, v in owner.items()}
+    merged.update({k: (v, 'override') for k, v in (override or {}).items()})
+
+    def said(key):
+        value, source = merged[key]
+        where = f'per launch, under {decision!r}' if source == 'override' \
+            else "the owner's config.toml"
+        shown = json.dumps(value) if not isinstance(value, dict) else \
+            f"a table with enabled = {json.dumps(value.get('enabled'))}"
+        return dict(key=key, value=value, route=where, why=f'{key} = {shown}, {where}')
+
+    def switch(*keys, default):
+        present = sorted(k for k in keys if k in merged)
+        if not present:
+            return dict(off=not default, key=None, value=None, route="Codex's default",
+                        why=f"Codex's default: {'on' if default else 'off'} "
+                            f"({', '.join(keys)} unset)")
+        found = said(present[-1])
+        on = found['value'] if isinstance(found['value'], bool) else None
+        return dict(found, off=None if on is None else not on)
+
+    features = {}
+    # Sub-agents: V2 if multi_agent_v2 is on; off if agents.enabled is false;
+    # else the model's catalog, which names v2 for gpt-5.6-terra.
+    v2 = merged.get('features.multi_agent_v2', (None, None))[0]
+    v2_on = v2 is True or (isinstance(v2, dict) and v2.get('enabled') is True)
+    v2_unread = 'features.multi_agent_v2' in merged and not isinstance(v2, (bool, dict))
+    agents = switch('agents.enabled', default=True)
+    if v2_unread or v2_on:
+        features['sub-agents'] = dict(said('features.multi_agent_v2'),
+                                      off=None if v2_unread else False)
+    elif agents['off'] is True:
+        features['sub-agents'] = agents
+    else:
+        features['sub-agents'] = dict(agents, why=agents['why'] + f"; {MODEL}'s catalog entry "
+                                      'names multi-agent v2, so sub-agents are on')
+    features['sub-agents']['multi_agent'] = switch('features.multi_agent', 'features.collab',
+                                                   default=True)['off'] is False
+    features['memories'] = switch('features.memories', 'features.memory_tool', default=False)
+    features['goals'] = switch('features.goals', default=True)
+    if 'web_search' in merged:
+        found = said('web_search')
+        mode = found['value'] if found['value'] in WEB_SEARCH_MODES else None
+        features['standalone web search'] = dict(found, off=None if mode is None
+                                                 else mode == 'disabled')
+    else:
+        cached = switch('features.web_search_cached', default=False)
+        live = switch('features.web_search', 'features.web_search_request', default=False)
+        chosen = cached if cached['key'] and cached['off'] is False else \
+            live if live['key'] and live['off'] is False else None
+        features['standalone web search'] = dict(
+            chosen, off=False, why=chosen['why'] + '; the top-level web_search is unset') \
+            if chosen else dict(off=False, key=None, value=None, route="Codex's default",
+                                why="Codex's default: cached (web_search unset)")
+    if 'features.image_generation' in merged:
+        features['image generation'] = switch('features.image_generation', default=True)
+    else:
+        features['image generation'] = switch('features.imagegenext', default=True)
+        if 'features.imagegenext' not in merged:
+            features['image generation']['why'] = \
+                "Codex's default: on (image_generation, imagegenext unset)"
+    return dict(read=path.name, exists=path.exists(), decision=decision,
+                owner_keys=owner, features=features)
+
+
+def features_not_off(unmetered):
+    """Each feature that is not off, and why."""
+    return {f: u['why'] for f, u in unmetered['features'].items() if u['off'] is not True}
 
 
 # Codex's memory state (review of L3, round 3, S6). With `[features]
@@ -1963,10 +2155,10 @@ def codex_scenario(mutant, calls):
     if mutant == 'step-past-in-flight':
         # One step of 40,000: under the ceiling, past the in-flight bound.
         play.update(led_heavy_if=alpha, led_heavy_step=40_000, led_step_ms=6000)
-    if mutant == 'memory-pipeline-ran':
+    if mutant in ('memory-pipeline-ran', 'overrides-on'):
         play['memory_pipeline'] = True
     if mutant in ('subagent-spawned', 'subagent-not-stopped', 'subagent-uncounted',
-                  'subagents-off'):
+                  'overrides-on'):
         # alpha's first step also spawns a sub-agent, as 0.157.0 does, which
         # takes three steps of its own unless stopped.
         play.update(spawn_agent_if=alpha, subagent_steps=3, subagent_step_ms=1500)
@@ -2111,9 +2303,13 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
     rows = Rows(rehearse)
     # Sub-agents off per launch: the owner's recorded decision, live, or the
     # labeled fake's own token (review of L3, round 3, SPEND-2).
-    agents_off = FEATURES_OFF_REHEARSAL if args.mutant == 'subagents-off' \
+    # Codex's unmetered features off per launch: the owner's recorded
+    # decision, live, or the labeled fake's own token (review of L3, round
+    # 3, SPEND-2; round 4, U1).
+    features_off = FEATURES_OFF_REHEARSAL if args.mutant in OVERRIDE_MUTANTS \
         else args.features_off_decision
-    service = Service(root, rehearse, scenario(args.mutant), args.mutant, features_off=agents_off)
+    service = Service(root, rehearse, scenario(args.mutant), args.mutant,
+                      features_off=features_off)
     if HARNESS == 'opencode':
         config_dir = Path(service.config['opencode']['config_dir'])
         if args.mutant == 'helper-elsewhere':
@@ -2137,9 +2333,7 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
             # canonical key, overrides it (review of L3, round 3, SPEND-3).
             'experimental-alias-on': '[features]\nexec_permission_approvals = false\n'
                                      'request_permissions = true\n',
-            # multi_agent off alone: the model's catalog still turns
-            # sub-agents on (review of L3, round 3, SPEND-2).
-            'subagents-multi-agent-only': '[features]\nmulti_agent = false\n'}.get(args.mutant)
+            **UNMETERED_PLANTED}.get(args.mutant)
         if planted:
             codex_home.mkdir(parents=True, exist_ok=True)
             (codex_home / 'config.toml').write_text(planted)
@@ -2155,22 +2349,28 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
             raise SystemExit('refusing to start: the Codex configuration turns on '
                              f'{widening}: a command approval could then ask for permissions '
                              'PIO is never shown, and an allow would grant them')
-        # Sub-agents (review of L3, round 3, SPEND-2): no plan has one, and a
-        # sub-agent's spend is outside every share. Live, refused unless the
-        # owner's configuration turns them off or a recorded owner decision
-        # turns them off per launch; the owner decides which. A rehearsal
-        # records what it read, and its mutants apply the live check.
-        record['subagents'] = dict(codex_agents(codex_home), decision=agents_off)
-        record['subagents']['off'] = subagents_off(record['subagents'], agents_off)
-        live_check = not rehearse or args.mutant in ('subagents-unguarded',
-                                                     'subagents-multi-agent-only')
-        if live_check and record['subagents']['off'] is None:
+        # Codex's unmetered, default-on features (review of L3, round 3,
+        # SPEND-2; round 4, U1): no plan has any of them, and their spend is
+        # outside every share. Live, each must resolve off, from the owner's
+        # own configuration or from the per-launch override under a recorded
+        # owner decision, laid over it as Codex lays it; otherwise the run is
+        # refused here, naming each feature and the key that decided it. A
+        # rehearsal records what it read, and its mutants apply the live check.
+        override = dict(FEATURES_OFF) if features_off else None
+        if override and args.mutant == 'override-misses-alias':
+            # A runner whose override forgot memories' legacy alias: the
+            # owner's `memory_tool = true` still decides (sorted last).
+            override.pop('features.memory_tool')
+        record['unmetered'] = unmetered_features(codex_home, override, features_off)
+        not_off = features_not_off(record['unmetered'])
+        live_check = not rehearse or args.mutant in UNMETERED_REFUSED
+        if live_check and not_off:
             raise SystemExit(
-                'refusing to start: Codex can spawn sub-agents on these threads. Its '
-                "configuration does not turn them off ([agents] enabled = false, with "
-                'features.multi_agent_v2 not on; multi_agent = false alone is not enough for '
-                f"{MODEL}, whose catalog entry names multi-agent v2), and no owner decision "
-                'turns them off per launch (--features-off-decision). The owner decides which.')
+                "refusing to start: Codex's unmetered, default-on features are not all off for "
+                "L3's threads: " + '; '.join(f'{f} ({why})' for f, why in not_off.items())
+                + ". Each must be off, by the owner's own config.toml or per launch under a "
+                'recorded owner decision (--features-off-decision; pio-protocol '
+                'FEATURES_OFF_DECISIONS); nothing is started or reserved.')
     # `--relay`: a rehearsal whose desk waits for answer files, as a live
     # one does, so the relay that will run beside the live run is rehearsed
     # against the requests this code actually writes.
@@ -2234,7 +2434,8 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
             record['memory_after'] = memory_state(service.config['codex']['codex_home'])
             rows.add("Codex's memory pipeline wrote nothing during the run",
                      dict(changes=memory_changes(record['memory_before'], record['memory_after']),
-                          features_memories=(record.get('subagents') or {}).get('memories')),
+                          memories=((record.get('unmetered') or {}).get('features') or {})
+                          .get('memories')),
                      "no memory file or database added, removed or changed",
                      holds=lambda o: not o['changes'],
                      note="Codex's own background pipeline, which [features] memories starts at "
@@ -3989,8 +4190,7 @@ def main():
         record = run(args)
     except BaseException as error:
         if args.mutant in ('setup-fails', 'helper-elsewhere', 'experimental-feature-on',
-                           'experimental-alias-on', 'subagents-unguarded',
-                           'subagents-multi-agent-only'):
+                           'experimental-alias-on', *UNMETERED_REFUSED):
             root = getattr(args, 'root', None)
             assert root is not None and not Path(root).exists(), (
                 f'the setup failed and left its tree behind: {root}')
@@ -4002,10 +4202,14 @@ def main():
                 assert 'exec_permission_approvals (by exec_permission_approvals)' in str(error), error
             if args.mutant == 'experimental-alias-on':
                 assert 'exec_permission_approvals (by request_permissions)' in str(error), error
-            if args.mutant in ('subagents-unguarded', 'subagents-multi-agent-only'):
-                assert 'can spawn sub-agents' in str(error), error
+            if args.mutant in UNMETERED_REFUSED:
+                # Refused for its own feature, by the key that decided it,
+                # and for no other.
+                feature, why = UNMETERED_REFUSED[args.mutant]
+                named = {f for f in UNMETERED if f'{f} (' in str(error)}
+                assert named == {feature} and why in str(error), error
             print(f'mutant {args.mutant}: dies on {MUTANTS[args.mutant]!r}: '
-                  f'{type(error).__name__}, and the tree is gone')
+                  f'{type(error).__name__}, and the tree is gone: {redact(str(error))[:600]}')
             raise SystemExit(1)
         if not args.mutant or not args.receipt.exists():
             raise
@@ -4029,13 +4233,21 @@ def main():
             print(f'mutant {args.mutant}: holds on {wanted!r}, against the committed record '
                   f"for {row['observed']['ran']['pinned']['version']}")
             return
-        if args.mutant == 'subagents-off':
-            # Off per launch on every thread, and so nothing spawned.
-            assert record['subagents']['off'].startswith('per launch'), record['subagents']
+        if args.mutant == 'overrides-on':
+            # Every feature off per launch, over an owner's configuration
+            # that turns each on; the whole set on every thread; and so no
+            # agent spawned and no memory pipeline wrote.
+            routes = {f: u['route'] for f, u in record['unmetered']['features'].items()}
+            assert routes == {f: f'per launch, under {FEATURES_OFF_REHEARSAL!r}'
+                              for f in UNMETERED}, routes
+            assert all(u['off'] is True for u in record['unmetered']['features'].values())
             assert all(sent == FEATURES_OFF for sent in record['features_off_sent'].values()) \
-                and record['features_off_sent'], record['features_off_sent']
-            print(f'mutant {args.mutant}: holds on {wanted!r}, with agents.enabled = false on '
-                  f"{len(record['features_off_sent'])} threads")
+                and len(record['features_off_sent']) == len(RUNS), record['features_off_sent']
+            memory = next(r for r in record['rows']
+                          if r['row'] == "Codex's memory pipeline wrote nothing during the run")
+            assert memory['holds'] is True, memory
+            print(f'mutant {args.mutant}: holds on {wanted!r}, with all {len(UNMETERED)} '
+                  f"features off per launch on {len(record['features_off_sent'])} threads")
             return
         at_limit = [r for r in row['observed'] if r['runtime'] not in ('exited', None)
                     and (r['seconds'] or 0) >= READ_WAIT]

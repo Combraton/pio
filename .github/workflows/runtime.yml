@@ -232,6 +232,8 @@ jobs:
                    child-renamed child-renamed-unchecked \
                    subagent-spawned subagent-not-stopped subagent-uncounted \
                    subagents-unguarded subagents-multi-agent-only step-past-in-flight \
+                   memory-unguarded memory-alias goals-unguarded web-search-unguarded \
+                   image-generation-unguarded override-misses-alias \
                    stopped-past-share stopped-charge-capped deadline-interrupted \
                    interrupted-charged-reported memory-pipeline-ran meter-dies \
                    lead-exit-uncarried owner-service-absent \
@@ -254,13 +256,14 @@ jobs:
             || { cat target/lead-run-l3-mutant-qualified-as-committed.log; exit 1; }
           grep -q "mutant qualified-as-committed: holds on" target/lead-run-l3-mutant-qualified-as-committed.log \
             || { cat target/lead-run-l3-mutant-qualified-as-committed.log; exit 1; }
-          # `subagents-off` must **hold**: sub-agents off per launch, and the
-          # child that would spawn one does not.
-          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant subagents-off \
-            --out target/lead-run-l3-mutants > target/lead-run-l3-mutant-subagents-off.log 2>&1 \
-            || { cat target/lead-run-l3-mutant-subagents-off.log; exit 1; }
-          grep -q "mutant subagents-off: holds on" target/lead-run-l3-mutant-subagents-off.log \
-            || { cat target/lead-run-l3-mutant-subagents-off.log; exit 1; }
+          # `overrides-on` must **hold**: Codex's unmetered features off per
+          # launch over a configuration that turns each on, and the child that
+          # would spawn a sub-agent does not.
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant overrides-on \
+            --out target/lead-run-l3-mutants > target/lead-run-l3-mutant-overrides-on.log 2>&1 \
+            || { cat target/lead-run-l3-mutant-overrides-on.log; exit 1; }
+          grep -q "mutant overrides-on: holds on" target/lead-run-l3-mutant-overrides-on.log \
+            || { cat target/lead-run-l3-mutant-overrides-on.log; exit 1; }
       - name: The L3 desk relay beside a rehearsal, and the lead tool's gate
         # The live relay (owner decision of 2026-09-25, item 3): its own
         # cases, then the relay itself beside a rehearsal whose desk waits

@@ -444,19 +444,44 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   one appears and charges it a step in flight on each of its threads; the
   rows "No run spawned a sub-agent" and "Every run that spawned a sub-agent
   was stopped when it appeared" judge it (`subagent-spawned`,
-  `subagent-not-stopped`, `subagent-uncounted`). **Live, the runner refuses
-  to start unless sub-agents are off**, either by the owner's own
-  `[agents] enabled = false` (with `features.multi_agent_v2` not on) or per
-  launch under a recorded owner decision (`--agents-off-decision`, which
-  puts `agents.enabled = false`, `features.multi_agent = false` and
-  `features.multi_agent_v2 = false` in each thread's config). The owner
-  decides which; no decision is recorded. `multi_agent = false` alone is not
-  enough: at rust-v0.157.0 the model catalog's multi-agent version wins over
-  it, and `gpt-5.6-terra`'s bundled entry names V2
-  (`subagents-multi-agent-only`). What the fake spawns is 0.157.0's shape
-  read from source (a `subAgentActivity` item, then the agent's own
-  thread), not a measurement; whether the live model would spawn at all is
-  not known.
+  `subagent-not-stopped`, `subagent-uncounted`). What the fake spawns is
+  0.157.0's shape read from source (a `subAgentActivity` item, then the
+  agent's own thread), not a measurement; whether the live model would
+  spawn at all is not known.
+- **Codex's unmetered, default-on features** (review of L3, round 4, U1).
+  Five features of Codex 0.157.0 spend outside every report PIO reads:
+  sub-agents (threads of their own), the memory pipeline (the owner's idle
+  sessions sent to an extraction model and a consolidation agent, on the
+  order of 900,000 input tokens an attempt), goals (a continuation turn
+  after `turn/completed`), standalone web search (`web.run`, its own model
+  call) and image generation (a separate endpoint). **Live, the runner
+  refuses to start unless each is off for L3's threads**, by the owner's own
+  `~/.codex/config.toml` or per launch under a recorded owner decision
+  (`--features-off-decision`, recorded in pio-protocol's
+  `FEATURES_OFF_DECISIONS`), which puts every key of
+  `pio_codex::features_off` in each thread's config: `agents.enabled`,
+  `features.multi_agent` and `features.multi_agent_v2` false,
+  `features.memories` and its legacy alias `features.memory_tool` false,
+  `features.goals` false, `web_search = "disabled"` and
+  `features.image_generation` false, each with its source at rust-v0.157.0.
+  The preflight lays the override over the owner's keys as Codex lays a
+  request override, resolves each feature as Codex does (a feature's keys
+  in sorted order, the last deciding), names each feature not off and the
+  key that decided it, and records each feature's route: the owner's
+  configuration, per launch, or Codex's default. It reads those keys and
+  nothing else. The owner's configuration, read by those keys alone on
+  2026-09-26, sets `[features] memories = true` and none of the others, so
+  every one of the five is on without the override. `multi_agent = false`
+  alone is not enough for sub-agents: at rust-v0.157.0 the model catalog's
+  multi-agent version wins over it, and `gpt-5.6-terra`'s bundled entry
+  names V2 (`subagents-multi-agent-only`). The check mutants plant a Codex
+  home with every other feature off and one on (`subagents-unguarded`,
+  `memory-unguarded`, `memory-alias`, `goals-unguarded`,
+  `web-search-unguarded`, `image-generation-unguarded`), and
+  `override-misses-alias` models an override without `memory_tool` beside
+  the owner's `memory_tool = true`: each is refused for its own feature and
+  no other. `overrides-on` turns all five off per launch over a home that
+  turns each on, and holds.
 - **The pre-allowance.** Whether Codex honours the per-thread
   `tools.<name>.approval_mode: approve` and asks nothing before the lead's
   tool calls. The fake implements that mode itself, so the row shows that
@@ -592,9 +617,10 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   if anything changed (`memory-pipeline-ran`, where the fake writes what the
   pipeline would). In-turn memory tools (an ad-hoc note under
   `memories/extensions/ad_hoc/notes/`) are offered only with `[memories]
-  dedicated_tools = true`, which is off by default. Whether the owner's
-  memory pipeline runs during L3, and what it costs, is not measured; the
-  owner may want it off for the run.
+  dedicated_tools = true`, which is off by default. With memories off for
+  L3's threads, as the runner now requires (above), the pipeline does not
+  start there, and the row stays behind that as a witness. What the
+  pipeline would cost is not measured.
 - **Placement is a snapshot.** Where a command approval's cwd lands is
   decided when the request arrives; the command runs only after the desk
   or the relay answers. A link changed in between changes where it runs

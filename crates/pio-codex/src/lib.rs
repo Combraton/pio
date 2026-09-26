@@ -657,7 +657,7 @@ pub fn config_diff(before: &Value, after: &Value, fixture_root: Option<&Path>) -
 /// override that turns each off on a thread, by feature: the dotted keys a
 /// `thread/start` `config` takes, each a request override Codex merges over
 /// the user's `config.toml` as it merges a `-c key=value`
-/// (`app-server/src/config_manager.rs:445-452`, `json_to_toml`), so it
+/// (`app-server/src/config_manager.rs:446-452`, `json_to_toml`), so it
 /// replaces the user's value for that key on that thread and changes nothing
 /// on disk. Read from source at `rust-v0.157.0` (00c972e), not measured
 /// (review of L3, round 4, SPEND-8, SPEND-9 and the web-search and
