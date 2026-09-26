@@ -168,6 +168,10 @@ does with a permission prompt.
   `subagents-unguarded` and `subagents-multi-agent-only` apply the live
   check to the rehearsal's own Codex home (its defaults, and `multi_agent =
   false` alone), which must refuse;
+- `memory-pipeline-ran` (L3) has the fake write, at its first turn, what
+  Codex's memory pipeline writes under the Codex home: the memory row must
+  fail, listing each path by a Codex-chosen name or a digest, and no name a
+  session gave may reach the receipt;
 - `step-past-in-flight` (L3) has `alpha` take a 40,000-token step: the
   runner must stop it, and the in-flight row fails;
 - `stopped-past-share` (L3) has `alpha`, stopped at its ceiling, ignore the
@@ -493,6 +497,11 @@ def select_plan(name):
                      'no run has a sub-agent: sub-agents are off, and a run whose sub-agent '
                      'appears anyway is stopped at once and charged a step on each of its '
                      'threads (round 3, SPEND-2)',
+                     "Codex's memory pipeline, which [features] memories starts in the "
+                     "background at a root thread's first turn, makes model calls that report "
+                     'nowhere PIO reads (Phase 1 extraction of up to two of the owner\'s recent '
+                     'idle sessions, a Phase 2 consolidation agent): they are outside this '
+                     'bound, and the memory row shows whether it wrote (round 3, S6)',
                      'Codex retries a dropped stream up to 5 times and a failed request up to '
                      '4 by default (model-provider-info, rust-v0.157.0) and records usage only '
                      'on a completed response: what a dropped attempt is billed, if anything, '
@@ -635,6 +644,11 @@ MUTANTS = {
     # floor row fails (SPEND-6).
     'deadline-interrupted': 'Each child reported the true count',
     'interrupted-charged-reported': "Every run's charge covers what it could have spent",
+    # Codex's memory pipeline writes its files and database during the run,
+    # as 0.157.0's does with [features] memories on (review of L3, round 3,
+    # S6): the row that lists them fails, and no name an owner's session
+    # could have given is in the receipt.
+    'memory-pipeline-ran': "Codex's memory pipeline wrote nothing during the run",
 }
 # L1b only: a mutant that must leave its row **inconclusive**, not failed. A
 # desk that was never asked has decided nothing, and must not say it has
@@ -656,7 +670,8 @@ PLAN_MUTANTS = {**{m: {'L3'} for m in (
                     'subagent-spawned', 'subagent-not-stopped', 'subagent-uncounted',
                     'subagents-unguarded', 'subagents-multi-agent-only', 'subagents-off',
                     'step-past-in-flight', 'stopped-past-share', 'stopped-charge-capped',
-                    'deadline-interrupted', 'interrupted-charged-reported')},
+                    'deadline-interrupted', 'interrupted-charged-reported',
+                    'memory-pipeline-ran')},
                 'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
@@ -831,7 +846,7 @@ def codex_agents(codex_home):
     `multi_agent_v2` not on, turns it off whatever the catalog says."""
     path = Path(codex_home) / 'config.toml'
     record = dict(read=path.name, exists=path.exists(), multi_agent=None, multi_agent_key=None,
-                  multi_agent_v2=None, agents_enabled=None)
+                  multi_agent_v2=None, agents_enabled=None, memories=None)
     if not path.exists():
         return record
     try:
@@ -844,6 +859,10 @@ def codex_agents(codex_home):
     v2 = features.get('multi_agent_v2')
     record['multi_agent_v2'] = v2 if isinstance(v2, bool) else (
         v2.get('enabled') if isinstance(v2, dict) and isinstance(v2.get('enabled'), bool) else None)
+    # And whether Codex's memory pipeline is on, which starts in the
+    # background at a root thread's first turn (S6); recorded, not refused.
+    record['memories'] = features.get('memories') if isinstance(features.get('memories'), bool) \
+        else None
     agents = config.get('agents') if isinstance(config.get('agents'), dict) else {}
     record['agents_enabled'] = agents.get('enabled') if isinstance(agents.get('enabled'), bool) \
         else None
@@ -859,6 +878,87 @@ def subagents_off(settings, decision):
     if decision:
         return f'per launch, under the decision {decision!r}'
     return None
+
+
+# Codex's memory state (review of L3, round 3, S6). With `[features]
+# memories = true`, as the owner has it, the app-server starts a background
+# memory pipeline at a root thread's first turn with input (0.157.0,
+# app-server turn_processor.rs, codex_memories_write::
+# start_memories_startup_task): Phase 1 sends up to two of the owner's
+# recent idle sessions to a model and stores what it extracts in
+# `memories_1.sqlite`; Phase 2 syncs files under `memories/` (a git
+# baseline, `raw_memories.md`, `rollout_summaries/`,
+# `phase2_workspace_diff.md`) and runs a consolidation agent that edits
+# `MEMORY.md`, `memory_summary.md` and `skills/`. None of it is in
+# `config.toml`, none of it reports on PIO's connection (the agent is
+# started with `start_thread`, which attaches no connection), and its model
+# calls are outside every meter. Its paths are listed before and after, by
+# a name Codex chose or a digest of any other name, size and time: never
+# content, never a name the owner's sessions could have given.
+MEMORY_DIRECTORIES = ('memories', 'memories_v2')
+MEMORY_DATABASES = ('memories_1.sqlite', 'memories_v2_1.sqlite')
+MEMORY_NAMES = {'raw_memories.md', 'MEMORY.md', 'memory_summary.md', 'phase2_workspace_diff.md',
+                'rollout_summaries', 'skills', 'extensions', 'ad_hoc', 'notes',
+                'instructions.md', 'SKILL.md'}
+
+
+def memory_state(codex_home):
+    """Codex's memory files and databases under `codex_home`, by name (a
+    digest for any name Codex did not choose), size and modification time.
+    The git baseline is counted, not listed."""
+    home = Path(codex_home)
+    state = {}
+    for name in MEMORY_DIRECTORIES:
+        root = home / name
+        if not root.is_dir():
+            state[name] = None
+            continue
+        entries, git = {}, dict(files=0, bytes=0, newest=None)
+        for path in sorted(root.rglob('*')):
+            relative = path.relative_to(root)
+            stat = path.lstat()
+            if relative.parts[0] == '.git':
+                if path.is_file():
+                    git.update(files=git['files'] + 1, bytes=git['bytes'] + stat.st_size,
+                               newest=max(git['newest'] or 0, int(stat.st_mtime)))
+                continue
+            key = '/'.join(part if part in MEMORY_NAMES else f'sha256:{sha(part)[:12]}'
+                           for part in relative.parts)
+            entries[key] = dict(kind='dir' if path.is_dir() else 'file',
+                                size=None if path.is_dir() else stat.st_size,
+                                mtime=int(stat.st_mtime))
+        state[name] = dict(entries=entries, git=git)
+    for name in MEMORY_DATABASES:
+        for suffix in ('', '-wal', '-shm'):
+            path = home / f'{name}{suffix}'
+            state[f'{name}{suffix}'] = dict(size=path.stat().st_size,
+                                            mtime=int(path.stat().st_mtime)) \
+                if path.is_file() else None
+    return state
+
+
+def memory_changes(before, after):
+    """What changed between two listings: each path or database added,
+    removed or changed in size or time."""
+    changes = []
+    empty = dict(entries={}, git=dict(files=0, bytes=0, newest=None))
+    for name in sorted(set(before) | set(after)):
+        old, new = before.get(name), after.get(name)
+        if name in MEMORY_DIRECTORIES and (old is not None or new is not None):
+            # A directory made or removed during the run: each entry apart.
+            if (old is None) != (new is None):
+                changes.append(dict(path=name, before=None if old is None else 'present',
+                                    after=None if new is None else 'present'))
+            old, new = old or empty, new or empty
+            for key in sorted(set(old['entries']) | set(new['entries'])):
+                a, b = old['entries'].get(key), new['entries'].get(key)
+                if a != b:
+                    changes.append(dict(path=f'{name}/{key}', before=a, after=b))
+            if old['git'] != new['git']:
+                changes.append(dict(path=f'{name}/.git', before=old['git'], after=new['git']))
+        elif old != new:
+            changes.append(dict(path=name, before=old, after=new))
+    return changes
 
 
 def fresh_credential(principal):
@@ -1803,6 +1903,8 @@ def codex_scenario(mutant, calls):
     if mutant == 'step-past-in-flight':
         # One step of 40,000: under the ceiling, past the in-flight bound.
         play.update(led_heavy_if=alpha, led_heavy_step=40_000, led_step_ms=6000)
+    if mutant == 'memory-pipeline-ran':
+        play['memory_pipeline'] = True
     if mutant in ('subagent-spawned', 'subagent-not-stopped', 'subagent-uncounted',
                   'subagents-off'):
         # alpha's first step also spawns a sub-agent, as 0.157.0 does, which
@@ -2065,6 +2167,21 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
         rows.add("The runner's own steps raised no error",
                  {k: record[k] for k in ('settle_error', 'judge_error', 'meter_error')
                   if k in record}, {})
+        if HARNESS == 'codex' and 'memory_before' in record:
+            # Every run is over and its app-server gone, so Codex's memory
+            # pipeline, which runs inside it, has stopped too (review of L3,
+            # round 3, S6).
+            record['memory_after'] = memory_state(service.config['codex']['codex_home'])
+            rows.add("Codex's memory pipeline wrote nothing during the run",
+                     dict(changes=memory_changes(record['memory_before'], record['memory_after']),
+                          features_memories=(record.get('subagents') or {}).get('memories')),
+                     "no memory file or database added, removed or changed",
+                     holds=lambda o: not o['changes'],
+                     note="Codex's own background pipeline, which [features] memories starts at "
+                          "a root thread's first turn: its files and databases by name (a digest "
+                          'for any name Codex did not choose), size and time, never content. A '
+                          'change means it ran, and its model calls report nowhere PIO reads and '
+                          'are outside every meter')
         try:
             if args.mutant == 'release-refused':
                 # The guard refuses every tree, as it refused L1's live one.
@@ -2112,6 +2229,8 @@ def watch(args, record, service, desk, meters, state):
     if HARNESS == 'opencode':
         record['sessions_before'] = live.session_listing(repo, rehearse)
         record['configured'] = live.configured_model(rehearse)
+    if HARNESS == 'codex':
+        record['memory_before'] = memory_state(service.config['codex']['codex_home'])
     service.start()
     if args.mutant in ('qualified-elsewhere', 'qualified-as-committed'):
         # What serve-codex writes for the owner's Codex: the committed record
@@ -3968,6 +4087,12 @@ def main():
             assert not stops and spent['cut_short'] and spent['basis'] == STOPPED_BASIS, spent
             assert spent['charged'] == spent['reported_total'] + CODEX['in_flight'], spent
             assert row_of("Every run's charge covers what it could have spent")['holds'] is True
+        if args.mutant == 'memory-pipeline-ran':
+            changes = row_of("Codex's memory pipeline wrote nothing during the run")['observed']
+            paths = {c['path'] for c in changes['changes']}
+            assert {'memories/raw_memories.md', 'memories_1.sqlite'} <= paths, paths
+            assert any(p.startswith('memories/rollout_summaries/sha256:') for p in paths), paths
+            assert 'private-topic' not in args.receipt.read_text(), 'a session-given name leaked'
         if args.mutant == 'third-admitted':
             probe = record['probes_admitted'].get(f'{LEAD}.third')
             assert probe and probe['basis'] == PROBE_BASIS and probe['charged'] == CHILD_SHARE, \

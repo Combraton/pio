@@ -48,6 +48,8 @@
 //! `subagent_steps`, `subagent_step`, `subagent_step_ms` and
 //! `subagent_asks`; none is spawned when the thread's config sets
 //! `agents.enabled = false` and does not turn `features.multi_agent_v2` on.
+//! `memory_pipeline` writes, at the first turn, what Codex's memory pipeline
+//! would under the Codex home (`memories/`, `memories_1.sqlite`).
 use crate::fake_turn::{self, McpServer, Turn, Waiting, emit};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
@@ -380,6 +382,24 @@ pub fn run() -> Result<()> {
                     }
                     "turn/start" => {
                         turns += 1;
+                        if turns == 1 && scenario["memory_pipeline"] == true {
+                            // What Codex 0.157.0's memory pipeline writes, in the
+                            // background, once a root thread's first turn starts
+                            // with [features] memories on (read from source, not
+                            // measured): Phase 2's files under `memories/`, one
+                            // named for a session, and Phase 1's database.
+                            let root = home.join("memories").join("rollout_summaries");
+                            std::fs::create_dir_all(&root)?;
+                            std::fs::write(
+                                home.join("memories").join("raw_memories.md"),
+                                "labeled fake raw memories\n",
+                            )?;
+                            std::fs::write(
+                                root.join("2026-09-20T10-00-00-owner-private-topic.md"),
+                                "labeled fake summary\n",
+                            )?;
+                            std::fs::write(home.join("memories_1.sqlite"), "labeled fake\n")?;
+                        }
                         let turn = format!("fake-turn-{turns}");
                         let text = message["params"]["input"][0]["text"].as_str().unwrap_or("");
                         marker(

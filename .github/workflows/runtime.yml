@@ -231,7 +231,7 @@ jobs:
                    subagent-spawned subagent-not-stopped subagent-uncounted \
                    subagents-unguarded subagents-multi-agent-only step-past-in-flight \
                    stopped-past-share stopped-charge-capped deadline-interrupted \
-                   interrupted-charged-reported \
+                   interrupted-charged-reported memory-pipeline-ran \
                    grant-no-steer wrong-child wrong-relay lead-loops runner-killed \
                    lead-asked-in-openai-form lead-asked-by-user-input child-asks-permissions \
                    service-never-ready \

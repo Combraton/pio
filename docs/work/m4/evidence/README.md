@@ -551,6 +551,30 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   `tool_timeout_sec`; PIO sets none). The lead tool's longest path, a read
   (55 s), the meter wait (30 s) and a hold (30 s), is 115 s, which fits: a
   timeout would hand the lead an error and start a step.
+- **Codex's memory pipeline.** The owner's configuration has `[features]
+  memories = true`. At rust-v0.157.0 the app-server then starts a
+  background pipeline when a root thread's first turn starts with input
+  (`app-server/src/request_processors/turn_processor.rs`, calling
+  `codex_memories_write::start_memories_startup_task`), unless the session
+  is ephemeral or a sub-agent's: Phase 1 sends up to two of the owner's
+  recent idle sessions (idle at least six hours, at most ten days old) to a
+  model and stores what it extracts in `~/.codex/memories_1.sqlite`; Phase 2
+  syncs `~/.codex/memories/` (a git baseline, `raw_memories.md`,
+  `rollout_summaries/`, `phase2_workspace_diff.md`) and runs a consolidation
+  agent that edits `MEMORY.md`, `memory_summary.md` and `skills/`. Each L3
+  run is a root thread in its own app-server, so each could start it. **None
+  of it is in `config.toml`**, so the configuration row never saw it; the
+  agent is started without a connection, so the host never sees it; and its
+  model calls are outside every meter and the bound. The runner now lists
+  those paths before the service starts and after every run is over (by a
+  name Codex chose or a digest of any other, size and time, never content),
+  and the row "Codex's memory pipeline wrote nothing during the run" fails
+  if anything changed (`memory-pipeline-ran`, where the fake writes what the
+  pipeline would). In-turn memory tools (an ad-hoc note under
+  `memories/extensions/ad_hoc/notes/`) are offered only with `[memories]
+  dedicated_tools = true`, which is off by default. Whether the owner's
+  memory pipeline runs during L3, and what it costs, is not measured; the
+  owner may want it off for the run.
 - **Children under other names.** The lead's tool starts only the plan's
   children (`PIO_LEAD_CHILDREN`), so a lead that names another is refused
   before anything reaches the service (`child-renamed`). Behind that, the
