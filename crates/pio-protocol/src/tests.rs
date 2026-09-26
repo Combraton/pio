@@ -913,6 +913,161 @@ fn codex_widening_approval_decisions_are_invalid_and_never_reach_the_host() {
     );
 }
 
+/// A Codex provider holding one execution `e` whose one action is pending,
+/// with the deadline the host advertised. Admission is not `admitted`, so no
+/// tick launches a host process.
+fn codex_with_pending_action(
+    store: &std::path::Path,
+    root: &std::path::Path,
+    deadline_seconds: u64,
+) -> (Provider, Session) {
+    std::fs::create_dir(store).unwrap();
+    std::fs::set_permissions(store, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+    let host = json!({"adapter":"codex","labeled_fake":true,"executable":"/bin/false","env":{"PATH":"/usr/bin:/bin"},"codex_home":root.join("home"),"fixture_root":root.join("fixtures"),"thread":{"sandbox":"workspace-write","approvalPolicy":"on-request"},"qualification_binding":null});
+    let mut cfg = config();
+    cfg["executor"] = json!({"host_id":"codex-host"});
+    let mut p = Provider::with_host(store, cfg, Some(host)).unwrap();
+    let mut s = session();
+    s.selected.as_mut().unwrap().insert(
+        "execution".into(),
+        crate::codex::FEATURES
+            .iter()
+            .map(|f| f.to_string())
+            .collect(),
+    );
+    let action = "e.action-1";
+    let e = json!({"source":pio_codex::fake::SOURCE,"principal":"owner","submit":{},"view":{"execution":{"kind":"execution.execution","id":"e"},"revision":3,"admission":"refused","delivery":"acknowledged","runtime":"requires_action","runtime_detail":{"action_id":action,"owner":"codex"},"actions":[{"action_id":action,"owner":"codex","state":"pending","requested_at":"2026-01-01T00:00:00Z"}],"effects":[],"host":{"id":"codex-host","generation":1}},"codex_actions":{action:{"seq":1,"method":"item/commandExecution/requestApproval","request_id":"r1","deadline_seconds":deadline_seconds}}});
+    p.update_execution(&e);
+    p.save().unwrap();
+    (p, s)
+}
+
+fn codex_answer(decision: &str, id: &str, revision: u64) -> Value {
+    let bytes = serde_json::to_vec(&json!({ "decision": decision })).unwrap();
+    let mut c = command(
+        "execution.respond_action",
+        json!({"kind":"execution.execution","id":"e"}),
+        revision,
+        json!({"action_id":"e.action-1","response":{"digest":pio_core::digest(&bytes),"media_type":"application/json"}}),
+    );
+    c["command_id"] = id.into();
+    c["extensions"] = json!({(crate::codex::CONTENT_EXTENSION):{"media_type":"application/json","text":String::from_utf8(bytes).unwrap()}});
+    c
+}
+
+/// Every `execution.action.answered` on the stream, as (action, decided_by).
+fn answered_events(p: &Provider) -> Vec<(Value, Value)> {
+    p.data
+        .events
+        .iter()
+        .filter(|e| e["type"] == "execution.action.answered")
+        .map(|e| {
+            (
+                e["payload"]["action_id"].clone(),
+                e["payload"]["pio.combraton.dev/decision"]["decided_by"].clone(),
+            )
+        })
+        .collect()
+}
+
+/// CH-7: one decision per action. The lapse is decided by the service, for
+/// an action nobody has answered, strictly after the advertised deadline;
+/// an answer after it is refused as already decided, and PIO's decision
+/// reaches the stream once, when the host says it sent it. An answer before
+/// it is the decision, and no lapse follows however late the host reads it.
+#[test]
+fn a_codex_approval_gets_one_decision_either_the_callers_or_the_lapse() {
+    // The lapse wins: nobody answered within two seconds.
+    let root = tempfile::tempdir().unwrap();
+    let (mut p, mut s) = codex_with_pending_action(&root.path().join("store"), root.path(), 2);
+    let mut e = p.data.executions["e"].clone();
+    p.now = "2026-01-01T00:00:02Z".into();
+    p.lapse_overdue(&mut e);
+    assert!(
+        e.get("codex_controls").is_none(),
+        "lapsed at, not after, the deadline"
+    );
+    // Past the deadline, but the host no longer runs the run: nothing is
+    // decided that could never be sent.
+    for runtime in ["exited", "unknown"] {
+        let mut ended = e.clone();
+        ended["view"]["runtime"] = runtime.into();
+        p.now = "2026-01-01T00:00:03Z".into();
+        p.lapse_overdue(&mut ended);
+        assert!(ended.get("codex_controls").is_none(), "{runtime}");
+        assert_eq!(ended["view"]["actions"][0]["state"], "pending", "{runtime}");
+    }
+    p.now = "2026-01-01T00:00:03Z".into();
+    p.lapse_overdue(&mut e);
+    let controls = list(&e["codex_controls"]);
+    assert_eq!(controls.len(), 1, "{controls:?}");
+    assert_eq!(
+        (
+            &controls[0]["decided_by"],
+            &controls[0]["decision"],
+            &controls[0]["action_seq"]
+        ),
+        (&json!("pio"), &json!("decline"), &json!(1))
+    );
+    assert_eq!(e["view"]["actions"][0]["state"], "answered");
+    p.update_execution(&e);
+    let refused = p
+        .handle(
+            &mut s,
+            "execution.respond_action",
+            &codex_answer("accept", "late", 3),
+        )
+        .unwrap_err();
+    assert_eq!(refused.code, "not_found");
+    assert_eq!(
+        refused.details,
+        json!({"reason":"already_decided","decided_by":"pio"})
+    );
+    assert!(
+        !p.data.effects.keys().any(|k| k.contains("response")),
+        "nothing queued for the late answer"
+    );
+    assert!(
+        answered_events(&p).is_empty(),
+        "not on the stream before the host sent it"
+    );
+    let mut e = p.data.executions["e"].clone();
+    p.native_event(&mut e, "e", &json!({"kind":"request_denied_by_default","action_seq":1,"control_id":"e.action-1.lapse","decision":"decline","decided_by":"pio","after_seconds":2,"sent":{"decision":"decline"},"always_option_taken":false})).unwrap();
+    assert_eq!(
+        answered_events(&p),
+        vec![(json!("e.action-1"), json!("pio"))]
+    );
+
+    // The caller wins: answered in time, and the host reads it late.
+    let root = tempfile::tempdir().unwrap();
+    let (mut p, mut s) = codex_with_pending_action(&root.path().join("store"), root.path(), 2);
+    p.now = "2026-01-01T00:00:01Z".into();
+    let answered = p
+        .handle(
+            &mut s,
+            "execution.respond_action",
+            &codex_answer("accept", "in-time", 3),
+        )
+        .unwrap();
+    assert_eq!(answered["outcome"]["state"], "answered");
+    p.now = "2026-01-01T00:01:00Z".into();
+    let mut e = p.data.executions["e"].clone();
+    p.lapse_overdue(&mut e);
+    let controls = list(&e["codex_controls"]);
+    assert_eq!(
+        controls.len(),
+        1,
+        "a lapse after the caller's answer: {controls:?}"
+    );
+    assert_eq!(controls[0]["decision"], "accept");
+    assert!(controls[0].get("decided_by").is_none());
+    p.native_event(&mut e, "e", &json!({"kind":"control_applied","control_id":controls[0]["id"],"action_seq":1,"decision":"accept","sent":{"decision":"accept"},"always_option_taken":false})).unwrap();
+    assert_eq!(
+        answered_events(&p),
+        vec![(json!("e.action-1"), json!("caller"))]
+    );
+}
+
 /// D1: `execution.discovery.list` must report the running service's own
 /// harness, never Codex's by default, for every native adapter.
 #[test]

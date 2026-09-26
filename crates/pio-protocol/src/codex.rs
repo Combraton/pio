@@ -560,11 +560,23 @@ impl Provider {
             }
             "execution.respond_action" => {
                 let action_id = text(&p["payload"]["action_id"]).to_owned();
+                // An answer past the deadline finds the lapse decided first.
+                self.lapse_overdue(e);
                 let pending = list(&e["view"]["actions"])
                     .iter()
                     .any(|a| a["action_id"] == action_id && a["state"] == "pending");
                 if !pending {
-                    return Err(err("not_found", json!({})));
+                    // Still `not_found`: no action by that id is pending. Where
+                    // one was and has been decided, say so and by whom, so an
+                    // answer that lost to PIO's lapse is refused as already
+                    // decided rather than told `answered` (CH-7).
+                    let decided = &e[format!("{ns}_actions")][&action_id]["decided_by"];
+                    let details = if decided.is_string() {
+                        json!({"reason":"already_decided","decided_by":decided})
+                    } else {
+                        json!({})
+                    };
+                    return Err(err("not_found", details));
                 }
                 let response = p["payload"]["response"].clone();
                 let decision = self
@@ -599,6 +611,12 @@ impl Provider {
                         action["response_effect"] = effect.clone().into();
                     }
                 }
+                // One decision per action, and this is it: the caller's, on
+                // the stream now. A lapse is decided only for an action still
+                // pending, so none follows (CH-7).
+                let record = &mut e[format!("{ns}_actions")][&action_id];
+                record["decided_by"] = "caller".into();
+                record["on_stream"] = true.into();
                 if e["view"]["runtime_detail"]["action_id"] == action_id {
                     e["view"].as_object_mut().unwrap().remove("runtime_detail");
                     e["view"]["runtime"] = "active".into();
@@ -641,6 +659,71 @@ impl Provider {
                     "holder":self.grant(id).map(|g| g["holder"].clone()),
                     "recorded_by":"pio"}))
     }
+    /// CH-7: PIO's lapse is decided here, in the one place every answer to
+    /// a Codex approval is decided, so an action gets exactly one decision.
+    ///
+    /// Before this the host lapsed an overdue request itself, in the same
+    /// pass that read answers, but after the sweep. A caller's answer the
+    /// service had already accepted (and told the caller `answered`) could
+    /// reach the host after it had declined, and the stream then carried two
+    /// `execution.action.answered` for one action. Now an action still
+    /// `pending` in this view past its deadline is marked decided by PIO and a
+    /// decline is queued for the host like any answer. An answer that arrives
+    /// after that is refused as already decided (`not_found`, reason
+    /// `already_decided`), and a lapse is never decided for an action a
+    /// caller has answered. PIO's decision reaches the stream when the host
+    /// says it sent it (`request_denied_by_default`), so a lapse the host
+    /// could no longer send (Codex settled the request, or the turn ended)
+    /// is never shown as sent.
+    ///
+    /// The deadline is the one the host advertised, counted from when this
+    /// view recorded the request, and only strictly after it: never before
+    /// the advertised deadline, at most a second and a tick after it. Codex
+    /// only; the Claude and OpenCode hosts still lapse by themselves.
+    pub(crate) fn lapse_overdue(&mut self, e: &mut Value) {
+        // Nothing is decided for a run whose host no longer runs it: no
+        // lapse could be sent, and none is shown decided.
+        if self.adapter() != "codex" || matches!(text(&e["view"]["runtime"]), "exited" | "unknown")
+        {
+            return;
+        }
+        let ns = self.adapter().to_owned();
+        let records = format!("{ns}_actions");
+        let due: Vec<(String, Value)> = list(&e["view"]["actions"])
+            .iter()
+            .filter(|a| a["state"] == "pending")
+            .filter_map(|a| {
+                let action_id = text(&a["action_id"]);
+                let record = &e[&records][action_id];
+                let seconds = record["deadline_seconds"].as_u64()?;
+                let start = text(&a["requested_at"]);
+                (!start.is_empty() && self.now > crate::execution::after(start, seconds))
+                    .then(|| (action_id.to_owned(), record["seq"].clone()))
+            })
+            .collect();
+        for (action_id, seq) in due {
+            let control = format!("{action_id}.lapse");
+            let record = &mut e[&records][&action_id];
+            record["decided_by"] = "pio".into();
+            record["lapse_control"] = control.clone().into();
+            for action in e["view"]["actions"].as_array_mut().unwrap() {
+                if action["action_id"] == action_id.as_str() {
+                    action["state"] = "answered".into();
+                    action["answered_at"] = self.now.clone().into();
+                }
+            }
+            if e["view"]["runtime_detail"]["action_id"] == action_id.as_str() {
+                e["view"].as_object_mut().unwrap().remove("runtime_detail");
+                e["view"]["runtime"] = "active".into();
+            }
+            push(
+                &mut e[format!("{ns}_controls")],
+                json!({"id":control,"kind":"respond_action","action_seq":seq,
+                       "decision":"decline","decided_by":"pio","appended":false}),
+            );
+        }
+    }
+
     fn codex_effect(
         &mut self,
         e: &mut Value,
@@ -783,6 +866,9 @@ impl Provider {
         let phase = text(&observed["invocation"]["phase"]).to_owned();
         e[&ns]["phase"] = phase.clone().into();
 
+        // A lapse is decided before controls are appended, so it goes to the
+        // host in this pass (CH-7).
+        self.lapse_overdue(e);
         // Controls are appended only after the command that created them was
         // committed; a repeated append after a crash is ignored by the host.
         let mut controls_changed = false;
@@ -878,7 +964,7 @@ impl Provider {
     ///
     /// Both hosts emit the same normalized events; what differs is in
     /// [`Profile`]. Kinds a harness never emits simply never match.
-    fn native_event(&mut self, e: &mut Value, id: &str, event: &Value) -> Result<()> {
+    pub(crate) fn native_event(&mut self, e: &mut Value, id: &str, event: &Value) -> Result<()> {
         // The journal namespace is the adapter; for Codex this is `codex`,
         // so no persisted field name changes.
         let ns = self.adapter().to_owned();
@@ -946,7 +1032,9 @@ impl Provider {
             }
             "action_requested" => {
                 let action_id = format!("{id}.action-{}", num(&event["action_seq"]));
-                e[format!("{ns}_actions")][&action_id] = json!({"seq":event["action_seq"],"method":event["method"],"approval_kind":event["approval_kind"],"request_id":event["request_id"]});
+                // The deadline is kept with the action: on Codex the service,
+                // not the host, decides the lapse (CH-7, `lapse_overdue`).
+                e[format!("{ns}_actions")][&action_id] = json!({"seq":event["action_seq"],"method":event["method"],"approval_kind":event["approval_kind"],"request_id":event["request_id"],"deadline_seconds":event["answer_deadline_seconds"]});
                 push(
                     &mut e["view"]["actions"],
                     json!({"action_id":action_id,"owner":profile.adapter,"state":"pending","requested_at":self.now}),
@@ -1304,6 +1392,9 @@ impl Provider {
                     e["view"].as_object_mut().unwrap().remove("runtime_detail");
                     e["view"]["runtime"] = "active".into();
                 }
+                let record = &mut e[format!("{ns}_actions")][&action_id];
+                record["decided_by"] = "pio".into();
+                record["on_stream"] = true.into();
                 let mut decision = json!({"decided_by":"pio",
                 "decision":event["decision"],
                 "basis":if declined { "out_of_scope" } else { "deadline_lapsed" },

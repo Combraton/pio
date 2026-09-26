@@ -1109,6 +1109,21 @@ def run_case(out, name):
             items = [e for e in events_of(case, 'item_completed') if e['item_id'] == 'item-approval']
             assert [i['status'] for i in items] == ['declined'], 'the command ran although nobody allowed it'
             assert [a['state'] for a in final['actions']] == ['answered'], final['actions']
+            # One decision per action (review of L3, CH-7): the lapse is the
+            # service's, sent to the host as a control like any answer, and an
+            # answer after it is refused as already decided, never told
+            # `answered`.
+            controls = [json.loads(l) for f in case.store.glob('codex-*.controls.jsonl')
+                        for l in f.read_text().splitlines()]
+            assert [(c['decision'], c.get('decided_by')) for c in controls
+                    if c['kind'] == 'respond_action'] == [('decline', 'pio')], controls
+            late = json.dumps({'decision': 'accept'}).encode()
+            refused = case.execution_command('execution.respond_action', 'work', dict(
+                action_id=final['actions'][0]['action_id'],
+                response=dict(digest=digest(late), media_type='application/json')),
+                'answer-late', late, 'application/json')
+            assert refused['error']['data']['code'] == 'not_found' and \
+                refused['error']['data']['details'] == {'reason': 'already_decided', 'decided_by': 'pio'}, refused
             with case.client() as c:
                 stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
                                                       'kinds': ['execution.execution']})['result']

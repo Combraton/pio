@@ -1048,13 +1048,20 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
     // The caller's own delivery timeout is how long their decision may take.
     // A request nobody answers holds the turn open for ever, so, as on the
     // other two hosts, the default is a single decline, recorded as PIO's
-    // (owner decision, 2026-09-25: "if I don't answer, it lapses").
+    // (owner decision, 2026-09-25: "if I don't answer, it lapses"). The
+    // service decides that lapse, where it decides every answer, and sends
+    // it here as a control marked `decided_by: pio`; this host keeps no
+    // clock of its own, so a caller's answer and the lapse can never both
+    // be decided for one request (review of L3, CH-7).
     let answer_timeout = life.spec["action_answer_timeout_seconds"]
         .as_u64()
         .map(Duration::from_secs)
         .unwrap_or(Duration::from_secs(120));
-    // Request id, whether it is an MCP tool-call elicitation, and its lapse.
-    let mut pending_actions: BTreeMap<u64, (Value, bool, Instant)> = BTreeMap::new();
+    // Request id and whether it is an MCP tool-call elicitation.
+    let mut pending_actions: BTreeMap<u64, (Value, bool)> = BTreeMap::new();
+    // A request settled without an answer from this host, and by whom, so a
+    // control that arrives for it later is refused as already decided.
+    let mut settled: BTreeMap<u64, &'static str> = BTreeMap::new();
     // Every notification is the run's only if it names the run's own thread
     // (review of L3, round 3, SPEND-2). Codex 0.157.0 attaches every thread
     // it creates to every initialized connection
@@ -1111,14 +1118,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                         (method == "item/commandExecution/requestApproval")
                             .then(|| params["kind"].as_str().unwrap_or("command").to_owned())
                     };
-                    pending_actions.insert(
-                        action_seq,
-                        (
-                            message["id"].clone(),
-                            elicitation,
-                            Instant::now() + answer_timeout,
-                        ),
-                    );
+                    pending_actions.insert(action_seq, (message["id"].clone(), elicitation));
                     let mut event = json!({"kind":"action_requested","action_seq":action_seq,"request_id":message["id"],"method":method,"approval_kind":approval_kind,"turn_id":params["turnId"],"item_id":params["itemId"],"command":params["command"],"cwd_digest":params["cwd"].as_str().map(|c|pio_codex::sha256_hex(c.as_bytes())),"reason":params["reason"],
                         "answer_deadline_seconds":answer_timeout.as_secs(),
                         "if_nobody_answers":{"decision":"decline","decided_by":"pio","always_option_taken":false}});
@@ -1263,41 +1263,49 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                 _ => {}
             }
         }
-        // A request nobody answered in time: one decline, recorded as PIO's.
-        let overdue: Vec<u64> = pending_actions
-            .iter()
-            .filter(|(_, (_, _, lapses))| Instant::now() >= *lapses)
-            .map(|(seq, _)| *seq)
-            .collect();
-        for seq in overdue {
-            let Some((rpc, elicitation, _)) = pending_actions.remove(&seq) else {
-                continue;
-            };
-            let body = answer_body(elicitation, "decline");
-            app.respond(&rpc, body.clone())?;
-            life.event(json!({"kind":"request_denied_by_default","action_seq":seq,
-                "decision":"decline","decided_by":"pio",
-                "after_seconds":answer_timeout.as_secs(),"sent":body,
-                "always_option_taken":false}))?;
-        }
-        // Controls are deduplicated by the lifecycle; each arrives once.
+        // Controls are deduplicated by the lifecycle; each arrives once. A
+        // request is answered by whichever control for it arrives first: the
+        // caller's answer, or PIO's lapse, which the service decides only for
+        // an action nobody has answered (CH-7).
         for control in life.controls()? {
             let id = control["id"].as_str().unwrap_or_default().to_owned();
             match control["kind"].as_str() {
                     Some("respond_action") => {
                         let decision = control["decision"].as_str().unwrap_or("");
-                        let rpc = control["action_seq"]
-                            .as_u64()
+                        let seq = control["action_seq"].as_u64();
+                        let lapse = control["decided_by"] == "pio";
+                        let rpc = seq
+                            .filter(|_| ALLOWED_DECISIONS.contains(&decision))
                             .and_then(|seq| pending_actions.remove(&seq));
                         match rpc {
-                            Some((rpc, elicitation, _)) if ALLOWED_DECISIONS.contains(&decision) => {
+                            Some((rpc, elicitation)) if lapse => {
+                                // Nobody answered in time: one decline,
+                                // recorded as PIO's.
                                 let body = answer_body(elicitation, decision);
                                 app.respond(&rpc, body.clone())?;
+                                settled.extend(seq.map(|seq| (seq, "pio")));
+                                life.event(json!({"kind":"request_denied_by_default","action_seq":seq,
+                                    "control_id":id,"decision":decision,"decided_by":"pio",
+                                    "after_seconds":answer_timeout.as_secs(),"sent":body,
+                                    "always_option_taken":false}))?;
+                            }
+                            Some((rpc, elicitation)) => {
+                                let body = answer_body(elicitation, decision);
+                                app.respond(&rpc, body.clone())?;
+                                settled.extend(seq.map(|seq| (seq, "caller")));
                                 life.event(json!({"kind":"control_applied","control_id":id,"action_seq":control["action_seq"],"decision":decision,"sent":body,"always_option_taken":false}),
                                 )?;
                             }
-                            _ => life.event(json!({"kind":"control_rejected","control_id":id,"reason":"no pending action or decision not allowed"}),
-                            )?,
+                            None => {
+                                let by = seq.and_then(|seq| settled.get(&seq)).copied();
+                                let reason = match by {
+                                    Some(_) => "already_decided",
+                                    None => "no pending action or decision not allowed",
+                                };
+                                life.event(json!({"kind":"control_rejected","control_id":id,
+                                    "action_seq":control["action_seq"],"reason":reason,
+                                    "decided_by":by}))?;
+                            }
                         }
                     }
                     Some("interrupt") => match &turn_id {

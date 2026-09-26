@@ -18,7 +18,7 @@ fn subject(id: &str) -> Value {
 fn push(v: &mut Value, x: Value) {
     v.as_array_mut().unwrap().push(x);
 }
-fn after(start: &str, seconds: u64) -> String {
+pub(crate) fn after(start: &str, seconds: u64) -> String {
     (chrono::DateTime::parse_from_rfc3339(start).unwrap()
         + chrono::Duration::seconds(seconds as i64))
     .format("%Y-%m-%dT%H:%M:%SZ")
