@@ -32,7 +32,7 @@ Core/Execution persistence is refined by [ADR 002](002-protocol-journal.md): mov
 
 ### Codex
 
-**Current pin: 0.155.1**, tag `rust-v0.155.1`, peeled source `be2951ea34f0d295ed0becf97079f92fa5f6950e` (owner decision, 2026-09-19; see "Codex re-pin" below). The candidate inspection that follows records 0.146.0 as it was observed and is left unchanged.
+**Current pin: 0.157.0**, tag `rust-v0.157.0`, peeled source `00c972ed5d6ff6499317fd41b7f23605b8e6850d` (owner decision, 2026-09-25; see "Codex re-pin to 0.157.0" below). Before that, 0.155.1 (2026-09-19). The candidate inspection that follows records 0.146.0 as it was observed and is left unchanged.
 
 Candidate: **0.146.0**, tag `rust-v0.146.0`, peeled source `e363b08c9175ac1cbe5893615dd2cb9ddf95043b`. Read the [pinned app-server source documentation](https://github.com/openai/codex/blob/e363b08c9175ac1cbe5893615dd2cb9ddf95043b/codex-rs/app-server/README.md) and [current official documentation](https://learn.chatgpt.com/docs/app-server). Local `generate-json-schema` exited 0: 275 JSON files, listing digest in [inspection evidence](../work/standalone-0.1/evidence/readiness.json). The installed binary was hashed; no reproducible-build equivalence to the Git source is claimed.
 
@@ -41,6 +41,10 @@ Owner review reproduced byte-nondeterminism in `codex_app_server_protocol.v2.sch
 Owner source review also found that `thread/start` with `cwd` and a `workspace-write` sandbox at this pinned commit writes a trusted-project entry into the user's `~/.codex/config.toml`. This is a durable native side effect outside the task worktree. PIO must disclose it and either avoid it through a validated configuration path that preserves native policy, or explicitly account for it in the launch/effect contract and evidence. Experiment 3 must observe before/after configuration state in an isolated test environment; do not exercise it against the user's real configuration merely to probe discovery. This follow-up records the owner's evidence; it did not run a live thread or modify configuration.
 
 Recommend a host-owned app-server over stdio, using explicit thread/turn IDs, streaming events, native approval requests and interrupt. Native resume is historical-session continuation, not proof a killed live turn continued. Advertise steering only after real acknowledgment/outcome tests. Never select the unrestricted `thread/shellCommand` or experimental process API to evade the execution grant. Current documentation and local help label app-server experimental; qualify the exact surface and treat version drift as requiring re-probe. Stable schema fields do not make every transport or endpoint production-supported upstream.
+
+### Codex re-pin to 0.157.0 (owner decision, 2026-09-25)
+
+The owner's Codex updated itself to **0.157.0** on 2026-09-25, and PIO's qualification refused it as `unsupported_version` before any native work. The owner chose to re-pin rather than reinstall 0.155.1: PIO drives the Codex that is installed. The pin moves to 0.157.0 with a new [314-file schema identity](../../adapters/codex/0.157.0/schema-identity.json), still an exact-version pin. Drift from 0.155.1: 4 files added, 2 removed, 39 changed. What PIO's Codex host uses did not change shape, and the offline probe's five cases give the same results. The record, its negative controls and a static reading of the MCP tool-approval path at both tags are in [codex qualification evidence](../work/m2/codex-qualification/README.md#re-qualification-at-01570-recorded-2026-09-25); [ADR 003](003-codex-app-server-adapter.md) carries what reaches the adapter.
 
 ### Codex re-pin to 0.155.1 (owner decision, 2026-09-19)
 
@@ -91,7 +95,7 @@ The harness test scope expands from the two initial candidates to the four harne
 
 | Harness | Local `--version` observation, 2026-09-16 | Role |
 |---|---|---|
-| Codex | `codex-cli 0.146.0`; `codex-cli 0.155.1` after the owner updated it on 2026-09-19 | M2 adapter; the user's own login and configured model |
+| Codex | `codex-cli 0.146.0`; `codex-cli 0.155.1` after the owner updated it on 2026-09-19; `codex-cli 0.157.0` after it updated itself on 2026-09-25 | M2 adapter; the user's own login and configured model |
 | Claude Code | `2.1.273 (Claude Code)` | M3 adapter; authentication route below |
 | OpenCode | `opencode v2.0.11` (`@opencode/cli`, invoked as `opencode2`; re-pinned from 2.0.1 on 2026-09-21 after an npm self-update) | Additional adapter; the owner has MiniMax, GLM and Kimi models configured. Preferred for heavy-usage testing |
 | Hermes Agent | `v0.20.1 (2026.8.13)` | Additional adapter; the owner has MiniMax configured |

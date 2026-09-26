@@ -780,7 +780,7 @@ pub const TARGET_FIELDS: &[&str] = &["file_path", "path", "notebook_path"];
 const SYMLINK_LIMIT: usize = 40;
 
 /// Resolve a target the way the filesystem would, without requiring it to
-/// exist.
+/// exist, or `None` when that cannot be known.
 ///
 /// A prefix test on the raw string is wrong in both directions: it calls
 /// `<fixture>/../../outside.txt` contained, and it calls a relative `calc.py`
@@ -788,7 +788,18 @@ const SYMLINK_LIMIT: usize = 40;
 /// directory, walks the path component by component, removes `.` and `..`
 /// lexically, and follows a symlink wherever one actually exists — which is
 /// the only way a link pointing out of the fixture can be seen.
-pub fn resolve_target(target: &str, cwd: &Path) -> PathBuf {
+///
+/// **It fails closed** (review of L3, round 3, R3-HC-1). A component that is
+/// not a link (`EINVAL`) or does not exist (`ENOENT`) is walked on lexically,
+/// as it would be once created. Any other answer from `readlink` —
+/// `ENAMETOOLONG` for a resolved path past `PATH_MAX`, `EACCES`, `EPERM`,
+/// `ELOOP`, `ENOTDIR`, `EIO` — or a chain longer than the link budget, means
+/// PIO cannot see where the path goes, and it is unresolvable. The kernel
+/// resolves each component against the directory it reached and never
+/// builds the whole string, so a link past `PATH_MAX` is still followed by
+/// the command; taking every error for "not a link" read such a path, and
+/// one whose chain ran out, as inside the fixture while it pointed out.
+pub fn resolve_target(target: &str, cwd: &Path) -> Option<PathBuf> {
     let joined = if Path::new(target).is_absolute() {
         PathBuf::from(target)
     } else {
@@ -812,29 +823,41 @@ pub fn resolve_target(target: &str, cwd: &Path) -> PathBuf {
                 resolved.push(&component);
                 // Only an existing link reads, so this is the "existing prefix"
                 // the reviewer asked for, resolved one component at a time.
-                if followed < SYMLINK_LIMIT
-                    && let Ok(link) = std::fs::read_link(&resolved)
-                {
-                    followed += 1;
-                    resolved.pop();
-                    let target = if link.is_absolute() {
-                        link
-                    } else {
-                        resolved.join(link)
-                    };
-                    let mut restored: Vec<std::ffi::OsString> = target
-                        .components()
-                        .map(|c| c.as_os_str().to_owned())
-                        .rev()
-                        .collect();
-                    resolved = PathBuf::new();
-                    restored.append(&mut pending);
-                    pending = restored;
+                let link = match std::fs::read_link(&resolved) {
+                    Ok(link) => link,
+                    Err(error)
+                        if error.raw_os_error() == Some(libc::EINVAL)
+                            || error.kind() == std::io::ErrorKind::NotFound =>
+                    {
+                        continue;
+                    }
+                    Err(_) => return None,
+                };
+                if followed == SYMLINK_LIMIT {
+                    return None;
                 }
+                followed += 1;
+                resolved.pop();
+                let target = if link.is_absolute() {
+                    link
+                } else {
+                    resolved.join(link)
+                };
+                let mut restored: Vec<std::ffi::OsString> = target
+                    .components()
+                    .map(|c| c.as_os_str().to_owned())
+                    .rev()
+                    .collect();
+                resolved = PathBuf::new();
+                // The link's target goes on top of what is left of the
+                // path, its first component to be walked next. The other
+                // way round walked the rest of the path first and then
+                // lost it (review of L3, round 2, HR-1).
+                pending.append(&mut restored);
             }
         }
     }
-    resolved
+    Some(resolved)
 }
 
 /// Where a tool use landed, relative to the fixture workspace.
@@ -848,7 +871,10 @@ pub fn resolve_target(target: &str, cwd: &Path) -> PathBuf {
 fn classify_target(input: &Value, workspace: &Path, cwd: &Path) -> (Option<String>, &'static str) {
     for key in TARGET_FIELDS {
         if let Some(target) = input[*key].as_str() {
-            let resolved = resolve_target(target, cwd);
+            // A target PIO cannot resolve is not placed: never inside.
+            let Some(resolved) = resolve_target(target, cwd) else {
+                return (None, "not_classifiable");
+            };
             let placement = if resolved.starts_with(workspace) {
                 "inside_fixture"
             } else {
@@ -986,6 +1012,24 @@ pub fn tool_use_records(
         "out_of_fixture_count":outside,
         "unclassifiable_target_count":unclassified,
         "liability":if outside > 0 || unclassified > 0 { "unresolved" } else { "none_observed" },
+    })
+}
+
+/// Where one path lands relative to the fixture workspace, by the same
+/// classifier a tool use's target goes through: `inside_fixture`,
+/// `outside_fixture`, or `not_classifiable` when there is no path. Named by
+/// a fixture-relative label and a digest, never by the path itself. The
+/// Codex host classifies the working directory of a command approval with it
+/// (review of L3, CH-6/F6).
+pub fn classify_path(path: Option<&str>, workspace: &Path, cwd: &Path) -> Value {
+    let workspace = std::fs::canonicalize(workspace).unwrap_or_else(|_| workspace.to_path_buf());
+    let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let input = path.map(|p| json!({"path":p})).unwrap_or(json!({}));
+    let (resolved, placement) = classify_target(&input, &workspace, &cwd);
+    json!({
+        "placement":placement,
+        "target_label":target_label(&resolved, &workspace, placement),
+        "target_sha256":resolved.as_ref().map(|r| sha256_hex(r.as_bytes())),
     })
 }
 

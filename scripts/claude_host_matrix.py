@@ -434,6 +434,21 @@ def run_case(out, name):
         assert classification['reason'] == 'target_outside_the_fixture_workspace', classification
         assert classification['target_label'] == '<outside>', classification
         assert classification['auto_allowed'] is False, classification
+        # The same escape through links, with no `..`: `self -> .`, then
+        # `esc2 -> outside`. The resolver walked the rest of a path before a
+        # link's target and then lost it, so since M3 this read inside the
+        # fixture and would have been surfaced rather than declined (review
+        # of L3, round 2, HR-1).
+        os.symlink('.', Path(case.workspace) / 'self')
+        os.symlink(case.root / 'outside', Path(case.workspace) / 'esc2')
+        linked = dict(request, request=dict(
+            request['request'], input={'file_path': f'{case.workspace}/self/esc2/secret.txt'}))
+        through = json.loads(subprocess.run(
+            [str(BINARY), 'claude', 'classify-request', '--workspace', str(case.workspace),
+             '--cwd', str(case.workspace)],
+            input=json.dumps(linked), capture_output=True, text=True, check=True).stdout)
+        assert (through['placement'], through['disposition'], through['target_label']) == \
+            ('outside_fixture', 'decline', '<outside>'), through
         encoded = json.loads(subprocess.run(
             [str(BINARY), 'claude', 'encode-decision', '--behavior', 'deny',
              '--reason', classification['reason']],

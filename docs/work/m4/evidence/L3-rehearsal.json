@@ -1,0 +1,2414 @@
+{
+  "answered": {
+    "alpha": "7",
+    "beta": "4"
+  },
+  "approvals": {
+    "l3": "Owner approval, 2026-09-24 \u2014 L3; owner decisions of 2026-09-25 (issue #12); owner decision of 2026-09-26, \"More headroom\": lead 150,000, child 60,000, in flight 30,000; owner decision of 2026-09-26 (Q9, \"Child 90k\"): child 90,000, worst case 510,000, sequence cap 685,000 and stop 548,000, Codex cap 1,210,000 and stop 968,000",
+    "lead_tool": "owner-2026-09-22-m4b-lead-tool",
+    "model_exception": "owner-2026-09-19-m2-fixture-runs"
+  },
+  "bound": {
+    "assumes": [
+      "Codex's reported total covers every step of a turn (review 48), and a run's usage is the sum over its threads (round 3)",
+      "a step on this harness and model is at most 30,000 tokens (measured about 22,000 to 24,500, M2 R4 to R6); the runner checks every report and stops a run whose step is larger, and charges its largest step in flight (review of L3, round 3, SPEND-4)",
+      "every unmetered, default-on feature of Codex 0.157.0 is off on every L3 thread (sub-agents, memories, goals, standalone web search and image generation), by the owner's own config.toml or per launch under a recorded owner decision; the runner refuses to start otherwise (round 4, U1). Behind that, a run whose sub-agent appears anyway is stopped at once and charged a step on each of its threads (round 3, SPEND-2), a turn Codex starts by itself on a run's thread after the run's own has ended is interrupted by the host, read for three seconds after that turn, and its run charged as cut short (round 4, SPEND-9), and a memory pipeline that writes anyway fails the memory row (round 3, S6). A setting from a managed configuration (requirements.toml, MDM, cloud) is not read, and could override either route",
+      "Codex's remote compaction makes a model call whose usage goes to analytics and the rollout budget, not the thread's total (core/src/compact_remote_v2.rs:304-310, 374; rust-v0.157.0). It runs when a step's context passes the model's auto-compact limit, 90% of gpt-5.6-terra's 272,000-token window, 244,800 (models-manager/models.json; protocol/src/openai_models.rs:525-536): a step that large is already past the one the bound assumes, and its run is stopped and charged its largest step in flight. The owner's model_auto_compact_token_limit, which could lower the limit, is not read; with it lowered, compaction would spend outside this bound (not measured)",
+      "at each thread's start Codex sends one request with generate: false, its instructions and tools, over the WebSocket transport, to warm it (core/src/session_startup_prewarm.rs:306-320; core/src/client.rs:1966, 2071-2120), and records no usage for it: whether it is billed, and for how much, is not established; one per thread, three an attempt, outside this bound",
+      "what Codex asks the model only when a client asks it to, which PIO never does, cannot occur: a review (review/start), a thread title (an ephemeral thread whose source is thread_title, core/src/session/session.rs:1643-1646), a realtime conversation, a compaction on request; nor the guardian reviewer, which runs only when approvalsReviewer is not user, which every run asserts from thread/start's answer before its first turn",
+      "a tool of the owner's own MCP servers, apps or plugins, which Codex loads on every thread, runs outside Codex, and what it spends is not in Codex's report; a call to one asks first unless the owner's settings pre-approve it (not read), and an ask fails the desk row",
+      "Codex retries a dropped stream up to 5 times on each transport, so up to 10 on the step that falls back from WebSocket to HTTPS, and a failed request up to 4 times, by default (model-provider-info/src/lib.rs:64-65, 487-498; core/src/responses_retry.rs:96-111, rust-v0.157.0); the owner's model_providers settings can raise either, up to 100, and are not read. The first WebSocket retry of a step is not surfaced in a release build (responses_retry.rs:119-121). Codex records usage only on a completed response, so what a dropped attempt is billed, if anything, is never reported: the receipt counts each retry Codex surfaced (willRetry) per run and charges none, and this bound leaves them out (not measured; round 4, SPEND-10)",
+      "Codex reports a step once its tool has finished, before the next step calls a tool (M2 R5, R6), and the report reaches the runner's meter within 1.5 s",
+      "a model step takes longer than a stop takes to reach Codex (about 1.5 s against the labeled fake)",
+      "Codex honours turn/interrupt (M2), before the tool's 30 s hold ends"
+    ],
+    "call_ceiling": 16,
+    "child": "at most its ceiling, plus the step that crossed it (reported only after its command) and the step in flight when the stop lands",
+    "child_ceiling": 90000,
+    "child_share": 150000,
+    "estimate": "Codex's own running total for the thread, reported after every step",
+    "hold_above": 120000,
+    "in_flight": 30000,
+    "lead": "at most its ceiling, plus the step that crossed it (reported only after its tool) and the step in flight when the stop lands. Its tool withholds any response once it has reported more than 120000, and the meter stops it when a result its tool never saw comes back past 120000: that keeps a lead using only its tool within its ceiling plus one step, but a result its tool never sees starts a step before anything can stop it",
+    "lead_ceiling": 150000,
+    "lead_share": 210000,
+    "unmetered": {
+      "features": [
+        "sub-agents",
+        "memories",
+        "goals",
+        "standalone web search",
+        "image generation"
+      ],
+      "memories_on": "on the order of 900,000 input tokens an attempt: Phase 1 sends up to two of the owner's idle sessions per app-server to the extraction model, three app-servers an attempt, and Phase 2 runs a consolidation agent (rust-v0.157.0, not measured)",
+      "off": "510000: with every one of them off on every thread, by the owner's own config.toml or per launch under a recorded owner decision (pio_codex::features_off), the bound above stands; the live runner refuses to start otherwise, naming each feature not off and the key that decided it (review of L3, round 4, U1)",
+      "subagents_on": {
+        "v1": 1050000,
+        "v2": 780000
+      },
+      "subagents_on_how": "510000 plus, for each of the 3 runs, a step in flight on every sub-agent it could start in one step before the stop lands: three for multi-agent V2, six for V1 (rust-v0.157.0, not measured)"
+    },
+    "usage_silence": 150,
+    "worst_case": 510000
+  },
+  "budget": 2,
+  "charge": {
+    "codex_cap": 1210000,
+    "codex_charged": 36864,
+    "ledger": "rehearsal ledger",
+    "lines": {
+      "L3": {
+        "at": "2026-09-26T12:23:56Z",
+        "charge_basis": "reported_total",
+        "charged": 20480,
+        "meter_estimate": 20480,
+        "model": "gpt-5.6-terra",
+        "observed_is": "the thread's total, which covers every step",
+        "observed_total_tokens": 20480,
+        "sequence": "M4-lead-codex",
+        "tokens": 20480
+      },
+      "L3.alpha": {
+        "at": "2026-09-26T12:23:56Z",
+        "charge_basis": "reported_total",
+        "charged": 8192,
+        "meter_estimate": 8192,
+        "model": "gpt-5.6-terra",
+        "observed_is": "the thread's total, which covers every step",
+        "observed_total_tokens": 8192,
+        "sequence": "M4-lead-codex",
+        "tokens": 8192
+      },
+      "L3.beta": {
+        "at": "2026-09-26T12:23:56Z",
+        "charge_basis": "reported_total",
+        "charged": 8192,
+        "meter_estimate": 8192,
+        "model": "gpt-5.6-terra",
+        "observed_is": "the thread's total, which covers every step",
+        "observed_total_tokens": 8192,
+        "sequence": "M4-lead-codex",
+        "tokens": 8192
+      }
+    },
+    "measured_against": "charged",
+    "reservations_left": [],
+    "sequence_cap": 685000,
+    "sequence_charged": 36864,
+    "sequence_stop": 548000,
+    "stop_reached": false
+  },
+  "codex_features": {
+    "exec_permission_approvals": null,
+    "exec_permission_approvals_key": null,
+    "exists": true,
+    "read": "config.toml",
+    "request_permissions_tool": null,
+    "request_permissions_tool_key": null
+  },
+  "commit": "84a227bd8d4b55bf64aa8475ba2e46425b343114",
+  "credential_check": {
+    "id": "906d6828-6a5a-4951-95c9-3f7907d72b8e",
+    "jsonrpc": "2.0",
+    "result": {
+      "acknowledgment": {
+        "command_digest": "sha256:59cf96faabd286ddbfa5fbb0d3154cd97533e8694289954552b06e2d8b30ca7c",
+        "command_id": "credential-check",
+        "effect_refs": [],
+        "operation_ref": "a73234c1-4143-4ac3-8eb9-d5f6c651b61a",
+        "revision": 1,
+        "subject": {
+          "id": "credential-check",
+          "kind": "execution.execution"
+        }
+      },
+      "outcome": {
+        "admission": "refused",
+        "alternative": "Lead tool refused: [{\"detail\":null,\"reason\":\"lead_tool_carries_a_credential_value\"}]",
+        "execution": {
+          "id": "credential-check",
+          "kind": "execution.execution"
+        },
+        "reason": "capability_unavailable"
+      },
+      "replay": false
+    }
+  },
+  "desk": null,
+  "desk_answered_by": "the rehearsal itself",
+  "desk_items": [
+    {
+      "action_id": "L3.beta.action-1",
+      "answer": {
+        "decided_by": "rehearsal",
+        "decision": "allow",
+        "words": "rehearsal: the runner answers; no owner is asked"
+      },
+      "answered_by_desk_at": "2026-09-26T12:24:07Z",
+      "approval": {
+        "action_id": "L3.beta.action-1",
+        "answer_deadline_seconds": 300,
+        "approval_kind": "command",
+        "classification": {
+          "placement": "inside_fixture",
+          "subject": "cwd",
+          "target_label": "<fixture>/",
+          "target_sha256": "f1d3145058612729e1937995a290c5458b59dcc4c582cf75e831894591e6169a"
+        },
+        "command": "/bin/zsh -lc 'sleep 5 && wc -l beta.md'",
+        "grant_root_requested": null,
+        "if_nobody_answers": {
+          "always_option_taken": false,
+          "decided_by": "pio",
+          "decision": "decline"
+        },
+        "message": null,
+        "method": "item/commandExecution/requestApproval",
+        "network_approval": false,
+        "options": null,
+        "persist_offered": null,
+        "reason": null,
+        "requested_at": "2026-09-26T12:24:06Z",
+        "server": null
+      },
+      "relayed_at": "2026-09-26T12:24:07Z",
+      "requested_at": "2026-09-26T12:24:06Z",
+      "run": "L3.beta",
+      "sent": "answered",
+      "state": "answered"
+    }
+  ],
+  "dirty": false,
+  "exit_path": true,
+  "failed": [],
+  "features_off_sent": {
+    "L3": {
+      "agents.enabled": false,
+      "features.goals": false,
+      "features.image_generation": false,
+      "features.memories": false,
+      "features.memory_tool": false,
+      "features.multi_agent": false,
+      "features.multi_agent_v2": false,
+      "web_search": "disabled"
+    },
+    "L3.alpha": {
+      "agents.enabled": false,
+      "features.goals": false,
+      "features.image_generation": false,
+      "features.memories": false,
+      "features.memory_tool": false,
+      "features.multi_agent": false,
+      "features.multi_agent_v2": false,
+      "web_search": "disabled"
+    },
+    "L3.beta": {
+      "agents.enabled": false,
+      "features.goals": false,
+      "features.image_generation": false,
+      "features.memories": false,
+      "features.memory_tool": false,
+      "features.multi_agent": false,
+      "features.multi_agent_v2": false,
+      "web_search": "disabled"
+    }
+  },
+  "finished_at": "2026-09-26T12:24:51Z",
+  "format": "pio-lead-run/2",
+  "grant": {
+    "id": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+    "terms": {
+      "audience": "conformance-provider",
+      "delegation": {
+        "allowed": false,
+        "max_depth": 0
+      },
+      "holder": "lead",
+      "resources": [
+        {
+          "id_prefix": "L3.",
+          "kind": "execution.execution"
+        }
+      ],
+      "rights": [
+        "execution.submit",
+        "execution.steer",
+        "execution.read",
+        "core.events.read"
+      ]
+    }
+  },
+  "grant_attach": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "owner_authority_required"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "d5b7a04c-bc59-4ba8-b8dc-242818f529de",
+    "jsonrpc": "2.0"
+  },
+  "harness": {
+    "mcp_approvals": "when Codex asks before an MCP tool call, what it offers and how it reads the answer: read from its source at rust-v0.157.0 (codex-rs/core/src/mcp_tool_call.rs), not measured. The file differs from rust-v0.155.1; the functions that decide, build the request and read the answer do not (requires_mcp_tool_approval_for_mode, maybe_request_mcp_tool_approval, custom_mcp_tool_approval_mode, build_mcp_tool_approval_elicitation_request, _meta, _question and _fallback_message, parse_mcp_tool_approval_elicitation_response, normalize_approval_decision_for_mode). request_mcp_tool_user_approval, which sends the request, changed (analytics on a refused answer), and so did the persistence helpers PIO never triggers",
+    "name": "codex",
+    "qualification": {
+      "qualified": null,
+      "reason": "labeled fake: no qualification"
+    },
+    "shapes": "0.157.0's generated app-server schema: ThreadItem mcpToolCall and commandExecution, McpServerElicitationRequestParams; the labeled fake follows it"
+  },
+  "lead": "L3",
+  "lead_answer": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "right_missing"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "c65b3d58-10c5-44f1-9a41-8835b2aff4f1",
+    "jsonrpc": "2.0"
+  },
+  "lead_reads_itself": {
+    "error": {
+      "code": 1,
+      "data": {
+        "code": "permission_denied",
+        "details": {
+          "reason": "out_of_scope"
+        },
+        "retry": "no"
+      },
+      "message": "permission_denied"
+    },
+    "id": "e1c2a493-508b-42c5-89b5-24be1e445d60",
+    "jsonrpc": "2.0"
+  },
+  "lead_submit": {
+    "admission": "admitted",
+    "delivery_id": "L3.delivery-1",
+    "execution": {
+      "id": "L3",
+      "kind": "execution.execution"
+    }
+  },
+  "live_tree": {
+    "probe": true,
+    "releasable": true,
+    "removed": true,
+    "why": null
+  },
+  "memory_after": {
+    "memories": null,
+    "memories_1.sqlite": null,
+    "memories_1.sqlite-shm": null,
+    "memories_1.sqlite-wal": null,
+    "memories_v2": null,
+    "memories_v2_1.sqlite": null,
+    "memories_v2_1.sqlite-shm": null,
+    "memories_v2_1.sqlite-wal": null
+  },
+  "memory_before": {
+    "memories": null,
+    "memories_1.sqlite": null,
+    "memories_1.sqlite-shm": null,
+    "memories_1.sqlite-wal": null,
+    "memories_v2": null,
+    "memories_v2_1.sqlite": null,
+    "memories_v2_1.sqlite-shm": null,
+    "memories_v2_1.sqlite-wal": null
+  },
+  "metering": {
+    "error": null,
+    "passes": 191,
+    "seconds": 49.7,
+    "source": "core.events.read, one query a pass"
+  },
+  "meters": {
+    "L3": {
+      "bytes": 2766,
+      "calls": 4,
+      "ceiling": 150000,
+      "continued": [],
+      "estimate": 20480,
+      "host_total": 20480,
+      "largest_step": 4096,
+      "silenced": false,
+      "stopped": null,
+      "subagents": [],
+      "threads": {
+        "fake-thread-22776": 20480
+      },
+      "tool_log_calls": 4,
+      "turn_status": "completed"
+    },
+    "L3.alpha": {
+      "bytes": 1137,
+      "calls": 0,
+      "ceiling": 90000,
+      "continued": [],
+      "estimate": 8192,
+      "host_total": 8192,
+      "largest_step": 4096,
+      "silenced": false,
+      "stopped": null,
+      "subagents": [],
+      "threads": {
+        "fake-thread-23617": 8192
+      },
+      "tool_log_calls": null,
+      "turn_status": "completed"
+    },
+    "L3.beta": {
+      "bytes": 1128,
+      "calls": 0,
+      "ceiling": 90000,
+      "continued": [],
+      "estimate": 8192,
+      "host_total": 8192,
+      "largest_step": 4096,
+      "silenced": false,
+      "stopped": null,
+      "subagents": [],
+      "threads": {
+        "fake-thread-26012": 8192
+      },
+      "tool_log_calls": null,
+      "turn_status": "completed"
+    },
+    "L3.third": {
+      "bytes": 0,
+      "calls": 0,
+      "ceiling": 90000,
+      "continued": [],
+      "estimate": 0,
+      "host_total": 0,
+      "largest_step": 0,
+      "silenced": false,
+      "stopped": null,
+      "subagents": [],
+      "threads": {},
+      "tool_log_calls": null,
+      "turn_status": null
+    }
+  },
+  "mode": "rehearsal",
+  "model": "gpt-5.6-terra",
+  "mutant": null,
+  "no_sleep": {
+    "command": "caffeinate -i -s -w 21747",
+    "held": true,
+    "held_to_the_end": true,
+    "power": "Now drawing from 'AC Power'"
+  },
+  "no_such_execution": [],
+  "owner_service_after": [
+    "4a78b1821d08a04888792ecc690198f073f3c75edd6b03daa2942b161613ea3f"
+  ],
+  "owner_service_before": [
+    "4a78b1821d08a04888792ecc690198f073f3c75edd6b03daa2942b161613ea3f"
+  ],
+  "plugins_off": {
+    "decision": "owner-2026-09-26-l3-plugins-apps-servers-off",
+    "keys": {
+      "features.apps": false,
+      "features.connectors": false,
+      "features.plugins": false
+    },
+    "route": "per launch, under 'owner-2026-09-26-l3-plugins-apps-servers-off'",
+    "servers": {
+      "bare_table": false,
+      "count": 2,
+      "lead_tool_name_taken": false,
+      "read": "config.toml: table header lines only",
+      "sha256": [
+        "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+        "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+      ]
+    }
+  },
+  "preflight": {
+    "checked": false,
+    "reason": "rehearsal"
+  },
+  "probes_admitted": {},
+  "qualification_check": {
+    "checked": false,
+    "reason": "labeled fake: serve-codex qualifies none"
+  },
+  "reserved": {
+    "L3": {
+      "at": "2026-09-26T12:23:56Z",
+      "charge_basis": "reserved",
+      "charged": 210000,
+      "model": "gpt-5.6-terra",
+      "sequence": "M4-lead-codex",
+      "tokens": 210000,
+      "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
+    },
+    "L3.alpha": {
+      "at": "2026-09-26T12:23:56Z",
+      "charge_basis": "reserved",
+      "charged": 150000,
+      "model": "gpt-5.6-terra",
+      "sequence": "M4-lead-codex",
+      "tokens": 150000,
+      "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
+    },
+    "L3.beta": {
+      "at": "2026-09-26T12:23:56Z",
+      "charge_basis": "reserved",
+      "charged": 150000,
+      "model": "gpt-5.6-terra",
+      "sequence": "M4-lead-codex",
+      "tokens": 150000,
+      "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
+    }
+  },
+  "root": "/private/tmp/pio-l1-vzu_09a7",
+  "rows": [
+    {
+      "expected": "admitted",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": "admitted",
+      "proven": true,
+      "row": "The lead was admitted"
+    },
+    {
+      "expected": "acknowledged",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": "acknowledged",
+      "proven": true,
+      "row": "The lead's delivery was acknowledged"
+    },
+    {
+      "expected": {
+        "cancellation": null,
+        "exit": {
+          "code": 0
+        },
+        "runtime": "exited"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "no cancel: a turn that was interrupted did not exit normally",
+      "observed": {
+        "cancellation": null,
+        "exit": {
+          "code": 0
+        },
+        "runtime": "exited"
+      },
+      "proven": true,
+      "row": "The lead exited normally"
+    },
+    {
+      "expected": {
+        "L3": {
+          "before_turn": true,
+          "matches": true,
+          "provider": "openai",
+          "reported": "gpt-5.6-terra",
+          "requested": "gpt-5.6-terra"
+        },
+        "L3.alpha": {
+          "before_turn": true,
+          "matches": true,
+          "provider": "openai",
+          "reported": "gpt-5.6-terra",
+          "requested": "gpt-5.6-terra"
+        },
+        "L3.beta": {
+          "before_turn": true,
+          "matches": true,
+          "provider": "openai",
+          "reported": "gpt-5.6-terra",
+          "requested": "gpt-5.6-terra"
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "model_checked: thread/start's own answer, before turn_start_sent; the host refuses a mismatch before the first turn; the fake answers what its scenario says",
+      "observed": {
+        "L3": {
+          "before_turn": true,
+          "matches": true,
+          "provider": "openai",
+          "reported": "gpt-5.6-terra",
+          "requested": "gpt-5.6-terra"
+        },
+        "L3.alpha": {
+          "before_turn": true,
+          "matches": true,
+          "provider": "openai",
+          "reported": "gpt-5.6-terra",
+          "requested": "gpt-5.6-terra"
+        },
+        "L3.beta": {
+          "before_turn": true,
+          "matches": true,
+          "provider": "openai",
+          "reported": "gpt-5.6-terra",
+          "requested": "gpt-5.6-terra"
+        }
+      },
+      "proven": true,
+      "row": "Each run was on the plan's model before its turn started"
+    },
+    {
+      "expected": "qualified, no schema drift, the service's Node the qualified one, and the wrapper, native binary and Node digests, version, pin and schema listing equal to the committed record for serve-codex's pin",
+      "holds": null,
+      "kind": "row",
+      "note": "from serve-codex's own qualification record in the store; a labeled fake has none, so a rehearsal decides nothing here unless a record is there; inconclusive",
+      "observed": {
+        "committed": null,
+        "ran": {
+          "qualified": null,
+          "reason": "labeled fake: no qualification"
+        },
+        "rehearsal": true
+      },
+      "proven": false,
+      "row": "Codex qualified at the pinned identity"
+    },
+    {
+      "expected": {
+        "L3": "user",
+        "L3.alpha": "user",
+        "L3.beta": "user"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "approvalsReviewer is never set; any other answer ends the run before its first turn",
+      "observed": {
+        "L3": "user",
+        "L3.alpha": "user",
+        "L3.beta": "user"
+      },
+      "proven": true,
+      "row": "Every run asserted that approvals go to the user"
+    },
+    {
+      "expected": {
+        "L3": [
+          [
+            "pio-lead"
+          ]
+        ],
+        "L3.alpha": [
+          []
+        ],
+        "L3.beta": [
+          []
+        ]
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L3": [
+          [
+            "pio-lead"
+          ]
+        ],
+        "L3.alpha": [
+          []
+        ],
+        "L3.beta": [
+          []
+        ]
+      },
+      "proven": true,
+      "row": "Only the lead got the tool"
+    },
+    {
+      "expected": {
+        "asked_about_the_tool": {
+          "declined_by_pio": [],
+          "surfaced": []
+        },
+        "pre_allowed": {
+          "L3": [
+            {
+              "pio-lead": {
+                "default_tools_approval_mode": null,
+                "tools": {
+                  "read_run": {
+                    "approval_mode": "approve"
+                  },
+                  "start_run": {
+                    "approval_mode": "approve"
+                  }
+                }
+              }
+            }
+          ],
+          "L3.alpha": [
+            {}
+          ],
+          "L3.beta": [
+            {}
+          ]
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "in the lead's thread config only; never written to the owner's",
+      "observed": {
+        "asked_about_the_tool": {
+          "declined_by_pio": [],
+          "surfaced": []
+        },
+        "pre_allowed": {
+          "L3": [
+            {
+              "pio-lead": {
+                "default_tools_approval_mode": null,
+                "tools": {
+                  "read_run": {
+                    "approval_mode": "approve"
+                  },
+                  "start_run": {
+                    "approval_mode": "approve"
+                  }
+                }
+              }
+            }
+          ],
+          "L3.alpha": [
+            {}
+          ],
+          "L3.beta": [
+            {}
+          ]
+        }
+      },
+      "proven": true,
+      "row": "The lead's own two tools were pre-allowed, and nothing else"
+    },
+    {
+      "expected": {
+        "L3": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        },
+        "L3.alpha": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        },
+        "L3.beta": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "per launch, under 'owner-2026-09-26-l3-plugins-apps-servers-off': features.plugins, features.apps and its alias features.connectors false, and each of the 2 server(s) the configuration names by a table header sent as enabled = false; names as sha256 digests. The owner's config.toml is not changed",
+      "observed": {
+        "L3": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        },
+        "L3.alpha": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        },
+        "L3.beta": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        }
+      },
+      "proven": true,
+      "row": "L3's threads carried plugins, apps and the owner's servers off"
+    },
+    {
+      "expected": {
+        "L3": [
+          "pio-lead"
+        ],
+        "L3.alpha": [],
+        "L3.beta": []
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "Codex's mcpServer/startupStatus/updated on each run's own thread (app-server/src/bespoke_event_handling.rs:202-228 at rust-v0.157.0), before and during the turn; any other name as a digest; the fake announces every server Codex would start: the rehearsal home's own, a plugin's and the apps server, unless turned off",
+      "observed": {
+        "L3": [
+          "pio-lead"
+        ],
+        "L3.alpha": [],
+        "L3.beta": []
+      },
+      "proven": true,
+      "row": "No MCP server but the lead's tool started on any L3 thread"
+    },
+    {
+      "expected": 1,
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": 1,
+      "proven": true,
+      "row": "The tool was launched exactly once"
+    },
+    {
+      "expected": [
+        "initialize",
+        "notifications/initialized",
+        "tools/list"
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        "initialize",
+        "notifications/initialized",
+        "tools/list"
+      ],
+      "proven": true,
+      "row": "The tool reached the lead"
+    },
+    {
+      "expected": "every line, and at least one",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "lines": 16,
+        "stamped": 16
+      },
+      "proven": true,
+      "row": "Every line of the lead tool's log carries the time it was written"
+    },
+    {
+      "expected": {
+        "L3": {
+          "before_turn": true,
+          "ready": true,
+          "sent": {
+            "omit_tools_from": [
+              "code_mode",
+              "deferred"
+            ],
+            "required": true,
+            "startup_timeout_sec": 30
+          }
+        },
+        "L3.alpha": {
+          "before_turn": null,
+          "ready": null,
+          "sent": null
+        },
+        "L3.beta": {
+          "before_turn": null,
+          "ready": null,
+          "sent": null
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "the lead tool's own server table as the host sent it: omit_tools_from code_mode and deferred keep its tools in gpt-5.6-terra's own tool list (code-mode-only; core/src/tools/spec_plan.rs:234-266 at rust-v0.157.0), and ready is Codex's mcpServer/startupStatus/updated on the lead's thread before turn/start; the fake computes the exposure from that source",
+      "observed": {
+        "L3": {
+          "before_turn": true,
+          "ready": true,
+          "sent": {
+            "omit_tools_from": [
+              "code_mode",
+              "deferred"
+            ],
+            "required": true,
+            "startup_timeout_sec": 30
+          }
+        },
+        "L3.alpha": {
+          "before_turn": null,
+          "ready": null,
+          "sent": null
+        },
+        "L3.beta": {
+          "before_turn": null,
+          "ready": null,
+          "sent": null
+        }
+      },
+      "proven": true,
+      "row": "The lead's tool was in the model's own list, and ready before its turn"
+    },
+    {
+      "expected": {
+        "names": [
+          "mcp__pio_lead",
+          "read_run",
+          "start_run"
+        ],
+        "sent_is_the_brief": true
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "the digest of the text the host sent at turn/start, and the brief's words: start_run and read_run, namespace mcp__pio_lead",
+      "observed": {
+        "names": [
+          "mcp__pio_lead",
+          "read_run",
+          "start_run"
+        ],
+        "sent_is_the_brief": true
+      },
+      "proven": true,
+      "row": "The lead's brief named its tools as the model sees them"
+    },
+    {
+      "expected": [
+        [
+          "alpha",
+          true
+        ],
+        [
+          "beta",
+          true
+        ]
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        [
+          "alpha",
+          true
+        ],
+        [
+          "beta",
+          true
+        ]
+      ],
+      "proven": true,
+      "row": "The lead started its two runs through the tool"
+    },
+    {
+      "expected": [
+        "6838daaa-d37a-4cf4-a31a-eb30cac53605"
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        "6838daaa-d37a-4cf4-a31a-eb30cac53605"
+      ],
+      "proven": true,
+      "row": "Every tool request carried the grant"
+    },
+    {
+      "expected": {
+        "L3.alpha": "admitted",
+        "L3.beta": "admitted"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L3.alpha": "admitted",
+        "L3.beta": "admitted"
+      },
+      "proven": true,
+      "row": "The submits landed"
+    },
+    {
+      "expected": {
+        "L3.alpha": {
+          "call_budget": 0,
+          "depth": 1,
+          "initiator": {
+            "id": "L3",
+            "kind": "execution.execution"
+          }
+        },
+        "L3.beta": {
+          "call_budget": 0,
+          "depth": 1,
+          "initiator": {
+            "id": "L3",
+            "kind": "execution.execution"
+          }
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L3.alpha": {
+          "call_budget": 0,
+          "depth": 1,
+          "initiator": {
+            "id": "L3",
+            "kind": "execution.execution"
+          }
+        },
+        "L3.beta": {
+          "call_budget": 0,
+          "depth": 1,
+          "initiator": {
+            "id": "L3",
+            "kind": "execution.execution"
+          }
+        }
+      },
+      "proven": true,
+      "row": "origin.initiator is bound"
+    },
+    {
+      "expected": {
+        "L3.alpha": {
+          "cancellation": null,
+          "delivery": "acknowledged",
+          "exit": {
+            "code": 0
+          },
+          "runtime": "exited"
+        },
+        "L3.beta": {
+          "cancellation": null,
+          "delivery": "acknowledged",
+          "exit": {
+            "code": 0
+          },
+          "runtime": "exited"
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "to the end of their turns: a child that was cancelled did not",
+      "observed": {
+        "L3.alpha": {
+          "cancellation": null,
+          "delivery": "acknowledged",
+          "exit": {
+            "code": 0
+          },
+          "runtime": "exited"
+        },
+        "L3.beta": {
+          "cancellation": null,
+          "delivery": "acknowledged",
+          "exit": {
+            "code": 0
+          },
+          "runtime": "exited"
+        }
+      },
+      "proven": true,
+      "row": "The children ran"
+    },
+    {
+      "expected": {
+        "code": "call_budget_spent",
+        "lead_running": true,
+        "started": false
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "code": "call_budget_spent",
+        "lead_running": true,
+        "started": false
+      },
+      "proven": true,
+      "row": "A third start is refused by PIO"
+    },
+    {
+      "expected": [
+        "L3.alpha",
+        "L3.beta"
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        "L3.alpha",
+        "L3.beta"
+      ],
+      "proven": true,
+      "row": "L3 has exactly two children that ran"
+    },
+    {
+      "expected": "recorded under the grant while the turn was active and delivered, then acknowledged by Codex (provider_ack_id); behavior not observed",
+      "holds": true,
+      "kind": "row",
+      "note": "L3's claim: delivery under the lead's authority, not obedience",
+      "observed": {
+        "delivery": {
+          "behavior": "not_observed",
+          "delivery": "acknowledged",
+          "delivery_id": "L3.alpha.steering-1",
+          "evidence": {
+            "class": "native_steer_acknowledged",
+            "source": "pio-fake-app-server/host"
+          },
+          "proof_class": "provider_ack_id",
+          "recorded_at": "2026-09-26T12:24:01Z",
+          "request": "recorded",
+          "steer_id": "L3.alpha.steer-1"
+        },
+        "steer": {
+          "alternative": null,
+          "delivery_at_steer": "acknowledged",
+          "delivery_id": "L3.alpha.steering-1",
+          "request": "recorded",
+          "runtime_after_steer": "active",
+          "runtime_at_steer": "active"
+        }
+      },
+      "proven": true,
+      "row": "A steer while the child runs"
+    },
+    {
+      "expected": "not_supported on any harness, once the turn is over",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "alternative": "Steering needs an acknowledged, running native turn",
+        "delivery_at_steer": "acknowledged",
+        "delivery_id": null,
+        "request": "not_supported",
+        "runtime_after_steer": "exited",
+        "runtime_at_steer": "exited"
+      },
+      "proven": true,
+      "row": "A steer on an exited run"
+    },
+    {
+      "expected": [
+        {
+          "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+          "holder": "lead",
+          "recorded_by": "pio"
+        },
+        {
+          "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+          "holder": "lead",
+          "recorded_by": "pio"
+        }
+      ],
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": [
+        {
+          "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+          "holder": "lead",
+          "recorded_by": "pio"
+        },
+        {
+          "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+          "holder": "lead",
+          "recorded_by": "pio"
+        }
+      ],
+      "proven": true,
+      "row": "Each steer names the grant that sent it"
+    },
+    {
+      "expected": {
+        "code": "permission_denied",
+        "reason": "right_missing"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "aimed at a child it may read, so only the missing right can refuse it",
+      "observed": {
+        "code": "permission_denied",
+        "reason": "right_missing"
+      },
+      "proven": true,
+      "row": "The lead may not answer an approval"
+    },
+    {
+      "expected": {
+        "code": "permission_denied",
+        "reason": "owner_authority_required"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "code": "permission_denied",
+        "reason": "owner_authority_required"
+      },
+      "proven": true,
+      "row": "A grant cannot attach the tool"
+    },
+    {
+      "expected": {
+        "admission": "refused",
+        "named": true,
+        "reason": "capability_unavailable"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "admission": "refused",
+        "named": true,
+        "reason": "capability_unavailable"
+      },
+      "proven": true,
+      "row": "A tool spec carrying a credential is refused"
+    },
+    {
+      "expected": {
+        "code": "permission_denied",
+        "reason": "out_of_scope"
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "the grant covers L3. and not L3",
+      "observed": {
+        "code": "permission_denied",
+        "reason": "out_of_scope"
+      },
+      "proven": true,
+      "row": "The lead cannot read its own run"
+    },
+    {
+      "expected": {
+        "alpha.md": 7,
+        "beta.md": 4
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "rehearsal: the fake counted, so this shows the runner compares; the last message each child completed after its last command, not its preamble; none if it never answered",
+      "observed": {
+        "alpha.md": 7,
+        "beta.md": 4
+      },
+      "proven": true,
+      "row": "Each child reported the true count"
+    },
+    {
+      "expected": {
+        "alpha.md": 7,
+        "beta.md": 4
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "rehearsal: the fake counted, so this shows the runner compares",
+      "observed": {
+        "alpha.md": 7,
+        "beta.md": 4
+      },
+      "proven": true,
+      "row": "The lead relayed the true counts"
+    },
+    {
+      "expected": "each relayed and answered at the desk, decided by the caller, sent as the single-use kind, never always, none lapsed, and nothing declined by PIO by itself",
+      "holds": true,
+      "kind": "row",
+      "note": "1 approval(s) asked; none asked is inconclusive; a lapse is the host's single-use reject after the delivery timeout, and it fails L3; so does any request PIO declined by itself, and a run whose exit did not carry that list",
+      "observed": {
+        "decisions": [
+          {
+            "action_id": "L3.beta.action-1",
+            "always_option_taken": false,
+            "applied": null,
+            "approval_kind": "command",
+            "decided_by": "caller",
+            "desk": "answered",
+            "desk_decision": "allow",
+            "option_kind": null,
+            "run": "L3.beta",
+            "sent": {
+              "decision": "accept"
+            }
+          }
+        ],
+        "declined_by_pio": {
+          "L3": [],
+          "L3.alpha": [],
+          "L3.beta": []
+        },
+        "desk": {
+          "L3.beta.action-1": "answered"
+        },
+        "lapsed": []
+      },
+      "proven": true,
+      "row": "Every approval was decided at the desk"
+    },
+    {
+      "expected": null,
+      "holds": null,
+      "kind": "record",
+      "note": "each request the host answered with an error, never put to a caller: what was asked (method, server, mode, Codex's approval kind, tool name) and why; never an argument, a form, a URL or a message",
+      "observed": {
+        "L3": [],
+        "L3.alpha": [],
+        "L3.beta": []
+      },
+      "proven": false,
+      "row": "What PIO declined by itself"
+    },
+    {
+      "expected": "a read of L3.alpha that took at least 20 s and returned exited, or one that returned still running after the tool's 55 s limit",
+      "holds": true,
+      "kind": "row",
+      "note": "seconds as the lead tool measured each call",
+      "observed": [
+        {
+          "run": "L3.alpha",
+          "runtime": "exited",
+          "seconds": 30.8
+        }
+      ],
+      "proven": true,
+      "row": "A read_run waited for its run: until it exited, or to the wait limit"
+    },
+    {
+      "expected": null,
+      "holds": null,
+      "kind": "record",
+      "note": "each an `error` notification with willRetry true on the run's own thread, counted from the host's events; the first WebSocket retry of a step is not surfaced in a release build (core/src/responses_retry.rs:119-121, rust-v0.157.0), so this can undercount by one a step. Not charged: Codex records usage only on a completed response, so a dropped attempt reports nothing, and nothing PIO observes says what, if anything, it was billed; the bound lists it as outside (not measured)",
+      "observed": {
+        "L3": 0,
+        "L3.alpha": 0,
+        "L3.beta": 0
+      },
+      "proven": false,
+      "row": "Stream retries Codex reported"
+    },
+    {
+      "expected": null,
+      "holds": null,
+      "kind": "record",
+      "note": "the fake in a rehearsal; the owner's Codex live",
+      "observed": [
+        {
+          "approval_kind": "command",
+          "desk": "answered",
+          "run": "L3.beta",
+          "sent": {
+            "decision": "accept"
+          }
+        }
+      ],
+      "proven": false,
+      "row": "What Codex asked, and what was sent"
+    },
+    {
+      "expected": "no stop; the lead made at most 16 tool calls; every bound stayed under its ceiling",
+      "holds": true,
+      "kind": "row",
+      "note": "estimate Codex's own running total for the thread, reported after every step",
+      "observed": {
+        "L3": {
+          "bytes": 2766,
+          "calls": 4,
+          "ceiling": 150000,
+          "continued": [],
+          "estimate": 20480,
+          "host_total": 20480,
+          "largest_step": 4096,
+          "silenced": false,
+          "stopped": null,
+          "subagents": [],
+          "threads": {
+            "fake-thread-22776": 20480
+          },
+          "tool_log_calls": 4,
+          "turn_status": "completed"
+        },
+        "L3.alpha": {
+          "bytes": 1137,
+          "calls": 0,
+          "ceiling": 90000,
+          "continued": [],
+          "estimate": 8192,
+          "host_total": 8192,
+          "largest_step": 4096,
+          "silenced": false,
+          "stopped": null,
+          "subagents": [],
+          "threads": {
+            "fake-thread-23617": 8192
+          },
+          "tool_log_calls": null,
+          "turn_status": "completed"
+        },
+        "L3.beta": {
+          "bytes": 1128,
+          "calls": 0,
+          "ceiling": 90000,
+          "continued": [],
+          "estimate": 8192,
+          "host_total": 8192,
+          "largest_step": 4096,
+          "silenced": false,
+          "stopped": null,
+          "subagents": [],
+          "threads": {
+            "fake-thread-26012": 8192
+          },
+          "tool_log_calls": null,
+          "turn_status": "completed"
+        },
+        "L3.third": {
+          "bytes": 0,
+          "calls": 0,
+          "ceiling": 90000,
+          "continued": [],
+          "estimate": 0,
+          "host_total": 0,
+          "largest_step": 0,
+          "silenced": false,
+          "stopped": null,
+          "subagents": [],
+          "threads": {},
+          "tool_log_calls": null,
+          "turn_status": null
+        }
+      },
+      "proven": true,
+      "row": "Every run stayed within its ceilings"
+    },
+    {
+      "expected": "every response of its tool passed the gate, none was handed back past 120000, and a result its tool never saw that came back past 120000 was met by a stop",
+      "holds": true,
+      "kind": "row",
+      "note": "the lead tool's own gate records, and the lead's host events in the order the host wrote them",
+      "observed": {
+        "handed_back_past_hold": [],
+        "responses": 4,
+        "stopped_for_one": false,
+        "ungated": [],
+        "untooled": []
+      },
+      "proven": true,
+      "row": "Every result the lead got was checked against its hold"
+    },
+    {
+      "expected": "for each run the runner stopped: the host sent turn/interrupt, Codex acknowledged it, and the turn ended interrupted (cancellation cancelled)",
+      "holds": null,
+      "kind": "row",
+      "note": "the host's own control_sent and control_response, not PIO's cancel_requested; no stop, nothing to judge; inconclusive",
+      "observed": {},
+      "proven": false,
+      "row": "Every stop the runner made reached Codex"
+    },
+    {
+      "expected": "for every run that ran: at least what it reported, its meter saw or its threads reported, plus a step in flight on each of its threads if it was stopped, interrupted or still ran, and its whole share if it still ran, reported nothing or went silent",
+      "holds": true,
+      "kind": "row",
+      "note": "a step in flight: 30000, or the largest seen, if larger; worked out from the views, the meters and the host's own usage events, not from the charge",
+      "observed": {
+        "runs": {
+          "L3": {
+            "allowance": 30000,
+            "at_least": 20480,
+            "charged": 20480,
+            "cut_short": false,
+            "meter": 20480,
+            "reported": 20480,
+            "running": false,
+            "silenced": false,
+            "stopped": false,
+            "threads_sum": 20480
+          },
+          "L3.alpha": {
+            "allowance": 30000,
+            "at_least": 8192,
+            "charged": 8192,
+            "cut_short": false,
+            "meter": 8192,
+            "reported": 8192,
+            "running": false,
+            "silenced": false,
+            "stopped": false,
+            "threads_sum": 8192
+          },
+          "L3.beta": {
+            "allowance": 30000,
+            "at_least": 8192,
+            "charged": 8192,
+            "cut_short": false,
+            "meter": 8192,
+            "reported": 8192,
+            "running": false,
+            "silenced": false,
+            "stopped": false,
+            "threads_sum": 8192
+          }
+        }
+      },
+      "proven": true,
+      "row": "Every run's charge covers what it could have spent"
+    },
+    {
+      "expected": "no model step, on any thread of any run, past 30000 tokens",
+      "holds": true,
+      "kind": "row",
+      "note": "each report's last step and the rise between reports, from the host's own usage events; a run past it is stopped",
+      "observed": {
+        "L3": {
+          "largest": 4096,
+          "steps": 5
+        },
+        "L3.alpha": {
+          "largest": 4096,
+          "steps": 2
+        },
+        "L3.beta": {
+          "largest": 4096,
+          "steps": 2
+        }
+      },
+      "proven": true,
+      "row": "Every step stayed within the in-flight bound"
+    },
+    {
+      "expected": "no thread but its own on any run: no plan has a sub-agent",
+      "holds": true,
+      "kind": "row",
+      "note": "the host's other_thread events, and the list each exit carries (pio.combraton.dev/other-threads); an exit without it is not nothing",
+      "observed": {
+        "not_carried": [],
+        "threads": {
+          "L3": [],
+          "L3.alpha": [],
+          "L3.beta": []
+        }
+      },
+      "proven": true,
+      "row": "No run spawned a sub-agent"
+    },
+    {
+      "expected": "each such run stopped by the runner, for its sub-agent",
+      "holds": null,
+      "kind": "row",
+      "note": "none spawned, nothing to judge; inconclusive",
+      "observed": {},
+      "proven": false,
+      "row": "Every run that spawned a sub-agent was stopped when it appeared"
+    },
+    {
+      "expected": "no turn started on any run's own thread after its turn had ended",
+      "holds": true,
+      "kind": "row",
+      "note": "the host's continuation_started events and the list each exit carries (pio.combraton.dev/continuations); such a turn is interrupted by the host and its run charged a step in flight",
+      "observed": {
+        "not_carried": [],
+        "turns": {
+          "L3": [],
+          "L3.alpha": [],
+          "L3.beta": []
+        }
+      },
+      "proven": true,
+      "row": "No run took a turn of its own after its turn ended"
+    },
+    {
+      "expected": "every run charged at most the share reserved for it, and all of them at most the worst case",
+      "holds": true,
+      "kind": "row",
+      "note": "lead share 210000, child share 150000, worst case 510000",
+      "observed": {
+        "runs": {
+          "L3": {
+            "charged": 20480,
+            "share": 210000
+          },
+          "L3.alpha": {
+            "charged": 8192,
+            "share": 150000
+          },
+          "L3.beta": {
+            "charged": 8192,
+            "share": 150000
+          }
+        },
+        "total": 36864,
+        "worst_case": 510000
+      },
+      "proven": true,
+      "row": "Every run's charge stayed within its reserved share"
+    },
+    {
+      "expected": "a positive amount per run that ran",
+      "holds": true,
+      "kind": "row",
+      "note": "Codex's own total, the sum over the run's threads, which covers every step: what a run that ended by itself is charged; a run cut short is charged it plus a step in flight on each of its threads, and one not seen exited at least its share (review of L3, round 3)",
+      "observed": {
+        "L3": 20480,
+        "L3.alpha": 8192,
+        "L3.beta": 8192
+      },
+      "proven": true,
+      "row": "Every run reported its usage"
+    },
+    {
+      "expected": "the same processes before and after",
+      "holds": true,
+      "kind": "row",
+      "note": "the owner's own OpenCode service, by process; none running is inconclusive",
+      "observed": {
+        "after": [
+          "4a78b1821d08a04888792ecc690198f073f3c75edd6b03daa2942b161613ea3f"
+        ],
+        "before": [
+          "4a78b1821d08a04888792ecc690198f073f3c75edd6b03daa2942b161613ea3f"
+        ]
+      },
+      "proven": true,
+      "row": "The owner's OpenCode service was untouched"
+    },
+    {
+      "expected": "for every run, nothing removed or changed, nothing outside the project tables, and any project added is under the fixture root",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "L3": {
+          "existed_before": true,
+          "exists_after": true,
+          "format": "pio-codex-config-diff/1",
+          "other_changes": false,
+          "projects_added": [
+            {
+              "location": "fixture",
+              "path_sha256": "f1d3145058612729e1937995a290c5458b59dcc4c582cf75e831894591e6169a",
+              "trust_level": "trusted"
+            }
+          ],
+          "projects_changed": [],
+          "projects_removed": [],
+          "raw_sha256": {
+            "after": "0becc62b121c336e6e615b854421c0addd7b16aa93b20bd6400350d0b47b3087",
+            "before": "888a17752b0cc9018541e552d996410800396bfa99045288776810135d0bc406"
+          },
+          "unchanged": false
+        },
+        "L3.alpha": {
+          "existed_before": true,
+          "exists_after": true,
+          "format": "pio-codex-config-diff/1",
+          "other_changes": false,
+          "projects_added": [],
+          "projects_changed": [],
+          "projects_removed": [],
+          "raw_sha256": {
+            "after": "0becc62b121c336e6e615b854421c0addd7b16aa93b20bd6400350d0b47b3087",
+            "before": "0becc62b121c336e6e615b854421c0addd7b16aa93b20bd6400350d0b47b3087"
+          },
+          "unchanged": true
+        },
+        "L3.beta": {
+          "existed_before": true,
+          "exists_after": true,
+          "format": "pio-codex-config-diff/1",
+          "other_changes": false,
+          "projects_added": [],
+          "projects_changed": [],
+          "projects_removed": [],
+          "raw_sha256": {
+            "after": "0becc62b121c336e6e615b854421c0addd7b16aa93b20bd6400350d0b47b3087",
+            "before": "0becc62b121c336e6e615b854421c0addd7b16aa93b20bd6400350d0b47b3087"
+          },
+          "unchanged": true
+        }
+      },
+      "proven": true,
+      "row": "The owner's Codex configuration changed only by the fixture's trust entry"
+    },
+    {
+      "expected": "releasable, and a probe removed",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "probe": true,
+        "releasable": true,
+        "removed": true,
+        "why": null
+      },
+      "proven": true,
+      "row": "The live tree can be released"
+    },
+    {
+      "expected": {},
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {},
+      "proven": true,
+      "row": "The runner's own steps raised no error"
+    },
+    {
+      "expected": "no memory file or database added, removed or changed in size; a later modification time alone, size unchanged, is inconclusive",
+      "holds": true,
+      "kind": "row",
+      "note": "Codex's own background pipeline, which [features] memories starts at a root thread's first turn: its files and databases by name (a digest for any name Codex did not choose), size and time, never content. A size change, or a path added or removed, means something wrote there, and the pipeline's model calls report nowhere PIO reads. A time alone decides nothing: at rust-v0.157.0 every app-server start opens the memories database read-write, in WAL mode, and runs its migrations, whatever features are on (state/src/runtime.rs:172-185; state/src/sqlite.rs:251-293, the pool at :296-310)",
+      "observed": {
+        "changes": [],
+        "memories": {
+          "key": "features.memory_tool",
+          "off": true,
+          "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+          "value": false,
+          "why": "features.memory_tool = false, per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+        },
+        "mtime_only": []
+      },
+      "proven": true,
+      "row": "Codex's memory pipeline wrote nothing during the run"
+    },
+    {
+      "expected": "released",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": "released",
+      "proven": true,
+      "row": "The service was released, and nothing it started survived"
+    }
+  ],
+  "sequence": "M4-lead-codex",
+  "sequence_cap": 685000,
+  "sequence_stop": 548000,
+  "spoken": {
+    "alpha": "Running `sleep 30 && wc -l alpha.md`.\n7",
+    "beta": "Running `sleep 5 && wc -l beta.md`.\n4",
+    "lead": "alpha.md: 7\nbeta.md: 4"
+  },
+  "started_at": "2026-09-26T12:23:56Z",
+  "steer_exited": {
+    "alternative": "Steering needs an acknowledged, running native turn",
+    "delivery_at_steer": "acknowledged",
+    "delivery_id": null,
+    "request": "not_supported",
+    "runtime_after_steer": "exited",
+    "runtime_at_steer": "exited"
+  },
+  "steer_running": {
+    "alternative": null,
+    "delivery_at_steer": "acknowledged",
+    "delivery_id": "L3.alpha.steering-1",
+    "request": "recorded",
+    "runtime_after_steer": "active",
+    "runtime_at_steer": "active"
+  },
+  "store_read": {
+    "read": false,
+    "reason": "Codex's own total covers every step (review 48); no store is read"
+  },
+  "third": {
+    "lead_runtime": "active",
+    "result": {
+      "refused": {
+        "alternative": null,
+        "code": "call_budget_spent"
+      },
+      "run": "L3.third",
+      "started": false
+    }
+  },
+  "third_started": true,
+  "tool_log": [
+    {
+      "at": "2026-09-26T12:23:59.149Z",
+      "event": "started",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "lead": "L3"
+    },
+    {
+      "at": "2026-09-26T12:23:59.150Z",
+      "event": "request",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "method": "initialize"
+    },
+    {
+      "at": "2026-09-26T12:23:59.154Z",
+      "event": "request",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "method": "notifications/initialized"
+    },
+    {
+      "at": "2026-09-26T12:23:59.155Z",
+      "event": "request",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "method": "tools/list"
+    },
+    {
+      "at": "2026-09-26T12:24:01.028Z",
+      "event": "request",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "brief": "Run the shell command `sleep 30 && wc -l alpha.md`. Then report the number of lines in alpha.md. Answer with the number alone.",
+        "name": "alpha"
+      },
+      "at": "2026-09-26T12:24:01.243Z",
+      "call": 1,
+      "event": "tool_call",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "result": {
+        "admission": "admitted",
+        "run": "L3.alpha",
+        "started": true
+      },
+      "seconds": 0.2,
+      "tool": "start_run"
+    },
+    {
+      "at": "2026-09-26T12:24:02.747Z",
+      "call": 1,
+      "event": "gate",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "held": false,
+      "hold_above": 120000,
+      "tool": "start_run",
+      "total": 0
+    },
+    {
+      "at": "2026-09-26T12:24:04.288Z",
+      "event": "request",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "brief": "Run the shell command `sleep 5 && wc -l beta.md`. Then report the number of lines in beta.md. Answer with the number alone.",
+        "name": "beta"
+      },
+      "at": "2026-09-26T12:24:04.943Z",
+      "call": 2,
+      "event": "tool_call",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "result": {
+        "admission": "admitted",
+        "run": "L3.beta",
+        "started": true
+      },
+      "seconds": 0.7,
+      "tool": "start_run"
+    },
+    {
+      "at": "2026-09-26T12:24:06.020Z",
+      "call": 2,
+      "event": "gate",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "held": false,
+      "hold_above": 120000,
+      "tool": "start_run",
+      "total": 4096
+    },
+    {
+      "at": "2026-09-26T12:24:07.565Z",
+      "event": "request",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "name": "alpha"
+      },
+      "at": "2026-09-26T12:24:38.369Z",
+      "call": 3,
+      "event": "tool_call",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "result": {
+        "exit": {
+          "code": 0
+        },
+        "run": "L3.alpha",
+        "runtime": "exited",
+        "text": "Running `sleep 30 && wc -l alpha.md`.\n7"
+      },
+      "seconds": 30.8,
+      "tool": "read_run"
+    },
+    {
+      "at": "2026-09-26T12:24:38.369Z",
+      "call": 3,
+      "event": "gate",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "held": false,
+      "hold_above": 120000,
+      "tool": "read_run",
+      "total": 8192
+    },
+    {
+      "at": "2026-09-26T12:24:39.911Z",
+      "event": "request",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "method": "tools/call"
+    },
+    {
+      "arguments": {
+        "name": "beta"
+      },
+      "at": "2026-09-26T12:24:41.186Z",
+      "call": 4,
+      "event": "tool_call",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "result": {
+        "exit": {
+          "code": 0
+        },
+        "run": "L3.beta",
+        "runtime": "exited",
+        "text": "Running `sleep 5 && wc -l beta.md`.\n4"
+      },
+      "seconds": 1.3,
+      "tool": "read_run"
+    },
+    {
+      "at": "2026-09-26T12:24:41.602Z",
+      "call": 4,
+      "event": "gate",
+      "grant": "6838daaa-d37a-4cf4-a31a-eb30cac53605",
+      "held": false,
+      "hold_above": 120000,
+      "tool": "read_run",
+      "total": 12288
+    }
+  ],
+  "unmetered": {
+    "decision": "owner-2026-09-26-l3-codex-unmetered-features-off",
+    "exists": true,
+    "features": {
+      "goals": {
+        "key": "features.goals",
+        "off": true,
+        "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+        "value": false,
+        "why": "features.goals = false, per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+      },
+      "image generation": {
+        "key": "features.image_generation",
+        "off": true,
+        "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+        "value": false,
+        "why": "features.image_generation = false, per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+      },
+      "memories": {
+        "key": "features.memory_tool",
+        "off": true,
+        "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+        "value": false,
+        "why": "features.memory_tool = false, per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+      },
+      "standalone web search": {
+        "key": "web_search",
+        "off": true,
+        "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+        "value": "disabled",
+        "why": "web_search = \"disabled\", per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+      },
+      "sub-agents": {
+        "key": "agents.enabled",
+        "multi_agent": false,
+        "off": true,
+        "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
+        "value": false,
+        "why": "agents.enabled = false, per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
+      }
+    },
+    "owner_keys": {},
+    "read": "config.toml"
+  },
+  "usage": {
+    "L3": {
+      "allowance": 30000,
+      "basis": "reported_total",
+      "charged": 20480,
+      "cut_short": false,
+      "host_files": {
+        "largest": 4096,
+        "others": [],
+        "sum": 20480
+      },
+      "meter_estimate": 20480,
+      "reported_total": 20480,
+      "seen": 20480,
+      "share": 210000,
+      "stopped_by_the_runner": false,
+      "subagents": [],
+      "threads": {
+        "fake-thread-22776": 20480
+      }
+    },
+    "L3.alpha": {
+      "allowance": 30000,
+      "basis": "reported_total",
+      "charged": 8192,
+      "cut_short": false,
+      "host_files": {
+        "largest": 4096,
+        "others": [],
+        "sum": 8192
+      },
+      "meter_estimate": 8192,
+      "reported_total": 8192,
+      "seen": 8192,
+      "share": 150000,
+      "stopped_by_the_runner": false,
+      "subagents": [],
+      "threads": {
+        "fake-thread-23617": 8192
+      }
+    },
+    "L3.beta": {
+      "allowance": 30000,
+      "basis": "reported_total",
+      "charged": 8192,
+      "cut_short": false,
+      "host_files": {
+        "largest": 4096,
+        "others": [],
+        "sum": 8192
+      },
+      "meter_estimate": 8192,
+      "reported_total": 8192,
+      "seen": 8192,
+      "share": 150000,
+      "stopped_by_the_runner": false,
+      "subagents": [],
+      "threads": {
+        "fake-thread-26012": 8192
+      }
+    }
+  },
+  "views": {
+    "L3": {
+      "admission": "admitted",
+      "completions": [],
+      "deliveries": [
+        {
+          "delivery": "acknowledged",
+          "delivery_id": "L3.delivery-1",
+          "determined_at": "2026-09-26T12:23:59Z",
+          "evidence": {
+            "class": "native_turn_acknowledged",
+            "source": "pio-fake-app-server/host"
+          },
+          "history": [
+            {
+              "delivery": "pending",
+              "recorded_at": "2026-09-26T12:23:59Z"
+            }
+          ],
+          "proof_class": "provider_ack_id"
+        }
+      ],
+      "delivery": "acknowledged",
+      "effects": [
+        "L3.delivery-1"
+      ],
+      "evaluation": "not_requested",
+      "execution": {
+        "id": "L3",
+        "kind": "execution.execution"
+      },
+      "exit": {
+        "code": 0
+      },
+      "host": {
+        "generation": 1,
+        "id": "codex-host"
+      },
+      "next_cursor": "9f26ec89-3f73-4d88-877c-160b5febfe8c:1:32",
+      "obligations": [],
+      "origin": {
+        "call_budget": 2,
+        "depth": 0,
+        "initiator": {
+          "id": "L3",
+          "kind": "execution.execution"
+        }
+      },
+      "recovery": [],
+      "result": "absent",
+      "revision": 10,
+      "runtime": "exited",
+      "usage": {
+        "liability": "resolved",
+        "observations": [
+          {
+            "amount": 20480,
+            "basis": "observed",
+            "invocation_id": "0267e891-854a-46cb-bcf8-01b2aa99fc81",
+            "measure": "codex.tokens.total",
+            "recorded_at": "2026-09-26T12:24:43Z"
+          }
+        ]
+      },
+      "workspace": {
+        "checkpoints": [],
+        "lease": {
+          "base": "f447bd07db5cacb2defdfe4b72e952a906d2b0a5",
+          "cleanup": "retain",
+          "lease_epoch": 1,
+          "lease_id": "L3.workspace",
+          "repository": "/private/tmp/pio-l1-vzu_09a7/fixtures/lead",
+          "writer": "owner"
+        }
+      }
+    },
+    "L3.alpha": {
+      "admission": "admitted",
+      "completions": [],
+      "deliveries": [
+        {
+          "delivery": "acknowledged",
+          "delivery_id": "L3.alpha.delivery-1",
+          "determined_at": "2026-09-26T12:24:01Z",
+          "evidence": {
+            "class": "native_turn_acknowledged",
+            "source": "pio-fake-app-server/host"
+          },
+          "history": [
+            {
+              "delivery": "pending",
+              "recorded_at": "2026-09-26T12:24:01Z"
+            }
+          ],
+          "proof_class": "provider_ack_id"
+        }
+      ],
+      "delivery": "acknowledged",
+      "effects": [
+        "L3.alpha.delivery-1",
+        "L3.alpha.steering-1"
+      ],
+      "evaluation": "not_requested",
+      "execution": {
+        "id": "L3.alpha",
+        "kind": "execution.execution"
+      },
+      "exit": {
+        "code": 0
+      },
+      "host": {
+        "generation": 1,
+        "id": "codex-host"
+      },
+      "next_cursor": "9f26ec89-3f73-4d88-877c-160b5febfe8c:1:32",
+      "obligations": [],
+      "origin": {
+        "call_budget": 0,
+        "depth": 1,
+        "initiator": {
+          "id": "L3",
+          "kind": "execution.execution"
+        }
+      },
+      "recovery": [],
+      "result": "absent",
+      "revision": 10,
+      "runtime": "exited",
+      "steering": [
+        {
+          "behavior": "not_observed",
+          "delivery": "acknowledged",
+          "delivery_id": "L3.alpha.steering-1",
+          "evidence": {
+            "class": "native_steer_acknowledged",
+            "source": "pio-fake-app-server/host"
+          },
+          "proof_class": "provider_ack_id",
+          "recorded_at": "2026-09-26T12:24:01Z",
+          "request": "recorded",
+          "steer_id": "L3.alpha.steer-1"
+        },
+        {
+          "alternative": "Steering needs an acknowledged, running native turn",
+          "recorded_at": "2026-09-26T12:24:47Z",
+          "request": "not_supported",
+          "steer_id": "L3.alpha.steer-2"
+        }
+      ],
+      "usage": {
+        "liability": "resolved",
+        "observations": [
+          {
+            "amount": 8192,
+            "basis": "observed",
+            "invocation_id": "9cbb96a3-8127-4068-a0d1-33f53b141f8d",
+            "measure": "codex.tokens.total",
+            "recorded_at": "2026-09-26T12:24:34Z"
+          }
+        ]
+      },
+      "workspace": {
+        "checkpoints": [],
+        "lease": {
+          "base": "f447bd07db5cacb2defdfe4b72e952a906d2b0a5",
+          "cleanup": "retain",
+          "lease_epoch": 1,
+          "lease_id": "L3.alpha.workspace",
+          "repository": "/private/tmp/pio-l1-vzu_09a7/fixtures/lead",
+          "writer": "lead"
+        }
+      }
+    },
+    "L3.attached": {},
+    "L3.beta": {
+      "actions": [
+        {
+          "action_id": "L3.beta.action-1",
+          "answered_at": "2026-09-26T12:24:07Z",
+          "owner": "codex",
+          "requested_at": "2026-09-26T12:24:06Z",
+          "response_effect": "L3.beta.response-1",
+          "state": "answered"
+        }
+      ],
+      "admission": "admitted",
+      "completions": [],
+      "deliveries": [
+        {
+          "delivery": "acknowledged",
+          "delivery_id": "L3.beta.delivery-1",
+          "determined_at": "2026-09-26T12:24:05Z",
+          "evidence": {
+            "class": "native_turn_acknowledged",
+            "source": "pio-fake-app-server/host"
+          },
+          "history": [
+            {
+              "delivery": "pending",
+              "recorded_at": "2026-09-26T12:24:05Z"
+            }
+          ],
+          "proof_class": "provider_ack_id"
+        }
+      ],
+      "delivery": "acknowledged",
+      "effects": [
+        "L3.beta.delivery-1",
+        "L3.beta.response-1"
+      ],
+      "evaluation": "not_requested",
+      "execution": {
+        "id": "L3.beta",
+        "kind": "execution.execution"
+      },
+      "exit": {
+        "code": 0
+      },
+      "host": {
+        "generation": 1,
+        "id": "codex-host"
+      },
+      "next_cursor": "9f26ec89-3f73-4d88-877c-160b5febfe8c:1:32",
+      "obligations": [],
+      "origin": {
+        "call_budget": 0,
+        "depth": 1,
+        "initiator": {
+          "id": "L3",
+          "kind": "execution.execution"
+        }
+      },
+      "recovery": [],
+      "result": "absent",
+      "revision": 9,
+      "runtime": "exited",
+      "usage": {
+        "liability": "resolved",
+        "observations": [
+          {
+            "amount": 8192,
+            "basis": "observed",
+            "invocation_id": "0e5235d9-c4a9-4c2c-8f79-cf9362a1b7de",
+            "measure": "codex.tokens.total",
+            "recorded_at": "2026-09-26T12:24:09Z"
+          }
+        ]
+      },
+      "workspace": {
+        "checkpoints": [],
+        "lease": {
+          "base": "f447bd07db5cacb2defdfe4b72e952a906d2b0a5",
+          "cleanup": "retain",
+          "lease_epoch": 1,
+          "lease_id": "L3.beta.workspace",
+          "repository": "/private/tmp/pio-l1-vzu_09a7/fixtures/lead",
+          "writer": "lead"
+        }
+      }
+    },
+    "L3.third": {
+      "admission": "refused",
+      "completions": [],
+      "deliveries": [],
+      "delivery": "failed_before_delivery",
+      "effects": [],
+      "evaluation": "not_requested",
+      "execution": {
+        "id": "L3.third",
+        "kind": "execution.execution"
+      },
+      "exit": "unavailable",
+      "host": {
+        "generation": 1,
+        "id": "codex-host"
+      },
+      "next_cursor": "9f26ec89-3f73-4d88-877c-160b5febfe8c:1:32",
+      "obligations": [],
+      "origin": {
+        "call_budget": 0,
+        "depth": 1,
+        "initiator": {
+          "id": "L3",
+          "kind": "execution.execution"
+        }
+      },
+      "reason": "call_budget_spent",
+      "recovery": [],
+      "result": "absent",
+      "revision": 1,
+      "runtime": "not_started",
+      "usage": {
+        "liability": "none",
+        "observations": []
+      },
+      "workspace": {
+        "checkpoints": [],
+        "lease": {
+          "base": "f447bd07db5cacb2defdfe4b72e952a906d2b0a5",
+          "cleanup": "retain",
+          "lease_epoch": 1,
+          "lease_id": "L3.third.workspace",
+          "repository": "/private/tmp/pio-l1-vzu_09a7/fixtures/lead",
+          "writer": "lead"
+        }
+      }
+    },
+    "credential-check": {
+      "admission": "refused",
+      "alternative": "Lead tool refused: [{\"detail\":null,\"reason\":\"lead_tool_carries_a_credential_value\"}]",
+      "completions": [],
+      "deliveries": [],
+      "delivery": "failed_before_delivery",
+      "effects": [],
+      "evaluation": "not_requested",
+      "execution": {
+        "id": "credential-check",
+        "kind": "execution.execution"
+      },
+      "exit": "unavailable",
+      "host": {
+        "generation": 1,
+        "id": "codex-host"
+      },
+      "next_cursor": "9f26ec89-3f73-4d88-877c-160b5febfe8c:1:32",
+      "obligations": [],
+      "reason": "capability_unavailable",
+      "recovery": [],
+      "result": "absent",
+      "revision": 1,
+      "runtime": "not_started",
+      "usage": {
+        "liability": "none",
+        "observations": []
+      },
+      "workspace": {
+        "checkpoints": [],
+        "lease": {
+          "base": "f447bd07db5cacb2defdfe4b72e952a906d2b0a5",
+          "cleanup": "retain",
+          "lease_epoch": 1,
+          "lease_id": "credential-check.workspace",
+          "repository": "/private/tmp/pio-l1-vzu_09a7/fixtures/lead",
+          "writer": "owner"
+        }
+      }
+    }
+  },
+  "wc_l": {
+    "alpha.md": 7,
+    "beta.md": 4
+  }
+}

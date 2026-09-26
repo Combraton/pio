@@ -597,14 +597,269 @@ fn a_symlink_pointing_out_of_the_fixture_is_followed() {
     );
 }
 
+/// A link that is not the last component of the path (review of L3, round
+/// 2, HR-1). The resolver used to put the rest of the path on the stack
+/// above the link's target, so it walked the rest first and then threw it
+/// away: a path through a link inside the fixture and then out of it read
+/// `inside_fixture`. These escapes are real on Codex, which joins a
+/// command's working directory without canonicalizing it, and on Claude
+/// Code and OpenCode, whose tool targets go through the same resolver.
 #[test]
-fn a_symlink_loop_terminates_instead_of_hanging() {
+fn a_symlink_before_the_last_component_is_followed_in_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    std::os::unix::fs::symlink(fixture.join("src"), fixture.join("inside")).unwrap();
+    // Through a link that stays inside, then out by `..`.
+    assert_eq!(
+        placement_of(
+            json!({"file_path":"inside/../../outside/secret.txt"}),
+            &fixture,
+            &fixture
+        ),
+        "outside_fixture"
+    );
+    // No `..` at all: a link to the fixture itself, then a link out of it.
+    std::os::unix::fs::symlink(".", fixture.join("self")).unwrap();
+    std::os::unix::fs::symlink(&outside, fixture.join("esc2")).unwrap();
+    assert_eq!(
+        placement_of(
+            json!({"file_path":"self/esc2/secret.txt"}),
+            &fixture,
+            &fixture
+        ),
+        "outside_fixture"
+    );
+    // A link that stays inside, to a directory holding a link out.
+    std::fs::create_dir_all(fixture.join("sub")).unwrap();
+    std::os::unix::fs::symlink(&outside, fixture.join("sub/esc")).unwrap();
+    std::os::unix::fs::symlink(fixture.join("sub"), fixture.join("link-in")).unwrap();
+    assert_eq!(
+        placement_of(
+            json!({"file_path":"link-in/esc/secret.txt"}),
+            &fixture,
+            &fixture
+        ),
+        "outside_fixture"
+    );
+    // The same classifier on a directory, as the Codex host uses it for a
+    // command's working directory: out through the two links, and the
+    // label of a path that stays inside keeps everything after the link.
+    let workdir = fixture.join("self/esc2");
+    assert_eq!(
+        classify_path(workdir.to_str(), &fixture, &fixture)["placement"],
+        "outside_fixture"
+    );
+    let deeper = classify_path(fixture.join("inside/deeper").to_str(), &fixture, &fixture);
+    assert_eq!(deeper["placement"], "inside_fixture");
+    assert_eq!(deeper["target_label"], "<fixture>/src/deeper");
+    // And the decision the Claude and OpenCode hosts make on a permission
+    // request: a target out through the links is declined, not surfaced.
+    let request = json!({"request":{"input":{"file_path":"self/esc2/secret.txt"},
+                                    "tool_name":"Read","tool_use_id":"t-link"}});
+    let decided = classify_permission_request(&request, &fixture, &fixture);
+    assert_eq!(decided["placement"], "outside_fixture");
+    assert_eq!(decided["disposition"], "decline");
+}
+
+/// A loop has no end to classify: it is unresolvable, never inside, and
+/// the Claude and OpenCode hosts put it to the caller rather than deciding
+/// it (review of L3, round 3, R3-HC-1).
+#[test]
+fn a_symlink_loop_is_unresolvable() {
     let dir = tempfile::tempdir().unwrap();
     let (fixture, _) = workspace(dir.path());
     std::os::unix::fs::symlink(fixture.join("b"), fixture.join("a")).unwrap();
     std::os::unix::fs::symlink(fixture.join("a"), fixture.join("b")).unwrap();
-    // The only requirement is that it returns; the answer is not meaningful.
-    let _ = resolve_target("a", &fixture);
+    assert_eq!(resolve_target("a", &fixture), None);
+    let placed = classify_path(fixture.join("a/x").to_str(), &fixture, &fixture);
+    assert_eq!(placed["placement"], "not_classifiable");
+    assert!(placed["target_label"].is_null(), "{placed}");
+    let request = json!({"request":{"input":{"file_path":"a/x"},
+                                    "tool_name":"Read","tool_use_id":"t-loop"}});
+    let decided = classify_permission_request(&request, &fixture, &fixture);
+    assert_eq!(decided["placement"], "not_classifiable");
+    assert_eq!(decided["disposition"], "surface_as_action");
+}
+
+/// Links chained one to the next are followed to the end, however many
+/// there are within the budget: six, the last pointing out of the fixture
+/// (review of L3, round 3, R3-HC-2; with a budget of two, this read inside).
+#[test]
+fn a_chain_of_links_is_followed_to_its_end() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    std::fs::create_dir_all(fixture.join("sub")).unwrap();
+    std::os::unix::fs::symlink(&outside, fixture.join("sub/esc")).unwrap();
+    std::os::unix::fs::symlink("sub", fixture.join("e6")).unwrap();
+    for n in (1..6).rev() {
+        std::os::unix::fs::symlink(format!("e{}", n + 1), fixture.join(format!("e{n}"))).unwrap();
+    }
+    // The kernel lands outside, through all six and then `esc`.
+    assert!(fixture.join("e1/esc/secret.txt").exists());
+    let out = classify_path(fixture.join("e1/esc").to_str(), &fixture, &fixture);
+    assert_eq!(out["placement"], "outside_fixture", "{out}");
+    let inside = classify_path(fixture.join("e1").to_str(), &fixture, &fixture);
+    assert_eq!(inside["placement"], "inside_fixture", "{inside}");
+    assert_eq!(inside["target_label"], "<fixture>/sub");
+}
+
+/// A chain longer than the link budget is not walked on as if it ended
+/// where the budget did: it is unresolvable. Forty-one links, the kernel's
+/// own limit being lower (32 on macOS, 40 on Linux).
+#[test]
+fn a_chain_past_the_link_budget_is_unresolvable() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    std::fs::create_dir_all(fixture.join("sub")).unwrap();
+    std::os::unix::fs::symlink(&outside, fixture.join("sub/esc")).unwrap();
+    std::os::unix::fs::symlink("sub", fixture.join("c41")).unwrap();
+    for n in (1..41).rev() {
+        std::os::unix::fs::symlink(format!("c{}", n + 1), fixture.join(format!("c{n}"))).unwrap();
+    }
+    assert_eq!(resolve_target("c1/esc", &fixture), None);
+    for path in ["c1/esc", "c1"] {
+        let placed = classify_path(fixture.join(path).to_str(), &fixture, &fixture);
+        assert_eq!(placed["placement"], "not_classifiable", "{path}: {placed}");
+    }
+}
+
+/// Make `names` as a chain of nested directories under `dir`, each relative
+/// to the one before by its descriptor, so no call names a long path; and
+/// return the descriptor of the deepest.
+fn nested_dirs(dir: std::fs::File, names: &[String]) -> std::fs::File {
+    use std::os::fd::{AsRawFd, FromRawFd};
+    names.iter().fold(dir, |parent, name| {
+        let name = std::ffi::CString::new(name.as_str()).unwrap();
+        // SAFETY: a valid descriptor and a NUL-terminated name; the new
+        // descriptor is owned by the File returned.
+        unsafe {
+            assert_eq!(libc::mkdirat(parent.as_raw_fd(), name.as_ptr(), 0o755), 0);
+            let fd = libc::openat(
+                parent.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY,
+            );
+            assert!(fd >= 0);
+            std::fs::File::from_raw_fd(fd)
+        }
+    })
+}
+
+fn symlink_at(target: &str, dir: &std::fs::File, name: &str) {
+    use std::os::fd::AsRawFd;
+    let (target, name) = (
+        std::ffi::CString::new(target).unwrap(),
+        std::ffi::CString::new(name).unwrap(),
+    );
+    // SAFETY: a valid descriptor and NUL-terminated strings.
+    assert_eq!(
+        unsafe { libc::symlinkat(target.as_ptr(), dir.as_raw_fd(), name.as_ptr()) },
+        0
+    );
+}
+
+/// A link reached through a resolved path longer than `PATH_MAX`: `readlink`
+/// refuses the long path (`ENAMETOOLONG`), while the kernel, resolving one
+/// component at a time from the directory it has reached, follows the link
+/// out. Two links, each under `PATH_MAX` by itself and together past it,
+/// with the second inside the directory the first leads to: `L1/L2/esc`.
+/// Taking the refusal for "not a link" read this inside the fixture (review
+/// of L3, round 3, R3-HC-1).
+#[test]
+fn a_link_reached_past_path_max_is_unresolvable() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    let path_max = libc::PATH_MAX as usize;
+    // As many 250-character components as one link's text holds under
+    // PATH_MAX (three on macOS, sixteen on Linux).
+    let per_link = (path_max - 64) / 251;
+    let names = |prefix: char| -> Vec<String> {
+        (0..per_link)
+            .map(|n| format!("{prefix}{n:02}{}", "d".repeat(247)))
+            .collect()
+    };
+    let (first, second) = (names('a'), names('b'));
+    std::fs::create_dir(fixture.join("t")).unwrap();
+    let a = nested_dirs(std::fs::File::open(fixture.join("t")).unwrap(), &first);
+    std::os::unix::fs::symlink(format!("t/{}", first.join("/")), fixture.join("L1")).unwrap();
+    let b = nested_dirs(a.try_clone().unwrap(), &second);
+    symlink_at(&second.join("/"), &a, "L2");
+    symlink_at(outside.to_str().unwrap(), &b, "esc");
+    // What the resolver would build is past PATH_MAX; the kernel follows it
+    // out regardless.
+    assert!(fixture.as_os_str().len() + 2 * per_link * 251 > path_max);
+    assert!(fixture.join("L1/L2/esc/secret.txt").exists());
+    assert_eq!(resolve_target("L1/L2/esc", &fixture), None);
+    let placed = classify_path(fixture.join("L1/L2/esc").to_str(), &fixture, &fixture);
+    assert_eq!(placed["placement"], "not_classifiable", "{placed}");
+    assert!(placed["target_label"].is_null(), "{placed}");
+    let request = json!({"request":{"input":{"file_path":"L1/L2/esc/secret.txt"},
+                                    "tool_name":"Read","tool_use_id":"t-long"}});
+    let decided = classify_permission_request(&request, &fixture, &fixture);
+    assert_eq!(decided["placement"], "not_classifiable");
+    assert_eq!(decided["disposition"], "surface_as_action");
+}
+
+/// Gives a directory its permissions back when a test ends, however it
+/// ends, so the temporary directory around it can be removed.
+struct Unlock(PathBuf);
+
+impl Drop for Unlock {
+    fn drop(&mut self) {
+        let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755));
+    }
+}
+
+/// A link out of the fixture, held in a directory this user cannot search
+/// (review of L3, round 4, R4-HC-3): `readlink` refuses it (`EACCES`), so
+/// where it leads cannot be seen, and the path is unresolvable, never
+/// inside. Taking that refusal for "not a link" read it inside the fixture.
+/// The kernel refuses it too, now; a directory unlocked before a command
+/// runs is the deferred time-of-check case (R3-HC-8).
+#[test]
+fn a_link_in_an_unsearchable_directory_is_unresolvable() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    let locked = fixture.join("locked");
+    std::fs::create_dir(&locked).unwrap();
+    std::os::unix::fs::symlink(&outside, locked.join("esc")).unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let _unlock = Unlock(locked.clone());
+    // The case itself: this user may not look inside. Run as root, it could,
+    // and the test would prove nothing, so it says so.
+    let refused = std::fs::read_link(locked.join("esc")).unwrap_err();
+    assert_eq!(
+        refused.kind(),
+        std::io::ErrorKind::PermissionDenied,
+        "{refused}"
+    );
+    assert_eq!(resolve_target("locked/esc", &fixture), None);
+    for path in ["locked/esc", "locked/esc/secret.txt"] {
+        let placed = classify_path(fixture.join(path).to_str(), &fixture, &fixture);
+        assert_eq!(placed["placement"], "not_classifiable", "{path}: {placed}");
+        assert!(placed["target_label"].is_null(), "{placed}");
+    }
+    let request = json!({"request":{"input":{"file_path":"locked/esc/secret.txt"},
+                                    "tool_name":"Read","tool_use_id":"t-locked"}});
+    let decided = classify_permission_request(&request, &fixture, &fixture);
+    assert_eq!(decided["placement"], "not_classifiable");
+    assert_eq!(decided["disposition"], "surface_as_action");
+}
+
+/// A path through a file (`file.txt/x`): `readlink` answers `ENOTDIR`, and
+/// the path is unresolvable, never inside (review of L3, round 4,
+/// R4-HC-3). Taking that answer for "not a link" read it inside.
+#[test]
+fn a_path_through_a_file_is_unresolvable() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, _) = workspace(dir.path());
+    std::fs::write(fixture.join("file.txt"), "text\n").unwrap();
+    let refused = std::fs::read_link(fixture.join("file.txt/x")).unwrap_err();
+    assert_eq!(refused.raw_os_error(), Some(libc::ENOTDIR), "{refused}");
+    assert_eq!(resolve_target("file.txt/x", &fixture), None);
+    let placed = classify_path(fixture.join("file.txt/x").to_str(), &fixture, &fixture);
+    assert_eq!(placed["placement"], "not_classifiable", "{placed}");
+    assert!(placed["target_label"].is_null(), "{placed}");
 }
 
 #[test]

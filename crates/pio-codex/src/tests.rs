@@ -289,8 +289,9 @@ fn resolve_mirrors_the_pinned_npm_wrapper_layouts() {
 fn checked_in_identity_is_the_qualified_schema_listing() {
     let identity: Value = serde_json::from_str(QUALIFIED_SCHEMA_IDENTITY).unwrap();
     assert_eq!(identity["format"], "pio-codex-schema-identity/1");
-    assert_eq!(identity["file_count"], 312);
-    assert_eq!(identity["files"].as_object().unwrap().len(), 312);
+    // 0.157.0: 314 files (0.155.1 had 312; four added, two removed).
+    assert_eq!(identity["file_count"], 314);
+    assert_eq!(identity["files"].as_object().unwrap().len(), 314);
     let mut listing = String::new();
     for (file, digest) in identity["files"].as_object().unwrap() {
         listing.push_str(&format!(
@@ -302,6 +303,39 @@ fn checked_in_identity_is_the_qualified_schema_listing() {
         identity["canonical_listing_sha256"],
         sha256_hex(listing.as_bytes())
     );
+}
+
+/// The three pin constants and the compiled-in identity name one release:
+/// the identity is the one checked in under `adapters/codex/<PINNED_VERSION>`,
+/// and the committed qualification record for that version names the same
+/// tag and source. A stale `PINNED_VERSION` fails closed at run time, but a
+/// stale tag or source was only copied into every record's `pinned` and
+/// would misstate provenance silently (review of L3, REPIN-5).
+#[test]
+fn pin_constants_name_the_identity_and_the_qualification_record() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let identity = std::fs::read_to_string(workspace.join(format!(
+        "adapters/codex/{PINNED_VERSION}/schema-identity.json"
+    )))
+    .expect("an identity directory for PINNED_VERSION");
+    assert_eq!(
+        identity, QUALIFIED_SCHEMA_IDENTITY,
+        "the compiled-in identity is not the one checked in for {PINNED_VERSION}"
+    );
+    let record: Value = serde_json::from_str(
+        &std::fs::read_to_string(workspace.join(format!(
+            "docs/work/m2/codex-qualification/qualification-{PINNED_VERSION}.json"
+        )))
+        .expect("a committed qualification record for PINNED_VERSION"),
+    )
+    .unwrap();
+    assert_eq!(
+        record["record"]["pinned"],
+        json!({"version":PINNED_VERSION,"tag":PINNED_TAG,"source":PINNED_SOURCE})
+    );
+    assert_eq!(record["record"]["qualified"], true);
+    assert_eq!(record["record"]["version"]["native"], PINNED_VERSION);
+    assert_eq!(PINNED_TAG, format!("rust-v{PINNED_VERSION}"));
 }
 
 #[test]
@@ -406,14 +440,14 @@ fn thread_settings_guard_refuses_broader_than_configured_defaults() {
         ])
     );
     // A configured `untrusted` approval policy is not a stricter default at
-    // 0.155.1: the app-server exits before `initialize`, so it is unresolved
+    // 0.155.1 and 0.157.0: the app-server exits before `initialize`, so it is unresolved
     // rather than compared, while requesting `untrusted` per thread is fine.
     let configured_untrusted = guard_for(Some("approval_policy = \"untrusted\"\n"), plan.clone());
     assert_eq!(configured_untrusted["allowed"], false);
     assert_eq!(configured_untrusted["broader_than_configured"], json!([]));
     assert_eq!(
         configured_untrusted["unresolved"],
-        json!([{"setting":"approval_policy","reason":"Codex 0.155.1 does not start with this configured value","value":"untrusted"}])
+        json!([{"setting":"approval_policy","reason":format!("Codex {PINNED_VERSION} does not start with this configured value"),"value":"untrusted"}])
     );
     assert_eq!(
         guard_for(Some("sandbox_mode = \"read-only\"\n"), untrusted)["allowed"],
@@ -441,5 +475,43 @@ fn thread_settings_guard_refuses_broader_than_configured_defaults() {
             !guard["unresolved"].as_array().unwrap().is_empty(),
             "{config}"
         );
+    }
+}
+
+/// The fake's reading of how Codex 0.157.0 exposes an MCP server's tools
+/// (`core/src/tools/spec_plan.rs:234-266`, `:761-772`; not measured): on a
+/// code-mode-only model, only `DirectModelOnly` is in the model's own list.
+/// L3's first live run sent nothing (deferred, never named); its lead sends
+/// `code_mode` and `deferred` omitted. `code_mode` alone would do on this
+/// model, and `deferred` alone keeps the tools inside `exec`.
+#[test]
+fn a_server_s_tools_reach_a_code_mode_only_model_only_when_kept_out_of_code_mode() {
+    use crate::fake_turn::{exposure, in_model_list};
+    let omit = |surfaces: &[&str]| surfaces.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    for (surfaces, code_mode_only, expected, listed) in [
+        (&[][..], true, "deferred", false),
+        (
+            &["code_mode", "deferred"][..],
+            true,
+            "direct_model_only",
+            true,
+        ),
+        (&["code_mode"][..], true, "direct_model_only", true),
+        (&["deferred"][..], true, "direct", false),
+        (&["direct"][..], true, "deferred", false),
+        (&[][..], false, "deferred", true),
+        (
+            &["code_mode", "deferred"][..],
+            false,
+            "direct_model_only",
+            true,
+        ),
+    ] {
+        let found = exposure(&omit(surfaces), code_mode_only);
+        assert_eq!(
+            found, expected,
+            "{surfaces:?}, code-mode-only {code_mode_only}"
+        );
+        assert_eq!(in_model_list(found, code_mode_only), listed, "{surfaces:?}");
     }
 }

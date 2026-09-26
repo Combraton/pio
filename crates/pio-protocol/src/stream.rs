@@ -23,6 +23,48 @@ use tokio::{
 /// the product still never selects a model. See ADR 003.
 pub const MODEL_EXCEPTION: &str = "owner-2026-09-19-m2-fixture-runs";
 
+/// The owner's dated decisions that PIO may turn Codex's unmetered,
+/// default-on features off per launch: sub-agents, memories, goals,
+/// standalone web search and image generation, by the keys
+/// `pio_codex::features_off` lists, in every thread's `thread/start` config
+/// and never in the owner's files (review of L3, round 3, SPEND-2; round 4,
+/// SPEND-8, SPEND-9, and the web-search and image-generation gaps). One
+/// override set, one decision list; a real Codex refuses any decision not
+/// recorded here.
+///
+/// **Owner decision, 2026-09-26** (answering "Q6: ... how should they be
+/// turned off?", chose "Per-launch override"): "L3's Codex threads are
+/// launched with these five off, per launch, under a dated test-only
+/// exception like the lead-tool pre-allowance. Your ~/.codex/config.toml is
+/// not changed." It covers exactly the five: sub-agents (the three keys),
+/// memories, goals, standalone web search and image generation, as
+/// `pio_codex::features_off` lists them. L3's runner sends it for L3's
+/// threads only.
+pub const FEATURES_OFF_DECISIONS: &[&str] = &["owner-2026-09-26-l3-codex-unmetered-features-off"];
+/// The same setting for a labeled fake only, so the rehearsal and the
+/// matrix exercise what would go on the wire. Refused beside a real Codex.
+pub const FEATURES_OFF_REHEARSAL: &str = "rehearsal-only-features-off";
+
+/// The owner's dated decisions that PIO may turn off, per launch, on a
+/// Codex thread: the owner's plugins, apps, and each MCP server of the
+/// owner's `~/.codex/config.toml` the service names (`mcp_servers_off`), by
+/// the keys `pio_codex::plugins_off` lists and `mcp_servers.<name>.enabled =
+/// false`, in every thread's `thread/start` config and never in the owner's
+/// files. A real Codex refuses any decision not recorded here.
+///
+/// **Owner decision, 2026-09-26** (answering Q7, chose "All off for L3"):
+/// "Per launch, under a dated test-only exception, L3's threads get
+/// features.plugins=false, features.apps=false, and your [three named MCP
+/// servers, names redacted] off. Only PIO's lead tool remains.
+/// Your config.toml is untouched." L3's first live lead called a tool of the
+/// owner's Computer Use plugin, which Codex approves without asking as
+/// read-only. L3's runner sends this for L3's threads only, with every
+/// server its `config.toml` names by a table header (only PIO's lead tool
+/// remains).
+pub const PLUGINS_OFF_DECISIONS: &[&str] = &["owner-2026-09-26-l3-plugins-apps-servers-off"];
+/// The same setting for a labeled fake only. Refused beside a real Codex.
+pub const PLUGINS_OFF_REHEARSAL: &str = "rehearsal-only-plugins-off";
+
 pub fn serve(root: &Path, config: &Path, socket: &Path) -> Result<()> {
     serve_mode(root, config, socket, Mode::Conformance)
 }
@@ -60,7 +102,11 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
                 "fixture_root",
                 "thread",
                 "labeled_fake",
-                "test_only_model_exception"
+                "test_only_model_exception",
+                "expected_model_provider",
+                "features_off_decision",
+                "plugins_off_decision",
+                "mcp_servers_off"
             ]
             .contains(&name.as_str()),
             "unsupported codex setting: {name}"
@@ -106,6 +152,59 @@ fn codex_host_config(root: &Path, codex: &Value) -> Result<Value> {
         model.is_some() == exception.is_some_and(|e| e == MODEL_EXCEPTION),
         "codex.thread.model requires test_only_model_exception = \"{MODEL_EXCEPTION}\" and that exception requires a model"
     );
+    // The provider Codex must report for the thread before its first turn.
+    // A check, never a selection: PIO sends no `modelProvider`. It exists
+    // only beside a requested model, so both are checked together.
+    if let Some(provider) = codex.get("expected_model_provider") {
+        anyhow::ensure!(
+            provider.as_str().is_some_and(|p| !p.is_empty()) && model.is_some(),
+            "codex.expected_model_provider must be a non-empty string beside codex.thread.model"
+        );
+    }
+    // Codex's unmetered features off per launch, only under a recorded owner
+    // decision, or the rehearsal's own token beside a labeled fake.
+    if let Some(decision) = codex.get("features_off_decision") {
+        let decision = decision.as_str().unwrap_or_default();
+        let rehearsal = codex["labeled_fake"] == true && decision == FEATURES_OFF_REHEARSAL;
+        anyhow::ensure!(
+            rehearsal || FEATURES_OFF_DECISIONS.contains(&decision),
+            "codex.features_off_decision is not a recorded owner decision: {decision:?}"
+        );
+    }
+    // The owner's plugins, apps and MCP servers off per launch, only under
+    // a recorded owner decision, or the rehearsal's own token beside a
+    // labeled fake; the servers by name, only with it. Names are never
+    // echoed: they are the owner's.
+    if let Some(decision) = codex.get("plugins_off_decision") {
+        let decision = decision.as_str().unwrap_or_default();
+        let rehearsal = codex["labeled_fake"] == true && decision == PLUGINS_OFF_REHEARSAL;
+        anyhow::ensure!(
+            rehearsal || PLUGINS_OFF_DECISIONS.contains(&decision),
+            "codex.plugins_off_decision is not a recorded owner decision: {decision:?}"
+        );
+    }
+    if let Some(servers) = codex.get("mcp_servers_off") {
+        anyhow::ensure!(
+            codex["plugins_off_decision"].is_string(),
+            "codex.mcp_servers_off needs codex.plugins_off_decision"
+        );
+        let names: Vec<&str> = servers
+            .as_array()
+            .map(|names| names.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default();
+        let distinct: std::collections::BTreeSet<&str> = names.iter().copied().collect();
+        anyhow::ensure!(
+            servers
+                .as_array()
+                .is_some_and(|all| all.len() == names.len())
+                && names.len() <= 64
+                && distinct.len() == names.len()
+                && names
+                    .iter()
+                    .all(|n| !n.is_empty() && n.len() <= 128 && !n.chars().any(char::is_control)),
+            "codex.mcp_servers_off must be distinct server names"
+        );
+    }
     let mut host = codex.clone();
     host["adapter"] = "codex".into();
     if codex["labeled_fake"] == true {
@@ -545,6 +644,31 @@ mod tests {
         codex
     }
 
+    /// L3 (owner decision, 2026-09-25): the provider Codex must report is a
+    /// check the operator names, never a selection, and only beside a model.
+    #[test]
+    fn an_expected_provider_is_only_accepted_beside_a_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let plan = json!({"sandbox":"workspace-write","approvalPolicy":"on-request"});
+        let with_model = json!({"sandbox":"workspace-write","approvalPolicy":"on-request","model":"gpt-5.6-terra"});
+        let mut alone = codex_config(dir.path(), plan, Value::Null);
+        alone["expected_model_provider"] = json!("openai");
+        let error = codex_host_config(dir.path(), &alone).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("beside codex.thread.model"),
+            "{error:#}"
+        );
+        let mut empty = codex_config(dir.path(), with_model.clone(), json!(MODEL_EXCEPTION));
+        empty["expected_model_provider"] = json!("");
+        assert!(codex_host_config(dir.path(), &empty).is_err());
+        let mut checked = codex_config(dir.path(), with_model, json!(MODEL_EXCEPTION));
+        checked["expected_model_provider"] = json!("openai");
+        let host = codex_host_config(dir.path(), &checked).unwrap();
+        assert_eq!(host["expected_model_provider"], "openai");
+        // Checked, never sent: the thread's own settings carry no provider.
+        assert!(host["thread"].get("modelProvider").is_none());
+    }
+
     #[test]
     fn a_model_is_only_accepted_under_the_dated_test_only_exception() {
         let dir = tempfile::tempdir().unwrap();
@@ -590,6 +714,155 @@ mod tests {
             codex_host_config(dir.path(), &codex_config(dir.path(), plan, Value::Null)).unwrap();
         assert_eq!(plain["thread"]["model"], Value::Null);
     }
+    /// Codex's unmetered features off per launch (review of L3, rounds 3 and
+    /// 4): only a recorded owner decision, the one of 2026-09-26, or the
+    /// rehearsal's own token beside a labeled fake.
+    #[test]
+    fn features_off_needs_a_recorded_decision() {
+        let dir = tempfile::tempdir().unwrap();
+        let plan = json!({"sandbox":"workspace-write","approvalPolicy":"on-request"});
+        let mut fake = codex_config(dir.path(), plan.clone(), Value::Null);
+        assert!(
+            codex_host_config(dir.path(), &fake).unwrap()["features_off_decision"].is_null(),
+            "absent unless asked for"
+        );
+        fake["features_off_decision"] = json!(FEATURES_OFF_REHEARSAL);
+        assert_eq!(
+            codex_host_config(dir.path(), &fake).unwrap()["features_off_decision"],
+            FEATURES_OFF_REHEARSAL
+        );
+        for decision in [
+            json!("owner-2026-09-26-l3-agents-off"),
+            json!("rehearsal-only-agents-off"),
+            json!(""),
+            json!(true),
+        ] {
+            fake["features_off_decision"] = decision.clone();
+            let error = codex_host_config(dir.path(), &fake).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("not a recorded owner decision"),
+                "{error:#} for {decision}"
+            );
+        }
+        // The old, agents-only setting is gone: one override set, one list.
+        let mut old = codex_config(dir.path(), plan.clone(), Value::Null);
+        old["agents_off_decision"] = json!("rehearsal-only-agents-off");
+        let error = codex_host_config(dir.path(), &old).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("unsupported codex setting: agents_off_decision"),
+            "{error:#}"
+        );
+        // Beside a real Codex, the rehearsal's token and any unrecorded
+        // decision are refused before any qualification is attempted, and a
+        // Codex given no decision at all gets none.
+        let mut real = codex_config(dir.path(), plan, Value::Null);
+        real["labeled_fake"] = json!(false);
+        for decision in [
+            json!(FEATURES_OFF_REHEARSAL),
+            json!("owner-2026-09-26-l3-agents-off"),
+            json!(""),
+        ] {
+            real["features_off_decision"] = decision.clone();
+            let error = codex_host_config(dir.path(), &real).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("not a recorded owner decision"),
+                "{error:#} for {decision}"
+            );
+        }
+        // The one recorded decision passes that check, and a real Codex is
+        // then qualified as ever (this test's executable is not Codex, so
+        // qualification is what refuses it).
+        real["features_off_decision"] = json!(FEATURES_OFF_DECISIONS[0]);
+        let error = codex_host_config(dir.path(), &real).unwrap_err();
+        assert!(
+            !format!("{error:#}").contains("not a recorded owner decision"),
+            "{error:#}"
+        );
+        // And beside the labeled fake too.
+        fake["features_off_decision"] = json!(FEATURES_OFF_DECISIONS[0]);
+        assert_eq!(
+            codex_host_config(dir.path(), &fake).unwrap()["features_off_decision"],
+            FEATURES_OFF_DECISIONS[0]
+        );
+        assert_eq!(
+            FEATURES_OFF_DECISIONS,
+            &["owner-2026-09-26-l3-codex-unmetered-features-off"],
+            "exactly the owner's decision of 2026-09-26"
+        );
+    }
+
+    /// The owner's plugins, apps and MCP servers off per launch (owner
+    /// decision of 2026-09-26, Q7): only the recorded decision, or the
+    /// rehearsal's own token beside a labeled fake; the servers only with it.
+    #[test]
+    fn plugins_off_needs_a_recorded_decision() {
+        let dir = tempfile::tempdir().unwrap();
+        let plan = json!({"sandbox":"workspace-write","approvalPolicy":"on-request"});
+        let mut fake = codex_config(dir.path(), plan.clone(), Value::Null);
+        assert!(codex_host_config(dir.path(), &fake).unwrap()["plugins_off_decision"].is_null());
+        fake["plugins_off_decision"] = json!(PLUGINS_OFF_REHEARSAL);
+        fake["mcp_servers_off"] = json!(["docs", "repl"]);
+        let host = codex_host_config(dir.path(), &fake).unwrap();
+        assert_eq!(host["plugins_off_decision"], PLUGINS_OFF_REHEARSAL);
+        assert_eq!(host["mcp_servers_off"], json!(["docs", "repl"]));
+        for bad in [
+            json!(["docs", "docs"]),
+            json!([""]),
+            json!("docs"),
+            json!([1]),
+            json!(["a\nb"]),
+        ] {
+            fake["mcp_servers_off"] = bad.clone();
+            let error = codex_host_config(dir.path(), &fake).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("must be distinct server names"),
+                "{error:#} for {bad}"
+            );
+            assert!(
+                !format!("{error:#}").contains("docs"),
+                "a name echoed: {error:#}"
+            );
+        }
+        // Servers without the decision are refused.
+        let mut alone = codex_config(dir.path(), plan.clone(), Value::Null);
+        alone["mcp_servers_off"] = json!(["docs"]);
+        let error = codex_host_config(dir.path(), &alone).unwrap_err();
+        assert!(format!("{error:#}").contains("needs codex.plugins_off_decision"));
+        // An unrecorded decision, and the features' decision in its place.
+        for decision in [
+            json!("owner-2026-09-26-l3-plugins-off"),
+            json!(FEATURES_OFF_DECISIONS[0]),
+            json!(""),
+            json!(true),
+        ] {
+            let mut config = codex_config(dir.path(), plan.clone(), Value::Null);
+            config["plugins_off_decision"] = decision.clone();
+            let error = codex_host_config(dir.path(), &config).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("not a recorded owner decision"),
+                "{error:#} for {decision}"
+            );
+        }
+        // Beside a real Codex, the rehearsal's token is refused before any
+        // qualification; the owner's decision passes that check, and
+        // qualification is then what refuses this test's executable.
+        let mut real = codex_config(dir.path(), plan, Value::Null);
+        real["labeled_fake"] = json!(false);
+        real["plugins_off_decision"] = json!(PLUGINS_OFF_REHEARSAL);
+        let error = codex_host_config(dir.path(), &real).unwrap_err();
+        assert!(format!("{error:#}").contains("not a recorded owner decision"));
+        real["plugins_off_decision"] = json!(PLUGINS_OFF_DECISIONS[0]);
+        real["mcp_servers_off"] = json!(["docs"]);
+        let error = codex_host_config(dir.path(), &real).unwrap_err();
+        assert!(!format!("{error:#}").contains("not a recorded owner decision"));
+        assert!(!format!("{error:#}").contains("mcp_servers_off"));
+        assert_eq!(
+            PLUGINS_OFF_DECISIONS,
+            &["owner-2026-09-26-l3-plugins-apps-servers-off"],
+            "exactly the owner's decision of 2026-09-26 (Q7)"
+        );
+    }
+
     #[tokio::test]
     async fn non_json_whitespace_is_a_fatal_parse_error() {
         for byte in [0x0b, 0x0c] {

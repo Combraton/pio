@@ -9,9 +9,15 @@ task output, configuration copies and paths stay under $HOME/pio-m2-live/private
 holds digests, identities and observed facts only.
 
 Stops (owner plan): no run starts if cumulative observed Codex usage has reached
-800,000 tokens, which is 80% of the 1,000,000 Codex cap; a run whose observed
-usage exceeds its own limit is interrupted with `execution.cancel`; a run that
-ends without a usage report stops the sequence.
+the stop, 80% of the Codex cap; a run whose observed usage exceeds its own limit
+is interrupted with `execution.cancel`; a run that ends without a usage report
+stops the sequence. The cap was 1,000,000 with its stop at 800,000; the owner
+raised it on 2026-09-26 to 1,090,000, stop 872,000, for L3 ("More headroom"),
+and again on 2026-09-26 to 1,135,000, stop 908,000, for L3's second attempt
+(Q8, "Raise for attempt 2": "Codex cap 1,135,000, stop 908,000 (457,576 +
+450,000 = 907,576). Limits per run unchanged."), and again on 2026-09-26 to
+1,210,000, stop 968,000, when L3's child ceiling rose to 90,000 (Q9, "Child
+90k": "Codex cap 1,210,000 / stop 968,000 (457,576 + 510,000 = 967,576).").
 
 Model (owner decision, 2026-09-19): R1 runs with the user's configuration
 untouched and no model passed, under a 50,000 token limit and with no retry on
@@ -44,8 +50,14 @@ HOME = Path(os.environ['HOME'])
 LIVE = HOME / 'pio-m2-live'
 CONTENT = 'pio.combraton.dev/content'
 FEATURES = ['execution.controller', 'execution.output', 'execution.discovery', 'execution.workspaces', 'execution.usage', 'execution.actions', 'execution.steering']
-CAP = 1_000_000
-STOP_AT = 800_000
+# The Codex cap and its stop, for every Codex run: owner decision,
+# 2026-09-26 (Q9, "Child 90k", for L3's second attempt with a child ceiling
+# of 90,000): "Codex cap 1,210,000 / stop 968,000 (457,576 + 510,000 =
+# 967,576)." Raised from 1,135,000 and 908,000 (Q8, "Raise for attempt 2",
+# the same day), which had raised 1,090,000 and 872,000 ("More headroom",
+# the same day), which had raised 1,000,000 and 800,000.
+CAP = 1_210_000
+STOP_AT = 968_000
 RUN_LIMIT = 250_000
 # Must equal `pio_protocol::stream::MODEL_EXCEPTION`.
 MODEL_EXCEPTION = 'owner-2026-09-19-m2-fixture-runs'

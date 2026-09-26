@@ -4,7 +4,18 @@ permissions:
   contents: read
 jobs:
   runtime:
-    timeout-minutes: 30
+    # Build, tests, the matrices, conformance, packaging and the leak check.
+    # The lead-run rehearsals and their mutants are the `lead-runs` job below,
+    # split out after the second review of L3: together they took 39 to 49
+    # minutes at 89f1fad. Without them this job took 11 to 18 minutes there,
+    # 13 to 18 on CI at 866a903, and 17 locally with the Codex matrix at 41
+    # cases (round 3). After round 4 it took 22 minutes locally: the Codex
+    # matrix had 45 cases, and every Codex run reads its thread for three
+    # seconds after its turn (11 minutes for the matrix at three
+    # repetitions). For L3's second attempt the matrix has 46 cases
+    # (`plugins_off_decision_sent`); at 81174a1, run locally beside the
+    # lead-runs job, its steps took about 25 minutes, the matrix 9.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -33,7 +44,7 @@ jobs:
           cargo fmt --all -- --check
           cargo build --workspace --locked
           cargo test --workspace --locked
-          cargo clippy --workspace --locked -- -D warnings
+          cargo clippy --workspace --all-targets --locked -- -D warnings
           python3 scripts/check_docs.py
           git diff --exit-code -- Cargo.lock
       - name: Case cleanup guard self-tests
@@ -72,49 +83,6 @@ jobs:
           PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-codex --harness codex
       - name: A lead that starts runs, and the scope it holds (M4b step 3)
         run: PYTHONPATH=scripts python3 scripts/lead_runs.py --out target/lead-runs
-      - name: The L1 lead run, rehearsed against the labeled fake, and its mutants
-        # The same code path as the live run. Each mutant changes one thing
-        # and must fail the row it is named for, and leave its receipt and
-        # its charge behind; one that does not fails this step. The one
-        # exception is `runner-killed`, which must leave no receipt, every
-        # reservation in the ledger, and the service stopped by the watchdog.
-        # `desk-silent` waits out the 300-second delivery timeout.
-        run: |
-          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --out target/lead-run
-          for m in no-tool reports-refused-as-started grant-may-answer grant-no-steer \
-                   wrong-child wrong-relay lead-without-brief lead-loops interrupted \
-                   runner-killed release-refused setup-fails desk-silent; do
-            if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --mutant "$m" \
-                 --out target/lead-run-mutants > "target/lead-run-mutant-$m.log" 2>&1; then
-              echo "mutant $m survived"; exit 1
-            fi
-            grep -q "mutant $m: dies on" "target/lead-run-mutant-$m.log" \
-              || { cat "target/lead-run-mutant-$m.log"; exit 1; }
-          done
-      - name: The L1b lead run, rehearsed, with its mutants
-        # L1's shape, briefed so the lead's read waits for a child that works
-        # thirty seconds, and a child's `.env` read comes to the desk.
-        # `no-wait` must fail the waiting-read row; `no-ask` must leave the
-        # desk row inconclusive, because a desk nobody asked has decided
-        # nothing (review 47); `alpha-outlasts` must leave it holding.
-        run: |
-          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L1b --out target/lead-run-l1b
-          for m in no-wait no-ask; do
-            if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L1b --mutant "$m" \
-                 --out target/lead-run-l1b-mutants > "target/lead-run-l1b-mutant-$m.log" 2>&1; then
-              echo "mutant $m survived"; exit 1
-            fi
-            grep -q "mutant $m: dies on" "target/lead-run-l1b-mutant-$m.log" \
-              || { cat "target/lead-run-l1b-mutant-$m.log"; exit 1; }
-          done
-          # `alpha-outlasts` must **hold**: alpha works past the tool's wait,
-          # and only a read that came back still running at the limit can
-          # hold the waiting row.
-          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L1b --mutant alpha-outlasts \
-            --out target/lead-run-l1b-mutants > target/lead-run-l1b-mutant-alpha-outlasts.log 2>&1 \
-            || { cat target/lead-run-l1b-mutant-alpha-outlasts.log; exit 1; }
-          grep -q "mutant alpha-outlasts: holds on" target/lead-run-l1b-mutant-alpha-outlasts.log \
-            || { cat target/lead-run-l1b-mutant-alpha-outlasts.log; exit 1; }
       - name: No private paths in any committed file
         run: |
           python3 scripts/check_private_paths.py --selftest
@@ -161,5 +129,187 @@ jobs:
         # alone, and 114 marker directories survived in $TMPDIR because
         # `permit_prefix` says a directory may be removed and removes
         # nothing. This is the check that says so without anyone looking.
+        if: always()
+        run: python3 scripts/check_case_leaks.py
+
+  lead-runs:
+    # The L1, L1b and L3 rehearsals against the labeled fakes, their mutants,
+    # and the L3 desk relay: the same code paths as the live runs, at zero
+    # tokens. Split from `runtime`, with its own build and its own leak
+    # check. At 89f1fad these steps took 27 to 30 minutes of the one job;
+    # at 866a903 this job took 27 to 29 minutes on CI. With round 3's
+    # mutants (57 for L3, two at a time) it took 34 minutes locally; with
+    # round 4's (67 for L3), 37 minutes locally, L3's desk-silent aside;
+    # for L3's second attempt there are 72, which took 25 minutes locally at
+    # 81174a1, two at a time.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: ubuntu-24.04
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Verify platform and install pinned toolchain
+        run: |
+          test "$(uname -m)" = '${{ matrix.arch }}'
+          rustup toolchain install 1.97.1 --profile minimal
+          rustc --version
+          cargo --version
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: The L1 lead run, rehearsed against the labeled fake, and its mutants
+        # The same code path as the live run. Each mutant changes one thing
+        # and must fail the row it is named for, and leave its receipt and
+        # its charge behind; one that does not fails this step. The one
+        # exception is `runner-killed`, which must leave no receipt, every
+        # reservation in the ledger, and the service stopped by the watchdog.
+        # `desk-silent` waits out the 300-second delivery timeout.
+        run: |
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --out target/lead-run
+          for m in no-tool reports-refused-as-started grant-may-answer grant-no-steer \
+                   wrong-child wrong-relay lead-without-brief lead-loops interrupted \
+                   runner-killed release-refused setup-fails helper-elsewhere service-never-ready \
+                   lead-submit-invalid third-admitted desk-silent; do
+            if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --mutant "$m" \
+                 --out target/lead-run-mutants > "target/lead-run-mutant-$m.log" 2>&1; then
+              echo "mutant $m survived"; exit 1
+            fi
+            grep -q "mutant $m: dies on" "target/lead-run-mutant-$m.log" \
+              || { cat "target/lead-run-mutant-$m.log"; exit 1; }
+          done
+      - name: The L1b lead run, rehearsed, with its mutants
+        # L1's shape, briefed so the lead's read waits for a child that works
+        # thirty seconds, and a child's `.env` read comes to the desk.
+        # `no-wait` must fail the waiting-read row; `no-ask` must leave the
+        # desk row inconclusive, because a desk nobody asked has decided
+        # nothing (review 47); `alpha-outlasts` must leave it holding.
+        run: |
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L1b --out target/lead-run-l1b
+          for m in no-wait no-ask; do
+            if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L1b --mutant "$m" \
+                 --out target/lead-run-l1b-mutants > "target/lead-run-l1b-mutant-$m.log" 2>&1; then
+              echo "mutant $m survived"; exit 1
+            fi
+            grep -q "mutant $m: dies on" "target/lead-run-l1b-mutant-$m.log" \
+              || { cat "target/lead-run-l1b-mutant-$m.log"; exit 1; }
+          done
+          # `alpha-outlasts` must **hold**: alpha works past the tool's wait,
+          # and only a read that came back still running at the limit can
+          # hold the waiting row.
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L1b --mutant alpha-outlasts \
+            --out target/lead-run-l1b-mutants > target/lead-run-l1b-mutant-alpha-outlasts.log 2>&1 \
+            || { cat target/lead-run-l1b-mutant-alpha-outlasts.log; exit 1; }
+          grep -q "mutant alpha-outlasts: holds on" target/lead-run-l1b-mutant-alpha-outlasts.log \
+            || { cat target/lead-run-l1b-mutant-alpha-outlasts.log; exit 1; }
+      - name: The L3 lead run on Codex, rehearsed, with its mutants
+        # L3 against the labeled Codex fake: the lead tool on the lead's thread
+        # alone, its own two tools pre-allowed there, each thread's model and
+        # provider checked from Codex's answer before its first turn, a steer
+        # under the lead's grant delivered to a running child, and the charge
+        # from Codex's own total. Each mutant must fail its named row, L1's
+        # own included, played on Codex. The host's lapse on Codex is the
+        # matrix's `mcp_approval_lapses` and `command_approval_lapses`, so
+        # `desk-silent` (five minutes) runs in the local gates only.
+        run: |
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --out target/lead-run-l3
+          # Two at a time, each in its own output directory (its own ledger,
+          # receipt and store): a rehearsal holds no state outside its tree
+          # and its `--out`. L1's and L1b's run one at a time, because
+          # OpenCode's steer row races under load.
+          l3_mutant() {
+            if PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant "$1" \
+                 --out "target/lead-run-l3-mutants/$1" > "target/lead-run-l3-mutant-$1.log" 2>&1; then
+              echo "mutant $1 survived"; return 1
+            fi
+            grep -q "mutant $1: dies on" "target/lead-run-l3-mutant-$1.log" \
+              || { cat "target/lead-run-l3-mutant-$1.log"; return 1; }
+          }
+          export -f l3_mutant
+          printf '%s\n' wrong-model reviewer-elsewhere no-pre-allow child-overspends no-wait \
+                   child-renamed child-renamed-unchecked lead-tool-deferred plugins-decision-absent \
+                   brief-unnamed memory-mtime-only memory-db-grew \
+                   subagent-spawned subagent-not-stopped subagent-uncounted \
+                   subagents-unguarded subagents-multi-agent-only step-past-in-flight \
+                   memory-unguarded memory-alias goals-unguarded web-search-unguarded \
+                   image-generation-unguarded override-misses-alias decision-absent \
+                   goal-continued continuation-uncharged late-step-after-halt stale-meter-charged \
+                   probe-over-share probe-charged-flat \
+                   stopped-past-share stopped-charge-capped deadline-interrupted \
+                   interrupted-charged-reported memory-pipeline-ran meter-dies \
+                   lead-exit-uncarried owner-service-absent \
+                   grant-no-steer wrong-child wrong-relay lead-loops runner-killed \
+                   lead-asked-in-openai-form lead-asked-by-user-input child-asks-permissions \
+                   service-never-ready \
+                   first-number-of-all ceiling-cancel-never-sent stop-charged-reported \
+                   usage-suppressed lead-heavy qualified-elsewhere \
+                   no-tool reports-refused-as-started grant-may-answer lead-without-brief \
+                   interrupted release-refused setup-fails lead-tool-error-past-hold \
+                   lead-shell-past-hold tool-error-ungated meter-ignores-items stop-ignored \
+                   not-exited-charged-share experimental-feature-on experimental-alias-on \
+                   asked-silent lead-submit-invalid \
+                   third-admitted \
+            | xargs -P 2 -I{} bash -c 'l3_mutant "$1"' _ {}
+          # `qualified-as-committed` must **hold**: the committed record,
+          # planted as serve-codex would write it, passes the pin row.
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant qualified-as-committed \
+            --out target/lead-run-l3-mutants > target/lead-run-l3-mutant-qualified-as-committed.log 2>&1 \
+            || { cat target/lead-run-l3-mutant-qualified-as-committed.log; exit 1; }
+          grep -q "mutant qualified-as-committed: holds on" target/lead-run-l3-mutant-qualified-as-committed.log \
+            || { cat target/lead-run-l3-mutant-qualified-as-committed.log; exit 1; }
+          # `overrides-on` must **hold**: Codex's unmetered features off per
+          # launch over a configuration that turns each on, and the child that
+          # would spawn a sub-agent does not.
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --mutant overrides-on \
+            --out target/lead-run-l3-mutants > target/lead-run-l3-mutant-overrides-on.log 2>&1 \
+            || { cat target/lead-run-l3-mutant-overrides-on.log; exit 1; }
+          grep -q "mutant overrides-on: holds on" target/lead-run-l3-mutant-overrides-on.log \
+            || { cat target/lead-run-l3-mutant-overrides-on.log; exit 1; }
+      - name: The L3 desk relay beside a rehearsal, and the lead tool's gate
+        # The live relay (owner decision of 2026-09-25, item 3): its own
+        # cases, then the relay itself beside a rehearsal whose desk waits
+        # for answer files, as a live one does. The lead tool's self-test
+        # checks that its gate judges only a meter pass fresh enough.
+        run: |
+          python3 scripts/l3_desk_relay.py --selftest
+          # The relay's server check is load-bearing (review of L3, round 4,
+          # U3): another server may copy pio-lead's exact words and approval
+          # kind. With the check removed, the selftest must fail on that item.
+          sed "s/and approval.get('server') == 'pio-lead'/and True/" scripts/l3_desk_relay.py \
+            > target/l3_desk_relay_server_unchecked.py
+          grep -q "and True" target/l3_desk_relay_server_unchecked.py
+          if python3 target/l3_desk_relay_server_unchecked.py --selftest \
+               > target/l3-relay-server-unchecked.log 2>&1; then
+            echo "relay mutant server-unchecked survived"; exit 1
+          fi
+          grep -q "owner-other-server" target/l3-relay-server-unchecked.log \
+            || { cat target/l3-relay-server-unchecked.log; exit 1; }
+          python3 scripts/lead_tool.py --selftest
+          PYTHONPATH=scripts python3 scripts/lead_run.py --charge-selftest
+          PYTHONPATH=scripts python3 scripts/lead_run.py --sizing-selftest
+          mkdir -p target/l3-relay
+          PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --plan L3 --relay \
+            --out target/l3-relay/out > target/l3-relay/runner.log 2>&1 &
+          echo $! > target/l3-relay/runner.pid
+          python3 scripts/l3_desk_relay.py --dir target/l3-relay > target/l3-relay/relay.log 2>&1
+          wait "$(cat target/l3-relay/runner.pid)" \
+            || { cat target/l3-relay/runner.log target/l3-relay/relay.log; exit 1; }
+          grep -q "ANSWERED IN ADVANCE L3.beta.action-1 allow" target/l3-relay/relay.log \
+            || { cat target/l3-relay/relay.log; exit 1; }
+          ! grep -q "DESK FOR THE OWNER" target/l3-relay/relay.log \
+            || { cat target/l3-relay/relay.log; exit 1; }
+      - name: No case left its store behind
+        # Last step, as in `runtime`: every rehearsal above starts a service
+        # in a private store and releases it in a `finally`.
         if: always()
         run: python3 scripts/check_case_leaks.py

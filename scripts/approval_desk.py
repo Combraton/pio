@@ -184,12 +184,9 @@ def walk(events, order='deadline', assume=None):
 def due(row, assume=None):
     """When PIO will decide, if nobody does — or `None` when it never will.
 
-    The Codex host sets no answer deadline and has no default deny: its
-    action waits until a caller answers it. A screen that invented a
-    countdown there would be promising a decision PIO will never make, so
-    `None` is the honest answer and the walk shows it as such.
-
-    `assume` is the mutant: a default substituted for the missing deadline.
+    Every release harness sets one now; `None` stays the honest answer for
+    a request that carries no deadline, rather than an invented countdown.
+    `assume` substitutes a default for a missing one.
     """
     seconds = row['answer_deadline_seconds']
     if seconds is None:
@@ -492,9 +489,10 @@ def pass_two_actions(out, lapse_after=20):
 def pass_harness(out, harness, mutant=None):
     """The walk through `serve-claude` or `serve-codex`.
 
-    What each harness **does not** do is the point. Codex sets no answer
-    deadline and has no default deny at all, so its approval carries no
-    countdown and never lapses. Claude Code offers a rule update with every
+    What each harness **does not** do is the point. Codex offers no option
+    list; its approval carries the caller's deadline and lapses to one decline
+    of PIO's (owner decision, 2026-09-25; before that it waited for ever, and
+    the walk asserted so). Claude Code offers a rule update with every
     request, and acting on one would widen a permission beyond it — so
     suggestions appear as offered and never as something PIO will send.
     """
@@ -504,26 +502,25 @@ def pass_harness(out, harness, mutant=None):
         svc.submit(identity='run-1', delivery_timeout=300)
         poll(lambda: svc.inspect('run-1'),
              lambda v: v['runtime'] == 'requires_action', seconds=120)
-        rows = walk(events_of(svc), assume=120 if mutant == 'assume-countdown' else None)
+        rows = walk(events_of(svc))
         assert len(rows) == 1, rows
         row = rows[0]
         facts['approval'] = {k: row[k] for k in
                              ('answer_deadline_seconds', 'options', 'method',
                               'approval_kind', 'if_nobody_answers') if k in row}
 
-        if harness.lapses:
-            assert row['answer_deadline_seconds'] == 300, row
-            assert row['due'] is not None, row
-        else:
-            # Codex. Asserted, not inferred from an empty field: there is no
-            # deadline, so the walk reports no due time, and `--mutant
-            # assume-countdown` — which substitutes a default — fails here.
-            assert row['answer_deadline_seconds'] is None, row
-            assert row['due'] is None, (
-                'this harness sets no answer deadline and never denies by '
-                'default, so a due time is a countdown to a decision PIO '
-                f'will never make: {row}')
-            assert row['method'] and row['approval_kind'], row
+        # Every release harness now has a deadline: Codex's approvals lapse
+        # to one decline of PIO's since 2026-09-25 (owner decision), as the
+        # other two's always have.
+        assert harness.lapses, harness.name
+        assert row['answer_deadline_seconds'] == 300, row
+        assert row['due'] is not None, row
+        assert row['if_nobody_answers'], row
+        if harness.name == 'codex':
+            # What is being approved, so whoever decides can see it: the
+            # command the request names (the fake's `echo fixture`).
+            assert row['method'] and row['approval_kind'] and \
+                row['command'] == 'echo fixture', row
 
         if harness.offers_options:
             assert [o['kind'] for o in row['options']] == \
@@ -568,34 +565,7 @@ def pass_harness(out, harness, mutant=None):
             facts['widening_fields_received'] = []
         svc.finish()
 
-    if not harness.lapses:
-        # And the other half of "waits until answered": left alone, it is
-        # still pending when a harness that denies by default would have
-        # decided long ago.
-        facts['never_lapses'] = pass_never_lapses(out, harness)
     return facts
-
-
-def pass_never_lapses(out, harness, seconds=45):
-    """A Codex action left unanswered stays pending, and nothing decides it."""
-    with harness.service(out, f'{harness.name}-waits', **harness.ask) as svc:
-        svc.start()
-        svc.submit(identity='run-1')
-        poll(lambda: svc.inspect('run-1'),
-             lambda v: v['runtime'] == 'requires_action', seconds=120)
-        deadline = time.monotonic() + seconds
-        while time.monotonic() < deadline:
-            time.sleep(2)
-        view = svc.inspect('run-1')
-        assert view['runtime'] == 'requires_action', view
-        assert [a['state'] for a in view['actions']] == ['pending'], view['actions']
-        events = events_of(svc, 'run-1')
-        assert not [e for e in events
-                    if e['type'] == 'execution.action.answered'], \
-            'something decided an action this harness never decides'
-        assert walk(events), 'the walk lost a request that is still waiting'
-        svc.finish()
-    return dict(waited_seconds=seconds, state='pending', decided_by=None)
 
 
 # --- 6. what a caller that ignores the keys sees ------------------------------
@@ -790,8 +760,9 @@ def baseline_mutants(out, commit):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, default=ROOT / 'target/approval-desk')
-    parser.add_argument('--mutant', choices=['arrival-order', 'cross-run', 'unstripped',
-                                             'assume-countdown'])
+    # `assume-countdown` is retired: it substituted a countdown for Codex's
+    # missing deadline, and since 2026-09-25 Codex has one.
+    parser.add_argument('--mutant', choices=['arrival-order', 'cross-run', 'unstripped'])
     parser.add_argument('--harness', default='opencode', choices=proof_harness.NAMES,
                         help='opencode runs the full proof; claude and codex run the '
                              'walk against the other two release harnesses')

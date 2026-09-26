@@ -13,6 +13,17 @@ pub const CONTENT_EXTENSION: &str = "pio.combraton.dev/content";
 /// carries it is refused before admission (`grants.rs`), because a server spec
 /// is a command the host's child will launch.
 pub const LEAD_TOOL_EXTENSION: &str = "pio.combraton.dev/lead-tool";
+/// The requests a run's host declined by itself, on `execution.exit.observed`.
+pub const NATIVE_DECLINES: &str = "pio.combraton.dev/native-declines";
+/// The threads a run's harness session reported on that the run did not
+/// start (a sub-agent it spawned, or any other), with how each appeared and
+/// its own usage, on `execution.exit.observed` (review of L3, round 3,
+/// SPEND-2).
+pub const OTHER_THREADS: &str = "pio.combraton.dev/other-threads";
+/// The turns Codex started by itself on a run's own thread after the run's
+/// turn had ended (a goal's continuation), each interrupted by the host, on
+/// `execution.exit.observed` (review of L3, round 4, SPEND-9).
+pub const CONTINUATIONS: &str = "pio.combraton.dev/continuations";
 const CONTENT_PATH: &str = "/extensions/pio.combraton.dev~1content";
 pub const FEATURES: &[&str] = &[
     "execution.controller",
@@ -29,6 +40,81 @@ pub(crate) fn push(v: &mut Value, x: Value) {
         *v = json!([]);
     }
     v.as_array_mut().unwrap().push(x);
+}
+
+/// Why a lead-tool spec for the Codex host is refused, if it is.
+///
+/// The same stdio shape and the same refusals as OpenCode's, plus one field
+/// only this host can honour: `pre_allowed_tools`, the names of the lead
+/// server's own tools whose approval mode the lead's thread config sets to
+/// `approve`, so Codex does not ask before calling them (owner decision,
+/// 2026-09-25, for L3's lead: its two tools, passed per launch, never written
+/// to the owner's configuration). Every other request still comes to the
+/// caller. OpenCode has no such setting, so its validator refuses the field.
+///
+/// And three settings of the server's own table on Codex, each sent as it
+/// is (`pio_host::codex::LEAD_TOOL_SETTINGS`; rust-v0.157.0,
+/// `config/src/mcp_types.rs:229-256`): `omit_tools_from`, the surfaces the
+/// server's tools are kept off, only `code_mode` and `deferred` (omitting
+/// `direct` would hide PIO's own tool from the model); `required`, a
+/// boolean; and `startup_timeout_sec`, whole seconds from 1 to 120. L3's
+/// lead sends `["code_mode","deferred"]`, `true` and `30`, so that
+/// `gpt-5.6-terra`, which runs code-mode-only, sees its two tools in its own
+/// tool list (review of L3's first live run, 2026-09-26).
+pub(crate) fn codex_lead_tool_refusals(tool: &Value) -> Vec<Value> {
+    let mut common = tool.clone();
+    let allowed = common
+        .as_object_mut()
+        .and_then(|o| o.remove("pre_allowed_tools"));
+    let settings: Vec<(&str, Value)> = ["omit_tools_from", "required", "startup_timeout_sec"]
+        .into_iter()
+        .filter_map(|name| {
+            common
+                .as_object_mut()
+                .and_then(|o| o.remove(name))
+                .map(|value| (name, value))
+        })
+        .collect();
+    let mut refusals = pio_opencode::lead_tool_refusals(&common);
+    for (name, value) in settings {
+        let valid = match name {
+            "omit_tools_from" => value.as_array().is_some_and(|surfaces| {
+                let unique: std::collections::BTreeSet<_> =
+                    surfaces.iter().filter_map(Value::as_str).collect();
+                !surfaces.is_empty()
+                    && unique.len() == surfaces.len()
+                    && unique.iter().all(|s| ["code_mode", "deferred"].contains(s))
+            }),
+            "required" => value.is_boolean(),
+            _ => value
+                .as_u64()
+                .is_some_and(|seconds| (1..=120).contains(&seconds)),
+        };
+        if !valid {
+            refusals.push(json!({"reason":format!("lead_tool_{name}_not_accepted"),
+                                 "detail":value}));
+        }
+    }
+    if let Some(allowed) = allowed {
+        let names = allowed.as_array().filter(|names| {
+            !names.is_empty()
+                && names.len() <= 8
+                && names.iter().all(|n| {
+                    n.as_str().is_some_and(|n| {
+                        !n.is_empty()
+                            && n.chars()
+                                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                    })
+                })
+        });
+        if names.is_none() {
+            refusals.push(
+                json!({"reason":"lead_tool_pre_allowed_tools_must_be_tool_names",
+                                 "detail":allowed}),
+            );
+        }
+    }
+    refusals
 }
 
 /// Digest-referenced content a command carries, if any.
@@ -236,15 +322,20 @@ impl Provider {
         }
         let lead_tool = p["extensions"].get(LEAD_TOOL_EXTENSION);
         if let Some(tool) = lead_tool {
-            // Only the OpenCode host sends `mcpServers` on the run's own
-            // session. Anywhere else the tool would be silently dropped, and
-            // a lead that has no tool is a lead that cannot do its job.
-            if ns != "opencode" {
+            // The OpenCode host sends `mcpServers` on the run's own session,
+            // and the Codex host puts the server in the run's own
+            // `thread/start` config. Anywhere else the tool would be silently
+            // dropped, and a lead that has no tool cannot do its job.
+            if !matches!(ns.as_str(), "opencode" | "codex") {
                 e["view"]["alternative"] =
-                    "The lead tool is attached only through serve-opencode".into();
+                    "The lead tool is attached only through serve-opencode or serve-codex".into();
                 return Some("capability_unavailable");
             }
-            let refusals = pio_opencode::lead_tool_refusals(tool);
+            let refusals = if ns == "codex" {
+                codex_lead_tool_refusals(tool)
+            } else {
+                pio_opencode::lead_tool_refusals(tool)
+            };
             if !refusals.is_empty() {
                 e["view"]["alternative"] = format!("Lead tool refused: {}", json!(refusals)).into();
                 return Some("capability_unavailable");
@@ -290,6 +381,27 @@ impl Provider {
             _ => {
                 spec["codex_home"] = host["codex_home"].clone();
                 spec["thread"] = host["thread"].clone();
+                // What Codex must answer for the thread's model and provider
+                // before its first turn, when the operator names it.
+                spec["expected_model_provider"] = host["expected_model_provider"].clone();
+                // Codex's unmetered features off on every thread, under the
+                // owner's recorded decision the service configuration was
+                // admitted with (review of L3, rounds 3 and 4); absent
+                // otherwise.
+                if host["features_off_decision"].is_string() {
+                    spec["features_off_decision"] = host["features_off_decision"].clone();
+                }
+                // The owner's plugins, apps and named MCP servers off on
+                // every thread, under the owner's recorded decision of
+                // 2026-09-26 (Q7); absent otherwise.
+                if host["plugins_off_decision"].is_string() {
+                    spec["plugins_off_decision"] = host["plugins_off_decision"].clone();
+                    spec["mcp_servers_off"] = host["mcp_servers_off"].clone();
+                }
+                // The lead tool, for this run's thread alone, validated above.
+                if let Some(tool) = lead_tool {
+                    spec["lead_tool"] = tool.clone();
+                }
                 // Codex alone uses this, to label which projects it recorded
                 // trust for. It is never a containment boundary: the boundary
                 // is the workspace repository, which `cwd` already carries.
@@ -778,14 +890,31 @@ impl Provider {
                                "approval_kind":event["approval_kind"],
                                // Null where a harness has no such notion,
                                // and the nulls mean something: the Codex
-                               // host offers no option list and sets no
-                               // answer deadline, so a Codex action waits
-                               // until a caller answers it. The walk shows
-                               // that rather than inventing a countdown.
+                               // host offers no option list. Its deadline
+                               // is the caller's delivery timeout, after
+                               // which it declines once (owner decision,
+                               // 2026-09-25); before that it had none.
                                "answer_deadline_seconds":event["answer_deadline_seconds"],
                                "options":event["options"],
                                "if_nobody_answers":event["if_nobody_answers"],
-                               "classification":event["classification"]}}),
+                               "classification":event["classification"],
+                               // What is being approved, in the harness's
+                               // own words, so whoever decides can see it:
+                               // the command a Codex command approval
+                               // names, and for an MCP tool-call approval
+                               // the server, Codex's question and what it
+                               // offered to remember (which PIO never
+                               // sends). Null where the harness has none.
+                               "command":event["command"],
+                               "server":event["server"],
+                               "message":event["message"],
+                               "persist_offered":event["persist_offered"],
+                               // Why the harness says it asks, and, for a
+                               // Codex command, whether it asks for network
+                               // access. The placement is `classification`.
+                               "reason":event["reason"],
+                               "network_approval":event["network_approval"],
+                               "grant_root_requested":event["grant_root_requested"]}}),
                     None,
                 );
             }
@@ -887,7 +1016,12 @@ impl Provider {
                 }
             }
             "usage" => {
-                if let Some(total) = event["total"]["totalTokens"].as_u64() {
+                // The run's total is the sum over its threads, where the host
+                // says so; a host that knows one thread reports that one.
+                if let Some(total) = event["run_total"]
+                    .as_u64()
+                    .or_else(|| event["total"]["totalTokens"].as_u64())
+                {
                     let invocation = e[&ns]["invocation_id"]
                         .as_str()
                         .map(str::to_owned)
@@ -896,6 +1030,19 @@ impl Provider {
                     e["view"]["usage"]["observations"] = json!([observation.clone()]);
                     e["view"]["usage"]["liability"] = "resolved".into();
                     self.execution_event(e, "execution.usage.observed", observation, None);
+                }
+            }
+            // The end of a turn Codex started by itself after the run's own
+            // (review of L3, round 4, SPEND-9): not the run's turn, whose
+            // status stands; carried with the exit's continuations instead.
+            "turn_completed" if event["continuation"] == true => {
+                if let Some(list) = e[&ns]["continuations"].as_array_mut()
+                    && let Some(started) = list
+                        .iter_mut()
+                        .rev()
+                        .find(|c| c["turn_id"] == event["turn_id"])
+                {
+                    started["status"] = event["status"].clone();
                 }
             }
             "turn_completed" => {
@@ -955,7 +1102,66 @@ impl Provider {
                     payload["pio.combraton.dev/tool-uses"] = json!({"audit":e[&ns]["tool_uses"],
                                "harness_status":e[&ns]["tool_use_harness_status"]});
                 }
+                // Every request the host declined by itself, never put to a
+                // caller: what was asked and PIO's reason. Nothing in the
+                // view can hold it (`action_entry` is closed, and no caller
+                // was asked), so it rides here under a namespaced key, as the
+                // audit does. Always present, so "none" and "not carried"
+                // differ (review of L3, CH-2/F1).
+                payload[NATIVE_DECLINES] = match &e[&ns]["native_declines"] {
+                    Value::Array(list) => Value::Array(list.clone()),
+                    _ => json!([]),
+                };
+                // Every thread the run did not start, the same way (Codex
+                // only, the one host that tells threads apart): the
+                // host's final list, or what it had recorded as each thread
+                // appeared, and none only when none appeared.
+                if ns == "codex" {
+                    payload[OTHER_THREADS] =
+                        match (&e[&ns]["other_threads"], &e[&ns]["other_threads_seen"]) {
+                            (Value::Array(list), _) | (_, Value::Array(list)) => {
+                                Value::Array(list.clone())
+                            }
+                            _ => json!([]),
+                        };
+                    // And every turn Codex started by itself on the run's own
+                    // thread after its turn had ended: none, or each one.
+                    payload[CONTINUATIONS] = match &e[&ns]["continuations"] {
+                        Value::Array(list) => Value::Array(list.clone()),
+                        _ => json!([]),
+                    };
+                }
                 self.execution_event(e, "execution.exit.observed", payload, None);
+            }
+            // A thread the run did not start, as the host first heard of it,
+            // and the host's list at the end with each thread's usage.
+            "other_thread" => {
+                let mut record = event.clone();
+                if let Some(fields) = record.as_object_mut() {
+                    fields.remove("kind");
+                }
+                push(&mut e[&ns]["other_threads_seen"], record);
+            }
+            "other_threads" => {
+                e[&ns]["other_threads"] = event["threads"].clone();
+            }
+            // A turn Codex started by itself on the run's own thread after
+            // the run's turn had ended, which the host interrupted.
+            "continuation_started" => {
+                let mut record = event.clone();
+                if let Some(fields) = record.as_object_mut() {
+                    fields.remove("kind");
+                }
+                push(&mut e[&ns]["continuations"], record);
+            }
+            // A request the host answered with an error by itself: never a
+            // caller's decision, and never on the stream until now.
+            "native_request_declined" => {
+                let mut record = event.clone();
+                if let Some(fields) = record.as_object_mut() {
+                    fields.remove("kind");
+                }
+                push(&mut e[&ns]["native_declines"], record);
             }
             // An acknowledgment whose proof did not hold is not a delivery.
             "turn_acknowledged" => e[&ns]["acknowledgment_unproven"] = true.into(),
@@ -1103,10 +1309,19 @@ impl Provider {
                 {
                     e["view"]["runtime"] = "exited".into();
                     e["view"].as_object_mut().unwrap().remove("runtime_detail");
+                    // Such a run has no `execution.exit.observed`, so what
+                    // its host declined by itself before the failure rides
+                    // here, under the same key, or no caller would ever see
+                    // it (review of L3, round 4, R4-HC-2). Always present.
+                    let declined = match &e[&ns]["native_declines"] {
+                        Value::Array(list) => Value::Array(list.clone()),
+                        _ => json!([]),
+                    };
                     self.execution_event(
                         e,
                         "execution.runtime.changed",
-                        json!({"runtime":"exited","reason":"refused_before_delivery"}),
+                        json!({"runtime":"exited","reason":"refused_before_delivery",
+                               NATIVE_DECLINES:declined}),
                         None,
                     );
                 }

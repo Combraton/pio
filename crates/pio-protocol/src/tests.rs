@@ -912,3 +912,90 @@ fn codex_widening_approval_decisions_are_invalid_and_never_reach_the_host() {
         "decline"
     );
 }
+
+/// L3 (owner decision, 2026-09-25): on Codex a lead-tool spec may name the
+/// lead server's own tools to pre-allow, and nothing else is widened. The
+/// shape and credential refusals are OpenCode's; `pre_allowed_tools` must
+/// be tool names; and OpenCode, which cannot honour it, still refuses it.
+#[test]
+fn a_codex_lead_tool_spec_may_pre_allow_its_own_tools_and_nothing_else() {
+    let good = json!({"name":"pio-lead","command":"/usr/bin/python3",
+        "args":["/opt/pio/lead_tool.py","--credential-file","/private/lead.credential"],
+        "env":[{"name":"PIO_LEAD_GRANT","value":"a-grant-id"}],
+        "pre_allowed_tools":["start_run","read_run"]});
+    let reasons = |tool: &Value| -> Vec<String> {
+        crate::codex::codex_lead_tool_refusals(tool)
+            .iter()
+            .map(|r| r["reason"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert!(reasons(&good).is_empty(), "{:?}", reasons(&good));
+    for bad in [
+        json!([]),
+        json!("start_run"),
+        json!(["start run"]),
+        json!([""]),
+        json!([1]),
+    ] {
+        let mut tool = good.clone();
+        tool["pre_allowed_tools"] = bad.clone();
+        assert_eq!(
+            reasons(&tool),
+            ["lead_tool_pre_allowed_tools_must_be_tool_names"],
+            "{bad}"
+        );
+    }
+    let mut valued = good.clone();
+    valued["env"] = json!([{"name":"PIO_LEAD_NOTE","value":"ccred1.lead.abc"}]);
+    assert_eq!(reasons(&valued), ["lead_tool_carries_a_credential_value"]);
+    let opencode: Vec<String> = pio_opencode::lead_tool_refusals(&good)
+        .iter()
+        .map(|r| r["reason"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(opencode, ["lead_tool_unsupported_field"]);
+}
+
+/// L3, after its first live run (2026-09-26): on Codex a lead-tool spec may
+/// carry three settings of its own server table, sent as they are:
+/// `omit_tools_from` (only `code_mode` and `deferred`, each once),
+/// `required` (a boolean) and `startup_timeout_sec` (1 to 120). Anything
+/// else is refused before admission, and OpenCode refuses all three.
+#[test]
+fn a_codex_lead_tool_spec_may_keep_its_tools_in_the_model_list() {
+    let good = json!({"name":"pio-lead","command":"/usr/bin/python3",
+        "args":["/opt/pio/lead_tool.py"],"env":[],
+        "pre_allowed_tools":["start_run","read_run"],
+        "omit_tools_from":["code_mode","deferred"],"required":true,
+        "startup_timeout_sec":30});
+    let reasons = |tool: &Value| -> Vec<String> {
+        crate::codex::codex_lead_tool_refusals(tool)
+            .iter()
+            .map(|r| r["reason"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert!(reasons(&good).is_empty(), "{:?}", reasons(&good));
+    for (setting, bad) in [
+        ("omit_tools_from", json!([])),
+        ("omit_tools_from", json!(["direct"])),
+        ("omit_tools_from", json!(["code_mode", "code_mode"])),
+        ("omit_tools_from", json!("deferred")),
+        ("omit_tools_from", json!(["codeMode"])),
+        ("required", json!("true")),
+        ("startup_timeout_sec", json!(0)),
+        ("startup_timeout_sec", json!(121)),
+        ("startup_timeout_sec", json!(30.5)),
+    ] {
+        let mut tool = good.clone();
+        tool[setting] = bad.clone();
+        assert_eq!(
+            reasons(&tool),
+            [format!("lead_tool_{setting}_not_accepted")],
+            "{setting} = {bad}"
+        );
+    }
+    let opencode: Vec<String> = pio_opencode::lead_tool_refusals(&good)
+        .iter()
+        .map(|r| r["reason"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(opencode, ["lead_tool_unsupported_field"; 4]);
+}

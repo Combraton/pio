@@ -1,0 +1,68 @@
+{
+ "exit": 3,
+ "record": {
+  "format": "pio-codex-qualification/1",
+  "isolated_codex_home": true,
+  "pinned": {
+   "source": "00c972ed5d6ff6499317fd41b7f23605b8e6850d",
+   "tag": "rust-v0.157.0",
+   "version": "0.157.0"
+  },
+  "qualified": false,
+  "refusals": [
+   {
+    "files": 1,
+    "reason": "schema_drift"
+   }
+  ],
+  "resolution": {
+   "kind": "npm_node_wrapper",
+   "native": {
+    "layout": {
+     "entrypoint": "bin/codex",
+     "layoutVersion": 1,
+     "pathDir": "codex-path",
+     "resourcesDir": "codex-resources",
+     "target": "aarch64-apple-darwin",
+     "variant": "codex",
+     "version": "0.157.0"
+    },
+    "path": "~/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
+    "sha256": "ad0be20d04e2ba6146ecdb51d7f8b7b0fe15420a15dc9b0057518d858f1f3714"
+   },
+   "node": {
+    "path": "~/.hermes/node/bin/node",
+    "sha256": "cc61696726abdfe8392297ecd75aa9863cd9b6435b202c0dc2266039f493da10",
+    "version": "v22.23.0"
+   },
+   "platform_package": "@openai/codex-darwin-arm64",
+   "resolved": "~/.local/lib/node_modules/@openai/codex/bin/codex.js",
+   "selected": "~/.local/bin/codex",
+   "target": "aarch64-apple-darwin",
+   "wrapper": {
+    "package_version": "0.157.0",
+    "path": "~/.local/lib/node_modules/@openai/codex/bin/codex.js",
+    "sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70"
+   }
+  },
+  "schema": {
+   "canonical_listing_sha256": "ccd71240f33d42fb14bfef7f8932c5dbb41cd36272635e673337aedc4edb0cdc",
+   "drift": [
+    {
+     "change": "changed",
+     "file": "v2/ThreadStartResponse.json"
+    }
+   ],
+   "drift_count": 1,
+   "expected_canonical_listing_sha256": "ccd71240f33d42fb14bfef7f8932c5dbb41cd36272635e673337aedc4edb0cdc",
+   "file_count": 314,
+   "generator_exit": 0,
+   "raw_listing_sha256": "54f57186bd1d420997e75e30cfc0428e6c5dce97414651c663f4d37d0b7f0165"
+  },
+  "selected": "~/.local/bin/codex",
+  "version": {
+   "native": "0.157.0",
+   "selected": "0.157.0"
+  }
+ }
+}
