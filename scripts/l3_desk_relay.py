@@ -207,6 +207,14 @@ def selftest():
              message=ask.format('stop_run')),
         item('L3', method=mcp, approval_kind='mcp_tool_call', server='computer-use',
              message='Allow the computer-use MCP server to run tool "click"?'),
+        # Another server copying pio-lead's exact words and approval kind: at
+        # rust-v0.157.0 an MCP server's own form elicitation reaches the
+        # client with its own message and _meta unchanged
+        # (codex-mcp/src/elicitation.rs), while serverName is Codex's own
+        # record of who asked. Only the server check leaves it to the owner
+        # (review of L3, round 4, U3).
+        item('L3', method=mcp, approval_kind='mcp_tool_call', server='owner-other-server',
+             message=ask.format('start_run')),
         item('L3.alpha', method=mcp, approval_kind='mcp_tool_call', server='pio-lead',
              message=ask.format('start_run')),
         item('L3', method=mcp, approval_kind=None, server='pio-lead',

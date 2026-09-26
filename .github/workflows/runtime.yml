@@ -272,6 +272,18 @@ jobs:
         # checks that its gate judges only a meter pass fresh enough.
         run: |
           python3 scripts/l3_desk_relay.py --selftest
+          # The relay's server check is load-bearing (review of L3, round 4,
+          # U3): another server may copy pio-lead's exact words and approval
+          # kind. With the check removed, the selftest must fail on that item.
+          sed "s/and approval.get('server') == 'pio-lead'/and True/" scripts/l3_desk_relay.py \
+            > target/l3_desk_relay_server_unchecked.py
+          grep -q "and True" target/l3_desk_relay_server_unchecked.py
+          if python3 target/l3_desk_relay_server_unchecked.py --selftest \
+               > target/l3-relay-server-unchecked.log 2>&1; then
+            echo "relay mutant server-unchecked survived"; exit 1
+          fi
+          grep -q "owner-other-server" target/l3-relay-server-unchecked.log \
+            || { cat target/l3-relay-server-unchecked.log; exit 1; }
           python3 scripts/lead_tool.py --selftest
           PYTHONPATH=scripts python3 scripts/lead_run.py --charge-selftest
           mkdir -p target/l3-relay
