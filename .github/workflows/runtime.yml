@@ -8,7 +8,8 @@ jobs:
     # The lead-run rehearsals and their mutants are the `lead-runs` job below,
     # split out after the second review of L3: together they took 39 to 49
     # minutes at 89f1fad. Without them this job took 11 to 18 minutes there,
-    # and 16 locally with the Codex matrix at 33 cases.
+    # 13 to 18 on CI at 866a903, and 17 locally with the Codex matrix at 41
+    # cases (round 3).
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -131,7 +132,8 @@ jobs:
     # and the L3 desk relay: the same code paths as the live runs, at zero
     # tokens. Split from `runtime`, with its own build and its own leak
     # check. At 89f1fad these steps took 27 to 30 minutes of the one job;
-    # with round 2's mutants, and L3's two at a time, 27 locally.
+    # at 866a903 this job took 27 to 29 minutes on CI. With round 3's
+    # mutants (57 for L3, two at a time) it took 34 minutes locally.
     timeout-minutes: 60
     strategy:
       fail-fast: false
