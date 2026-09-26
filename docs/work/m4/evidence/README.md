@@ -593,14 +593,98 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   arrives while the host waits for `initialize`, `account/read` or
   `thread/start` (phase `before_turn`; before round 2 it was dropped
   unanswered). The fake sends none unless a mutant or case does. Live, the
-  owner's own MCP servers and plugins (four servers and fourteen plugins in
-  `~/.codex/config.toml`) are loaded on every thread and could ask
-  something; each such ask fails the desk row, by design.
+  owner's plugins, apps and own MCP servers are off on every L3 thread
+  (below), so what could still ask is Codex itself and PIO's lead tool;
+  each ask PIO declines fails the desk row, by design.
+- **The lead's tool in the model's own list** (L3's first live run,
+  2026-09-26). `gpt-5.6-terra` runs code-mode-only
+  (`models-manager/models.json:676`): the model sees `exec` and `wait`, and
+  an ordinary MCP server's tools are deferred behind `exec` and never named
+  (`core/src/tools/spec_plan.rs:234-266`, `core/src/mcp_tool_exposure.rs:90-94`).
+  The lead's thread now sends PIO's own server table with
+  `omit_tools_from = ["code_mode","deferred"]`, `required = true` and
+  `startup_timeout_sec = 30` (`config/src/mcp_types.rs:229-256`, `:372-385`;
+  the surfaces' names `protocol/src/config_types.rs:396-407`), which makes
+  its tools `DirectModelOnly`, in the model's own list
+  (`tools/src/tool_executor.rs:68-72`; `spec_plan.rs:528-566`, `:761-772`).
+  Read from source, not measured: `code_mode` alone would do on this model,
+  and `deferred` alone would keep them inside `exec`. With `required` Codex
+  refuses `thread/start` if the server fails to start
+  (`codex-mcp/src/connection_manager/required.rs:15-58`); before the lead's
+  turn the host also waits, bounded, for Codex's
+  `mcpServer/startupStatus/updated` = `ready` for it on the lead's thread
+  (`app-server/src/bespoke_event_handling.rs:202-228`). The rehearsal's fake
+  computes the exposure the same way and plays a lead that cannot call a
+  tool not in its list, as the live one could not (`lead-tool-deferred`).
+  Whether the live model then calls `start_run` is the model's. The lead's
+  brief names the tools as the model sees them: `start_run` and `read_run`,
+  namespace `mcp__pio_lead` (`codex-mcp/src/tools.rs:228-234`,
+  `codex-mcp/src/rmcp_client.rs:850`, `core/src/tools/handlers/mcp.rs:504-505`).
+- **The owner's plugins, apps and MCP servers** (owner decision,
+  2026-09-26, Q7). L3's first live lead called `cua_repl`, a tool of the
+  owner's Computer Use plugin that Codex approves without asking as
+  read-only. Every L3 thread, lead and children, now carries
+  `features.plugins`, `features.apps` and its legacy alias
+  `features.connectors` false, and each MCP server the owner's `config.toml`
+  names by a table header as `enabled = false` inside the thread's own
+  `mcp_servers` table (`pio_codex::plugins_off`, each key with its source).
+  Per thread, from source: the plugin manager loads no plugin
+  (`core/src/config/mod.rs:1692-1700`, `core-plugins/src/manager.rs:776-779`),
+  so no plugin server is registered (`core/src/config/mod.rs:1735-1783`,
+  `ext/mcp/src/plugin.rs:123`, `:207`); the apps server is not registered
+  (`core/src/config/mod.rs:1824`, `core/src/mcp.rs:323-335`,
+  `ext/mcp/src/lib.rs:50-51`, `core/src/connectors.rs:125-130`, `:141`); and
+  a disabled server is never started
+  (`codex-mcp/src/connection_manager.rs:241-251`, `:288-291`). The servers
+  are read from header lines alone; the receipt carries them as digests and
+  a count. Two rows judge it: what each thread's host sent, read back from
+  its request, and every server Codex reported starting on each run's
+  thread, which must be the lead's tool on the lead's thread and nothing
+  else. Here the fake announces what Codex would start (the rehearsal home's
+  two servers, a plugin's, the apps server) unless the thread turned it off;
+  live, that row is Codex's own word. A server the header reader cannot see
+  (one written as keys under a bare `[mcp_servers]` table, which the runner
+  refuses, or as an inline table) would show on that row. A managed
+  configuration that sets any of this is not read.
+- **Code mode, for the children** (read from rust-v0.157.0's source, not
+  measured). On a code-mode-only model a child runs its command as
+  `tools.exec_command(...)` inside `exec`
+  (`code-mode-protocol/src/description.rs:21`), a nested call dispatched
+  through the same tool runtime (`core/src/tools/code_mode/mod.rs:330-407`)
+  under an id of its own, `exec-<uuid>`
+  (`core/src/tools/code_mode/delegate.rs:323`). It is still a
+  `commandExecution` item, and any approval is still
+  `item/commandExecution/requestApproval`, from the same shell tool and the
+  same approval path (`core/src/tools/approvals.rs:707-724`,
+  `core/src/session/mod.rs:2801-2887`). The command Codex names is
+  `shlex_join` of `[shell, "-lc", cmd]`
+  (`app-server/src/bespoke_event_handling.rs:748`;
+  `core/src/tools/handlers/unified_exec.rs:99-124`, `core/src/shell.rs:22-31`),
+  so `/bin/zsh -lc 'sleep 30 && wc -l alpha.md'`, a login shell unless the
+  model asks for none (`core/src/config/mod.rs:3798`; `-c` then, which the
+  relay leaves to the owner); its cwd is the thread's, or the model's
+  `workdir` under it (`core/src/tools/handlers/unified_exec/exec_command.rs:196-203`),
+  so PIO's placement applies as before. The item starts before the request
+  (`bespoke_event_handling.rs:754-770`), and `reason` is omitted when absent.
+  The fake now sends exactly that for the children, and the relay's exact
+  match and the host's placement hold on it (the rehearsal's `beta`). But
+  under `on-request` in a `workspace-write` sandbox 0.157.0 **does not ask**
+  about a command that is not flagged dangerous and does not ask to leave
+  the sandbox (`core/src/exec_policy.rs:820-838`, reached from
+  `core/src/unified_exec/process_manager.rs:1477-1495`): M2's command
+  approvals were under `untrusted` (`scripts/codex_live_run.py`, R5 and R6).
+  So live, most likely nothing reaches the desk, and the desk row is
+  **inconclusive, not failed**. `exec` yields to the model after 30 s by
+  default (`core/src/config/mod.rs:1144`), and `exec_command` itself after
+  10 s, at most 30 s (`core/src/tools/handlers/unified_exec.rs:62-64`,
+  `core/src/unified_exec/mod.rs:77`, `:218-224`): `alpha`'s 30-second command
+  outlasts both, so live it takes at least one more model step (`wait`, or a
+  poll) than the fake plays, which is not modelled here.
 - **Command approvals.** The fake asks about `beta`'s command because its
-  scenario says to, and names it `/bin/zsh -lc '…'` as M2 R5 measured, with
-  `reason` null as both measured approvals (R5, R6) had it. Live,
-  `on-request` in a `workspace-write` sandbox need not ask. If nobody asks,
-  the desk row is inconclusive, not passed. Each command approval carries
+  scenario says to, in the code-mode shape above, named `/bin/zsh -lc '…'`
+  as M2 R5 measured and 0.157.0's source builds it. Live, `on-request` in a
+  `workspace-write` sandbox does not ask (above). If nobody asks, the desk
+  row is inconclusive, not passed. Each command approval carries
   its placement (the command's working directory, followed through any
   symlinks and classified against the workspace; a cwd through links that
   lead out of it reads `outside_fixture`), a network flag and Codex's

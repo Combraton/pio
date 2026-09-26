@@ -729,6 +729,23 @@ fn named_file(text: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// A nested code-mode call's id, `exec-` and a UUID's shape, as
+/// `core/src/tools/code_mode/delegate.rs:323` makes it (a v4 UUID there;
+/// here a digest of the thread, turn and call, so a replay is stable).
+fn exec_call_id(thread: &str, turn: &str, n: u64) -> String {
+    use sha2::Digest;
+    let digest = sha2::Sha256::digest(format!("{thread}/{turn}/{n}").as_bytes());
+    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+    format!(
+        "exec-{}-{}-4{}-8{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[13..16],
+        &hex[17..20],
+        &hex[20..32]
+    )
+}
+
 /// The command a prompt quotes in backticks, if any.
 fn quoted_command(text: &str) -> Option<String> {
     let start = text.find('`')? + 1;
@@ -1111,9 +1128,32 @@ fn play_led(
     let file = named_file(prompt).unwrap_or_default();
     // How Codex named a command it asked about, measured in M2 R5 at 0.155.1:
     // the user's login shell wrapping it (`/bin/zsh -lc 'python3 -m unittest
-    // -q'`).
+    // -q'`). The same at rust-v0.157.0, from source: the shell tool builds
+    // `[shell, "-lc", cmd]` (`core/src/tools/handlers/unified_exec.rs:99-124`,
+    // `core/src/shell.rs:22-31`; a login shell unless the model asks for
+    // none, `core/src/config/mod.rs:3798`), and the app-server sends
+    // `shlex_join` of it (`app-server/src/bespoke_event_handling.rs:748`).
     let asked_for = quoted_command(prompt).unwrap_or_else(|| format!("wc -l {file}"));
     let command = format!("/bin/zsh -lc '{asked_for}'");
+    // On a code-mode-only model (`gpt-5.6-terra`) the shell tool is not in
+    // the model's own list: it runs as `tools.exec_command(...)` inside
+    // `exec` (`code-mode-protocol/src/description.rs:21`), dispatched as a
+    // nested call through the same tool runtime
+    // (`core/src/tools/code_mode/mod.rs:330-407`) under a call id of its own,
+    // `exec-<uuid>` (`core/src/tools/code_mode/delegate.rs:323`). The item
+    // and any approval carry that id; the command, its cwd and the approval
+    // path are the shell tool's own, as outside code mode.
+    let code_mode = CODE_MODE_ONLY.load(Ordering::SeqCst);
+    let command_id = |n: u64| {
+        if code_mode {
+            exec_call_id(&play.turn.thread, &play.turn.id, n)
+        } else if n == 0 {
+            "item-command".to_owned()
+        } else {
+            format!("item-command-{}", n + 1)
+        }
+    };
+    let mut started_by_the_approval = false;
     play.begin();
     if !play.think() {
         return Ok(());
@@ -1153,13 +1193,32 @@ fn play_led(
         )?;
     }
     if asks {
-        let answer = play.ask(
-            "item/commandExecution/requestApproval",
+        let params = if code_mode {
+            // 0.157.0's shape, from source (`CommandExecutionRequestApprovalParams`,
+            // `app-server-protocol/src/protocol/v2/item.rs:1544-1606`, built at
+            // `app-server/src/bespoke_event_handling.rs:785-801`): the item id
+            // is the nested call's; `environmentId` is the local environment's;
+            // `reason`, `approvalId` and the network context are omitted when
+            // absent. The item starts, `inProgress`, before the request
+            // (`:754-770`). `availableDecisions` and extra permissions are
+            // experimental fields PIO does not opt into, and are not played.
+            play.item(
+                "item/started",
+                json!({"type":"commandExecution","id":command_id(0),"command":&command,
+                       "cwd":cwd,"processId":null,"source":"agent","status":"inProgress",
+                       "commandActions":[]}),
+            )?;
+            started_by_the_approval = true;
+            json!({"kind":"command","threadId":play.turn.thread,"turnId":play.turn.id,
+                   "itemId":command_id(0),"startedAtMs":now_ms(),"environmentId":"local",
+                   "command":&command,"cwd":cwd,"commandActions":[]})
+        } else {
             json!({"threadId":play.turn.thread,"turnId":play.turn.id,"itemId":"item-command",
                    // null, as in both command approvals M2 measured (R5, R6).
                    "command":&command,"cwd":cwd,"reason":null,
-                   "kind":"command","startedAtMs":now_ms()}),
-        )?;
+                   "kind":"command","startedAtMs":now_ms()})
+        };
+        let answer = play.ask("item/commandExecution/requestApproval", params)?;
         let Some(answer) = answer else {
             return Ok(());
         };
@@ -1168,7 +1227,7 @@ fn play_led(
         if decision != "accept" {
             play.item(
                 "item/completed",
-                json!({"type":"commandExecution","id":"item-command","command":&command,
+                json!({"type":"commandExecution","id":command_id(0),"command":&command,
                        "cwd":cwd,"status":"declined","commandActions":[]}),
             )?;
             if decision == "cancel" {
@@ -1193,16 +1252,17 @@ fn play_led(
             }
             play.responded();
         }
-        let id = if n == 0 {
-            "item-command".to_owned()
-        } else {
-            format!("item-command-{}", n + 1)
-        };
-        play.item(
-            "item/started",
-            json!({"type":"commandExecution","id":id,"command":&command,"cwd":cwd,
-                   "status":"inProgress","commandActions":[]}),
-        )?;
+        let id = command_id(n);
+        // Started once: by the approval, where there was one.
+        if !(n == 0 && started_by_the_approval) {
+            let mut item = json!({"type":"commandExecution","id":id,"command":&command,
+                                  "cwd":cwd,"status":"inProgress","commandActions":[]});
+            if code_mode {
+                item["source"] = json!("unifiedExecStartup");
+                item["processId"] = json!(format!("{}", 1000 + n));
+            }
+            play.item("item/started", item)?;
+        }
         let started = Instant::now();
         let wait = if n == 0 {
             delay

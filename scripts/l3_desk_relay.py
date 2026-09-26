@@ -26,6 +26,22 @@ a command it asks about: M2's R5 measured 0.155.1 sending
 `/bin/zsh -lc 'python3 -m unittest -q'`, the owner's login shell wrapping it.
 Nothing else matches: no other shell, no other quoting, no extra words.
 
+On `gpt-5.6-terra`, which runs code-mode-only, a child runs its command as
+`tools.exec_command(...)` inside `exec`; read from rust-v0.157.0's source,
+not measured, the approval is the same request with the same words: the
+nested call goes through the same shell tool
+(`core/src/tools/code_mode/mod.rs:330-407`), which builds
+`[shell, "-lc", cmd]` (`core/src/tools/handlers/unified_exec.rs:99-124`,
+`core/src/shell.rs:22-31`), and the app-server names it by `shlex_join`
+(`app-server/src/bespoke_event_handling.rs:748`), so
+`/bin/zsh -lc 'sleep 30 && wc -l alpha.md'`. Only the item id differs
+(`exec-<uuid>`, `core/src/tools/code_mode/delegate.rs:323`), which the relay
+does not read. A model that asks for no login shell (`-c`), another shell,
+the script's own words, or a subcommand alone is left to the owner. Under
+`on-request` in a `workspace-write` sandbox, 0.157.0 asks about neither
+child's command unless the model asks to leave the sandbox
+(`core/src/exec_policy.rs:820-837`): most likely nothing reaches the relay.
+
 Its command line never names the live tree: the tree is read from the
 runner's log in `--dir`, and polled with `os.listdir` and `open()`, with no
 subprocess. The cleanup kills every process group whose command line names
@@ -159,6 +175,10 @@ def selftest():
              command="/bin/zsh -lc 'sleep 30 && wc -l alpha.md'", **inside),
         item('L3.beta', method=command, approval_kind='command',
              command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'", **inside),
+        # Code mode, as 0.157.0's source routes a nested `tools.exec_command`:
+        # the same words, so the same answer.
+        item('L3.alpha', method=command, approval_kind='command',
+             command="/bin/zsh -lc 'sleep 30 && wc -l alpha.md'", **inside),
         item('L3', method=mcp, approval_kind='mcp_tool_call', server='pio-lead',
              message=ask.format('start_run')),
         item('L3', method=mcp, approval_kind='mcp_tool_call', server='pio-lead',
@@ -197,6 +217,18 @@ def selftest():
              command="/bin/zsh -lc 'sleep 30 && wc -l alpha.md; rm -f alpha.md'", **inside),
         item('L3.alpha', method=command, approval_kind='command',
              command="/bin/bash -lc 'sleep 30 && wc -l alpha.md'", **inside),
+        # Shapes code mode could also give, none the owner named: no login
+        # shell (`login: false`, `core/src/tools/handlers/unified_exec.rs:105-113`),
+        # other quoting, the script's own words, and one program alone (a
+        # subcommand approval, `core/src/tools/approvals.rs:762-790`).
+        item('L3.alpha', method=command, approval_kind='command',
+             command="/bin/zsh -c 'sleep 30 && wc -l alpha.md'", **inside),
+        item('L3.alpha', method=command, approval_kind='command',
+             command='/bin/zsh -lc "sleep 30 && wc -l alpha.md"', **inside),
+        item('L3.alpha', method=command, approval_kind='command',
+             command='await tools.exec_command({cmd: "sleep 30 && wc -l alpha.md"})', **inside),
+        item('L3.alpha', method=command, approval_kind='command',
+             command='sleep 30', **inside),
         item('L3.alpha', method=command, approval_kind='writeStdin',
              command='sleep 30 && wc -l alpha.md', **inside),
         item('L3.beta', method='item/fileChange/requestApproval', approval_kind=None),
@@ -224,7 +256,7 @@ def selftest():
         assert decided_in_advance(case), case
     for case in for_the_owner:
         assert decided_in_advance(case) is None, case
-    assert 'did not hold' in decided_in_advance(answered[3])
+    assert 'did not hold' in decided_in_advance(answered[4])
     print(f'l3 desk relay: {len(answered)} answered in advance, '
           f'{len(for_the_owner)} left for the owner')
     half_written()
