@@ -431,9 +431,11 @@ fn recheck_executable(spec: &Value) -> Result<()> {
 
 /// A request the host declined while it waited for `initialize`,
 /// `account/read` or `thread/start`, recorded like any other native decline,
-/// with which wait, as soon as it is answered, and so carried on the run's
-/// exit (review of L3, round 2, V-2/HR-6), and kept even if the wait then
-/// fails (round 3, R3-HC-3).
+/// with which wait, as soon as it is answered (review of L3, round 2,
+/// V-2/HR-6), and kept even if the wait then fails (round 3, R3-HC-3). A
+/// caller reads it on the run's `execution.exit.observed`, or, when the
+/// start failed and the run has no exit, on the `execution.runtime.changed`
+/// that marks it `refused_before_delivery` (round 4, R4-HC-2).
 fn record_early_decline(life: &mut Lifecycle, wait: &str, mut record: Value) -> Result<()> {
     record["kind"] = json!("native_request_declined");
     record["phase"] = json!("before_turn");

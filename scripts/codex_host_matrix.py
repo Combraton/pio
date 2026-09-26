@@ -987,7 +987,22 @@ def run_case(out, name):
             assert [(m['id'], m['error']['code']) for m in wire] == \
                 [('fake-early-account-read', -32000)], wire
             assert any(m['kind'] == 'exiting_after_early' for m in case.markers_records())
-            return dict(outcome='pass', recorded=declined[0]['wait'])
+            # And on the stream: the run has no exit event, so the decline
+            # rides on the runtime change that marks it refused before
+            # delivery (review of L3, round 4, R4-HC-2).
+            final = exited(case)
+            with case.client() as c:
+                stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                      'kinds': ['execution.execution']})['result']
+            events = [i['event'] for i in stream['items'] if 'event' in i]
+            assert not any(e['type'] == 'execution.exit.observed' for e in events), events
+            refused = [e['payload'] for e in events if e['type'] == 'execution.runtime.changed'
+                       and e['payload'].get('reason') == 'refused_before_delivery']
+            assert [[(d['method'], d['wait'], d['phase']) for d in r[NATIVE]] for r in refused] == \
+                [[('mcpServer/elicitation/request', 'account/read', 'before_turn')]], refused
+            assert 'example.invalid' not in json.dumps(refused), refused
+            assert (final['runtime'], final['exit']) == ('exited', 'unavailable'), final
+            return dict(outcome='pass', recorded=declined[0]['wait'], on_stream=True)
         if name == 'command_approval_lapses':
             # A command approval nobody answers: after the caller's two
             # seconds, one decline of PIO's, and the command never runs. In

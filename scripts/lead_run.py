@@ -3392,12 +3392,17 @@ def qualified_at_pin(o):
 
 def native_declines(stream):
     """What each run's host declined by itself, read from the run's own
-    `execution.exit.observed` on the public stream: a list, empty for none,
-    or None where the exit carried no list."""
+    `execution.exit.observed` on the public stream, or, for a run whose start
+    failed and that has no exit, from the runtime change that marks it
+    refused before delivery (review of L3, round 4, R4-HC-2): a list, empty
+    for none, or None where neither carried one."""
     found = {}
     for e in stream:
         if e['type'] == 'execution.exit.observed':
             found[e['subject']['id']] = e['payload'].get(NATIVE)
+        elif e['type'] == 'execution.runtime.changed' \
+                and e['payload'].get('reason') == 'refused_before_delivery':
+            found.setdefault(e['subject']['id'], e['payload'].get(NATIVE))
     return found
 
 

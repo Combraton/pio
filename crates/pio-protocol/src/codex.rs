@@ -1264,10 +1264,19 @@ impl Provider {
                 {
                     e["view"]["runtime"] = "exited".into();
                     e["view"].as_object_mut().unwrap().remove("runtime_detail");
+                    // Such a run has no `execution.exit.observed`, so what
+                    // its host declined by itself before the failure rides
+                    // here, under the same key, or no caller would ever see
+                    // it (review of L3, round 4, R4-HC-2). Always present.
+                    let declined = match &e[&ns]["native_declines"] {
+                        Value::Array(list) => Value::Array(list.clone()),
+                        _ => json!([]),
+                    };
                     self.execution_event(
                         e,
                         "execution.runtime.changed",
-                        json!({"runtime":"exited","reason":"refused_before_delivery"}),
+                        json!({"runtime":"exited","reason":"refused_before_delivery",
+                               NATIVE_DECLINES:declined}),
                         None,
                     );
                 }
