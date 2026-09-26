@@ -149,8 +149,9 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let executable = PathBuf::from(life.spec["executable"].as_str().context("executable")?);
 
     let mut args: Vec<String> = STREAM_ARGS.iter().map(|a| (*a).to_owned()).collect();
-    args.push("--permission-mode".into());
-    args.push(requested.clone());
+    // The product default has no flag spelling, so requesting it passes none;
+    // the `init` echo is still compared with it below.
+    args.extend(pio_claude::permission_mode_args(&requested));
     // PIO never selects a model outside the owner's dated, test-only exception,
     // which the service checked before this host was launched.
     if let Some(model) = life.spec["model"].as_str() {

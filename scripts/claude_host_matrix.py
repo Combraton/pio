@@ -41,6 +41,7 @@ CASES = [
     'unqualified_executable_refused',
     'missing_credential_route_refused',
     'permission_mode_not_the_configured_default_refused',
+    'service_runs_under_the_product_default_when_none_is_configured',
     'surface_drift_refused',
     # Through the service, which is the only place these can be observed.
     'service_turn_completes',
@@ -604,6 +605,36 @@ def run_case(out, name):
         status, record = case.admit()
         assert status == 0, record
         assert record['permission_mode']['allowed'] is True, record
+
+    elif name == 'service_runs_under_the_product_default_when_none_is_configured':
+        # D2. Most installations configure no `permissions.defaultMode`, and
+        # admission refused every one of them. Absent is the product default,
+        # measured as `default`; the flag does not accept that name, so the
+        # run passes no mode flag and the `init` echo is compared with it.
+        case = ServiceCase(out, name, settings={'permissions': {'allow': ['Bash(cat)']}},
+                           permission_mode='default')
+        status, record = case.admit()
+        assert status == 0, record
+        guard = record['permission_mode']
+        assert guard['allowed'] is True and guard['configured'] == 'default', guard
+        assert guard['configured_source'] == 'product_default', guard
+        # Asking for anything else under that default is still refused.
+        other = Case(out, f'{name}-acceptEdits', settings={'permissions': {}},
+                     permission_mode='acceptEdits')
+        status, refused = other.admit()
+        assert status == 3 and refused['permission_mode']['allowed'] is False, refused
+        other.cleanup()
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
+        assert view['exit'] == {'code': 0}, view
+        received = case.markers_of('turn_received')
+        assert len(received) == 1 and received[0]['permission_mode_flag'] is None, received
+        started = [e for e in case.host_events() if e['kind'] == 'session_started']
+        assert len(started) == 1, case.host_events()
+        assert started[0]['requested_permission_mode'] == 'default', started
+        assert started[0]['effective_permission_mode'] == 'default', started
+        assert started[0]['effective_mode_matches_requested'] is True, started
 
     elif name == 'surface_drift_refused':
         # A genuine drift, not merely an unqualified executable: pin the fake's

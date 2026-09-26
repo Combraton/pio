@@ -404,6 +404,31 @@ pub fn auth_route(exe: &Path, env: &ChildEnv) -> Result<Value> {
 /// The one permission mode PIO may never request, whatever anything else says.
 pub const FORBIDDEN_MODE: &str = "bypassPermissions";
 
+/// The mode Claude Code runs in when no `permissions.defaultMode` is
+/// configured, which is most installations: what `system/init` reports with
+/// an empty configuration and no flag, from the pinned stream identity.
+/// Measured `default` on 2.1.278 and again on 2.1.281 (ADR 004 §4).
+pub fn product_default_permission_mode() -> String {
+    let stream: Value = serde_json::from_str(QUALIFIED_STREAM).expect("pinned stream identity");
+    stream["product_default_permission_mode"]
+        .as_str()
+        .expect("the pinned stream identity names the product default mode")
+        .to_owned()
+}
+
+/// The arguments that request `requested`. The product default's name,
+/// `default`, is one `--permission-mode` does not accept, so requesting it
+/// passes **no** mode flag: the harness then runs in its own default, which
+/// is exactly what was requested, and the `system/init` echo is compared with
+/// it after delivery like any other mode.
+pub fn permission_mode_args(requested: &str) -> Vec<String> {
+    if requested == product_default_permission_mode() {
+        Vec::new()
+    } else {
+        vec!["--permission-mode".to_owned(), requested.to_owned()]
+    }
+}
+
 /// Refuse a requested permission mode that is not exactly the user's configured
 /// default (owner guard, carried from ADR 003 §6 and the Codex thread-settings
 /// guard). The breadth ordering of Claude Code's six modes is **not
@@ -411,13 +436,20 @@ pub const FORBIDDEN_MODE: &str = "bypassPermissions";
 /// placing `dontAsk`, which auto-denies everything that would prompt, above
 /// `acceptEdits`. Rather than encode a guess as a safety property, this guard
 /// compares for equality. A mode joins a narrower-than set only with a
-/// measurement. An absent or unreadable default refuses rather than assuming
-/// the product's own default, which is likewise unmeasured.
+/// measurement.
+///
+/// An **absent** default is the product's own, which is the state of most
+/// installations and was measured: `system/init` reports `default` with an
+/// empty configuration and no flag. It used to be refused, so PIO could not
+/// run on an ordinary install (D2); it is now compared like any configured
+/// value, and `configured_source` says which it was. An unreadable value
+/// still refuses.
 pub fn permission_mode_guard(settings: &Value, requested: &str) -> Value {
     let mut unresolved = Vec::new();
     if requested == FORBIDDEN_MODE {
         unresolved.push(json!({"setting":"requested","reason":"PIO never requests this mode","value":requested}));
     }
+    let mut source = "user_settings";
     let configured = match &settings["permissions"]["defaultMode"] {
         Value::String(mode) if mode == FORBIDDEN_MODE => {
             unresolved.push(json!({"setting":"permissions.defaultMode","reason":"PIO never requests this mode, even when it is configured","value":mode}));
@@ -425,8 +457,8 @@ pub fn permission_mode_guard(settings: &Value, requested: &str) -> Value {
         }
         Value::String(mode) => Some(mode.clone()),
         Value::Null => {
-            unresolved.push(json!({"setting":"permissions.defaultMode","reason":"absent; measured, the product default reports as `default`, which --permission-mode does not accept"}));
-            None
+            source = "product_default";
+            Some(product_default_permission_mode())
         }
         other => {
             unresolved.push(json!({"setting":"permissions.defaultMode","reason":"not a plain string","value":other}));
@@ -440,8 +472,9 @@ pub fn permission_mode_guard(settings: &Value, requested: &str) -> Value {
             "configured":configured,"requested":requested}));
     }
     json!({
-        "format":"pio-claude-permission-guard/1",
+        "format":"pio-claude-permission-guard/2",
         "configured":configured,
+        "configured_source":configured.as_ref().map(|_| source),
         "requested":requested,
         "unresolved":unresolved,
         "allowed":unresolved.is_empty() && matches,

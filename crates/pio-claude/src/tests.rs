@@ -305,7 +305,8 @@ fn permission_mode_guard_requires_the_configured_default() {
     );
     assert_eq!(configured_bypass["allowed"], false);
 
-    // An absent or unreadable default refuses rather than assuming one.
+    // An absent default is the product's own, which is not `acceptEdits`;
+    // an unreadable one refuses rather than assuming anything.
     for settings in [
         json!({}),
         json!({"permissions":{}}),
@@ -315,6 +316,41 @@ fn permission_mode_guard_requires_the_configured_default() {
         assert_eq!(guard["allowed"], false, "{settings}");
         assert!(!guard["unresolved"].as_array().unwrap().is_empty());
     }
+}
+
+/// D2. Most installations configure no `permissions.defaultMode`, and the
+/// guard refused every one of them. Absent means the product's own default,
+/// measured as `default` in `system/init`; the guard compares against that,
+/// and requesting it passes no flag, because `--permission-mode` does not
+/// accept the name.
+#[test]
+fn an_absent_default_mode_is_the_product_default_and_is_compared_like_any_other() {
+    assert_eq!(product_default_permission_mode(), "default");
+    for settings in [json!({}), json!({"permissions":{"allow":["Bash(cat)"]}})] {
+        let guard = permission_mode_guard(&settings, "default");
+        assert_eq!(guard["allowed"], true, "{guard:#}");
+        assert_eq!(guard["configured"], "default");
+        assert_eq!(guard["configured_source"], "product_default");
+        assert_eq!(guard["unresolved"], json!([]));
+        // Still equality: an absent default admits nothing broader, and
+        // nothing narrower either, since no ordering is established.
+        for requested in ["acceptEdits", "plan", "manual", FORBIDDEN_MODE] {
+            let refused = permission_mode_guard(&settings, requested);
+            assert_eq!(refused["allowed"], false, "{requested}: {refused:#}");
+        }
+    }
+    // A configured value still comes from the user's settings.
+    let configured = permission_mode_guard(
+        &json!({"permissions":{"defaultMode":"acceptEdits"}}),
+        "acceptEdits",
+    );
+    assert_eq!(configured["configured_source"], "user_settings");
+    // The product default has no flag spelling; every other mode is passed.
+    assert!(permission_mode_args("default").is_empty());
+    assert_eq!(
+        permission_mode_args("acceptEdits"),
+        ["--permission-mode", "acceptEdits"]
+    );
 }
 
 #[test]

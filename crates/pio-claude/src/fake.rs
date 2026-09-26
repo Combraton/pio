@@ -319,7 +319,10 @@ pub fn run() -> Result<()> {
         &markers,
         json!({"event":"turn_received","attached":attached,
                             "permission_prompt_tool":prompt_tool,
-                            "initialize_received":handshook}),
+                            "initialize_received":handshook,
+                            // The mode flag it was given, or null for none, so
+                            // a case can prove what PIO actually passed.
+                            "permission_mode_flag":flag_value(&args, "--permission-mode")}),
     )?;
 
     emit(&init_message(&scenario, &args))?;
