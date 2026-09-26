@@ -242,6 +242,8 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
         .map(Duration::from_secs)
         .unwrap_or(ACTION_ANSWER_TIMEOUT);
     let mut tool_use_messages: Vec<Value> = Vec::new();
+    // Every tool use whose `tool_result` arrived.
+    let mut completed_tool_uses: Vec<String> = Vec::new();
     let mut interrupt_deadline: Option<(std::time::Instant, String)> = None;
     let mut escalation: Option<Value> = None;
     let pinned_stream: Value = serde_json::from_str(pio_claude::QUALIFIED_STREAM)?;
@@ -369,6 +371,22 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                     acknowledged = message["message"] == sent["message"];
                     life.event(json!({"kind":"turn_acknowledged",
                         "replay_matches_sent":acknowledged}))?;
+                }
+                // A tool's result: the use it answers completed, whatever it
+                // returned. Kept by id only, for the audit of a turn that is
+                // cut short.
+                "user" => {
+                    for block in message["message"]["content"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                    {
+                        if block["type"] == "tool_result"
+                            && let Some(id) = block["tool_use_id"].as_str()
+                        {
+                            completed_tool_uses.push(id.to_owned());
+                        }
+                    }
                 }
                 "assistant" => {
                     if message["message"]["content"]
@@ -642,7 +660,25 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     // never ran and is not an effect. Without a result (a kill, a crash) that
     // list does not exist, and nothing nobody denied is called performed.
     let denials = result.as_ref().map(|r| &r["permission_denials"]);
-    let tool_uses = pio_claude::tool_use_records(&tool_use_messages, denials, &decided, &cwd, &cwd);
+    // A turn cut short still gets a `result` (measured on R5: SIGINT is
+    // answered with `terminal_reason: aborted_streaming`), but a tool use in
+    // flight when it was cut short never reported how it ended. Such a use
+    // is `unknown`, never `performed`.
+    let interrupted = interrupt_deadline.is_some()
+        || result.as_ref().is_some_and(|r| {
+            matches!(
+                r["terminal_reason"].as_str(),
+                Some("aborted_streaming" | "interrupted")
+            )
+        });
+    let tool_uses = pio_claude::tool_use_records_after(
+        &tool_use_messages,
+        denials,
+        &decided,
+        &cwd,
+        &cwd,
+        interrupted.then_some(completed_tool_uses.as_slice()),
+    );
     // Ordered deliberately: the exit event is what turns the runtime to
     // `exited`, so everything a caller must see on a finished execution is
     // recorded first. A matrix run caught the other order.

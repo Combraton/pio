@@ -1069,6 +1069,58 @@ fn a_refusal_is_attributed_to_whoever_decided_it() {
     assert_eq!(record["liability"], "none_observed");
 }
 
+/// A cancelled turn still gets a `result` (measured on R5: SIGINT is answered
+/// with `terminal_reason: aborted_streaming`), so its denial list exists. A
+/// tool use whose `tool_result` arrived before the signal ran; one still in
+/// flight when it landed has no completed result, and nothing says whether
+/// it ran: `unknown`, never `performed`, and the liability stays open.
+#[test]
+fn an_interrupted_turn_s_tool_use_in_flight_is_unknown_not_performed() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, _) = workspace(dir.path());
+    let messages = vec![
+        tool_use("Read", "t1", json!({"file_path":"src/calc.py"})),
+        tool_use("Edit", "t2", json!({"file_path":"src/calc.py"})),
+    ];
+    let completed = vec!["t1".to_owned()];
+    let record = tool_use_records_after(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+        Some(&completed),
+    );
+    let uses = record["tool_uses"].as_array().unwrap();
+    assert_eq!(uses[0]["outcome"], "performed", "{record}");
+    assert_eq!(
+        uses[1]["outcome"], "unknown",
+        "an in-flight use of a cancelled turn is not performed: {record}"
+    );
+    assert_eq!(uses[1]["denied"], false);
+    assert_eq!(record["result_observed"], true);
+    assert_eq!(record["turn_interrupted"], true);
+    assert_eq!(record["unknown_outcome_count"], 1);
+    assert_eq!(record["liability"], "unresolved");
+    // The same `result` from a turn nobody interrupted: both ran.
+    let whole = tool_use_records(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+    );
+    assert!(
+        whole["tool_uses"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|u| u["outcome"] == "performed")
+    );
+    assert_eq!(whole["turn_interrupted"], false);
+    assert_eq!(whole["liability"], "none_observed", "{whole}");
+}
+
 /// D3. A turn killed or crashed before its final `result` has no denial list.
 /// The audit used to read that absence as "nothing was refused" and record
 /// PIO's own decline as `performed`, `denied: false`. A deny PIO sent is a

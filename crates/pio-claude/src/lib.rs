@@ -1032,6 +1032,27 @@ pub fn tool_use_records(
     workspace: &Path,
     cwd: &Path,
 ) -> Value {
+    tool_use_records_after(messages, denials, decided, workspace, cwd, None)
+}
+
+/// [`tool_use_records`] for a turn that may have been interrupted.
+///
+/// `interrupted` is `Some` when the turn was cut short (SIGINT answered by a
+/// `result` with `terminal_reason: aborted_streaming`, or any interrupt),
+/// carrying the ids of the tool uses whose `tool_result` arrived. A signal
+/// still gets a `result`, so its denial list exists, but a use in flight when
+/// the signal landed may have run, partly run, or never started: with no
+/// completed `tool_result` it is `unknown`, never `performed`, and leaves the
+/// liability unresolved. Measured on R5: the aborted `result` says nothing
+/// about the use it interrupted.
+pub fn tool_use_records_after(
+    messages: &[Value],
+    denials: Option<&Value>,
+    decided: &Value,
+    workspace: &Path,
+    cwd: &Path,
+    interrupted: Option<&[String]>,
+) -> Value {
     // A tool use the harness refused is an **attempt**, not an effect. The
     // `result` names every one it denied, by `tool_use_id`. PIO had this all
     // along and ignored it: R6 reported an out-of-fixture effect with
@@ -1078,6 +1099,17 @@ pub fn tool_use_records(
                 (true, _) => "attempted_and_denied",
                 // No `result`, so nothing says whether it ran.
                 (false, _) if !result_observed => "unknown",
+                // Interrupted with no completed `tool_result`: in flight
+                // when the signal landed, so nothing says whether it ran.
+                (false, _)
+                    if interrupted.is_some_and(|done| {
+                        !block["id"]
+                            .as_str()
+                            .is_some_and(|id| done.iter().any(|d| d == id))
+                    }) =>
+                {
+                    "unknown"
+                }
                 (false, _) => "performed",
             };
             records.push(json!({
@@ -1122,7 +1154,7 @@ pub fn tool_use_records(
         .count();
     let unknown = records.iter().filter(|r| r["outcome"] == "unknown").count();
     json!({
-        "format":"pio-claude-tool-uses/6",
+        "format":"pio-claude-tool-uses/7",
         "containment":{
             "mechanism":"harness_permission_rules_only",
             "os_sandbox_observed":false,
@@ -1141,6 +1173,9 @@ pub fn tool_use_records(
         // Whether the final `result` arrived, and how many uses it left
         // undecided because it did not.
         "result_observed":result_observed,
+        // Whether the turn was cut short, so that a use with no completed
+        // `tool_result` is unknown even though a `result` arrived.
+        "turn_interrupted":interrupted.is_some(),
         "unknown_outcome_count":unknown,
         "liability":if outside > 0 || unclassified > 0 || unknown > 0 {
             "unresolved"

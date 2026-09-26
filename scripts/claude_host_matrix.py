@@ -1114,8 +1114,14 @@ def run_case(out, name):
         # `basis: observed, amount: 0, liability: resolved` — it told the
         # protocol a cancelled turn provably cost nothing, and the ledger
         # counted zero for a turn that had spent a session's prefix.
+        # Two tool uses before the signal: one whose result arrived and one
+        # still in flight, both inside the fixture.
         case = ServiceCase(out, name, scenario={'delay_ms': 30000,
-                                                'abort_on_interrupt': True})
+                                                'abort_on_interrupt': True,
+                                                'tool_uses_before_delay': [
+                                                    {'name': 'Read', 'input': {'file_path': 'README.md'},
+                                                     'result': True},
+                                                    {'name': 'Edit', 'input': {'file_path': 'README.md'}}]})
         case.start()
         case.submit()
         poll(lambda: case.inspect(), lambda v: v['delivery'] == 'acknowledged')
@@ -1136,6 +1142,17 @@ def run_case(out, name):
         # And nothing reached the protocol as a measurement.
         assert view['usage']['liability'] == 'unresolved', view['usage']
         assert view['usage'].get('observations', []) == [], view['usage']
+        # The aborted `result` says nothing of the use the signal cut short:
+        # the one whose result arrived was performed, the one in flight is
+        # unknown, never `performed`, and the effects liability stays open.
+        audit = [e['record'] for e in events if e['kind'] == 'tool_uses']
+        assert len(audit) == 1 and audit[0]['result_observed'] is True \
+            and audit[0]['turn_interrupted'] is True, audit
+        outcomes = [(u['tool'], u['tool_use_id'], u['outcome']) for u in audit[0]['tool_uses']]
+        assert outcomes == [('Read', 'toolu_fake_early_0', 'performed'),
+                            ('Edit', 'toolu_fake_early_1', 'unknown')], \
+            f'an in-flight tool use of a cancelled turn was recorded: {outcomes}'
+        assert audit[0]['unknown_outcome_count'] == 1 and audit[0]['liability'] == 'unresolved', audit
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     elif name == 'service_restart_reattaches_without_a_duplicate_launch':
