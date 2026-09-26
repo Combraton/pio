@@ -327,11 +327,41 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         refusal = Some(record);
                         break;
                     }
-                    ensure!(
-                        mode_matched == Some(true),
-                        "effective_permission_mode_mismatch: requested {requested}, effective {}",
-                        message["permissionMode"]
-                    );
+                    if mode_matched != Some(true) {
+                        // The mode the harness runs in is not the one PIO
+                        // asked for. Measured: `init` arrives only after the
+                        // brief, so this cannot precede delivery. The run is
+                        // refused the way D11 refuses a drifted stream: the
+                        // echo that follows `init` alone is read, so delivery
+                        // is recorded as what it was, the child is stopped
+                        // before any tool use is answered, and the turn ends
+                        // cleanly with its usage unknown. Before this it
+                        // failed through `host_error`, and a caller saw a lost
+                        // host: delivery ambiguous, runtime unknown and usage
+                        // liability `none` for a turn that had been delivered
+                        // and had spent.
+                        if let Some(next) = child.receive(REPLAY_WAIT)?
+                            && next["type"] == "user"
+                            && next["isReplay"] == true
+                        {
+                            acknowledged = next["message"] == sent["message"];
+                            life.event(json!({"kind":"turn_acknowledged",
+                                "replay_matches_sent":acknowledged}))?;
+                        }
+                        let killed = child.child.kill().is_ok();
+                        let _ = child.child.wait();
+                        let record = json!({"reason":"effective_permission_mode_mismatch",
+                            "requested_permission_mode":requested,
+                            "effective_permission_mode":message["permissionMode"]});
+                        life.event(json!({"kind":"permission_mode_mismatch_refused",
+                            "refusal":record,"killed":killed,
+                            "before_any_tool_use_answered":true,
+                            // Stopped after the brief arrived, before `result`,
+                            // which is the only message that reports usage.
+                            "usage":"unknown"}))?;
+                        refusal = Some(record);
+                        break;
+                    }
                 }
                 // The replay echo is the delivery proof: the exact message PIO
                 // sent, returned by the harness.

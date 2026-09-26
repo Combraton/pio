@@ -43,6 +43,7 @@ CASES = [
     'permission_mode_not_the_configured_default_refused',
     'service_runs_under_the_product_default_when_none_is_configured',
     'service_refuses_a_stream_identity_drift_at_init',
+    'service_refuses_a_permission_mode_mismatch_at_init',
     'surface_drift_refused',
     # Through the service, which is the only place these can be observed.
     'service_turn_completes',
@@ -679,7 +680,60 @@ def run_case(out, name):
         assert view['exit'] == 'unavailable', view
         assert view['usage']['liability'] == 'unresolved', view['usage']
         assert view['usage']['observations'] == [], view['usage']
+        # And why, on the exit: refused after delivery, usage unknown.
+        with case.client() as c:
+            stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                  'kinds': ['execution.execution']})['result']
+        exits = [i['event']['payload'] for i in stream['items']
+                 if 'event' in i and i['event']['type'] == 'execution.exit.observed']
+        assert [(x['pio.combraton.dev/refusal']['refusal']['reason'],
+                 x['pio.combraton.dev/refusal']['usage']) for x in exits] == \
+            [('stream_drift', 'unknown')], exits
         # The child is stopped, not left running.
+        poll(lambda: case.harness_processes(), lambda p: not p, seconds=60)
+        (case.out / 'events.json').write_text(json.dumps(events, indent=2))
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_refuses_a_permission_mode_mismatch_at_init':
+        # The harness reports a permission mode other than the one PIO asked
+        # for. `init` arrives only after the brief, so the brief was
+        # delivered. This failed through `host_error`, and the caller saw a
+        # lost host: delivery ambiguous, runtime unknown, usage liability
+        # `none`. It is refused the way D11 refuses a drift: the echo alone
+        # is read, the child stopped before any tool use is answered, and the
+        # turn ends with usage unresolved and the reason on the exit.
+        case = ServiceCase(out, name, scenario={
+            'init': {'permissionMode': 'bypassPermissions'},
+            'permission_request': {'tool_name': 'Bash', 'input': {'command': 'git tag x'}}})
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] in ('exited', 'unknown'),
+                    seconds=120)
+        events = case.host_events()
+        order = [e['kind'] for e in events]
+        refused = [e for e in events if e['kind'] == 'permission_mode_mismatch_refused']
+        assert len(refused) == 1, order
+        assert refused[0]['refusal'] == {'reason': 'effective_permission_mode_mismatch',
+                                         'requested_permission_mode': 'acceptEdits',
+                                         'effective_permission_mode': 'bypassPermissions'}, refused
+        assert refused[0]['usage'] == 'unknown' and refused[0]['killed'] is True, refused
+        for later in ('host_error', 'action_requested', 'request_declined_by_pio',
+                      'control_applied', 'request_denied_by_default', 'turn_completed'):
+            assert later not in order, order
+        assert case.markers_of('permission_decision') == [], case.markers_of('permission_decision')
+        # Delivered and stopped, not lost: the echo proved delivery, the run
+        # exited with no exit code claimed, and usage is unknown, not none.
+        assert (view['delivery'], view['runtime'], view['exit']) == \
+            ('acknowledged', 'exited', 'unavailable'), view
+        assert view['usage'] == {'observations': [], 'liability': 'unresolved'}, view['usage']
+        with case.client() as c:
+            stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                  'kinds': ['execution.execution']})['result']
+        exits = [i['event']['payload'] for i in stream['items']
+                 if 'event' in i and i['event']['type'] == 'execution.exit.observed']
+        assert [x['pio.combraton.dev/refusal']['refusal']['reason'] for x in exits] == \
+            ['effective_permission_mode_mismatch'], exits
+        assert exits[0]['pio.combraton.dev/refusal']['usage'] == 'unknown', exits
         poll(lambda: case.harness_processes(), lambda p: not p, seconds=60)
         (case.out / 'events.json').write_text(json.dumps(events, indent=2))
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))

@@ -24,6 +24,10 @@ pub const OTHER_THREADS: &str = "pio.combraton.dev/other-threads";
 /// turn had ended (a goal's continuation), each interrupted by the host, on
 /// `execution.exit.observed` (review of L3, round 4, SPEND-9).
 pub const CONTINUATIONS: &str = "pio.combraton.dev/continuations";
+/// Why a run whose brief was delivered was refused and stopped (a Claude
+/// stream drift, D11, or a permission-mode mismatch), with its usage
+/// unknown, on `execution.exit.observed`.
+pub const REFUSAL: &str = "pio.combraton.dev/refusal";
 const CONTENT_PATH: &str = "/extensions/pio.combraton.dev~1content";
 pub const FEATURES: &[&str] = &[
     "execution.controller",
@@ -1410,6 +1414,15 @@ impl Provider {
                     Value::Array(list) => Value::Array(list.clone()),
                     _ => json!([]),
                 };
+                // Why a delivered run was stopped before it could finish, and
+                // that its usage is unknown for that reason. Present only for
+                // a refused run.
+                if e[&ns]["refusal"].is_object() {
+                    payload[REFUSAL] = json!({"refusal":e[&ns]["refusal"],
+                        "delivered_before_refusal":true,
+                        "usage":"unknown",
+                        "usage_reason":"the harness was stopped before `result`, the only message that reports usage"});
+                }
                 // Every thread the run did not start, the same way (Codex
                 // only, the one host that tells threads apart): the
                 // host's final list, or what it had recorded as each thread
@@ -1575,6 +1588,15 @@ impl Provider {
                 }
             }
 
+            // A Claude run refused after its brief was delivered: a drifted
+            // stream (D11) or a permission mode other than the one asked for.
+            // The child was stopped before `result`, the only message that
+            // reports usage, so what the turn spent is unknown, never none;
+            // the reason rides on the exit.
+            "stream_identity_refused" | "permission_mode_mismatch_refused" => {
+                e[&ns]["refusal"] = event["refusal"].clone();
+                e["view"]["usage"]["liability"] = "unresolved".into();
+            }
             // A turn that ended without the message that reports usage leaves
             // usage unknown, never zero.
             "result_missing" => {
