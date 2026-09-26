@@ -1033,3 +1033,68 @@ fn only_a_returned_identifier_earns_a_delivery_proof_class() {
     );
     assert_eq!(opencode.delivery_evidence, "native_session_update");
 }
+
+/// G4, decided for v0.1: PIO does not steer a Claude Code run mid-turn. A
+/// steer to a running, acknowledged Claude run is refused as
+/// `not_supported` with the reason that is true, `not_supported_mid_turn`,
+/// rather than the generic one, which said steering needs a running,
+/// acknowledged turn — exactly what this run is. Nothing is queued, no
+/// control reaches the host, and nothing is shown as delivered.
+#[test]
+fn a_steer_to_a_running_claude_run_is_refused_as_not_supported_mid_turn() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("store");
+    std::fs::create_dir(&store).unwrap();
+    std::fs::set_permissions(&store, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+    let host = json!({"adapter":"claude","labeled_fake":true,"executable":"/bin/false","env":{"PATH":"/usr/bin:/bin"}});
+    let mut cfg = config();
+    cfg["executor"] = json!({"host_id":"claude-host"});
+    let mut p = Provider::with_host(&store, cfg, Some(host)).unwrap();
+    let mut s = session();
+    s.selected.as_mut().unwrap().insert(
+        "execution".into(),
+        crate::codex::FEATURES
+            .iter()
+            .map(|f| f.to_string())
+            .collect(),
+    );
+    // Internal store test only: a Claude execution whose turn is running and
+    // whose brief the replay echo acknowledged. Admission is not `admitted`,
+    // so no tick launches a host process here.
+    let e = json!({"source":pio_claude::fake::SOURCE,"principal":"owner","submit":{},"view":{"execution":{"kind":"execution.execution","id":"e"},"revision":3,"admission":"refused","delivery":"acknowledged","runtime":"active","effects":[],"host":{"id":"claude-host","generation":1}},"claude":{"turn_id":Value::Null}});
+    p.update_execution(&e);
+    p.save().unwrap();
+    let text = "change course";
+    let mut c = command(
+        "execution.steer",
+        json!({"kind":"execution.execution","id":"e"}),
+        3,
+        json!({"message":{"digest":pio_core::digest(text.as_bytes()),"media_type":"text/plain"}}),
+    );
+    c["extensions"] =
+        json!({(crate::codex::CONTENT_EXTENSION):{"media_type":"text/plain","text":text}});
+    let reply = p.handle(&mut s, "execution.steer", &c).unwrap();
+    assert_eq!(reply["outcome"]["request"], "not_supported", "{reply}");
+    let alternative = reply["outcome"]["alternative"].as_str().unwrap();
+    assert!(
+        alternative.starts_with("not_supported_mid_turn"),
+        "{alternative}"
+    );
+    assert!(
+        alternative.len() <= 512,
+        "the Protocol caps an alternative at 512"
+    );
+    assert!(reply["outcome"].get("delivery_id").is_none(), "{reply}");
+    assert!(
+        reply["acknowledgment"]["effect_refs"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let stored = &p.data.executions["e"];
+    assert_eq!(stored["view"]["steering"][0]["request"], "not_supported");
+    assert_eq!(stored["view"]["steering"][0]["alternative"], alternative);
+    assert!(stored["view"]["steering"][0].get("delivery").is_none());
+    assert!(stored.get("claude_controls").is_none(), "no control queued");
+    assert!(!p.data.effects.keys().any(|k| k.contains("steering")));
+}

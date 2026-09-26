@@ -127,6 +127,18 @@ fn content_reference<'a>(method: &str, p: &'a Value) -> Option<&'a Value> {
     }
 }
 
+/// Why a steer to a Claude Code run is refused, in the words a caller sees.
+///
+/// Decided for v0.1 (the orchestrator, 2026-09-26, G4): PIO does not steer a
+/// Claude Code run mid-turn. The harness would accept a second message on
+/// stdin, but whether it steers the running turn, queues it for the next or
+/// drops it is not measured (ADR 004 §10), and the Claude host runs one turn,
+/// so a queued message would never be run and must not be shown as
+/// delivered. The steer is refused with this reason instead of the generic
+/// one, which wrongly implied a running, acknowledged Claude turn would do.
+pub const CLAUDE_STEER_REFUSAL: &str = "not_supported_mid_turn: PIO v0.1 does not steer a Claude Code run; \
+     a message to a running run is neither delivered nor queued. Cancel the run and submit a new one.";
+
 /// What differs between harnesses, in one place.
 ///
 /// Both hosts emit the same normalized events; only these strings differ, so
@@ -451,8 +463,15 @@ impl Provider {
                 if self.content_available(&message).is_none() {
                     return Err(invalid(CONTENT_PATH));
                 }
-                if !live {
-                    let alternative = "Steering needs an acknowledged, running native turn";
+                // G4: never a Claude Code run, running or not.
+                let refusal = if ns == "claude" {
+                    Some(CLAUDE_STEER_REFUSAL)
+                } else if !live {
+                    Some("Steering needs an acknowledged, running native turn")
+                } else {
+                    None
+                };
+                if let Some(alternative) = refusal {
                     push(
                         &mut e["view"]["steering"],
                         json!({"steer_id":steer_id,"request":"not_supported","recorded_at":self.now,"alternative":alternative}),
