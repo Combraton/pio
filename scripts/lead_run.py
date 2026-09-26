@@ -168,6 +168,10 @@ does with a permission prompt.
   `subagents-unguarded` and `subagents-multi-agent-only` apply the live
   check to the rehearsal's own Codex home (its defaults, and `multi_agent =
   false` alone), which must refuse;
+- `lead-exit-uncarried` (L3) drops the lead's list of what PIO declined, as
+  if its exit carried none and it was not seen to exit: the pre-allowance
+  row must be inconclusive, not held; `owner-service-absent` empties both
+  listings of the owner's OpenCode service: that row must be inconclusive;
 - `meter-dies` (L3) fails the meter thread as the third start begins: the
   meter must cancel every run still going itself, within seconds, before
   alpha reaches its ceiling, and the run ends with the error;
@@ -663,7 +667,16 @@ MUTANTS = {
 # L1b only: a mutant that must leave its row **inconclusive**, not failed. A
 # desk that was never asked has decided nothing, and must not say it has
 # (review 47).
-INCONCLUSIVE_MUTANTS = {'no-ask': 'Every approval was decided at the desk'}
+INCONCLUSIVE_MUTANTS = {'no-ask': 'Every approval was decided at the desk',
+                        # L3: the lead's exit carried no list of what PIO
+                        # declined, and it was not seen to exit: nothing is
+                        # decided about the pre-allowance (review of L3, round
+                        # 3, C3-3).
+                        'lead-exit-uncarried': "The lead's own two tools were pre-allowed, "
+                                               'and nothing else',
+                        # No OpenCode service of the owner's before or after:
+                        # nothing observed (C3-4).
+                        'owner-service-absent': "The owner's OpenCode service was untouched"}
 # L1b only: a mutant whose row must still **hold**. `alpha` outlasts the lead
 # tool's wait, so its first read comes back still running at the limit, and
 # its second comes back `exited` too soon to count. Only the limit can hold
@@ -681,7 +694,7 @@ PLAN_MUTANTS = {**{m: {'L3'} for m in (
                     'subagents-unguarded', 'subagents-multi-agent-only', 'subagents-off',
                     'step-past-in-flight', 'stopped-past-share', 'stopped-charge-capped',
                     'deadline-interrupted', 'interrupted-charged-reported',
-                    'memory-pipeline-ran', 'meter-dies')},
+                    'memory-pipeline-ran', 'meter-dies', 'lead-exit-uncarried')},
                 'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
@@ -3138,6 +3151,11 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
         # recognise and declined by itself (review of L3, CH-2/F1). An
         # elicitation from the lead's own server, or from a server Codex did
         # not name, counts.
+        lead_declined = declined.get(LEAD)
+        if record.get('mutant') == 'lead-exit-uncarried':
+            # A lead whose exit carried no list, and which was not seen to
+            # exit: the host lost, say (review of L3, round 3, C3-3).
+            lead_declined = None
         asked = dict(
             surfaced=[e.get('message') for e in host.get(LEAD, [])
                       if e['kind'] == 'action_requested'
@@ -3149,26 +3167,36 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
             # nothing, and is not taken for 'nothing asked'.
             declined_by_pio=[{k: d.get(k) for k in ('method', 'mode', 'approval_kind', 'server',
                                                     'tool', 'mcp_tool_call_approval')}
-                             for d in declined.get(LEAD) or []
+                             for d in lead_declined
                              if (d.get('method') == ELICITATION
                                  and d.get('server') in (LEAD_SERVER, None))
                              or (d.get('method') == 'item/tool/requestUserInput'
                                  and d.get('mcp_tool_call_approval') is True)]
-            if declined.get(LEAD) is not None or lead_view.get('runtime') != 'exited'
-            else 'not carried: the lead exited with no list of what PIO declined')
+            # Whatever the lead's runtime: a list that was never carried is
+            # not "nothing asked" (review of L3, round 3, R3-HC-9 / C3-3).
+            if lead_declined is not None
+            else 'not carried: no exit of the lead carried what PIO declined')
         held = not asked['surfaced'] and not asked['declined_by_pio']
+        expected_asked = dict(surfaced=[], declined_by_pio=[])
         # What each thread's config carried on the wire, as the host read it
         # back from the request it sent: exactly the lead's two tools at
         # `approve`, and no server-wide default (review of L3, CH-1).
+        expected_pre = dict(pre_allowed={LEAD: [{LEAD_SERVER: dict(
+            tools={tool: dict(approval_mode='approve') for tool in PRE_ALLOWED},
+            default_tools_approval_mode=None)}],
+            **{f'{LEAD}.{c}': [{}] for c in CHILDREN}},
+            asked_about_the_tool=expected_asked)
         rows.add("The lead's own two tools were pre-allowed, and nothing else",
                  dict(pre_allowed={run: [e.get('servers') for e in host.get(run, [])
                                          if e['kind'] == 'mcp_servers_sent'] for run in RUNS},
                       asked_about_the_tool=asked),
-                 dict(pre_allowed={LEAD: [{LEAD_SERVER: dict(
-                     tools={tool: dict(approval_mode='approve') for tool in PRE_ALLOWED},
-                     default_tools_approval_mode=None)}],
-                     **{f'{LEAD}.{c}': [{}] for c in CHILDREN}},
-                      asked_about_the_tool=dict(surfaced=[], declined_by_pio=[])),
+                 expected_pre,
+                 # An ask PIO surfaced, or a wrong wire, fails it; with neither,
+                 # a list that was never carried decides nothing.
+                 holds=lambda o: False if o['pre_allowed'] != expected_pre['pre_allowed']
+                 or o['asked_about_the_tool']['surfaced']
+                 else None if isinstance(o['asked_about_the_tool']['declined_by_pio'], str)
+                 else o == expected_pre,
                  note="in the lead's thread config only; never written to the owner's"
                       + ('' if held else
                          f"; THE PRE-ALLOWANCE DID NOT HOLD: Codex asked about the lead's "
@@ -3570,8 +3598,17 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
              "OpenCode's last model step; charged times the steps it could have taken")
 
     record['owner_service_after'] = opencode_live_run.owner_service()
+    if record.get('mutant') == 'owner-service-absent':
+        # No OpenCode service of the owner's to see, on any machine.
+        record['owner_service_before'] = record['owner_service_after'] = []
     rows.add("The owner's OpenCode service was untouched",
-             record['owner_service_after'] == record['owner_service_before'], True)
+             dict(before=record['owner_service_before'], after=record['owner_service_after']),
+             'the same processes before and after',
+             # Nothing listed before or after observed nothing (review of L3,
+             # round 3, C3-4): [] == [] is not "untouched".
+             holds=lambda o: None if not o['before'] and not o['after']
+             else o['before'] == o['after'],
+             note='the owner\'s own OpenCode service, by process; none running is inconclusive')
     if HARNESS == 'codex':
         # Every run's own before and after of the owner's config.toml. A
         # thread in a writable workspace trusts that project, which every run
@@ -4147,6 +4184,10 @@ def main():
             assert not stops and spent['cut_short'] and spent['basis'] == STOPPED_BASIS, spent
             assert spent['charged'] == spent['reported_total'] + CODEX['in_flight'], spent
             assert row_of("Every run's charge covers what it could have spent")['holds'] is True
+        if args.mutant == 'lead-asked-by-user-input':
+            # What was asked, never how: no question, header or option text
+            # reaches the receipt (review of L3, round 3, R3-HC-5).
+            assert 'SENTINEL' not in args.receipt.read_text(), 'a question text leaked'
         if args.mutant == 'meter-dies':
             # Every run still going was cancelled by the meter itself, within
             # seconds of its failing, and alpha never reached the ceiling it

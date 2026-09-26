@@ -232,6 +232,7 @@ jobs:
                    subagents-unguarded subagents-multi-agent-only step-past-in-flight \
                    stopped-past-share stopped-charge-capped deadline-interrupted \
                    interrupted-charged-reported memory-pipeline-ran meter-dies \
+                   lead-exit-uncarried owner-service-absent \
                    grant-no-steer wrong-child wrong-relay lead-loops runner-killed \
                    lead-asked-in-openai-form lead-asked-by-user-input child-asks-permissions \
                    service-never-ready \

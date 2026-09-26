@@ -475,8 +475,9 @@ pub fn run() -> Result<()> {
                                 (scenario.clone(), waiting.clone(), markers.clone());
                             if lead {
                                 let servers = servers.clone();
+                                let dir = cwd.clone();
                                 std::thread::spawn(move || {
-                                    fake_turn::lead(playing, servers, script, queue, marks)
+                                    fake_turn::lead(playing, servers, script, queue, marks, dir)
                                 });
                             } else {
                                 let (dir, prompt) = (cwd.clone(), text.to_owned());
@@ -562,11 +563,16 @@ pub fn run() -> Result<()> {
                                     // call (0.157.0): a question whose id begins
                                     // mcp_tool_call_approval, text PIO must never
                                     // record.
+                                    // `isBlocking` is required at 0.157.0 and Codex
+                                    // sends true (review of L3, round 3, R3-HC-7); a
+                                    // sentinel in every text a host could copy,
+                                    // header and label included (R3-HC-5).
                                     params = json!({"threadId":thread_id,"turnId":turn,"itemId":"item-approval",
-                                                    "questions":[{"id":"mcp_tool_call_approval_call-1","header":"Approve app tool call?",
+                                                    "isBlocking":true,
+                                                    "questions":[{"id":"mcp_tool_call_approval_call-1","header":"Approve app tool call? SENTINEL-header",
                                                                   "question":"Allow the someone MCP server to run tool \"go\"? SENTINEL-question",
                                                                   "isOther":false,"isSecret":false,
-                                                                  "options":[{"label":"Allow","description":"SENTINEL-option"}]}]});
+                                                                  "options":[{"label":"Allow SENTINEL-label","description":"SENTINEL-option"}]}]});
                                 }
                                 if kind == "elicitation" {
                                     // An elicitation that is not an MCP

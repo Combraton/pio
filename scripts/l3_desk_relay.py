@@ -180,6 +180,15 @@ def selftest():
         item('L3.beta', method=command, approval_kind='command',
              command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'",
              **dict(inside, network_approval=True)),
+        # The exact command, inside the fixture, with no network flag at
+        # all, or a flag that says nothing: a missing flag is not "no
+        # network" (review of L3, round 3, R3-HC-4).
+        item('L3.beta', method=command, approval_kind='command',
+             command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'",
+             classification=inside['classification']),
+        item('L3.beta', method=command, approval_kind='command',
+             command="/bin/zsh -lc 'sleep 5 && wc -l beta.md'",
+             **dict(inside, network_approval=None)),
         # Another run's command, a longer command, another shell, a
         # terminal write, a file change.
         item('L3.alpha', method=command, approval_kind='command',

@@ -532,6 +532,7 @@ pub(crate) fn lead(
     scenario: Value,
     waiting: Waiting,
     markers: Option<PathBuf>,
+    cwd: String,
 ) {
     let play = Play {
         turn: turn.clone(),
@@ -547,13 +548,18 @@ pub(crate) fn lead(
         requests: AtomicU64::new(0),
         messages: AtomicU64::new(0),
     };
-    if let Err(error) = play_lead(&play, &servers, &scenario) {
+    if let Err(error) = play_lead(&play, &servers, &scenario, &cwd) {
         let _ = play.marker(json!({"kind":"lead_script_failed","error":format!("{error:#}")}));
         let _ = turn.complete("failed");
     }
 }
 
-fn play_lead(play: &Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> Result<()> {
+fn play_lead(
+    play: &Play,
+    servers: &Mutex<Vec<McpServer>>,
+    scenario: &Value,
+    cwd: &str,
+) -> Result<()> {
     let calls = scenario["lead"]["calls"]
         .as_array()
         .cloned()
@@ -589,7 +595,8 @@ fn play_lead(play: &Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> 
                 let command = call["command"].as_str().unwrap_or("ls");
                 let item = json!({"type":"commandExecution","id":format!("call_shell_{index}"),
                                   "command":format!("/bin/zsh -lc '{command}'"),
-                                  "cwd":null,"commandActions":[]});
+                                  // A string at 0.157.0: the thread's own cwd (R3-HC-7).
+                                  "cwd":cwd,"commandActions":[]});
                 let mut started = item.clone();
                 started["status"] = json!("inProgress");
                 play.item("item/started", started)?;
@@ -620,11 +627,13 @@ fn play_lead(play: &Play, servers: &Mutex<Vec<McpServer>>, scenario: &Value) -> 
                 let answer = play.ask(
                     "item/tool/requestUserInput",
                     json!({"threadId":play.turn.thread,"turnId":play.turn.id,"itemId":item_id,
+                           // Required at 0.157.0, and true from Codex (R3-HC-7).
+                           "isBlocking":true,
                            "questions":[{"id":format!("mcp_tool_call_approval_{item_id}"),
-                                         "header":"Approve app tool call?",
+                                         "header":"Approve app tool call? SENTINEL-header",
                                          "question":format!("Allow the {server_name} MCP server to run tool \"{tool}\"? SENTINEL-question"),
                                          "isOther":false,"isSecret":false,
-                                         "options":[{"label":"Allow","description":"SENTINEL-option"},
+                                         "options":[{"label":"Allow SENTINEL-label","description":"SENTINEL-option"},
                                                     {"label":"Cancel","description":"no"}]}]}),
                 )?;
                 let Some(answer) = answer else {

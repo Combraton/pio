@@ -36,7 +36,8 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'command_approval_lapses', 'form_elicitation_declined', 'approval_cwd_through_a_link',
          'approval_cwd_past_path_max', 'subagent_thread_attributed',
          'subagent_interrupted_with_the_run', 'agents_off_decision_sent',
-         'early_declines_in_every_wait', 'early_decline_then_exit',
+         'early_declines_in_every_wait', 'early_decline_then_exit', 'file_change_no_root',
+         'file_change_root_inside',
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
          'file_change_grant_root']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
@@ -529,6 +530,50 @@ def past_path_max(repo, outside):
     return repo / 'L1' / 'L2' / 'esc'
 
 
+def file_change_case(case, name):
+    """A file-change approval with no root, and one whose root is inside the
+    fixture (review of L3, round 3, R3-HC-6): the first says it asks for
+    none and carries no placement; the second places its root inside, by
+    label and digest. The relay leaves both to the owner."""
+    import l3_desk_relay
+    repo, base = case.fixture('work')
+    scenario = json.loads(case.config['codex']['env']['PIO_CODEX_FAKE_SCENARIO'])
+    if name == 'file_change_root_inside':
+        (repo / 'src').mkdir(exist_ok=True)
+        scenario['approval_grant_root'] = str(repo / 'src')
+    case.config['codex']['env']['PIO_CODEX_FAKE_SCENARIO'] = json.dumps(scenario)
+    case.config_path.write_text(json.dumps(case.config))
+    case.start()
+    response, _ = case.submit(repository=repo, base=base)
+    assert response['result']['outcome']['admission'] == 'admitted', response
+    waiting = poll(lambda: case.inspect()['result'], lambda v: v['runtime'] == 'requires_action')
+    requested = events_of(case, 'action_requested')[0]
+    assert requested['method'] == 'item/fileChange/requestApproval', requested
+    if name == 'file_change_no_root':
+        assert requested['grant_root_requested'] is False, requested
+        assert 'classification' not in requested, requested
+    else:
+        assert requested['grant_root_requested'] is True, requested
+        placement = requested['classification']
+        assert (placement['subject'], placement['placement'], placement['target_label']) == \
+            ('grant_root', 'inside_fixture', '<fixture>/src'), placement
+        assert str(repo) not in json.dumps(placement), placement
+    with case.client() as c:
+        stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                              'kinds': ['execution.execution']})['result']
+    approval = next(i['event']['payload']['pio.combraton.dev/approval'] for i in stream['items']
+                    if 'event' in i and 'pio.combraton.dev/approval' in i['event']['payload'])
+    assert approval['grant_root_requested'] is (name == 'file_change_root_inside'), approval
+    assert l3_desk_relay.decided_in_advance(dict(run='L3.beta', approval=approval)) is None
+    action = waiting['runtime_detail']['action_id']
+    body = json.dumps({'decision': 'decline'}).encode()
+    case.execution_command('execution.respond_action', 'work',
+                           dict(action_id=action, response=dict(digest=digest(body), media_type='application/json')),
+                           'decline', body, 'application/json')
+    exited(case)
+    return dict(outcome='pass', grant_root=requested['grant_root_requested'])
+
+
 def link_case(case, name):
     """A command approval whose working directory is inside the fixture by
     its spelling and outside it on disk: through `self -> .` and then
@@ -630,6 +675,8 @@ def run_case(out, name):
         early_elicitation_declined={'elicit_during_thread_start': True, 'delay_ms': 100},
         user_input_declined={'approval': 'user_input', 'delay_ms': 100},
         file_change_grant_root={'approval': 'fileChange', 'delay_ms': 100, 'approval_grant_root': '/'},
+        file_change_no_root={'approval': 'fileChange', 'delay_ms': 100},
+        file_change_root_inside={'approval': 'fileChange', 'delay_ms': 100},
         network_and_unplaced_approval={'approval': 'command', 'delay_ms': 100,
                                        'approval_network': True, 'approval_no_cwd': True},
         model_checked_before_turn={'model_provider': 'openai', 'delay_ms': 100},
@@ -644,6 +691,8 @@ def run_case(out, name):
     try:
         if name in ('approval_cwd_through_a_link', 'approval_cwd_past_path_max'):
             return link_case(case, name)
+        if name in ('file_change_no_root', 'file_change_root_inside'):
+            return file_change_case(case, name)
         if name in ('subagent_thread_attributed', 'subagent_interrupted_with_the_run',
                     'agents_off_decision_sent'):
             return subagent_case(case, name)
