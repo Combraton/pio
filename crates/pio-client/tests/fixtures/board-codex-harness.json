@@ -11,17 +11,17 @@
         "caused_by": [],
         "command_id": "work",
         "epoch": 1,
-        "operation_ref": "5a9fba57-862c-4442-a927-8b4e43d5bd5a",
+        "operation_ref": "a9cb6a00-1cce-4a98-9f6b-f285e7c110d1",
         "origin": "command",
         "payload": {
          "admission": "admitted",
          "delivery_id": "work.delivery-1",
          "runtime": "preparing"
         },
-        "recorded_at": "2026-09-26T15:17:12Z",
+        "recorded_at": "2026-09-26T15:55:46Z",
         "revision": 1,
         "sequence": 1,
-        "stream": "80712366-a608-48aa-8af7-10092c97c851",
+        "stream": "d8677a53-c1e5-4679-bc6d-231cabd636e8",
         "subject": {
          "id": "work",
          "kind": "execution.execution"
@@ -43,10 +43,10 @@
          },
          "proof_class": "provider_ack_id"
         },
-        "recorded_at": "2026-09-26T15:17:12Z",
+        "recorded_at": "2026-09-26T15:55:47Z",
         "revision": 2,
         "sequence": 2,
-        "stream": "80712366-a608-48aa-8af7-10092c97c851",
+        "stream": "d8677a53-c1e5-4679-bc6d-231cabd636e8",
         "subject": {
          "id": "work",
          "kind": "execution.execution"
@@ -62,10 +62,10 @@
         "payload": {
          "runtime": "active"
         },
-        "recorded_at": "2026-09-26T15:17:12Z",
+        "recorded_at": "2026-09-26T15:55:47Z",
         "revision": 3,
         "sequence": 3,
-        "stream": "80712366-a608-48aa-8af7-10092c97c851",
+        "stream": "d8677a53-c1e5-4679-bc6d-231cabd636e8",
         "subject": {
          "id": "work",
          "kind": "execution.execution"
@@ -89,7 +89,7 @@
            "placement": "inside_fixture",
            "subject": "cwd",
            "target_label": "<fixture>/",
-           "target_sha256": "065cb6817bb1ce38d0eb521a028064fe471aea7bf16432ee842710f4a37a620a"
+           "target_sha256": "4622c13fa9719be29fa116892479c2773c4f80b4bc662afc3544d51913a9a15f"
           },
           "command": "echo fixture",
           "grant_root_requested": null,
@@ -104,15 +104,15 @@
           "options": null,
           "persist_offered": null,
           "reason": null,
-          "requested_at": "2026-09-26T15:17:12Z",
+          "requested_at": "2026-09-26T15:55:47Z",
           "server": null
          },
          "runtime": "requires_action"
         },
-        "recorded_at": "2026-09-26T15:17:12Z",
+        "recorded_at": "2026-09-26T15:55:47Z",
         "revision": 4,
         "sequence": 4,
-        "stream": "80712366-a608-48aa-8af7-10092c97c851",
+        "stream": "d8677a53-c1e5-4679-bc6d-231cabd636e8",
         "subject": {
          "id": "work",
          "kind": "execution.execution"
@@ -135,10 +135,10 @@
           "sent": false
          }
         },
-        "recorded_at": "2026-09-26T15:17:13Z",
+        "recorded_at": "2026-09-26T15:55:47Z",
         "revision": 5,
         "sequence": 5,
-        "stream": "80712366-a608-48aa-8af7-10092c97c851",
+        "stream": "d8677a53-c1e5-4679-bc6d-231cabd636e8",
         "subject": {
          "id": "work",
          "kind": "execution.execution"
@@ -154,14 +154,14 @@
         "payload": {
          "amount": 42,
          "basis": "observed",
-         "invocation_id": "4aa83e1c-613f-41d6-8efb-772b205f877a",
+         "invocation_id": "8663ca4f-93a3-432c-bb44-fed09d3e53f5",
          "measure": "codex.tokens.total",
-         "recorded_at": "2026-09-26T15:17:18Z"
+         "recorded_at": "2026-09-26T15:55:52Z"
         },
-        "recorded_at": "2026-09-26T15:17:18Z",
+        "recorded_at": "2026-09-26T15:55:52Z",
         "revision": 6,
         "sequence": 6,
-        "stream": "80712366-a608-48aa-8af7-10092c97c851",
+        "stream": "d8677a53-c1e5-4679-bc6d-231cabd636e8",
         "subject": {
          "id": "work",
          "kind": "execution.execution"
@@ -177,10 +177,10 @@
         "payload": {
          "runtime": "unknown"
         },
-        "recorded_at": "2026-09-26T15:17:21Z",
+        "recorded_at": "2026-09-26T15:55:55Z",
         "revision": 7,
         "sequence": 7,
-        "stream": "80712366-a608-48aa-8af7-10092c97c851",
+        "stream": "d8677a53-c1e5-4679-bc6d-231cabd636e8",
         "subject": {
          "id": "work",
          "kind": "execution.execution"
@@ -201,10 +201,10 @@
          "pio.combraton.dev/native-declines": [],
          "pio.combraton.dev/other-threads": []
         },
-        "recorded_at": "2026-09-26T15:17:21Z",
+        "recorded_at": "2026-09-26T15:55:55Z",
         "revision": 8,
         "sequence": 8,
-        "stream": "80712366-a608-48aa-8af7-10092c97c851",
+        "stream": "d8677a53-c1e5-4679-bc6d-231cabd636e8",
         "subject": {
          "id": "work",
          "kind": "execution.execution"
@@ -213,19 +213,19 @@
        }
       }
      ],
-     "next_cursor": "80712366-a608-48aa-8af7-10092c97c851:1:8",
+     "next_cursor": "d8677a53-c1e5-4679-bc6d-231cabd636e8:1:8",
      "stream": {
       "epoch": 1,
-      "id": "80712366-a608-48aa-8af7-10092c97c851"
+      "id": "d8677a53-c1e5-4679-bc6d-231cabd636e8"
      }
     },
     {
      "filtered": false,
      "items": [],
-     "next_cursor": "80712366-a608-48aa-8af7-10092c97c851:1:8",
+     "next_cursor": "d8677a53-c1e5-4679-bc6d-231cabd636e8:1:8",
      "stream": {
       "epoch": 1,
-      "id": "80712366-a608-48aa-8af7-10092c97c851"
+      "id": "d8677a53-c1e5-4679-bc6d-231cabd636e8"
      }
     }
    ],
@@ -234,9 +234,9 @@
      "actions": [
       {
        "action_id": "work.action-1",
-       "answered_at": "2026-09-26T15:17:13Z",
+       "answered_at": "2026-09-26T15:55:47Z",
        "owner": "codex",
-       "requested_at": "2026-09-26T15:17:12Z",
+       "requested_at": "2026-09-26T15:55:47Z",
        "state": "answered"
       }
      ],
@@ -246,7 +246,7 @@
       {
        "delivery": "acknowledged",
        "delivery_id": "work.delivery-1",
-       "determined_at": "2026-09-26T15:17:12Z",
+       "determined_at": "2026-09-26T15:55:47Z",
        "evidence": {
         "class": "native_turn_acknowledged",
         "source": "pio-fake-app-server/host"
@@ -254,7 +254,7 @@
        "history": [
         {
          "delivery": "pending",
-         "recorded_at": "2026-09-26T15:17:12Z"
+         "recorded_at": "2026-09-26T15:55:47Z"
         }
        ],
        "proof_class": "provider_ack_id"
@@ -276,7 +276,7 @@
       "generation": 1,
       "id": "codex-host"
      },
-     "next_cursor": "80712366-a608-48aa-8af7-10092c97c851:1:8",
+     "next_cursor": "d8677a53-c1e5-4679-bc6d-231cabd636e8:1:8",
      "obligations": [],
      "recovery": [],
      "result": "absent",
@@ -288,20 +288,20 @@
        {
         "amount": 42,
         "basis": "observed",
-        "invocation_id": "4aa83e1c-613f-41d6-8efb-772b205f877a",
+        "invocation_id": "8663ca4f-93a3-432c-bb44-fed09d3e53f5",
         "measure": "codex.tokens.total",
-        "recorded_at": "2026-09-26T15:17:18Z"
+        "recorded_at": "2026-09-26T15:55:52Z"
        }
       ]
      },
      "workspace": {
       "checkpoints": [],
       "lease": {
-       "base": "42a16251b769dee5fce38bea8026d46b9a8ffc57",
+       "base": "3d048e01d529e1d899b543659b0a9e6862cca67c",
        "cleanup": "retain",
        "lease_epoch": 1,
        "lease_id": "work.workspace",
-       "repository": "/private/tmp/pio-cx-q1id_tcd/fixtures/work",
+       "repository": "/tmp/pio-fixture/fixtures/work",
        "writer": "owner"
       }
      }

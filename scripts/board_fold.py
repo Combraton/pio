@@ -264,16 +264,24 @@ def run_state(view):
     """One word for one run, from its view alone, first match wins.
 
     A run seen on the stream but not (yet) read has no view, and is
-    `unknown` rather than a guess. `uncertain` is the violet state: delivery
-    ambiguous, usage liability unresolved, or a runtime PIO cannot see.
+    `unknown` rather than a guess. `uncertain` is the violet state and means
+    the **outcome** is in doubt: delivery ambiguous, the host lost (a runtime
+    PIO cannot see), or a run that exited with neither an exit status nor a
+    result observed. Every run of the labeled fakes exits with `result:
+    absent` and an exit code, and its outcome is not in doubt, so an absent
+    result counts only beside an unavailable exit.
+
+    Usage PIO has not resolved is **not** an outcome in doubt: it is a usage
+    marker on the row (`row_markers`), never the run's state. The
+    orchestrator's decision of 2026-09-26, refining the design input's
+    "usage unknown" under uncertain; before it, every exited OpenCode run
+    read uncertain.
     """
     if view is None:
         return 'unknown'
     if any(a.get('state') == 'pending' for a in view.get('actions') or []):
         return 'needs approval'
-    usage = view.get('usage') or {}
-    if view.get('delivery') == 'ambiguous' or usage.get('liability') == 'unresolved' \
-            or view.get('runtime') == 'unknown':
+    if view.get('delivery') == 'ambiguous' or view.get('runtime') == 'unknown':
         return 'uncertain'
     if view.get('admission') == 'refused':
         return 'refused'
@@ -282,8 +290,16 @@ def run_state(view):
     if (view.get('cancellation') or {}).get('outcome') == 'cancelled':
         return 'cancelled'
     if view.get('runtime') == 'exited':
+        if view.get('exit') == 'unavailable' and (view.get('result') or 'absent') == 'absent':
+            return 'uncertain'
         return 'finished'
     return 'running'
+
+
+def row_markers(view):
+    """What a row says beside its state. Usage lives here, never in it."""
+    usage = (view or {}).get('usage') or {}
+    return ['usage unresolved'] if usage.get('liability') == 'unresolved' else []
 
 
 def board_view(board):
@@ -301,7 +317,8 @@ def board_view(board):
             admission=(view or {}).get('admission'), runtime=(view or {}).get('runtime'),
             delivery=(view or {}).get('delivery'),
             liability=((view or {}).get('usage') or {}).get('liability'),
-            exit=(view or {}).get('exit'), pending_actions=pending))
+            exit=(view or {}).get('exit'), pending_actions=pending,
+            markers=row_markers(view)))
     counts = {}
     for row in rows:
         counts[row['state']] = counts.get(row['state'], 0) + 1

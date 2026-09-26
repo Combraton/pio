@@ -27,6 +27,8 @@ edit applied, and requires the parity check to fail **on that field**:
 
 - `walk-drops-offer` removes `if_nobody_answers` from every walk row;
 - `board-exited-running` draws an exited run as `running`;
+- `board-liability-uncertain` makes unresolved usage alone `uncertain` again
+  (the rule before the orchestrator's decision of 2026-09-26);
 - `blocks-nobody-unknown` fills an undecided tool use as `unknown` instead of
   `nobody was asked`.
 """
@@ -34,6 +36,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -56,6 +59,11 @@ MUTANTS = {
                              'if view["runtime"] == "exited" {\n        return "finished";',
                              'if view["runtime"] == "exited" {\n        return "running";',
                              'state'),
+    'board-liability-uncertain': ('crates/pio-client/src/board.rs',
+                                  'if view["delivery"] == "ambiguous" || view["runtime"] == "unknown" {',
+                                  'if view["delivery"] == "ambiguous" || view["runtime"] == "unknown"'
+                                  ' || view["usage"]["liability"] == "unresolved" {',
+                                  'state'),
     'blocks-nobody-unknown': ('crates/pio-client/src/blocks.rs',
                               'Value::Null => json!("nobody was asked"),',
                               'Value::Null => json!("unknown"),',
@@ -357,11 +365,33 @@ def record(out, into):
     record_desk(work, into)
     record_codex_settlements(work, into)
     for path in recordings(into):
+        scrub(path)
         text = path.read_text()
         for decoded in [text] + [base64.b64decode(r).decode(errors='replace')
                                  for r in json.loads(text).get('reads', [])]:
             assert '/Users/' not in decoded and '/home/' not in decoded, \
                 f'{path.name} carries a home path'
+
+
+# A case's private temporary root, however the platform spells /tmp.
+TEMPORARY = re.compile(r'(?:/private)?/tmp/pio-[A-Za-z0-9_.-]+')
+
+
+def scrub(path):
+    """One name for every case's temporary root, in the recording and inside
+    the transcript bytes it carries, so a committed fixture names no
+    machine's /tmp. Each read is rewritten on its own, so where the reads
+    were cut is kept."""
+    recording = json.loads(TEMPORARY.sub('/tmp/pio-fixture', path.read_text()))
+    if 'reads' in recording:
+        recording['reads'] = [
+            # latin-1 maps bytes one to one, so a character a read cut in
+            # half survives the round trip.
+            base64.b64encode(TEMPORARY.sub('/tmp/pio-fixture',
+                                           base64.b64decode(r).decode('latin-1'))
+                             .encode('latin-1')).decode()
+            for r in recording['reads']]
+    path.write_text(json.dumps(recording, indent=1) + '\n')
 
 
 # --- mutants ------------------------------------------------------------------

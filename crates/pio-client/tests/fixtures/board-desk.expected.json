@@ -5,7 +5,7 @@
     "counts": {
      "needs approval": 2
     },
-    "cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:8",
+    "cursor": "a549555e-61e3-4b8a-907d-7943cefc7d3d:1:8",
     "gaps": 0,
     "groups": [
      {
@@ -29,6 +29,7 @@
       "glyph": "◐",
       "id": "run-1",
       "liability": "none",
+      "markers": [],
       "pending_actions": [
        "run-1.action-1"
       ],
@@ -44,6 +45,7 @@
       "glyph": "◐",
       "id": "run-2",
       "liability": "none",
+      "markers": [],
       "pending_actions": [
        "run-2.action-1"
       ],
@@ -61,9 +63,9 @@
   {
    "board": {
     "counts": {
-     "uncertain": 2
+     "finished": 2
     },
-    "cursor": "15cd160a-4f37-4b04-ba7b-3999db35f7ae:1:16",
+    "cursor": "a549555e-61e3-4b8a-907d-7943cefc7d3d:1:16",
     "gaps": 0,
     "groups": [
      {
@@ -71,12 +73,12 @@
        "run-1",
        "run-2"
       ],
-      "state": "uncertain"
+      "state": "finished"
      }
     ],
     "notes": {
      "approvals": 0,
-     "uncertain": 2
+     "uncertain": 0
     },
     "runs": [
      {
@@ -86,13 +88,16 @@
       "exit": {
        "code": 0
       },
-      "glyph": "◇",
+      "glyph": "○",
       "id": "run-1",
       "liability": "unresolved",
+      "markers": [
+       "usage unresolved"
+      ],
       "pending_actions": [],
       "revision": 8,
       "runtime": "exited",
-      "state": "uncertain"
+      "state": "finished"
      },
      {
       "admission": "admitted",
@@ -101,13 +106,16 @@
       "exit": {
        "code": 0
       },
-      "glyph": "◇",
+      "glyph": "○",
       "id": "run-2",
       "liability": "unresolved",
+      "markers": [
+       "usage unresolved"
+      ],
       "pending_actions": [],
       "revision": 8,
       "runtime": "exited",
-      "state": "uncertain"
+      "state": "finished"
      }
     ]
    },

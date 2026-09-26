@@ -38,6 +38,12 @@ pub const GROUPS: [&str; 8] = [
 
 /// One word for one run, from its view alone; first match wins. No view
 /// (seen on the stream, never read) is `unknown`, not a guess.
+///
+/// `uncertain` means the **outcome** is in doubt: delivery ambiguous, the
+/// host lost (runtime unknown), or a run that exited with neither an exit
+/// status nor a result observed. Unresolved usage is not an outcome in
+/// doubt: it is a marker on the row ([`row_markers`]), never the state
+/// (the orchestrator's decision of 2026-09-26).
 pub fn run_state(view: Option<&Value>) -> &'static str {
     let Some(view) = view else {
         return "unknown";
@@ -48,10 +54,7 @@ pub fn run_state(view: Option<&Value>) -> &'static str {
     if pending {
         return "needs approval";
     }
-    if view["delivery"] == "ambiguous"
-        || view["usage"]["liability"] == "unresolved"
-        || view["runtime"] == "unknown"
-    {
+    if view["delivery"] == "ambiguous" || view["runtime"] == "unknown" {
         return "uncertain";
     }
     if view["admission"] == "refused" {
@@ -64,9 +67,24 @@ pub fn run_state(view: Option<&Value>) -> &'static str {
         return "cancelled";
     }
     if view["runtime"] == "exited" {
+        let result = view
+            .get("result")
+            .and_then(Value::as_str)
+            .unwrap_or("absent");
+        if view["exit"] == "unavailable" && result == "absent" {
+            return "uncertain";
+        }
         return "finished";
     }
     "running"
+}
+
+/// What a row says beside its state. Usage lives here, never in it.
+pub fn row_markers(view: Option<&Value>) -> Vec<&'static str> {
+    match view {
+        Some(view) if view["usage"]["liability"] == "unresolved" => vec!["usage unresolved"],
+        _ => vec![],
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -183,7 +201,8 @@ impl Board {
                 "drawn_revision": field("revision"), "admission": field("admission"),
                 "runtime": field("runtime"), "delivery": field("delivery"),
                 "liability": view.map(|v| v["usage"]["liability"].clone()).unwrap_or(Value::Null),
-                "exit": field("exit"), "pending_actions": pending}));
+                "exit": field("exit"), "pending_actions": pending,
+                "markers": row_markers(view)}));
         }
         let groups: Vec<Value> = GROUPS
             .iter()
@@ -210,5 +229,36 @@ impl Board {
         json!({"runs": rows, "groups": groups, "counts": counts,
                "notes": {"approvals": approvals, "uncertain": uncertain},
                "cursor": self.cursor, "gaps": self.gaps.len()})
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn exited(exit: Value, result: &str, liability: &str) -> Value {
+        json!({"runtime": "exited", "delivery": "acknowledged", "exit": exit,
+               "result": result, "usage": {"liability": liability}, "actions": []})
+    }
+
+    #[test]
+    fn unresolved_usage_is_a_marker_and_never_the_state() {
+        let view = exited(json!({"code": 0}), "absent", "unresolved");
+        assert_eq!(run_state(Some(&view)), "finished");
+        assert_eq!(row_markers(Some(&view)), ["usage unresolved"]);
+        assert!(row_markers(Some(&exited(json!({"code": 0}), "absent", "none"))).is_empty());
+    }
+
+    #[test]
+    fn uncertain_is_an_outcome_in_doubt() {
+        let no_exit = exited(json!("unavailable"), "absent", "none");
+        assert_eq!(run_state(Some(&no_exit)), "uncertain");
+        let returned = exited(json!("unavailable"), "returned", "none");
+        assert_eq!(run_state(Some(&returned)), "finished");
+        let ambiguous = json!({"runtime": "active", "delivery": "ambiguous"});
+        assert_eq!(run_state(Some(&ambiguous)), "uncertain");
+        let lost = json!({"runtime": "unknown", "delivery": "delivered"});
+        assert_eq!(run_state(Some(&lost)), "uncertain");
+        assert_eq!(run_state(None), "unknown");
     }
 }

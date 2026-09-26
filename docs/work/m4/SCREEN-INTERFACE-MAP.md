@@ -258,7 +258,7 @@ Who decided is the same: **unknown until a decision is recorded**, never "the us
 | Preview: the truth line | `deliveries[].evidence`, `.proof_class`, `usage.liability`, `recovery` | have |
 | Preview: latest blocks | incremental source | **G3** |
 | Amber sticky note: approvals waiting | `actions[]` where `state == "pending"`, across the fold | **G1** + **G2** |
-| Violet sticky note: uncertain runs | `delivery == "ambiguous"`, `usage.liability == "unresolved"`, `runtime == "unknown"` | have, per run |
+| Violet sticky note: uncertain runs | the outcome in doubt: `delivery == "ambiguous"`, `runtime == "unknown"` (host lost), or exited with `exit: "unavailable"` and `result: "absent"`. **Not** `usage.liability == "unresolved"` alone: that is a usage marker on the row (orchestrator, 2026-09-26; see M4 T1 below) | have, per run |
 | Refresh without re-reading everything | the events fold | **G6** |
 
 ## Screen 2 — split view
@@ -484,7 +484,8 @@ The three folds are **ports**, not rewrites: each is held to the Python fold tha
 
 Decisions this step made, for the screen to inherit:
 
-- **A run's word on the board** comes from its view alone, first match wins: `needs approval` (a pending action), `uncertain` (delivery ambiguous, usage liability unresolved, runtime unknown), `refused`, `failed`, `cancelled`, `finished`, `running`; a run the stream names and nobody has read is `unknown`, not a guess. The violet note counts `uncertain` and `unknown`. OpenCode's runs read `uncertain` after they exit, because their usage liability is unresolved (the last-step usage of D4), which is the truth rather than a board defect.
+- **A run's word on the board** comes from its view alone, first match wins: `needs approval` (a pending action), `uncertain`, `refused`, `failed`, `cancelled`, `finished`, `running`; a run the stream names and nobody has read is `unknown`, not a guess. The violet note counts `uncertain` and `unknown`.
+- **`uncertain` means the outcome is in doubt** (the orchestrator's decision, 2026-09-26): delivery ambiguous, the host lost (`runtime: unknown`), or a run that exited with neither an exit status nor a result observed (`exit: unavailable`, `result: absent`). An absent result alone does not count: every run of the labeled fakes exits with `result: absent` and an exit code, and its outcome is not in doubt. **Unresolved usage liability alone never makes a run uncertain**: it is shown on the row as the marker `usage unresolved` (`markers` in the board's JSON), beside whatever state the run is in. This refines line 92 of the design input, the vocabulary row `◇ uncertain` "Ambiguous delivery, lost host, or usage unknown": *usage unknown* is shown as a usage marker, not as a run state, and screen 6's rule that usage unknown is never shown as zero is unchanged. The first cut of T1 had it the other way, and every exited OpenCode run read `uncertain` (D4's last-step usage); `fold_parity.py --mutant board-liability-uncertain` puts that rule back and fails on `state`.
 - **A refusal is printed whole**, the service's error object, and exits 3. An answer aimed at the wrong run, or fenced at a stale epoch, can never read as a success; `client_cli_matrix.py` proves both on `serve-opencode`.
 - **An answer is sent in the harness's own single-use word**: Codex `accept`/`decline`, the others `allow`/`deny`, chosen from the action's `owner`. Nothing wider is encodable.
 - **A board whose read of a run is refused keeps the last view it had**, as the Python fold does; the row's `drawn_revision` then trails its `revision`, so its age shows.

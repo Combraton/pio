@@ -5,17 +5,17 @@
    "caused_by": [],
    "command_id": "run-3",
    "epoch": 1,
-   "operation_ref": "6c61fa14-8155-46cb-bcae-2b3d5f30ba86",
+   "operation_ref": "7c9bf706-7f4d-4449-915f-e0783d4c432f",
    "origin": "command",
    "payload": {
     "admission": "admitted",
     "delivery_id": "run-3.delivery-1",
     "runtime": "preparing"
    },
-   "recorded_at": "2026-09-26T15:17:09Z",
+   "recorded_at": "2026-09-26T15:55:44Z",
    "revision": 1,
    "sequence": 1,
-   "stream": "6e034005-3458-47d0-8199-4d03cd6b1cc7",
+   "stream": "a218627f-9a2e-4db0-b1af-ffddfd7bf339",
    "subject": {
     "id": "run-3",
     "kind": "execution.execution"
@@ -34,10 +34,10 @@
      "source": "pio-fake-opencode-acp/host"
     }
    },
-   "recorded_at": "2026-09-26T15:17:11Z",
+   "recorded_at": "2026-09-26T15:55:44Z",
    "revision": 2,
    "sequence": 2,
-   "stream": "6e034005-3458-47d0-8199-4d03cd6b1cc7",
+   "stream": "a218627f-9a2e-4db0-b1af-ffddfd7bf339",
    "subject": {
     "id": "run-3",
     "kind": "execution.execution"
@@ -51,10 +51,10 @@
    "payload": {
     "runtime": "active"
    },
-   "recorded_at": "2026-09-26T15:17:11Z",
+   "recorded_at": "2026-09-26T15:55:44Z",
    "revision": 3,
    "sequence": 3,
-   "stream": "6e034005-3458-47d0-8199-4d03cd6b1cc7",
+   "stream": "a218627f-9a2e-4db0-b1af-ffddfd7bf339",
    "subject": {
     "id": "run-3",
     "kind": "execution.execution"
@@ -88,10 +88,10 @@
      "reason": "target_outside_the_fixture_workspace"
     }
    },
-   "recorded_at": "2026-09-26T15:17:11Z",
+   "recorded_at": "2026-09-26T15:55:44Z",
    "revision": 4,
    "sequence": 4,
-   "stream": "6e034005-3458-47d0-8199-4d03cd6b1cc7",
+   "stream": "a218627f-9a2e-4db0-b1af-ffddfd7bf339",
    "subject": {
     "id": "run-3",
     "kind": "execution.execution"
@@ -105,14 +105,14 @@
    "payload": {
     "amount": 256,
     "basis": "estimated",
-    "invocation_id": "acc2ee84-e24c-43de-99b1-8ce0cf23fa0d",
+    "invocation_id": "6fceaa8a-80d8-440b-a7c3-21869a225b1c",
     "measure": "opencode.tokens.total.last_step_only",
-    "recorded_at": "2026-09-26T15:17:11Z"
+    "recorded_at": "2026-09-26T15:55:45Z"
    },
-   "recorded_at": "2026-09-26T15:17:11Z",
+   "recorded_at": "2026-09-26T15:55:45Z",
    "revision": 5,
    "sequence": 5,
-   "stream": "6e034005-3458-47d0-8199-4d03cd6b1cc7",
+   "stream": "a218627f-9a2e-4db0-b1af-ffddfd7bf339",
    "subject": {
     "id": "run-3",
     "kind": "execution.execution"
@@ -126,10 +126,10 @@
    "payload": {
     "runtime": "unknown"
    },
-   "recorded_at": "2026-09-26T15:17:11Z",
+   "recorded_at": "2026-09-26T15:55:45Z",
    "revision": 6,
    "sequence": 6,
-   "stream": "6e034005-3458-47d0-8199-4d03cd6b1cc7",
+   "stream": "a218627f-9a2e-4db0-b1af-ffddfd7bf339",
    "subject": {
     "id": "run-3",
     "kind": "execution.execution"
@@ -176,7 +176,7 @@
       "turn_interrupted": false,
       "unclassifiable_target_count": 0,
       "unknown_outcome_count": 0,
-      "workspace_sha256": "0d4d19c03f50d78283384e5e501df1352197e360c74cd30ec7dfa089701f49b8"
+      "workspace_sha256": "418cdc2b5c2bcb9274fdebe974199eefaf576c03dfe351aae449b83cfbc24016"
      },
      "harness_status": [
       {
@@ -192,10 +192,10 @@
      ]
     }
    },
-   "recorded_at": "2026-09-26T15:17:11Z",
+   "recorded_at": "2026-09-26T15:55:45Z",
    "revision": 7,
    "sequence": 7,
-   "stream": "6e034005-3458-47d0-8199-4d03cd6b1cc7",
+   "stream": "a218627f-9a2e-4db0-b1af-ffddfd7bf339",
    "subject": {
     "id": "run-3",
     "kind": "execution.execution"

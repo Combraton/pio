@@ -3,37 +3,40 @@
   {
    "board": {
     "counts": {
-     "uncertain": 1
+     "finished": 1
     },
-    "cursor": "7c27624e-bb58-476c-9083-a9c86dbe118c:1:8",
+    "cursor": "418eff01-bfab-4d84-8da0-20a51768350f:1:7",
     "gaps": 0,
     "groups": [
      {
       "runs": [
        "work"
       ],
-      "state": "uncertain"
+      "state": "finished"
      }
     ],
     "notes": {
      "approvals": 0,
-     "uncertain": 1
+     "uncertain": 0
     },
     "runs": [
      {
       "admission": "admitted",
       "delivery": "acknowledged",
-      "drawn_revision": 8,
+      "drawn_revision": 7,
       "exit": {
        "code": 0
       },
-      "glyph": "◇",
+      "glyph": "○",
       "id": "work",
       "liability": "unresolved",
+      "markers": [
+       "usage unresolved"
+      ],
       "pending_actions": [],
-      "revision": 8,
+      "revision": 7,
       "runtime": "exited",
-      "state": "uncertain"
+      "state": "finished"
      }
     ]
    },

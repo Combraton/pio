@@ -5,7 +5,7 @@
     "counts": {
      "finished": 1
     },
-    "cursor": "80712366-a608-48aa-8af7-10092c97c851:1:8",
+    "cursor": "d8677a53-c1e5-4679-bc6d-231cabd636e8:1:8",
     "gaps": 0,
     "groups": [
      {
@@ -30,6 +30,7 @@
       "glyph": "○",
       "id": "work",
       "liability": "resolved",
+      "markers": [],
       "pending_actions": [],
       "revision": 8,
       "runtime": "exited",

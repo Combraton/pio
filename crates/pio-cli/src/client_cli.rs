@@ -345,10 +345,10 @@ fn list(args: &Args) -> Result<()> {
                 "finished" | "cancelled" => exit_word(&row["exit"]),
                 "unknown" => "not read: no view from the service".into(),
                 "uncertain" => format!(
-                    "delivery {} · usage liability {} · runtime {}",
+                    "the outcome is in doubt: delivery {} · runtime {} · {}",
                     word(&row["delivery"]),
-                    word(&row["liability"]),
-                    word(&row["runtime"])
+                    word(&row["runtime"]),
+                    exit_word(&row["exit"])
                 ),
                 _ => format!(
                     "runtime {} · delivery {} · admission {}",
@@ -357,7 +357,19 @@ fn list(args: &Args) -> Result<()> {
                     word(&row["admission"])
                 ),
             };
-            println!("  {}  r{}  {detail}", word(id), row["revision"]);
+            // Usage is a marker beside the state, never the state itself.
+            let markers: Vec<String> = row["markers"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(word)
+                .collect();
+            let markers = if markers.is_empty() {
+                String::new()
+            } else {
+                format!(" · {}", markers.join(" · "))
+            };
+            println!("  {}  r{}  {detail}{markers}", word(id), row["revision"]);
         }
     }
     Ok(())

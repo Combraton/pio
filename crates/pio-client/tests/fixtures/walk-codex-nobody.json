@@ -5,17 +5,17 @@
    "caused_by": [],
    "command_id": "work",
    "epoch": 1,
-   "operation_ref": "030cb1e0-0803-4eaf-8ae9-be9279e630d5",
+   "operation_ref": "2a3d8e1f-c440-44d0-9112-d8633b359fd2",
    "origin": "command",
    "payload": {
     "admission": "admitted",
     "delivery_id": "work.delivery-1",
     "runtime": "preparing"
    },
-   "recorded_at": "2026-09-26T15:17:22Z",
+   "recorded_at": "2026-09-26T15:55:56Z",
    "revision": 1,
    "sequence": 1,
-   "stream": "7c27624e-bb58-476c-9083-a9c86dbe118c",
+   "stream": "418eff01-bfab-4d84-8da0-20a51768350f",
    "subject": {
     "id": "work",
     "kind": "execution.execution"
@@ -35,10 +35,10 @@
     },
     "proof_class": "provider_ack_id"
    },
-   "recorded_at": "2026-09-26T15:17:23Z",
+   "recorded_at": "2026-09-26T15:55:57Z",
    "revision": 2,
    "sequence": 2,
-   "stream": "7c27624e-bb58-476c-9083-a9c86dbe118c",
+   "stream": "418eff01-bfab-4d84-8da0-20a51768350f",
    "subject": {
     "id": "work",
     "kind": "execution.execution"
@@ -52,10 +52,10 @@
    "payload": {
     "runtime": "active"
    },
-   "recorded_at": "2026-09-26T15:17:23Z",
+   "recorded_at": "2026-09-26T15:55:57Z",
    "revision": 3,
    "sequence": 3,
-   "stream": "7c27624e-bb58-476c-9083-a9c86dbe118c",
+   "stream": "418eff01-bfab-4d84-8da0-20a51768350f",
    "subject": {
     "id": "work",
     "kind": "execution.execution"
@@ -77,7 +77,7 @@
       "placement": "inside_fixture",
       "subject": "cwd",
       "target_label": "<fixture>/",
-      "target_sha256": "732f08a00ed9bb61fc833334efc3031f9fb9417aeff686649074bd19144b523a"
+      "target_sha256": "9449cc94a1210a30be1a21174cd471e01f97757ea82dd1eeb0aab18af46ddcde"
      },
      "command": "echo fixture",
      "grant_root_requested": null,
@@ -92,15 +92,15 @@
      "options": null,
      "persist_offered": null,
      "reason": null,
-     "requested_at": "2026-09-26T15:17:23Z",
+     "requested_at": "2026-09-26T15:55:57Z",
      "server": null
     },
     "runtime": "requires_action"
    },
-   "recorded_at": "2026-09-26T15:17:23Z",
+   "recorded_at": "2026-09-26T15:55:57Z",
    "revision": 4,
    "sequence": 4,
-   "stream": "7c27624e-bb58-476c-9083-a9c86dbe118c",
+   "stream": "418eff01-bfab-4d84-8da0-20a51768350f",
    "subject": {
     "id": "work",
     "kind": "execution.execution"
@@ -114,10 +114,10 @@
    "payload": {
     "timeout": "execution_deadline"
    },
-   "recorded_at": "2026-09-26T15:17:26Z",
+   "recorded_at": "2026-09-26T15:56:00Z",
    "revision": 5,
    "sequence": 5,
-   "stream": "7c27624e-bb58-476c-9083-a9c86dbe118c",
+   "stream": "418eff01-bfab-4d84-8da0-20a51768350f",
    "subject": {
     "id": "work",
     "kind": "execution.execution"
@@ -138,32 +138,15 @@
      "sent": false
     }
    },
-   "recorded_at": "2026-09-26T15:17:26Z",
+   "recorded_at": "2026-09-26T15:56:00Z",
    "revision": 6,
    "sequence": 6,
-   "stream": "7c27624e-bb58-476c-9083-a9c86dbe118c",
+   "stream": "418eff01-bfab-4d84-8da0-20a51768350f",
    "subject": {
     "id": "work",
     "kind": "execution.execution"
    },
    "type": "execution.action.answered"
-  },
-  {
-   "caused_by": [],
-   "epoch": 1,
-   "origin": "provider",
-   "payload": {
-    "runtime": "unknown"
-   },
-   "recorded_at": "2026-09-26T15:17:29Z",
-   "revision": 7,
-   "sequence": 7,
-   "stream": "7c27624e-bb58-476c-9083-a9c86dbe118c",
-   "subject": {
-    "id": "work",
-    "kind": "execution.execution"
-   },
-   "type": "execution.runtime.changed"
   },
   {
    "caused_by": [],
@@ -177,10 +160,10 @@
     "pio.combraton.dev/native-declines": [],
     "pio.combraton.dev/other-threads": []
    },
-   "recorded_at": "2026-09-26T15:17:29Z",
-   "revision": 8,
-   "sequence": 8,
-   "stream": "7c27624e-bb58-476c-9083-a9c86dbe118c",
+   "recorded_at": "2026-09-26T15:56:03Z",
+   "revision": 7,
+   "sequence": 7,
+   "stream": "418eff01-bfab-4d84-8da0-20a51768350f",
    "subject": {
     "id": "work",
     "kind": "execution.execution"

@@ -100,4 +100,19 @@ fn the_recordings_cover_what_the_folds_decide() {
         .map(|r| r["state"].clone())
         .collect();
     assert_eq!(states, ["needs approval", "needs approval"]);
+    // Exited OpenCode and Codex runs whose usage PIO could not resolve are
+    // finished, with the usage shown as a marker beside the state.
+    for (name, round) in [("board-desk", 1), ("board-codex-nobody", 0)] {
+        let board = &expected(name)["rounds"][round]["board"];
+        for row in board["runs"].as_array().unwrap() {
+            assert_eq!(row["liability"], "unresolved", "{name}");
+            assert_eq!(row["state"], "finished", "{name}");
+            assert_eq!(
+                row["markers"],
+                serde_json::json!(["usage unresolved"]),
+                "{name}"
+            );
+        }
+        assert_eq!(board["notes"]["uncertain"], 0, "{name}");
+    }
 }

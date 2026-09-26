@@ -15,15 +15,6 @@
   "",
   "",
   "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
   "eyJtZXNzYWdlIjp7ImNvbnRlbnQiOlt7ImlkIjoidG9vbHVfZmFrZV9hc2siLCJpbnB1dCI6eyJjb21tYW5kIjoiZ2l0IHRhZyBwaW8tYXBwcm92YWwtbWFya2VyIn0sIm5hbWUiOiJCYXNoIiwidHlwZSI6InRvb2xfdXNlIn1dLCJyb2xlIjoiYXNzaXN0YW50In0sInR5cGUiOiJhc3Npc3RhbnQifQo=",
   "eyJtZXNzYWdlIjp7ImNvbnRlbnQiOlt7ImlkIjoidG9vbHVfZmFrZV8wIiwiaW5wdXQiOnsiY29tbWFuZCI6IndjIC1sIFJFQURNRS5tZCJ9LCJuYW1lIjoiQmFzaCIsInR5cGUiOiJ0b29sX3VzZSJ9LHsiaWQiOiJ0b29sdV9mYWtlXzEiLCJpbnB1dCI6eyJmaWxlX3BhdGgiOiJSRUFETUUubWQifSwibmFtZSI6IlJlYWQiLCJ0eXBlIjoidG9vbF91c2UifV0sInJvbGUiOiJhc3Npc3RhbnQifSwidHlwZSI6ImFzc2lzdGFudCJ9CnsibWVzc2FnZSI6eyJjb250ZW50IjpbeyJ0ZXh0IjoiZmFrZSB0dXJuIGNvbXBsZXRlIiwidHlwZSI6InRleHQifV0sInJvbGUiOiJhc3Npc3RhbnQifSwidHlwZSI6ImFzc2lzdGFudCJ9Cg==",
   ""
@@ -84,7 +75,7 @@
        "outcome": "performed",
        "placement": "inside_fixture",
        "target_label": "<fixture>/README.md",
-       "target_sha256": "78fd0b5b7a88f681ad8f8d5ec35419e8a6d49e121bc9c2b56de271537153a300",
+       "target_sha256": "1966b605d03b1b00a8ad9ac21ab9373b2557a7e7378fa07fde0378f382196aac",
        "tool": "Read",
        "tool_use_id": "toolu_fake_1"
       }
@@ -92,15 +83,15 @@
      "turn_interrupted": false,
      "unclassifiable_target_count": 2,
      "unknown_outcome_count": 0,
-     "workspace_sha256": "b7d026af56b3653566db1ef49c9a0a87d78f158e63c4e5025a9942925b147a9c"
+     "workspace_sha256": "7cd74725ef5092488c27d3fb7843b71c42669e9a15a4c2b3d72bbfd89b0b113c"
     },
     "harness_status": null
    }
   },
-  "recorded_at": "2026-09-26T15:16:55Z",
+  "recorded_at": "2026-09-26T15:55:21Z",
   "revision": 8,
   "sequence": 8,
-  "stream": "46070d60-876f-4ace-b0c6-a44743edd1ce",
+  "stream": "a282c3c7-7433-4fb1-a545-8c0879c67167",
   "subject": {
    "id": "run-1",
    "kind": "execution.execution"

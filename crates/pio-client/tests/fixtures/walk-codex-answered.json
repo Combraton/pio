@@ -5,17 +5,17 @@
    "caused_by": [],
    "command_id": "run-1",
    "epoch": 1,
-   "operation_ref": "5909de04-d222-442e-a675-2687d2b1aff0",
+   "operation_ref": "076604c5-851a-4d83-a3eb-db593f02a3d7",
    "origin": "command",
    "payload": {
     "admission": "admitted",
     "delivery_id": "run-1.delivery-1",
     "runtime": "preparing"
    },
-   "recorded_at": "2026-09-26T15:16:56Z",
+   "recorded_at": "2026-09-26T15:55:22Z",
    "revision": 1,
    "sequence": 1,
-   "stream": "eaac22ea-1dfa-472c-b950-320012bb7254",
+   "stream": "22e5da71-65cd-426f-8da4-a83b7ff55452",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -35,10 +35,10 @@
     },
     "proof_class": "provider_ack_id"
    },
-   "recorded_at": "2026-09-26T15:16:56Z",
+   "recorded_at": "2026-09-26T15:55:23Z",
    "revision": 2,
    "sequence": 2,
-   "stream": "eaac22ea-1dfa-472c-b950-320012bb7254",
+   "stream": "22e5da71-65cd-426f-8da4-a83b7ff55452",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -52,10 +52,10 @@
    "payload": {
     "runtime": "active"
    },
-   "recorded_at": "2026-09-26T15:16:56Z",
+   "recorded_at": "2026-09-26T15:55:23Z",
    "revision": 3,
    "sequence": 3,
-   "stream": "eaac22ea-1dfa-472c-b950-320012bb7254",
+   "stream": "22e5da71-65cd-426f-8da4-a83b7ff55452",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -77,7 +77,7 @@
       "placement": "inside_fixture",
       "subject": "cwd",
       "target_label": "<fixture>/",
-      "target_sha256": "f5cea47f5635fe3cc32138ba98df83ad1aee7d757b858b7fc0462af1b0a08cb2"
+      "target_sha256": "49d5c7fe9c6057a751bdaac29846312cc39a423278f2c70d76f110af47dd1b02"
      },
      "command": "echo fixture",
      "grant_root_requested": null,
@@ -92,15 +92,15 @@
      "options": null,
      "persist_offered": null,
      "reason": null,
-     "requested_at": "2026-09-26T15:16:56Z",
+     "requested_at": "2026-09-26T15:55:23Z",
      "server": null
     },
     "runtime": "requires_action"
    },
-   "recorded_at": "2026-09-26T15:16:56Z",
+   "recorded_at": "2026-09-26T15:55:23Z",
    "revision": 4,
    "sequence": 4,
-   "stream": "eaac22ea-1dfa-472c-b950-320012bb7254",
+   "stream": "22e5da71-65cd-426f-8da4-a83b7ff55452",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -111,7 +111,7 @@
    "caused_by": [],
    "command_id": "run-1.answer",
    "epoch": 1,
-   "operation_ref": "9f1a630b-5217-423a-a966-a7adae32f8a6",
+   "operation_ref": "dd12fba6-e699-4199-afb2-6c13bb2592fe",
    "origin": "command",
    "payload": {
     "action_id": "run-1.action-1",
@@ -121,10 +121,10 @@
     },
     "response_effect": "run-1.response-1"
    },
-   "recorded_at": "2026-09-26T15:16:56Z",
+   "recorded_at": "2026-09-26T15:55:23Z",
    "revision": 5,
    "sequence": 5,
-   "stream": "eaac22ea-1dfa-472c-b950-320012bb7254",
+   "stream": "22e5da71-65cd-426f-8da4-a83b7ff55452",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -138,36 +138,19 @@
    "payload": {
     "amount": 42,
     "basis": "observed",
-    "invocation_id": "9fd471e8-8992-4cd4-a3f9-cdb9dc20b240",
+    "invocation_id": "5031f313-7293-4a98-afba-b6b930bc3ad1",
     "measure": "codex.tokens.total",
-    "recorded_at": "2026-09-26T15:16:56Z"
+    "recorded_at": "2026-09-26T15:55:23Z"
    },
-   "recorded_at": "2026-09-26T15:16:56Z",
+   "recorded_at": "2026-09-26T15:55:23Z",
    "revision": 6,
    "sequence": 6,
-   "stream": "eaac22ea-1dfa-472c-b950-320012bb7254",
+   "stream": "22e5da71-65cd-426f-8da4-a83b7ff55452",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
    },
    "type": "execution.usage.observed"
-  },
-  {
-   "caused_by": [],
-   "epoch": 1,
-   "origin": "provider",
-   "payload": {
-    "runtime": "unknown"
-   },
-   "recorded_at": "2026-09-26T15:17:00Z",
-   "revision": 7,
-   "sequence": 7,
-   "stream": "eaac22ea-1dfa-472c-b950-320012bb7254",
-   "subject": {
-    "id": "run-1",
-    "kind": "execution.execution"
-   },
-   "type": "execution.runtime.changed"
   },
   {
    "caused_by": [],
@@ -181,10 +164,10 @@
     "pio.combraton.dev/native-declines": [],
     "pio.combraton.dev/other-threads": []
    },
-   "recorded_at": "2026-09-26T15:17:00Z",
-   "revision": 8,
-   "sequence": 8,
-   "stream": "eaac22ea-1dfa-472c-b950-320012bb7254",
+   "recorded_at": "2026-09-26T15:55:27Z",
+   "revision": 7,
+   "sequence": 7,
+   "stream": "22e5da71-65cd-426f-8da4-a83b7ff55452",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"

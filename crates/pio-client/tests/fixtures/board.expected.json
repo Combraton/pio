@@ -5,7 +5,7 @@
     "counts": {
      "finished": 6
     },
-    "cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:37",
+    "cursor": "e0619371-b0cf-4999-bb21-b7bfc14df8a0:1:37",
     "gaps": 0,
     "groups": [
      {
@@ -35,36 +35,7 @@
       "glyph": "○",
       "id": "run-1",
       "liability": "none",
-      "pending_actions": [],
-      "revision": 6,
-      "runtime": "exited",
-      "state": "finished"
-     },
-     {
-      "admission": "admitted",
-      "delivery": "delivered",
-      "drawn_revision": 6,
-      "exit": {
-       "code": 0
-      },
-      "glyph": "○",
-      "id": "run-2",
-      "liability": "none",
-      "pending_actions": [],
-      "revision": 6,
-      "runtime": "exited",
-      "state": "finished"
-     },
-     {
-      "admission": "admitted",
-      "delivery": "delivered",
-      "drawn_revision": 6,
-      "exit": {
-       "code": 0
-      },
-      "glyph": "○",
-      "id": "run-3",
-      "liability": "none",
+      "markers": [],
       "pending_actions": [],
       "revision": 6,
       "runtime": "exited",
@@ -78,8 +49,25 @@
        "code": 0
       },
       "glyph": "○",
-      "id": "run-4",
+      "id": "run-2",
       "liability": "none",
+      "markers": [],
+      "pending_actions": [],
+      "revision": 7,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 7,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-3",
+      "liability": "none",
+      "markers": [],
       "pending_actions": [],
       "revision": 7,
       "runtime": "exited",
@@ -93,10 +81,27 @@
        "code": 0
       },
       "glyph": "○",
-      "id": "run-5",
+      "id": "run-4",
       "liability": "none",
+      "markers": [],
       "pending_actions": [],
       "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 5,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-5",
+      "liability": "none",
+      "markers": [],
+      "pending_actions": [],
+      "revision": 5,
       "runtime": "exited",
       "state": "finished"
      },
@@ -110,6 +115,7 @@
       "glyph": "○",
       "id": "run-6",
       "liability": "none",
+      "markers": [],
       "pending_actions": [],
       "revision": 6,
       "runtime": "exited",
@@ -132,7 +138,7 @@
      "finished": 6,
      "running": 1
     },
-    "cursor": "6c14ed6a-3cf6-45de-94c9-c0ab77f988d5:1:40",
+    "cursor": "e0619371-b0cf-4999-bb21-b7bfc14df8a0:1:40",
     "gaps": 0,
     "groups": [
      {
@@ -168,36 +174,7 @@
       "glyph": "○",
       "id": "run-1",
       "liability": "none",
-      "pending_actions": [],
-      "revision": 6,
-      "runtime": "exited",
-      "state": "finished"
-     },
-     {
-      "admission": "admitted",
-      "delivery": "delivered",
-      "drawn_revision": 6,
-      "exit": {
-       "code": 0
-      },
-      "glyph": "○",
-      "id": "run-2",
-      "liability": "none",
-      "pending_actions": [],
-      "revision": 6,
-      "runtime": "exited",
-      "state": "finished"
-     },
-     {
-      "admission": "admitted",
-      "delivery": "delivered",
-      "drawn_revision": 6,
-      "exit": {
-       "code": 0
-      },
-      "glyph": "○",
-      "id": "run-3",
-      "liability": "none",
+      "markers": [],
       "pending_actions": [],
       "revision": 6,
       "runtime": "exited",
@@ -211,8 +188,25 @@
        "code": 0
       },
       "glyph": "○",
-      "id": "run-4",
+      "id": "run-2",
       "liability": "none",
+      "markers": [],
+      "pending_actions": [],
+      "revision": 7,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 7,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-3",
+      "liability": "none",
+      "markers": [],
       "pending_actions": [],
       "revision": 7,
       "runtime": "exited",
@@ -226,10 +220,27 @@
        "code": 0
       },
       "glyph": "○",
-      "id": "run-5",
+      "id": "run-4",
       "liability": "none",
+      "markers": [],
       "pending_actions": [],
       "revision": 6,
+      "runtime": "exited",
+      "state": "finished"
+     },
+     {
+      "admission": "admitted",
+      "delivery": "delivered",
+      "drawn_revision": 5,
+      "exit": {
+       "code": 0
+      },
+      "glyph": "○",
+      "id": "run-5",
+      "liability": "none",
+      "markers": [],
+      "pending_actions": [],
+      "revision": 5,
       "runtime": "exited",
       "state": "finished"
      },
@@ -243,6 +254,7 @@
       "glyph": "○",
       "id": "run-6",
       "liability": "none",
+      "markers": [],
       "pending_actions": [],
       "revision": 6,
       "runtime": "exited",
@@ -256,6 +268,7 @@
       "glyph": "●",
       "id": "run-7",
       "liability": "none",
+      "markers": [],
       "pending_actions": [],
       "revision": 3,
       "runtime": "active",

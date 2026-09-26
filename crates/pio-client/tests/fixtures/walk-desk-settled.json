@@ -5,17 +5,17 @@
    "caused_by": [],
    "command_id": "run-1",
    "epoch": 1,
-   "operation_ref": "4bf2c8a3-9f51-4ccd-97be-3d72651d1c47",
+   "operation_ref": "08006953-8780-439d-8094-cce0def5cc5c",
    "origin": "command",
    "payload": {
     "admission": "admitted",
     "delivery_id": "run-1.delivery-1",
     "runtime": "preparing"
    },
-   "recorded_at": "2026-09-26T15:17:00Z",
+   "recorded_at": "2026-09-26T15:55:28Z",
    "revision": 1,
    "sequence": 1,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -34,10 +34,10 @@
      "source": "pio-fake-opencode-acp/host"
     }
    },
-   "recorded_at": "2026-09-26T15:17:00Z",
+   "recorded_at": "2026-09-26T15:55:33Z",
    "revision": 2,
    "sequence": 2,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -51,10 +51,10 @@
    "payload": {
     "runtime": "active"
    },
-   "recorded_at": "2026-09-26T15:17:00Z",
+   "recorded_at": "2026-09-26T15:55:33Z",
    "revision": 3,
    "sequence": 3,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -118,15 +118,15 @@
      ],
      "persist_offered": null,
      "reason": null,
-     "requested_at": "2026-09-26T15:17:00Z",
+     "requested_at": "2026-09-26T15:55:33Z",
      "server": null
     },
     "runtime": "requires_action"
    },
-   "recorded_at": "2026-09-26T15:17:00Z",
+   "recorded_at": "2026-09-26T15:55:33Z",
    "revision": 4,
    "sequence": 4,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -137,17 +137,17 @@
    "caused_by": [],
    "command_id": "run-2",
    "epoch": 1,
-   "operation_ref": "a6dba74c-06eb-4406-8236-aa309e0bfba8",
+   "operation_ref": "0a982171-d6ab-4cb6-93b5-e4ba5fe9983c",
    "origin": "command",
    "payload": {
     "admission": "admitted",
     "delivery_id": "run-2.delivery-1",
     "runtime": "preparing"
    },
-   "recorded_at": "2026-09-26T15:17:01Z",
+   "recorded_at": "2026-09-26T15:55:34Z",
    "revision": 1,
    "sequence": 5,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-2",
     "kind": "execution.execution"
@@ -166,10 +166,10 @@
      "source": "pio-fake-opencode-acp/host"
     }
    },
-   "recorded_at": "2026-09-26T15:17:01Z",
+   "recorded_at": "2026-09-26T15:55:34Z",
    "revision": 2,
    "sequence": 6,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-2",
     "kind": "execution.execution"
@@ -183,10 +183,10 @@
    "payload": {
     "runtime": "active"
    },
-   "recorded_at": "2026-09-26T15:17:01Z",
+   "recorded_at": "2026-09-26T15:55:34Z",
    "revision": 3,
    "sequence": 7,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-2",
     "kind": "execution.execution"
@@ -250,15 +250,15 @@
      ],
      "persist_offered": null,
      "reason": null,
-     "requested_at": "2026-09-26T15:17:01Z",
+     "requested_at": "2026-09-26T15:55:34Z",
      "server": null
     },
     "runtime": "requires_action"
    },
-   "recorded_at": "2026-09-26T15:17:01Z",
+   "recorded_at": "2026-09-26T15:55:34Z",
    "revision": 4,
    "sequence": 8,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-2",
     "kind": "execution.execution"
@@ -269,7 +269,7 @@
    "caused_by": [],
    "command_id": "run-1.answer",
    "epoch": 1,
-   "operation_ref": "1696d08a-5123-4486-b1df-28ebc99d79ed",
+   "operation_ref": "a82f07bb-c54d-4b8e-a6ff-9894c9ae7ef7",
    "origin": "command",
    "payload": {
     "action_id": "run-1.action-1",
@@ -279,10 +279,10 @@
     },
     "response_effect": "run-1.response-1"
    },
-   "recorded_at": "2026-09-26T15:17:01Z",
+   "recorded_at": "2026-09-26T15:55:34Z",
    "revision": 5,
    "sequence": 9,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -296,14 +296,14 @@
    "payload": {
     "amount": 256,
     "basis": "estimated",
-    "invocation_id": "8ea69019-17ff-495a-96e4-6f1e80b22d3a",
+    "invocation_id": "b3da679c-a17e-476a-887b-2a90f163659c",
     "measure": "opencode.tokens.total.last_step_only",
-    "recorded_at": "2026-09-26T15:17:01Z"
+    "recorded_at": "2026-09-26T15:55:34Z"
    },
-   "recorded_at": "2026-09-26T15:17:01Z",
+   "recorded_at": "2026-09-26T15:55:34Z",
    "revision": 6,
    "sequence": 10,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -317,10 +317,10 @@
    "payload": {
     "runtime": "unknown"
    },
-   "recorded_at": "2026-09-26T15:17:01Z",
+   "recorded_at": "2026-09-26T15:55:34Z",
    "revision": 7,
    "sequence": 11,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -367,7 +367,7 @@
       "turn_interrupted": false,
       "unclassifiable_target_count": 0,
       "unknown_outcome_count": 0,
-      "workspace_sha256": "25a60c349f0ed93ccaa28a92920d2db6ecde0d0f8d87f62482d971d860404bc4"
+      "workspace_sha256": "9715d4c217061e9b71ce1db1f0424b7f7000805f912a17ef988aa05dc08d3caf"
      },
      "harness_status": [
       {
@@ -379,10 +379,10 @@
      ]
     }
    },
-   "recorded_at": "2026-09-26T15:17:01Z",
+   "recorded_at": "2026-09-26T15:55:35Z",
    "revision": 8,
    "sequence": 12,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -406,10 +406,10 @@
      "reason": "no caller answered within the delivery timeout"
     }
    },
-   "recorded_at": "2026-09-26T15:17:09Z",
+   "recorded_at": "2026-09-26T15:55:42Z",
    "revision": 5,
    "sequence": 13,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-2",
     "kind": "execution.execution"
@@ -423,14 +423,14 @@
    "payload": {
     "amount": 256,
     "basis": "estimated",
-    "invocation_id": "ff8e8957-82f6-48b7-9a77-59220ff5ba4b",
+    "invocation_id": "81254419-96f7-431c-b969-70bdd33539a0",
     "measure": "opencode.tokens.total.last_step_only",
-    "recorded_at": "2026-09-26T15:17:09Z"
+    "recorded_at": "2026-09-26T15:55:42Z"
    },
-   "recorded_at": "2026-09-26T15:17:09Z",
+   "recorded_at": "2026-09-26T15:55:42Z",
    "revision": 6,
    "sequence": 14,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-2",
     "kind": "execution.execution"
@@ -444,10 +444,10 @@
    "payload": {
     "runtime": "unknown"
    },
-   "recorded_at": "2026-09-26T15:17:09Z",
+   "recorded_at": "2026-09-26T15:55:42Z",
    "revision": 7,
    "sequence": 15,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-2",
     "kind": "execution.execution"
@@ -494,7 +494,7 @@
       "turn_interrupted": false,
       "unclassifiable_target_count": 0,
       "unknown_outcome_count": 0,
-      "workspace_sha256": "4750b07611f6349f0dd3640e7a7bcb16e1a33e7ed48079fae145413023279102"
+      "workspace_sha256": "9e2124f6c71aadd2b027a585e181af91fd4dd3a251b79d75bd71994687269bc6"
      },
      "harness_status": [
       {
@@ -506,10 +506,10 @@
      ]
     }
    },
-   "recorded_at": "2026-09-26T15:17:09Z",
+   "recorded_at": "2026-09-26T15:55:42Z",
    "revision": 8,
    "sequence": 16,
-   "stream": "15cd160a-4f37-4b04-ba7b-3999db35f7ae",
+   "stream": "a549555e-61e3-4b8a-907d-7943cefc7d3d",
    "subject": {
     "id": "run-2",
     "kind": "execution.execution"

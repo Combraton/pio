@@ -5,17 +5,17 @@
    "caused_by": [],
    "command_id": "run-1",
    "epoch": 1,
-   "operation_ref": "b5d19cbb-72c9-40ec-97ee-3d73f454ea91",
+   "operation_ref": "93939ceb-5c4a-4dd9-881f-da2e25fce43e",
    "origin": "command",
    "payload": {
     "admission": "admitted",
     "delivery_id": "run-1.delivery-1",
     "runtime": "preparing"
    },
-   "recorded_at": "2026-09-26T15:16:51Z",
+   "recorded_at": "2026-09-26T15:55:12Z",
    "revision": 1,
    "sequence": 1,
-   "stream": "865f54f1-fe77-4d3c-83cb-be974a11fc67",
+   "stream": "0c7f5269-e64b-4d95-9cd5-6460ed6147e7",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -34,10 +34,10 @@
      "source": "pio-fake-opencode-acp/host"
     }
    },
-   "recorded_at": "2026-09-26T15:16:52Z",
+   "recorded_at": "2026-09-26T15:55:16Z",
    "revision": 2,
    "sequence": 2,
-   "stream": "865f54f1-fe77-4d3c-83cb-be974a11fc67",
+   "stream": "0c7f5269-e64b-4d95-9cd5-6460ed6147e7",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -51,10 +51,10 @@
    "payload": {
     "runtime": "active"
    },
-   "recorded_at": "2026-09-26T15:16:52Z",
+   "recorded_at": "2026-09-26T15:55:16Z",
    "revision": 3,
    "sequence": 3,
-   "stream": "865f54f1-fe77-4d3c-83cb-be974a11fc67",
+   "stream": "0c7f5269-e64b-4d95-9cd5-6460ed6147e7",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -118,15 +118,15 @@
      ],
      "persist_offered": null,
      "reason": null,
-     "requested_at": "2026-09-26T15:16:53Z",
+     "requested_at": "2026-09-26T15:55:17Z",
      "server": null
     },
     "runtime": "requires_action"
    },
-   "recorded_at": "2026-09-26T15:16:53Z",
+   "recorded_at": "2026-09-26T15:55:17Z",
    "revision": 4,
    "sequence": 4,
-   "stream": "865f54f1-fe77-4d3c-83cb-be974a11fc67",
+   "stream": "0c7f5269-e64b-4d95-9cd5-6460ed6147e7",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -137,7 +137,7 @@
    "caused_by": [],
    "command_id": "run-1.answer",
    "epoch": 1,
-   "operation_ref": "f7b2adae-de5c-4b81-9541-ba59e8d2b286",
+   "operation_ref": "4c203bb6-9685-44d2-9c57-7241dcd681b2",
    "origin": "command",
    "payload": {
     "action_id": "run-1.action-1",
@@ -147,10 +147,10 @@
     },
     "response_effect": "run-1.response-1"
    },
-   "recorded_at": "2026-09-26T15:16:53Z",
+   "recorded_at": "2026-09-26T15:55:17Z",
    "revision": 5,
    "sequence": 5,
-   "stream": "865f54f1-fe77-4d3c-83cb-be974a11fc67",
+   "stream": "0c7f5269-e64b-4d95-9cd5-6460ed6147e7",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -164,14 +164,14 @@
    "payload": {
     "amount": 256,
     "basis": "estimated",
-    "invocation_id": "a1b0d13f-27a6-4a3f-80f1-dbac18929d96",
+    "invocation_id": "28f3e7d1-bd35-40d7-b314-d425a4048928",
     "measure": "opencode.tokens.total.last_step_only",
-    "recorded_at": "2026-09-26T15:16:53Z"
+    "recorded_at": "2026-09-26T15:55:17Z"
    },
-   "recorded_at": "2026-09-26T15:16:53Z",
+   "recorded_at": "2026-09-26T15:55:17Z",
    "revision": 6,
    "sequence": 6,
-   "stream": "865f54f1-fe77-4d3c-83cb-be974a11fc67",
+   "stream": "0c7f5269-e64b-4d95-9cd5-6460ed6147e7",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -185,10 +185,10 @@
    "payload": {
     "runtime": "unknown"
    },
-   "recorded_at": "2026-09-26T15:16:53Z",
+   "recorded_at": "2026-09-26T15:55:17Z",
    "revision": 7,
    "sequence": 7,
-   "stream": "865f54f1-fe77-4d3c-83cb-be974a11fc67",
+   "stream": "0c7f5269-e64b-4d95-9cd5-6460ed6147e7",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
@@ -251,7 +251,7 @@
         "outcome": "performed",
         "placement": "inside_fixture",
         "target_label": "<fixture>/README.md",
-        "target_sha256": "d1028a85cf5fb4ee1e6475ded2a7623e31285e6c8cb04433b033f3e181879498",
+        "target_sha256": "d7e756db31e893212c106c28ac606216bd9237bfbf7fd1e3411b81d3f7b4d596",
         "tool": "read",
         "tool_use_id": "call_1"
        }
@@ -259,7 +259,7 @@
       "turn_interrupted": false,
       "unclassifiable_target_count": 2,
       "unknown_outcome_count": 0,
-      "workspace_sha256": "3791a314523cc56fed0738505f141684755226dbab1895c435e87bcc50575b07"
+      "workspace_sha256": "e053f10c0854c01c9bb900bf74a98a739fb542e380d22ab3e49e52f0bf1c3429"
      },
      "harness_status": [
       {
@@ -287,10 +287,10 @@
      ]
     }
    },
-   "recorded_at": "2026-09-26T15:16:53Z",
+   "recorded_at": "2026-09-26T15:55:17Z",
    "revision": 8,
    "sequence": 8,
-   "stream": "865f54f1-fe77-4d3c-83cb-be974a11fc67",
+   "stream": "0c7f5269-e64b-4d95-9cd5-6460ed6147e7",
    "subject": {
     "id": "run-1",
     "kind": "execution.execution"
