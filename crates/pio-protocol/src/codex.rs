@@ -578,6 +578,15 @@ impl Provider {
                     };
                     return Err(err("not_found", details));
                 }
+                // And no answer is taken for a run whose host is no longer
+                // running it: nothing would ever send it.
+                let runtime = text(&e["view"]["runtime"]);
+                if matches!(runtime, "exited" | "unknown") {
+                    return Err(err(
+                        "not_found",
+                        json!({"reason":"run_not_running","runtime":runtime}),
+                    ));
+                }
                 let response = p["payload"]["response"].clone();
                 let decision = self
                     .content_available(&response)
@@ -1188,6 +1197,17 @@ impl Provider {
             "control_applied" => {
                 let control = text(&event["control_id"]).to_owned();
                 self.codex_observe_effect(&control, "pending", "native_response_written", false);
+            }
+            // The turn ended with a request nobody's answer had reached.
+            "request_expired_with_turn" => {
+                let action_id = format!("{id}.action-{}", num(&event["action_seq"]));
+                self.settle_unanswered(
+                    e,
+                    &action_id,
+                    "nobody",
+                    "expired_with_turn",
+                    "the turn ended before any answer reached the harness; nothing was sent",
+                );
             }
             // Codex settled a request no answer from PIO had reached (CH-8).
             "request_resolved" if event["settled_by"] == "harness" => {

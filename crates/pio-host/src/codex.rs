@@ -1295,8 +1295,12 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                         let decision = control["decision"].as_str().unwrap_or("");
                         let seq = control["action_seq"].as_u64();
                         let lapse = control["decided_by"] == "pio";
+                        // The turn has ended: Codex holds none of its
+                        // requests any more, so nothing is sent. Whatever is
+                        // still pending is closed below with the turn.
                         let rpc = seq
                             .filter(|_| ALLOWED_DECISIONS.contains(&decision))
+                            .filter(|_| turn_status.is_none())
                             .and_then(|seq| pending_actions.remove(&seq));
                         match rpc {
                             Some((rpc, elicitation)) if lapse => {
@@ -1321,6 +1325,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                                 let by = seq.and_then(|seq| settled.get(&seq)).copied();
                                 let reason = match by {
                                     Some(_) => "already_decided",
+                                    None if turn_status.is_some() => "turn_ended",
                                     None => "no pending action or decision not allowed",
                                 };
                                 life.event(json!({"kind":"control_rejected","control_id":id,
@@ -1366,7 +1371,17 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                 }
         }
     }
-    // The run's own turn is over. Another thread's turn still running is
+    // The run's own turn is over, and with it every request of the turn
+    // that nobody answered: Codex holds none of them any more and no answer
+    // will ever be sent. Each is closed here, answered by nobody, so it does
+    // not stay pending on an exited run and a later answer is refused
+    // (review of L3, "an approval pending at exit").
+    for (seq, (rpc, _)) in std::mem::take(&mut pending_actions) {
+        life.event(json!({"kind":"request_expired_with_turn","action_seq":seq,
+                          "request_id":rpc,"decided_by":"nobody","sent":Value::Null,
+                          "turn_status":turn_status}))?;
+    }
+    // Another thread's turn still running is
     // interrupted, and its end waited for, up to ten seconds, so its last
     // report (Codex reports a step an interrupt cut short, if its response
     // had completed) is counted. And for a grace period the host keeps

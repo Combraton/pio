@@ -1068,6 +1068,36 @@ fn a_codex_approval_gets_one_decision_either_the_callers_or_the_lapse() {
     );
 }
 
+/// An approval still pending on a run whose host is no longer running it
+/// (an exit that closed nothing, or a lost host) takes no answer: nothing
+/// would ever send it, so none is accepted and nothing is queued.
+#[test]
+fn an_answer_to_a_run_no_longer_running_is_refused() {
+    for runtime in ["exited", "unknown"] {
+        let root = tempfile::tempdir().unwrap();
+        let (mut p, mut s) =
+            codex_with_pending_action(&root.path().join("store"), root.path(), 120);
+        let mut e = p.data.executions["e"].clone();
+        e["view"]["runtime"] = runtime.into();
+        e["view"].as_object_mut().unwrap().remove("runtime_detail");
+        p.update_execution(&e);
+        let refused = p
+            .handle(
+                &mut s,
+                "execution.respond_action",
+                &codex_answer("accept", "after-exit", 3),
+            )
+            .unwrap_err();
+        assert_eq!(refused.code, "not_found", "{runtime}");
+        assert_eq!(
+            refused.details,
+            json!({"reason":"run_not_running","runtime":runtime})
+        );
+        assert!(p.data.executions["e"].get("codex_controls").is_none());
+        assert!(!p.data.effects.keys().any(|k| k.contains("response")));
+    }
+}
+
 /// D1: `execution.discovery.list` must report the running service's own
 /// harness, never Codex's by default, for every native adapter.
 #[test]

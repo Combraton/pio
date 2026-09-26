@@ -41,7 +41,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
          'file_change_grant_root', 'continuation_interrupted', 'subagent_turn_after_interrupt',
          'url_elicitation_with_approval_kind_declined', 'stream_retries_recorded',
-         'plugins_off_decision_sent', 'approval_settled_by_codex']
+         'plugins_off_decision_sent', 'approval_settled_by_codex', 'approval_pending_at_turn_end']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # The lead tool's own server settings on Codex, as `lead_run.py` sends them
 # for L3 (after its first live run, 2026-09-26).
@@ -731,6 +731,7 @@ def run_case(out, name):
         # goes on five seconds more: past the two-second answer deadline.
         approval_settled_by_codex={'approval': 'command', 'approval_settles_itself_ms': 500,
                                    'delay_ms': 5000},
+        approval_pending_at_turn_end={'approval': 'command', 'delay_ms': 100},
         form_elicitation_declined={'approval': 'elicitation', 'elicitation_mode': 'form',
                                    'delay_ms': 100},
         approval_cwd_through_a_link={'approval': 'command', 'delay_ms': 100},
@@ -1124,6 +1125,43 @@ def run_case(out, name):
             assert refused['error']['data']['code'] == 'not_found' and \
                 refused['error']['data']['details'] == {'reason': 'already_decided', 'decided_by': 'harness'}, refused
             return dict(outcome='pass', settled_by='harness', native_answers=len(wire))
+        if name == 'approval_pending_at_turn_end':
+            # The execution deadline (four seconds) stops the turn while its
+            # command approval waits for an answer (two minutes). The
+            # reviewer's probe of "an approval pending at exit": the action
+            # stayed `pending` on the exited run, and a later answer was
+            # accepted and never sent. Now the turn closes it, answered by
+            # nobody, and a later answer is refused.
+            response, _ = case.submit(deadline=4, delivery=120)
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = exited(case, seconds=60)
+            assert [a['state'] for a in final['actions']] == ['answered'], \
+                f"an approval stayed pending on an exited run: {final['actions']}"
+            assert [e['status'] for e in events_of(case, 'turn_completed')] == ['interrupted']
+            expired = events_of(case, 'request_expired_with_turn')
+            assert [(x['action_seq'], x['request_id'], x['decided_by'], x['sent']) for x in expired] == \
+                [(1, 'fake-request-1', 'nobody', None)], expired
+            for kind in ('request_denied_by_default', 'control_applied'):
+                assert events_of(case, kind) == [], (kind, events_of(case, kind))
+            wire = [m for m in answered_once(case) if m['id'] == 'fake-request-1']
+            assert wire == [], wire
+            with case.client() as c:
+                stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                      'kinds': ['execution.execution']})['result']
+            decided = [i['event']['payload'].get('pio.combraton.dev/decision') for i in stream['items']
+                       if 'event' in i and i['event']['type'] == 'execution.action.answered']
+            assert [(d['decided_by'], d['decision'], d['basis'], d['sent']) for d in decided] == \
+                [('nobody', None, 'expired_with_turn', False)], decided
+            late = json.dumps({'decision': 'accept'}).encode()
+            refused = case.execution_command('execution.respond_action', 'work', dict(
+                action_id=final['actions'][0]['action_id'],
+                response=dict(digest=digest(late), media_type='application/json')),
+                'answer-late', late, 'application/json')
+            assert refused['error']['data']['code'] == 'not_found' and \
+                refused['error']['data']['details'] == {'reason': 'already_decided', 'decided_by': 'nobody'}, refused
+            after = case.inspect()['result']
+            assert not [x for x in after['effects'] if '.response-' in x], after['effects']
+            return dict(outcome='pass', expired=len(expired), native_answers=len(wire))
         if name == 'command_approval_lapses':
             # A command approval nobody answers: after the caller's two
             # seconds, one decline of PIO's, and the command never runs. In
