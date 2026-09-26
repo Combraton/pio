@@ -495,12 +495,14 @@ def lead_tool_case(case, name):
                     for e in events_of(case, 'mcp_startup')]
         assert startups == [('pio-lead', 'starting', True, 'thread/start'),
                             ('pio-lead', 'ready', True, 'thread/start')], startups
-        order = [json.loads(l)['kind'] for f in case.store.glob('codex-*.events.jsonl')
-                 for l in f.read_text().splitlines()
-                 if json.loads(l)['kind'] in ('lead_tool_ready', 'turn_start_sent')]
+        # In the lead's own events file: the plain run has one too, and
+        # the order of the files says nothing.
+        runs = [[json.loads(l)['kind'] for l in f.read_text().splitlines()]
+                for f in case.store.glob('codex-*.events.jsonl')]
+        lead = [kinds for kinds in runs if 'lead_tool_ready' in kinds]
         ready = events_of(case, 'lead_tool_ready')
-        assert [r['ready'] for r in ready] == [True] and order[:2] == \
-            ['lead_tool_ready', 'turn_start_sent'], (ready, order)
+        assert [r['ready'] for r in ready] == [True] and len(lead) == 1 and \
+            lead[0].index('lead_tool_ready') < lead[0].index('turn_start_sent'), (ready, runs)
         seen = witnessed(log)
         assert [e.get('method') for e in seen if e['event'] == 'request'] == \
             ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'tools/call'], seen
