@@ -45,7 +45,7 @@ Four of those matter here and were missing from the first draft:
 | **G3** | Transcript blocks **as they happen**, each with where a tool use landed and who decided. | Blocks from `execution.output.read`, per harness. The audit on `execution.exit.observed`, key `pio.combraton.dev/tool-uses`. Live placement is the *absence* of a record. | 1, 5 |
 | **G4** | Mid-turn messages for Claude Code. `execution.steer` exists and Codex takes one; the Claude host has no steer control. The thread shows **queued**, never delivered, until it does. | PIO host work. | 3, 5 |
 | **G5** | Per-message usage for Claude Code. Usage arrives once, at turn end. | PIO host work. | 1, 2, 5 |
-| **G6** | Incremental changed-key commits. | **Closed** by the same fold: settled runs are never re-read. | 1, 2 |
+| **G6** | Incremental changed-key commits. | **Two halves.** The client half is the events fold, so settled runs are never re-read (`scripts/board_fold.py`). The server half, which the owner's G6/S7 names, is **changed-key commits** ([ADR 002](../../decisions/002-protocol-journal.md#changed-key-commits-2026-09-26), 2026-09-26): each commit reads and compares only the records that changed, not the whole provider state. The earlier "Closed" covered only the client half. The per-request execution tick and the rollback reload are still linear in retained state. | 1, 2 |
 | **G7** | Projects are not modelled anywhere. | Client-side configuration. Belongs nowhere near the Protocol. | 1 |
 | **G8** | **`origin` is defined and PIO does not implement it.** | **PIO gap. No Protocol issue.** | 3 |
 
@@ -70,6 +70,8 @@ Two things the proof established that the schemas do not say out loud:
 - **A retention gap hands back `snapshot.subjects[]`** with `{subject, revision, state}`, exactly as the reviewer said — a roster, not a hole.
 
 **G1 and G6 need no new operation.** That is now a measurement rather than a plan.
+
+**Correction (2026-09-26).** The fold proved only G6's client half. Until then, every command's commit serialized and diffed the whole provider state, however the board read it. Commits are now changed-key; see [ADR 002](../../decisions/002-protocol-journal.md#changed-key-commits-2026-09-26).
 
 ## The carrier, settled before any G2 or G3 code
 
@@ -460,4 +462,4 @@ L1 held two rows only because nothing could fail them: no approval was asked, an
 - **A leak the gate found.** L1b's first rehearsal crashed while building its scenario, after its tree existed and before the `try` that releases it, and the tree stayed in `/tmp`. Now a failure before anything is reserved releases the tree. Mutant `setup-fails` fails the scenario at that point: the tree must be gone, and there is no receipt. The source mutant (the release removed) fails it.
 - **Attempt 2 held** (2026-09-25, at `0ba60de`): 32 of 33 rows hold, and "PIO deleted no session" is inconclusive. The desk request was the same as in attempt 1 (`inside_fixture`; `once` / `always` / `reject`). It was allowed once by the relay, from the owner's advance decision, within a second of reaching the desk, so it was not answered live. The lead's read of `alpha` waited 53.1 s and returned `exited`, so the row held on the exited branch, not on the limit. 82,910 charged. See the evidence README.
 
-**Step 2 order:** ~~G1 and G6 (the events fold)~~ **done**, ~~G2 (the approval walk)~~ **done**, ~~G3 (blocks and the audit)~~ **done**. Each with its own headless case and a mutant. Next: step 3, orchestrate.
+**Step 2 order:** ~~G1 and G6 (the events fold)~~ **done** (G6's server half, changed-key commits, done 2026-09-26), ~~G2 (the approval walk)~~ **done**, ~~G3 (blocks and the audit)~~ **done**. Each with its own headless case and a mutant. Next: step 3, orchestrate.
