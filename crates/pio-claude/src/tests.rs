@@ -800,6 +800,68 @@ fn a_link_reached_past_path_max_is_unresolvable() {
     assert_eq!(decided["disposition"], "surface_as_action");
 }
 
+/// Gives a directory its permissions back when a test ends, however it
+/// ends, so the temporary directory around it can be removed.
+struct Unlock(PathBuf);
+
+impl Drop for Unlock {
+    fn drop(&mut self) {
+        let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755));
+    }
+}
+
+/// A link out of the fixture, held in a directory this user cannot search
+/// (review of L3, round 4, R4-HC-3): `readlink` refuses it (`EACCES`), so
+/// where it leads cannot be seen, and the path is unresolvable, never
+/// inside. Taking that refusal for "not a link" read it inside the fixture.
+/// The kernel refuses it too, now; a directory unlocked before a command
+/// runs is the deferred time-of-check case (R3-HC-8).
+#[test]
+fn a_link_in_an_unsearchable_directory_is_unresolvable() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    let locked = fixture.join("locked");
+    std::fs::create_dir(&locked).unwrap();
+    std::os::unix::fs::symlink(&outside, locked.join("esc")).unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let _unlock = Unlock(locked.clone());
+    // The case itself: this user may not look inside. Run as root, it could,
+    // and the test would prove nothing, so it says so.
+    let refused = std::fs::read_link(locked.join("esc")).unwrap_err();
+    assert_eq!(
+        refused.kind(),
+        std::io::ErrorKind::PermissionDenied,
+        "{refused}"
+    );
+    assert_eq!(resolve_target("locked/esc", &fixture), None);
+    for path in ["locked/esc", "locked/esc/secret.txt"] {
+        let placed = classify_path(fixture.join(path).to_str(), &fixture, &fixture);
+        assert_eq!(placed["placement"], "not_classifiable", "{path}: {placed}");
+        assert!(placed["target_label"].is_null(), "{placed}");
+    }
+    let request = json!({"request":{"input":{"file_path":"locked/esc/secret.txt"},
+                                    "tool_name":"Read","tool_use_id":"t-locked"}});
+    let decided = classify_permission_request(&request, &fixture, &fixture);
+    assert_eq!(decided["placement"], "not_classifiable");
+    assert_eq!(decided["disposition"], "surface_as_action");
+}
+
+/// A path through a file (`file.txt/x`): `readlink` answers `ENOTDIR`, and
+/// the path is unresolvable, never inside (review of L3, round 4,
+/// R4-HC-3). Taking that answer for "not a link" read it inside.
+#[test]
+fn a_path_through_a_file_is_unresolvable() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, _) = workspace(dir.path());
+    std::fs::write(fixture.join("file.txt"), "text\n").unwrap();
+    let refused = std::fs::read_link(fixture.join("file.txt/x")).unwrap_err();
+    assert_eq!(refused.raw_os_error(), Some(libc::ENOTDIR), "{refused}");
+    assert_eq!(resolve_target("file.txt/x", &fixture), None);
+    let placed = classify_path(fixture.join("file.txt/x").to_str(), &fixture, &fixture);
+    assert_eq!(placed["placement"], "not_classifiable", "{placed}");
+    assert!(placed["target_label"].is_null(), "{placed}");
+}
+
 #[test]
 fn a_tool_use_the_harness_refused_is_an_attempt_and_not_an_effect() {
     let dir = tempfile::tempdir().unwrap();
