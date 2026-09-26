@@ -353,6 +353,10 @@ servers are off on every L3 thread per launch, the owner's decision Q7
 (`dbd7efc`); the memory row is corrected as said (`ff1985a`); and the owner
 raised the L3 sequence and Codex stops for a second attempt, Q8 (`81174a1`),
 and then each child's ceiling to 90,000 with the stops to match, Q9.
+Attempt 2 is built and rehearsed (`L3-rehearsal.json`, below) and **parked**:
+owner decision of 2026-09-26, "L2 and L3 attempt 2 live runs parked; product
+defects next, then the TUI immediately; J7 acceptance replaces the headless
+lead runs." No second live attempt is planned.
 
 ## `L3-rehearsal.json`
 
