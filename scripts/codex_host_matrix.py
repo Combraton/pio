@@ -914,7 +914,9 @@ def run_case(out, name):
             carried = carried_declines(case, key='pio.combraton.dev/continuations')
             assert [(c['turn_id'], c.get('status')) for c in carried] == \
                 [(f'{own}-continued', 'interrupted')], carried
-            receipt = case.journal()[1][0]['receipt']
+            # The host completes its invocation after the exit event that
+            # turns the runtime to `exited`: wait for its receipt.
+            receipt = poll(lambda: case.journal()[1][0]['receipt'], lambda r: r is not None)
             assert receipt['turn_status'] == 'completed', receipt
             with case.client() as c:
                 output = c.query('execution.output.read', {'execution': 'work', 'offset': 0})['result']
