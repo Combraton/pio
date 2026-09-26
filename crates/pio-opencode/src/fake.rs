@@ -722,6 +722,21 @@ pub fn run() -> Result<()> {
             }
 
             "session/cancel" => {
+                // D8: the real ACP host sends this as a notification, with
+                // no id and no response awaited. A request framing here is
+                // a defect in the host, not something to paper over by
+                // replying to it: refuse it instead, so a regression back to
+                // `Rpc::request` fails a case rather than passing quietly.
+                if !id.is_null() {
+                    marker(
+                        &markers,
+                        json!({"event":"cancel_sent_as_request_not_notification","id":id}),
+                    )?;
+                    emit(&json!({"jsonrpc":"2.0","id":id,
+                        "error":{"code":-32600,
+                                 "message":"session/cancel must be a notification"}}))?;
+                    continue;
+                }
                 // A harness that ignores cancel, so a host's bounded
                 // escalation can be proven rather than assumed.
                 if scenario["ignore_cancel"] == true {
@@ -730,9 +745,6 @@ pub fn run() -> Result<()> {
                 }
                 cancelled = true;
                 marker(&markers, json!({"event":"cancelled"}))?;
-                if !id.is_null() {
-                    reply(&id, json!({}))?;
-                }
             }
 
             _ if !id.is_null() => emit(&json!({"jsonrpc":"2.0","id":id,

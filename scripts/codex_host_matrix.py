@@ -1332,7 +1332,12 @@ def run_case(out, name):
             assert [a['decision'] for a in answers] == [decision], answers
             assert [m['result'] for m in answered_once(case)] == [{'decision': decision}]
             items = [e for e in events_of(case, 'item_completed') if e['item_id'] == 'item-approval']
-            assert items and items[0]['status'] == ('completed' if decision == 'accept' else 'declined'), items
+            # D16: an accept's item completes by the command's own exit, not
+            # by the decision. Measured (docs/work/m2/codex-live/R6.json,
+            # "approval-allow"): the live accept gave `failed`, not
+            # `completed`; the fake plays that, and this asserts what it
+            # actually plays rather than a decision-shaped guess.
+            assert items and items[0]['status'] == ('failed' if decision == 'accept' else 'declined'), items
             # The decision records which kind of command approval it answered.
             requested = events_of(case, 'action_requested')
             expected_kind = 'writeStdin' if decision == 'decline' else 'command'

@@ -374,6 +374,62 @@ fn refusal(reason: &str, detail: Value) -> Value {
     json!({"reason":reason,"detail":detail})
 }
 
+/// Every model an OpenCode configuration names outside a session's own,
+/// read from the non-secret configuration files only, and nothing else in
+/// them (Review 52, a static reading of OpenCode 2.0.11, not measured: its
+/// title and compaction helpers use the session's own provider and model
+/// unless `small_model` or a helper's own `model` says otherwise). Ported
+/// from `scripts/lead_run.py`'s `helper_models`, which this now backs.
+fn helper_models(config_dir: &Path) -> Result<Vec<(String, String)>> {
+    let mut models = Vec::new();
+    for name in ["opencode.json", "opencode.jsonc"] {
+        let path = config_dir.join(name);
+        if !path.exists() {
+            continue;
+        }
+        let raw = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading {}", path.display()))?;
+        let body: String = raw
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let config: Value = serde_json::from_str(&body).with_context(|| {
+            format!("{name} is unreadable, so its helper models cannot be checked")
+        })?;
+        if let Some(small) = config["small_model"].as_str() {
+            models.push((format!("{name}: small_model"), small.to_owned()));
+        }
+        for section in ["agent", "mode"] {
+            if let Some(entries) = config[section].as_object() {
+                for (entry, settings) in entries {
+                    if let Some(model) = settings["model"].as_str() {
+                        models.push((format!("{name}: {section}.{entry}.model"), model.to_owned()));
+                    }
+                }
+            }
+        }
+    }
+    Ok(models)
+}
+
+/// Owner decision, 2026-09-25: refuse to start on any helper whose provider
+/// is not the session's own (D18; ported from `scripts/lead_run.py`'s
+/// `helpers_elsewhere`, which enforced this only for its own L3 rehearsal).
+fn helper_provider_refusals(config_dir: &Path, model: &str) -> Result<Vec<Value>> {
+    let provider = model.split_once('/').map_or(model, |(p, _)| p);
+    let elsewhere: Vec<Value> = helper_models(config_dir)?
+        .into_iter()
+        .filter(|(_, m)| m.split_once('/').map_or(m.as_str(), |(p, _)| p) != provider)
+        .map(|(setting, model)| json!({"setting":setting,"model":model}))
+        .collect();
+    Ok(if elsewhere.is_empty() {
+        vec![]
+    } else {
+        vec![refusal("helper_elsewhere", json!(elsewhere))]
+    })
+}
+
 /// Every decision a service must make before it starts a session.
 pub fn service_admission(work: &Path, opencode: &Value) -> Result<Value> {
     let mut refusals = Vec::new();
@@ -443,6 +499,21 @@ pub fn service_admission(work: &Path, opencode: &Value) -> Result<Value> {
                     "provider_not_covered_by_the_exception",
                     json!({"model":model,"allowed_provider":ALLOWED_PROVIDER}),
                 ));
+            }
+            // Owner decision, 2026-09-25 (moved from scripts/lead_run.py's
+            // L3 rehearsal into admission itself, D18, so every OpenCode
+            // run gets it, not only one driven through that script): a
+            // helper's `small_model`, or an `agent`/`mode` entry's own
+            // `model`, on a provider other than the session's spends there
+            // with nothing in the receipt to show it. Refused outright.
+            if let Some(dir) = opencode["config_dir"].as_str() {
+                match helper_provider_refusals(Path::new(dir), model) {
+                    Ok(found) => refusals.extend(found),
+                    Err(error) => refusals.push(refusal(
+                        "opencode_config_unreadable",
+                        json!(error.to_string()),
+                    )),
+                }
             }
         }
     }

@@ -334,6 +334,25 @@ fn opencode_host_config(root: &Path, opencode: &Value) -> Result<Value> {
     Ok(host)
 }
 
+/// D9: refuse at startup, for every product service, the launch controls
+/// that exist only for the conformance participant to declare a fake
+/// adapter's enforcement, fault-inject a call, or steer the clock. These are
+/// accepted structurally by `Provider::with_host` (shared with conformance),
+/// so a product service must refuse them itself before ever reaching it.
+fn refuse_conformance_only_controls(protocol: &Value) -> Result<()> {
+    anyhow::ensure!(protocol.get("clock").is_none(), "clock is conformance-only");
+    anyhow::ensure!(
+        protocol.get("faults").is_none(),
+        "faults is conformance-only"
+    );
+    for field in ["enforcement", "enforced_bounds", "echo_proves_delivery"] {
+        anyhow::ensure!(
+            protocol["executor"]["adapter"].get(field).is_none(),
+            "executor.adapter.{field} is conformance-only"
+        );
+    }
+    Ok(())
+}
 fn serve_mode(root: &Path, config: &Path, socket: &Path, mode: Mode) -> Result<()> {
     let durable = mode != Mode::Conformance;
     if durable {
@@ -353,6 +372,7 @@ fn serve_mode(root: &Path, config: &Path, socket: &Path, mode: Mode) -> Result<(
                 && protocol["executor"]["default_script"].is_null(),
             "executor.script is conformance-only"
         );
+        refuse_conformance_only_controls(&protocol)?;
         let host = opencode_host_config(root, &config["opencode"])?;
         Provider::with_host(root, protocol, Some(host))?
     } else if mode == Mode::Claude {
@@ -366,6 +386,7 @@ fn serve_mode(root: &Path, config: &Path, socket: &Path, mode: Mode) -> Result<(
                 && protocol["executor"]["default_script"].is_null(),
             "executor.script is conformance-only"
         );
+        refuse_conformance_only_controls(&protocol)?;
         let host = claude_host_config(root, &config["claude"])?;
         Provider::with_host(root, protocol, Some(host))?
     } else if mode == Mode::Codex {
@@ -379,6 +400,7 @@ fn serve_mode(root: &Path, config: &Path, socket: &Path, mode: Mode) -> Result<(
                 && protocol["executor"]["default_script"].is_null(),
             "executor.script is conformance-only"
         );
+        refuse_conformance_only_controls(&protocol)?;
         let host = codex_host_config(root, &config["codex"])?;
         Provider::with_host(root, protocol, Some(host))?
     } else if durable {

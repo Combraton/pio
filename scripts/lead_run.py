@@ -487,7 +487,17 @@ OPENCODE_BOUND = dict(
              "a child's step stays near the size measured in M3b"])
 
 FEATURES = ('core.events', 'core.capabilities', 'core.effects', 'core.grants')
-EXECUTION_FEATURES = (*matrix.FEATURES, 'execution.steering')
+
+
+def execution_features():
+    """D6: `execution.steering` is advertised only where the host implements
+    it, which is Codex alone — Claude and OpenCode both refuse it truthfully
+    now (`unsupported_required_feature`, not a false per-call reason), so a
+    session that required it there would fail to negotiate at all. Read
+    `HARNESS`, set by `select_plan`, rather than assuming one plan's shape."""
+    return (*matrix.FEATURES, 'execution.steering') if HARNESS == 'codex' else matrix.FEATURES
+
+
 CONTENT = 'pio.combraton.dev/content'
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # The lead's own two tools, pre-allowed on Codex (owner decision, 2026-09-25).
@@ -1687,11 +1697,11 @@ class Service:
 
     def owner(self):
         return Caller(self.socket, self.owner_credential, features=FEATURES,
-                      execution_features=EXECUTION_FEATURES)
+                      execution_features=execution_features())
 
     def lead(self, grant_id):
         return Caller(self.socket, self.lead_credential, grant=grant_id,
-                      features=FEATURES, execution_features=EXECUTION_FEATURES)
+                      features=FEATURES, execution_features=execution_features())
 
     def host_events(self, views, briefs):
         """Each execution's own host events.
@@ -3626,16 +3636,33 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None, host=None, id
     return usage
 
 def running_steer(s):
-    """The running steer holds only against a turn that was running and
-    delivered when it was sent, and still running just after. A turn that
-    ended inside the steer's round trip decides nothing either way."""
-    if not (s and s.get('request') == 'not_supported'
+    """OpenCode's and Claude's own negative (D6): `execution.steering` is not
+    negotiated there at all, so every steer is refused
+    `unsupported_required_feature` before the per-call turn check is ever
+    reached — never the old, false 'not_supported' this session's turn was
+    not running. This holds only against a turn that was running and
+    delivered when the steer was sent, and still running just after. A turn
+    that ended inside the steer's round trip decides nothing either way."""
+    if not (s and s.get('refused') == 'unsupported_required_feature'
             and s.get('runtime_at_steer') == 'active'
             and s.get('delivery_at_steer') == 'acknowledged'):
         return False
     if s.get('runtime_after_steer') == 'exited':
         return None
     return s.get('runtime_after_steer') is not None
+
+
+def exited_steer(s):
+    """A steer once the turn is over. Codex still negotiates
+    `execution.steering` and refuses it per call ('not_supported', this turn
+    is not running); Claude and OpenCode never negotiate the feature at all
+    (D6), so every steer there is `unsupported_required_feature` regardless
+    of the run's own state."""
+    if not (s and s.get('runtime_at_steer') == 'exited'):
+        return False
+    if HARNESS == 'codex':
+        return s.get('request') == 'not_supported'
+    return s.get('refused') == 'unsupported_required_feature'
 
 
 def host_model(records):
@@ -4036,19 +4063,25 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                  note="L3's claim: delivery under the lead's authority, not obedience")
     else:
         rows.add('A steer while the child runs', record.get('steer_running'),
-                 'not_supported, sent while the turn was active and delivered, and '
-                 'before it exited',
+                 'unsupported_required_feature, sent while the turn was active and '
+                 'delivered, and before it exited',
                  holds=running_steer,
-                 note="OpenCode's own negative: its turn was running and delivered, and "
-                      'the host never sets a turn id')
+                 note="OpenCode's and Claude's own negative (D6): the session never "
+                      'negotiated execution.steering, so the refusal is true and given '
+                      'before the per-call turn check, whatever the turn was doing')
     rows.add('A steer on an exited run', record.get('steer_exited'),
-             'not_supported on any harness, once the turn is over',
-             holds=lambda s: bool(s) and s.get('request') == 'not_supported'
-             and s.get('runtime_at_steer') == 'exited')
+             "not_supported once the turn is over, on Codex; on OpenCode and Claude "
+             'the same unsupported_required_feature as any other steer there (D6)',
+             holds=exited_steer)
     rows.add('Each steer names the grant that sent it',
              [dict(grant=u and u.get('grant'), holder=u and u.get('holder'),
                    recorded_by=u and u.get('recorded_by')) for u in under],
-             [dict(grant=grant_id, holder='lead', recorded_by='pio')] * 2)
+             [dict(grant=grant_id, holder='lead', recorded_by='pio')] * 2
+             if HARNESS == 'codex' else [],
+             note='' if HARNESS == 'codex' else
+                  'OpenCode and Claude refuse every steer before the protocol ever '
+                  'reaches execution.steer.requested (D6), so nothing is recorded '
+                  'under any grant here')
     data = (record.get('lead_answer') or {}).get('error', {}).get('data', {})
     rows.add('The lead may not answer an approval',
              dict(code=data.get('code'), reason=(data.get('details') or {}).get('reason')),
@@ -4682,7 +4715,7 @@ def watchdog(runner, daemon, root):
         config = json.loads((root / 'service.json').read_text())
         owner = Caller(root / 'socket' / 'public.sock',
                        config['protocol']['credentials'][0]['credential'],
-                       features=FEATURES, execution_features=EXECUTION_FEATURES)
+                       features=FEATURES, execution_features=execution_features())
         try:
             # Every execution under this lead, whatever its name (review of
             # L3, round 3, SPEND-1).

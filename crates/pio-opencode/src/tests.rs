@@ -184,6 +184,51 @@ fn the_owner_excluded_provider_is_refused_outright() {
     assert!(reasons(&record).contains(&"provider_excluded_by_the_owner".to_owned()));
 }
 
+/// D18: the helper-provider refusal used to exist only in
+/// `scripts/lead_run.py`'s L3 rehearsal; every `serve-opencode` admission
+/// must refuse it now, not only a run driven through that script.
+#[test]
+fn a_helper_model_on_another_provider_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("opencode.json"),
+        json!({"small_model":"another-provider/helper-model"}).to_string(),
+    )
+    .unwrap();
+    let record = admitted(
+        dir.path(),
+        &service(
+            json!("minimax-coding-plan/MiniMax-M2.7-highspeed"),
+            json!({"config_dir":dir.path().display().to_string()}),
+        ),
+    );
+    assert_eq!(record["admitted"], false, "{record}");
+    assert!(
+        reasons(&record).contains(&"helper_elsewhere".to_owned()),
+        "{record}"
+    );
+}
+
+#[test]
+fn a_helper_model_on_the_session_s_own_provider_is_admitted() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("opencode.json"),
+        json!({"small_model":"minimax-coding-plan/MiniMax-M2.7-highspeed",
+               "agent":{"title":{"model":"minimax-coding-plan/MiniMax-M2.7-highspeed"}}})
+        .to_string(),
+    )
+    .unwrap();
+    let record = admitted(
+        dir.path(),
+        &service(
+            json!("minimax-coding-plan/MiniMax-M2.7-highspeed"),
+            json!({"config_dir":dir.path().display().to_string()}),
+        ),
+    );
+    assert_eq!(record["admitted"], true, "{record}");
+}
+
 #[test]
 fn a_model_requires_the_dated_exception_and_a_run_requires_a_model() {
     let dir = tempfile::tempdir().unwrap();

@@ -34,6 +34,20 @@ pub const FEATURES: &[&str] = &[
     "execution.actions",
     "execution.steering",
 ];
+/// [`FEATURES`] without `execution.steering` (D6): the host does not
+/// implement steering for an adapter whose [`Profile::steering_supported`]
+/// is false, so it is never advertised there. A caller that still asks for
+/// it in `core.negotiate` is refused `unknown_feature`/`unsupported_
+/// required_feature`, and `execution.steer` itself is refused
+/// `unsupported_required_feature` rather than a false "not running yet".
+pub const FEATURES_WITHOUT_STEERING: &[&str] = &[
+    "execution.controller",
+    "execution.output",
+    "execution.discovery",
+    "execution.workspaces",
+    "execution.usage",
+    "execution.actions",
+];
 
 pub(crate) fn push(v: &mut Value, x: Value) {
     if !v.is_array() {
@@ -164,6 +178,19 @@ pub struct Profile {
     pub guard_event: &'static str,
     pub guard_key: &'static str,
     pub exited_event: &'static str,
+    /// `execution.discovery.list`'s own record of this harness: a stable
+    /// installation id, the pinned version this build was qualified
+    /// against, and the label a report gives the real harness versus a
+    /// labeled fake standing in for it (D1: discovery must never report a
+    /// different adapter's harness).
+    pub installation_id: &'static str,
+    pub pinned_version: &'static str,
+    pub real_harness_name: &'static str,
+    pub fake_harness_name: &'static str,
+    /// Whether this host implements `execution.steer` at all. Only Codex
+    /// does; advertising the feature elsewhere and refusing the call with a
+    /// "not running yet" reason would be a false one (D6).
+    pub steering_supported: bool,
 }
 
 pub const PROFILES: &[Profile] = &[
@@ -181,6 +208,11 @@ pub const PROFILES: &[Profile] = &[
         guard_event: "thread_settings_guard",
         guard_key: "thread_settings",
         exited_event: "app_server_exited",
+        installation_id: "codex-selected",
+        pinned_version: pio_codex::PINNED_VERSION,
+        real_harness_name: "Codex CLI app-server",
+        fake_harness_name: "PIO labeled fake Codex app-server (not Codex)",
+        steering_supported: true,
     },
     Profile {
         adapter: "claude",
@@ -200,6 +232,11 @@ pub const PROFILES: &[Profile] = &[
         guard_event: "settings_guard",
         guard_key: "permission_mode",
         exited_event: "harness_exited",
+        installation_id: "claude-selected",
+        pinned_version: pio_claude::PINNED_VERSION,
+        real_harness_name: "Claude Code CLI",
+        fake_harness_name: "PIO labeled fake Claude Code CLI (not Claude Code)",
+        steering_supported: false,
     },
     Profile {
         adapter: "opencode",
@@ -219,6 +256,11 @@ pub const PROFILES: &[Profile] = &[
         guard_event: "settings_guard",
         guard_key: "session_configuration",
         exited_event: "harness_exited",
+        installation_id: "opencode-selected",
+        pinned_version: pio_opencode::PINNED_VERSION,
+        real_harness_name: "OpenCode ACP agent",
+        fake_harness_name: "PIO labeled fake OpenCode ACP agent (not OpenCode)",
+        steering_supported: false,
     },
 ];
 
@@ -643,10 +685,15 @@ impl Provider {
         }
     }
 
-    pub(crate) fn codex_discovery(&self) -> Value {
+    /// `execution.discovery.list` for whichever native adapter this service
+    /// is (D1): every field comes from this adapter's own [`Profile`] and
+    /// its own journal namespace, never Codex's by default, so `serve-claude`
+    /// and `serve-opencode` report their own harness instead of Codex's.
+    pub(crate) fn native_discovery(&self) -> Value {
         // The journal namespace is the adapter; for Codex this is `codex`,
         // so no persisted field name changes.
         let ns = self.adapter().to_owned();
+        let profile = self.profile();
         let executable = text(&self.host_config["executable"]);
         let detected = std::path::Path::new(executable).exists();
         let fake = self.host_config["labeled_fake"] == true;
@@ -659,8 +706,7 @@ impl Provider {
             .values()
             .filter(|e| e[&ns]["account_observed_at"].is_string())
             .max_by(|a, b| {
-                text(&a["codex"]["account_observed_at"])
-                    .cmp(text(&b["codex"]["account_observed_at"]))
+                text(&a[&ns]["account_observed_at"]).cmp(text(&b[&ns]["account_observed_at"]))
             });
         let (authentication, reachable, verified) = match observed {
             Some(e) => (
@@ -681,9 +727,14 @@ impl Provider {
         } else {
             "unknown"
         };
-        let mut installation = json!({"installation_id":"codex-selected","harness":if fake {"PIO labeled fake Codex app-server (not Codex)"} else {"Codex CLI app-server"},"detected":detected,"adapter_recognized":recognized,"version_supported":if qualified {"yes"} else if fake {"no"} else {"unknown"},"authentication":authentication,"reachable":reachable});
+        let harness = if fake {
+            profile.fake_harness_name
+        } else {
+            profile.real_harness_name
+        };
+        let mut installation = json!({"installation_id":profile.installation_id,"harness":harness,"detected":detected,"adapter_recognized":recognized,"version_supported":if qualified {"yes"} else if fake {"no"} else {"unknown"},"authentication":authentication,"reachable":reachable});
         if qualified {
-            installation["version"] = pio_codex::PINNED_VERSION.into();
+            installation["version"] = profile.pinned_version.into();
         }
         if let Some(at) = verified {
             installation["last_verified"] = at;
