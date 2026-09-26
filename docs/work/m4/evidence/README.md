@@ -649,8 +649,13 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   nothing while every spend row held.
 - **The runner's probes.** The third start, the grant's attempt to attach
   the tool and the credential check must be refused; one that was admitted
-  instead is cancelled and charged its share on a line of its own
-  (`third-admitted`).
+  instead is cancelled with the rest on the way out and charged on a line of
+  its own, through the same branches as any run and never below its share:
+  at least its share, and at least what it was seen to spend plus a step in
+  flight. The floor and share rows cover it (`third-admitted`; review of
+  L3, round 4, SPEND-12: `probe-over-share`, whose admitted third run takes
+  a 150,000-token step, fails the share row with the floor holding, and
+  `probe-charged-flat`, the old flat share, fails the floor row).
 - **The configuration snapshot.** Here the diff is of the fake's own Codex
   home inside the tree. The lead's thread shows `existed_before: false` and
   one fixture trust entry added. Live, it is the owner's

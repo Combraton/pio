@@ -187,6 +187,12 @@ does with a permission prompt.
 - `meter-dies` (L3) fails the meter thread as the third start begins: the
   meter must cancel every run still going itself, within seconds, before
   alpha reaches its ceiling, and the run ends with the error;
+- `probe-over-share` (L3) is `third-admitted` with the admitted third run
+  taking one 150,000-token step: it is metered and stopped like any run,
+  charged through the same branches (at least its share, and at least what
+  it was seen to spend plus a step in flight), and the share row, which now
+  covers probes, fails; `probe-charged-flat` charges it its flat share, as
+  before, and the floor row fails;
 - `late-step-after-halt` (L3) interrupts the runner while `alpha`'s
   40,000-token step is in flight, so the host reports it only after the meter
   has stopped: the charge, read from the host's files, must cover it and the
@@ -435,6 +441,12 @@ NATIVE = 'pio.combraton.dev/native-declines'
 ELICITATION = 'mcpServer/elicitation/request'
 
 
+# The runner's own probes' briefs.
+THIRD_BRIEF = 'a third run the budget does not allow'
+ATTACHED_BRIEF = 'give my child a tool'
+CREDENTIAL_BRIEF = 'a spec with a credential value in it'
+
+
 def child_brief(name):
     return PLAN['briefs'][name]
 
@@ -456,7 +468,8 @@ def select_plan(name):
     harness."""
     global PLAN, LEAD, FILES, CHILDREN, RUNS, APPROVALS, BRIEF, HARNESS, live
     global MODEL, SEQUENCE, SEQUENCE_CAP, SEQUENCE_STOP, LEAD_CEILING, CHILD_CEILING
-    global LEAD_SHARE, CHILD_SHARE, WORST_CASE, BOUND, HOLD_ABOVE, PROBES
+    global LEAD_SHARE, CHILD_SHARE, WORST_CASE, BOUND, HOLD_ABOVE, PROBES, PROBE_SHARES
+    global PROBE_BRIEFS
     PLAN = dict(PLANS[name], name=name)
     LEAD = name
     FILES = PLAN['files']
@@ -593,6 +606,12 @@ def select_plan(name):
                                                OPENCODE_WORST_CASE)
         HOLD_ABOVE = None
         BOUND = OPENCODE_BOUND
+    # Each probe's share, should the service admit it, and its brief, by
+    # which the journal names its invocation.
+    PROBE_SHARES = {f'{LEAD}.third': CHILD_SHARE, f'{LEAD}.attached': LEAD_SHARE,
+                    'credential-check': LEAD_SHARE}
+    PROBE_BRIEFS = {f'{LEAD}.third': THIRD_BRIEF, f'{LEAD}.attached': ATTACHED_BRIEF,
+                    'credential-check': CREDENTIAL_BRIEF}
     APPROVALS = dict(model_exception=live.MODEL_EXCEPTION,
                      lead_tool='owner-2026-09-22-m4b-lead-tool',
                      **{name.lower(): PLAN['approval']})
@@ -647,6 +666,9 @@ UNMETERED_REFUSED = {
     'web-search-unguarded': ('standalone web search', "Codex's default: cached"),
     'image-generation-unguarded': ('image generation', "Codex's default: on"),
     'override-misses-alias': ('memories', "features.memory_tool = true, the owner's config.toml")}
+# The mutants whose lead has a budget of three, so the runner's third start
+# is admitted.
+THIRD_ADMITTED = ('third-admitted', 'probe-over-share', 'probe-charged-flat')
 # The mutants that send the fake's own token.
 OVERRIDE_MUTANTS = ('overrides-on', 'override-misses-alias')
 
@@ -790,6 +812,12 @@ MUTANTS = {
     # L3, round 4, SPEND-11): the charge must read the host's files, and
     # the floor row hold; with the meter's fold alone, the floor row fails.
     'late-step-after-halt': 'The run finished without an error',
+    # The runner's third start, admitted, spends past its share (review of
+    # L3, round 4, SPEND-12): charged through the same branches as any run,
+    # past its share, so the share row fails and the floor holds; charged
+    # its flat share, as before, the floor row fails.
+    'probe-over-share': "Every run's charge stayed within its reserved share",
+    'probe-charged-flat': "Every run's charge covers what it could have spent",
     'stale-meter-charged': "Every run's charge covers what it could have spent",
     'continuation-uncharged': "Every run's charge covers what it could have spent",
     # The meter thread fails as the third start begins (review of L3, round
@@ -833,7 +861,7 @@ PLAN_MUTANTS = {**{m: {'L3'} for m in (
                     'deadline-interrupted', 'interrupted-charged-reported',
                     'memory-pipeline-ran', 'meter-dies', 'lead-exit-uncarried',
                     'goal-continued', 'continuation-uncharged', 'late-step-after-halt',
-                    'stale-meter-charged')},
+                    'stale-meter-charged', 'probe-over-share', 'probe-charged-flat')},
                 'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
@@ -2192,6 +2220,10 @@ def codex_scenario(mutant, calls):
     if mutant == 'step-past-in-flight':
         # One step of 40,000: under the ceiling, past the in-flight bound.
         play.update(led_heavy_if=alpha, led_heavy_step=40_000, led_step_ms=6000)
+    if mutant in ('probe-over-share', 'probe-charged-flat'):
+        # The third run the runner's probe starts, admitted, takes one step
+        # of 150,000, past its share (review of L3, round 4, SPEND-12).
+        play.update(led_heavy_if=THIRD_BRIEF, led_heavy_step=150_000)
     if mutant in ('late-step-after-halt', 'stale-meter-charged'):
         # The same step, reported only once the runner is on its way out.
         play.update(led_heavy_if=alpha, led_heavy_step=40_000)
@@ -2627,7 +2659,7 @@ def watch(args, record, service, desk, meters, state):
     record['lead_submit'] = submit(owner, LEAD, BRIEF, repo, base,
                                    dict(initiator=dict(kind='execution.execution', id=LEAD),
                                         depth=0, call_budget=BUDGET + (
-                                            1 if args.mutant == 'third-admitted' else 0)),
+                                            1 if args.mutant in THIRD_ADMITTED else 0)),
                                    extensions).get('result', {}).get('outcome')
 
     # Watch until every run is over: relay approvals, meter every run, steer a
@@ -2691,8 +2723,7 @@ def watch(args, record, service, desk, meters, state):
                 instance = ToolInstance(spec, root / 'runner-tool.jsonl')
                 caller = service.owner()
                 try:
-                    result = instance.tool('start_run', name='third',
-                                           brief='a third run the budget does not allow')
+                    result = instance.tool('start_run', name='third', brief=THIRD_BRIEF)
                     record['third'] = dict(result=result,
                                            lead_runtime=(view(caller, LEAD) or {}).get('runtime'))
                 except Exception as caught:
@@ -2721,17 +2752,16 @@ def watch(args, record, service, desk, meters, state):
     # Attaching a tool is the owner's act: under the lead's grant it is
     # refused before anything else about the submit is looked at.
     record['grant_attach'] = submit(
-        lead_grant, f'{LEAD}.attached', 'give my child a tool', repo, base,
+        lead_grant, f'{LEAD}.attached', ATTACHED_BRIEF, repo, base,
         dict(initiator=dict(kind='execution.execution', id=LEAD), depth=1, call_budget=0),
-        {CONTENT: dict(media_type='text/plain', text='give my child a tool'),
-         LEAD_TOOL: spec})
+        {CONTENT: dict(media_type='text/plain', text=ATTACHED_BRIEF), LEAD_TOOL: spec})
     lead_grant.close()
     # And a spec that carries a credential value is refused at admission,
     # because the spec is journaled. A credential-shaped dummy, never the
     # lead's own: a refused submit is journaled too.
     leaky = dict(spec, env=[*spec['env'], dict(name='PIO_LEAD_NOTE',
                                                value='ccred1.lead.' + 'x' * 43)])
-    brief_bytes = 'a spec with a credential value in it'
+    brief_bytes = CREDENTIAL_BRIEF
     record['credential_check'] = submit(
         owner, 'credential-check', brief_bytes, repo, base, None,
         {CONTENT: dict(media_type='text/plain', text=brief_bytes), LEAD_TOOL: leaky})
@@ -2934,33 +2964,32 @@ def settle(record, service, meters, state, root):
             if current and current.get('admission') == 'admitted' \
                     and current.get('runtime') != 'exited':
                 stopped[identity] = cancel(owner, identity, 'exit')
-        if stopped:
-            record['stopped_on_exit'] = stopped
+        # The runner's own probes, each expected to be refused. One the
+        # service admitted is a real run with no reservation: cancelled here
+        # with the rest, and charged below (review of L3, round 2, SB-5).
+        admitted = {}
+        for probe in PROBE_SHARES:
+            current = view(owner, probe) or {}
+            if current.get('admission') == 'admitted':
+                admitted[probe] = dict(
+                    runtime=current.get('runtime'), share=PROBE_SHARES[probe],
+                    cancel=cancel(owner, probe, 'probe')
+                    if current.get('runtime') != 'exited' else None)
+        if stopped or admitted:
             # OpenCode's host escalates an unanswered cancel to a kill after
             # ten seconds. **The Codex host has no such escalation**: a
             # turn/interrupt Codex did not honour leaves the run going. So
             # this waits at most a minute, for either, and a run still not
             # exited when its usage is read is charged its whole share
             # (review of L3, F2).
+            if stopped:
+                record['stopped_on_exit'] = stopped
             end = time.monotonic() + 60
             while time.monotonic() < end and any(
                     (view(owner, i) or {}).get('runtime') not in (None, 'exited')
-                    for i in stopped):
+                    for i in (*stopped, *admitted)):
                 time.sleep(0.5)
-        views = {i: view(owner, i) or {} for i in (*runs(meters), *PROBES)}
-        # The runner's own probes, each expected to be refused. One the
-        # service admitted is a real run with no reservation: cancelled
-        # here, and charged its share (review of L3, round 2, SB-5).
-        admitted = {}
-        for probe, share in ((f'{LEAD}.third', CHILD_SHARE), (f'{LEAD}.attached', LEAD_SHARE),
-                             ('credential-check', LEAD_SHARE)):
-            current = view(owner, probe) or {}
-            if current.get('admission') == 'admitted':
-                admitted[probe] = dict(
-                    charged=share, basis=PROBE_BASIS, runtime=current.get('runtime'),
-                    cancel=cancel(owner, probe, 'probe')
-                    if current.get('runtime') != 'exited' else None)
-        record['probes_admitted'] = admitted
+        views = {i: view(owner, i) or {} for i in (*runs(meters), *PROBE_SHARES)}
         # A submit the service answered with an error made nothing: that run
         # is charged nothing, not its share (review of L3, round 2, SB-6).
         record['no_such_execution'] = sorted(i for i in RUNS if not views[i]
@@ -2970,11 +2999,31 @@ def settle(record, service, meters, state, root):
                 gauge.read(owner)
         stream = events(owner)
         log = tool_log(root)
-        briefs = {LEAD: BRIEF}
+        briefs = {LEAD: BRIEF, **PROBE_BRIEFS}
         briefs.update({f"{LEAD}.{e['arguments'].get('name')}": e['arguments'].get('brief', '')
                        for e in log if e.get('event') == 'tool_call'
                        and e.get('tool') == 'start_run'})
         host = service.host_events(views, briefs)
+        # An admitted probe is charged as any run is, through the same
+        # branches, and never below its share: at least its share, and at
+        # least what it was seen to spend plus a step in flight (review of
+        # L3, round 4, SPEND-12). OpenCode's is its share.
+        for probe, entry in admitted.items():
+            if HARNESS != 'codex':
+                entry.update(charged=entry['share'], basis=PROBE_BASIS)
+                continue
+            gauge = meters.get(probe) or CodexMeter(probe, CHILD_CEILING)
+            if views.get(probe):
+                gauge.read(owner)
+            spent = codex_usage(views, {probe: gauge}, {probe}, {probe}, record.get('mutant'),
+                                host, identities=[probe],
+                                shares={probe: entry['share']})[probe]
+            charged = max(entry['share'], spent['charged'], spent['seen'] + spent['allowance'])
+            if record.get('mutant') == 'probe-charged-flat':
+                # The flat share, as before round 4.
+                charged = entry['share']
+            entry.update(spent, charged=charged, basis=f"{PROBE_BASIS}; {spent['basis']}")
+        record['probes_admitted'] = admitted
         # What each run's host sent to turn Codex's unmetered features off,
         # where it did.
         record['features_off_sent'] = {i: next((e.get('sent') for e in host.get(i, [])
@@ -3057,7 +3106,8 @@ def store_steps(home, sessions):
 
 NO_SUCH_EXECUTION = 'no such execution: the service, asked, holds none, so nothing ran'
 PROBE_BASIS = ('admitted though it should have been refused: a run with no reservation, '
-               'charged its whole share')
+               'charged at least its whole share, and at least what it was seen to spend plus '
+               'a step in flight')
 
 
 def usage_of(views, meters, submitted, steps=None, stopped=(), mutant=None, absent=(),
@@ -3130,7 +3180,8 @@ SILENT_BASIS = (f'stopped by the runner after {USAGE_SILENCE} s of activity with
                 'of its threads, if more')
 
 
-def codex_usage(views, meters, submitted, stopped=(), mutant=None, host=None):
+def codex_usage(views, meters, submitted, stopped=(), mutant=None, host=None, identities=None,
+                shares=None):
     """Codex's reported total for each run, which covers every step of its
     turn (review 48) and, from round 3, every thread it had: so it is what a
     run that ended by itself is charged.
@@ -3158,7 +3209,7 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None, host=None):
     is the floor's and must be the charge's too (review of L3, round 4,
     SPEND-11)."""
     usage = {}
-    for identity in runs(meters):
+    for identity in (identities or runs(meters)):
         current = views.get(identity) or {}
         if current.get('admission') == 'refused':
             usage[identity] = dict(charged=0, basis='refused before any model call')
@@ -3168,7 +3219,7 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None, host=None):
         observations = (current.get('usage') or {}).get('observations') or []
         reported = observations[0]['amount'] if observations else None
         gauge = meters[identity]
-        share = LEAD_SHARE if identity == LEAD else CHILD_SHARE
+        share = (shares or {}).get(identity) or (LEAD_SHARE if identity == LEAD else CHILD_SHARE)
         filed = host_steps((host or {}).get(identity, []))
         if mutant == 'stale-meter-charged':
             # A charge that read the meter's fold alone, as before round 4.
@@ -3197,7 +3248,7 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None, host=None):
             seen = reported if isinstance(reported, int) else 0
             allowance = max(CODEX['in_flight'], gauge.largest_step)
         entry = dict(reported_total=reported if isinstance(reported, int) else None,
-                     meter_estimate=gauge.estimate(), share=share,
+                     meter_estimate=gauge.estimate(), share=share, seen=seen,
                      stopped_by_the_runner=identity in stopped, cut_short=cut,
                      allowance=allowance, threads=dict(gauge.threads) or None,
                      host_files=dict(sum=filed['sum'], largest=filed['largest'],
@@ -3780,13 +3831,17 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
         # step in flight if the runner stopped it or it still ran, and at
         # least its whole share if it still ran, reported nothing, or was
         # stopped for silence.
+        # An admitted probe is judged as any run is, at least at its share
+        # (review of L3, round 4, SPEND-12).
+        probes = record.get('probes_admitted') or {}
+        charged_runs = {**usage, **probes}
         step, floors, within = CODEX['in_flight'], {}, {}
-        observed_steps = {run: host_steps(host.get(run, [])) for run in usage}
-        for run, u in usage.items():
+        observed_steps = {run: host_steps(host.get(run, [])) for run in charged_runs}
+        for run, u in charged_runs.items():
             if u['basis'] in ('refused before any model call', NO_SUCH_EXECUTION):
                 continue
             current = views.get(run) or {}
-            share = LEAD_SHARE if run == LEAD else CHILD_SHARE
+            share = u.get('share') or (LEAD_SHARE if run == LEAD else CHILD_SHARE)
             reported = ((current.get('usage') or {}).get('observations') or [{}])[0].get('amount')
             gauge = record['meters'].get(run) or {}
             steps_seen = observed_steps[run]
@@ -3797,7 +3852,8 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                 or (current.get('cancellation') or {}).get('outcome') == 'cancelled'
             allowance = max(step, steps_seen['largest']) * (1 + len(steps_seen['others']))
             floor = seen + (allowance if cut or running else 0)
-            if running or not isinstance(reported, int) or reported <= 0 or gauge.get('silenced'):
+            if running or not isinstance(reported, int) or reported <= 0 or gauge.get('silenced') \
+                    or run in probes:
                 floor = max(floor, share)
             floors[run] = dict(charged=u['charged'], at_least=floor, reported=reported,
                                meter=gauge.get('estimate'), threads_sum=steps_seen['sum'],
@@ -4517,6 +4573,14 @@ def main():
             assert took <= 5, died
             assert (spent.get('reported_total') or 0) < CHILD_CEILING, spent
             assert 'the meter stopped' in record['error']['message'], record['error']
+        if args.mutant == 'probe-over-share':
+            # Metered, stopped and charged past its share: its report plus
+            # its step in flight, and the floor agrees.
+            probe = record['probes_admitted'][f'{LEAD}.third']
+            assert probe['charged'] == probe['seen'] + probe['allowance'] > CHILD_SHARE, probe
+            assert row_of("Every run's charge covers what it could have spent")['holds'] is True
+            assert record['charge']['lines'][f'{names_of(record)}:{LEAD}.third']['charged'] \
+                == probe['charged'], record['charge']['lines']
         if args.mutant == 'late-step-after-halt':
             # The meter never saw the 40,000 step; the host's files did, and
             # so did the charge: its report plus that step in flight.
@@ -4541,8 +4605,8 @@ def main():
             assert 'private-topic' not in args.receipt.read_text(), 'a session-given name leaked'
         if args.mutant == 'third-admitted':
             probe = record['probes_admitted'].get(f'{LEAD}.third')
-            assert probe and probe['basis'] == PROBE_BASIS and probe['charged'] == CHILD_SHARE, \
-                record['probes_admitted']
+            assert probe and probe['basis'].startswith(PROBE_BASIS) \
+                and probe['charged'] == CHILD_SHARE, record['probes_admitted']
             assert record['charge']['lines'][f'{names_of(record)}:{LEAD}.third']['charged'] \
                 == CHILD_SHARE, record['charge']['lines']
         if args.mutant == 'lead-submit-invalid':
