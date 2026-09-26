@@ -286,7 +286,7 @@ It **records** a permission response that carries a widening field rather than r
 
 Fourteen of the twenty-seven run **through the service**, `pio serve-claude` over the public Unix API, which is the only place journal, delivery and usage behaviour can be observed:
 
-- a turn that completes, whose view carries `delivery: acknowledged` with evidence class `native_replay_echo` and proof class `provider_ack_id`, `exit: {code: 0}`, the containment statement, and an observed `claude.tokens.total`;
+- a turn that completes, whose view carries `delivery: acknowledged` with evidence class `native_replay_echo` and **no proof class** (D7: the echo returns no identifier; `only_a_returned_identifier_earns_a_delivery_proof_class` is the unit test), `exit: {code: 0}`, the containment statement, and an observed `claude.tokens.total`;
 - a real configuration pointed at an unqualified executable, where the service **refuses to start at all** and the admission record says `stream_spawned: false`;
 - a control request PIO will not act on, which still receives the protocol's **error control response** — recording a decline while sending nothing would leave a real harness waiting forever, and the fake records that it was answered;
 - a harness that **ignores the interrupt**: SIGINT, a bounded wait, then SIGKILL, with the escalation recorded and usage left **unknown rather than zero**, because a killed child sends no `result`;

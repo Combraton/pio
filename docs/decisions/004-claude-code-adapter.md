@@ -132,7 +132,7 @@ Project entries also carry per-project token counters — `lastTotalInputTokens`
 Measured shapes, from a credential-free probe that spent nothing:
 
 - **`system/init`** — first message, contents as §6.
-- **`user` with `isReplay: true`** — with `--replay-user-messages`, the harness echoes back the exact user message PIO sent. This is the **delivery acknowledgment**, the analogue of Codex's `turn/start` response, and the evidence class for a `provider_ack_id` delivery proof. Input shape, measured: `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"…"}]}}`.
+- **`user` with `isReplay: true`** — with `--replay-user-messages`, the harness echoes back the exact user message PIO sent. This is the **delivery acknowledgment**, the analogue of Codex's `turn/start` response, recorded with evidence class `native_replay_echo`. **It earns no proof class** (corrected 2026-09-26, D7): the echo returns the message PIO sent and no identifier of the harness's own, so, like OpenCode's `native_session_update`, it is evidence of receipt and not a `provider_ack_id`. Receipts R1–R7 were recorded with `provider_ack_id` before the correction and are not rewritten. Input shape, measured: `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"…"}]}}`.
 - **`assistant`** — model messages, carrying a `usage` block and, on failure, `error` and `is_api_error_message`.
 - **`result`** — end of turn, carrying `usage` (input, output, cache creation and read, thinking tokens), `modelUsage` per model, `total_cost_usd`, `permission_denials`, `num_turns`, `is_error`, `terminal_reason`, `duration_ms` and `session_id`.
 

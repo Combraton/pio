@@ -999,3 +999,37 @@ fn a_codex_lead_tool_spec_may_keep_its_tools_in_the_model_list() {
         .collect();
     assert_eq!(opencode, ["lead_tool_unsupported_field"; 4]);
 }
+
+/// D7. Only an identifier the harness returned earns `provider_ack_id`.
+/// Claude Code's replay echo returns the message PIO sent and no identifier,
+/// so its delivery carries evidence class `native_replay_echo` and no proof
+/// class, exactly as OpenCode's `native_session_update` does.
+#[test]
+fn only_a_returned_identifier_earns_a_delivery_proof_class() {
+    let codex = crate::codex::profile("codex").unwrap();
+    let claude = crate::codex::profile("claude").unwrap();
+    let opencode = crate::codex::profile("opencode").unwrap();
+    assert_eq!(
+        crate::codex::delivery_proof(
+            codex,
+            &json!({"kind":"turn_acknowledged","turn_id":"turn-1"})
+        ),
+        Some("provider_ack_id")
+    );
+    assert_eq!(
+        crate::codex::delivery_proof(
+            claude,
+            &json!({"kind":"turn_acknowledged","replay_matches_sent":true})
+        ),
+        None
+    );
+    assert_eq!(claude.delivery_evidence, "native_replay_echo");
+    assert_eq!(
+        crate::codex::delivery_proof(
+            opencode,
+            &json!({"kind":"turn_acknowledged","first_session_update":true,"proof_class":null})
+        ),
+        None
+    );
+    assert_eq!(opencode.delivery_evidence, "native_session_update");
+}

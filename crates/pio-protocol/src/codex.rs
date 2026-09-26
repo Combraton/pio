@@ -175,6 +175,8 @@ pub const PROFILES: &[Profile] = &[
         fake_source: "pio-fake-claude-cli",
         real_source: "claude-code",
         // The replay echo: the exact message PIO sent, returned by the harness.
+        // Evidence of receipt, but no identifier the harness returned, so no
+        // proof class (D7; ADR 005 §7), the same as OpenCode's.
         delivery_evidence: "native_replay_echo",
         ack_proof_field: "replay_matches_sent",
         usage_measure: "claude.tokens.total",
@@ -210,6 +212,17 @@ pub const PROFILES: &[Profile] = &[
 
 pub fn profile(adapter: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.adapter == adapter)
+}
+
+/// The proof class an acknowledgment earns. Only an identifier the harness
+/// returned is a `provider_ack_id` (EXECUTION §3.1, ADR 005 §7): Codex's turn
+/// id. Claude Code's replay echo and OpenCode's first session update are
+/// evidence of receipt, recorded by their evidence class, and carry none.
+/// Claude's used to get one (D7).
+pub fn delivery_proof(profile: &Profile, acknowledgment: &Value) -> Option<&'static str> {
+    acknowledgment[profile.ack_proof_field]
+        .is_string()
+        .then_some("provider_ack_id")
 }
 
 impl Provider {
@@ -828,8 +841,7 @@ impl Provider {
                     let reconcile = e["view"]["delivery"] == "ambiguous";
                     // Only a harness that returned an identifier gets a
                     // proof class. ADR 005 §7.
-                    let proof = (profile.ack_proof_field != "first_session_update")
-                        .then_some("provider_ack_id");
+                    let proof = delivery_proof(profile, event);
                     self.delivery_observed(
                         e,
                         "acknowledged",

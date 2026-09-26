@@ -674,12 +674,13 @@ def run_case(out, name):
         case.start()
         case.submit()
         view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
-        # The replay echo is the delivery proof, and it reached the journal as
+        # The replay echo is the delivery evidence, and it reached the journal as
         # a delivery with its own evidence class rather than an inference.
         assert view['delivery'] == 'acknowledged', view
         delivery = view['deliveries'][0]
         assert delivery['evidence']['class'] == 'native_replay_echo', delivery
-        assert delivery['proof_class'] == 'provider_ack_id', delivery
+        # The echo returns no identifier, so it earns no proof class (D7).
+        assert 'proof_class' not in delivery, delivery
         assert delivery['evidence']['source'] == 'pio-fake-claude-cli/host', delivery
         assert view['exit'] == {'code': 0}, view
         # Containment is recorded on every execution, not only when something
