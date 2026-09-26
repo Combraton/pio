@@ -430,9 +430,16 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   30,000; the runner now checks every report against that, stops a run
   whose step is larger, and charges its largest step in flight
   (`step-past-in-flight`; round 3, SPEND-4). Codex retries a dropped stream
-  up to 5 times and a failed request up to 4 by default, and records usage
-  only on a completed response: whatever a dropped attempt is billed is
-  never reported and is outside the bound (not measured).
+  up to 5 times on each transport, so up to 10 on the step that falls back
+  from WebSocket to HTTPS, and a failed request up to 4 times, by default
+  (the owner's `model_providers` settings can raise either and are not
+  read); the first WebSocket retry of a step is not surfaced in a release
+  build. It records usage only on a completed response: whatever a dropped
+  attempt is billed is never reported and is outside the bound (not
+  measured). The host now keeps each `error` notification's `willRetry`, and
+  the receipt counts the retries Codex surfaced per run ("Stream retries
+  Codex reported"), and says why none is charged (review of L3, round 4,
+  SPEND-10).
 - **Sub-agents.** Codex 0.157.0 has `multi_agent` on by default and
   attaches every thread it creates to every initialized connection, so a
   sub-agent a run spawns reports on PIO's connection. The host now tells

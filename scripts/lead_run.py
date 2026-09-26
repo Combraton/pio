@@ -587,10 +587,17 @@ def select_plan(name):
                      'loads on every thread, runs outside Codex, and what it spends is not in '
                      "Codex's report; a call to one asks first unless the owner's settings "
                      'pre-approve it (not read), and an ask fails the desk row',
-                     'Codex retries a dropped stream up to 5 times and a failed request up to '
-                     '4 by default (model-provider-info, rust-v0.157.0) and records usage only '
-                     'on a completed response: what a dropped attempt is billed, if anything, '
-                     'is never reported and is not in this bound (not measured)',
+                     'Codex retries a dropped stream up to 5 times on each transport, so up '
+                     'to 10 on the step that falls back from WebSocket to HTTPS, and a failed '
+                     'request up to 4 times, by default (model-provider-info/src/lib.rs:64-65, '
+                     '487-498; core/src/responses_retry.rs:96-111, rust-v0.157.0); the '
+                     "owner's model_providers settings can raise either, up to 100, and are "
+                     'not read. The first WebSocket retry of a step is not surfaced in a '
+                     'release build (responses_retry.rs:119-121). Codex records usage only on '
+                     'a completed response, so what a dropped attempt is billed, if anything, '
+                     'is never reported: the receipt counts each retry Codex surfaced '
+                     '(willRetry) per run and charges none, and this bound leaves them out (not '
+                     'measured; round 4, SPEND-10)',
                      'Codex reports a step once its tool has finished, before the next '
                      "step calls a tool (M2 R5, R6), and the report reaches the runner's "
                      'meter within 1.5 s',
@@ -2229,6 +2236,9 @@ def codex_scenario(mutant, calls):
         play.update(led_heavy_if=alpha, led_heavy_step=40_000)
     if mutant in ('memory-pipeline-ran', 'overrides-on'):
         play['memory_pipeline'] = True
+    if mutant == 'overrides-on':
+        # And two stream retries on beta, which the receipt counts.
+        play.update(stream_retries_if=beta, stream_retries=2)
     if mutant in ('goal-continued', 'continuation-uncharged', 'overrides-on'):
         # beta goes on by itself once its turn has ended, as a goal's
         # continuation does (review of L3, round 4, SPEND-9).
@@ -3105,6 +3115,14 @@ def store_steps(home, sessions):
 
 
 NO_SUCH_EXECUTION = 'no such execution: the service, asked, holds none, so nothing ran'
+# Why a retry is counted and not charged (review of L3, round 4, SPEND-10).
+RETRIES_NOT_CHARGED = (
+    "each an `error` notification with willRetry true on the run's own thread, counted from "
+    "the host's events; the first WebSocket retry of a step is not surfaced in a release build "
+    '(core/src/responses_retry.rs:119-121, rust-v0.157.0), so this can undercount by one a '
+    'step. Not charged: Codex records usage only on a completed response, so a dropped '
+    'attempt reports nothing, and nothing PIO observes says what, if anything, it was billed; '
+    'the bound lists it as outside (not measured)')
 PROBE_BASIS = ('admitted though it should have been refused: a run with no reservation, '
                'charged at least its whole share, and at least what it was seen to spend plus '
                'a step in flight')
@@ -3744,6 +3762,12 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                          and (r['seconds'] or 0) >= READ_WAIT) for r in o),
                  note='seconds as the lead tool measured each call')
     if HARNESS == 'codex':
+        # Each stream retry Codex surfaced, per run (review of L3, round 4,
+        # SPEND-10), and why none is charged.
+        rows.record('Stream retries Codex reported',
+                    {i: len([e for e in host.get(i, []) if e['kind'] == 'native_error'
+                             and e.get('will_retry') is True]) for i in everyone},
+                    note=RETRIES_NOT_CHARGED)
         rows.record('What Codex asked, and what was sent',
                     [dict(run=d['run'], approval_kind=d['approval_kind'], desk=d['desk'],
                           sent=d['sent']) for d in decisions],
@@ -4403,6 +4427,8 @@ def main():
                          'No run took a turn of its own after its turn ended'):
                 held = next(r for r in record['rows'] if r['row'] == name)
                 assert held['holds'] is True, held
+            retries = next(r for r in record['rows'] if r['row'] == 'Stream retries Codex reported')
+            assert retries['observed'] == {LEAD: 0, f'{LEAD}.alpha': 0, f'{LEAD}.beta': 2}, retries
             print(f'mutant {args.mutant}: holds on {wanted!r}, with all {len(UNMETERED)} '
                   f"features off per launch on {len(record['features_off_sent'])} threads")
             return

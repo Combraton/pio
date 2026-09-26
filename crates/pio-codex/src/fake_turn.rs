@@ -412,6 +412,22 @@ pub(crate) fn continue_thread(
     Ok(Some(turn))
 }
 
+/// Codex retrying a dropped stream, as the client sees it at 0.157.0: an
+/// `error` notification with `willRetry: true` for each retry it surfaces
+/// (`app-server/src/bespoke_event_handling.rs:1054-1070`), and no usage for
+/// the attempt that dropped (review of L3, round 4, SPEND-10). `stream_retries`
+/// of them, each `n/5` as Codex words its reconnect.
+pub(crate) fn stream_retries(thread: &str, turn: &str, scenario: &Value) -> Result<()> {
+    let retries = scenario["stream_retries"].as_u64().unwrap_or(0);
+    for n in 1..=retries {
+        emit(&json!({"method":"error","params":{
+            "error":{"message":format!("Reconnecting... {n}/5"),"codexErrorInfo":null,
+                     "additionalDetails":null},
+            "willRetry":true,"threadId":thread,"turnId":turn}}))?;
+    }
+    Ok(())
+}
+
 /// Replies to the requests a scripted turn sent the client, keyed by request
 /// id, routed back by the main loop to the turn that waits for them.
 pub(crate) type Waiting = Arc<Mutex<HashMap<String, Sender<Value>>>>;
@@ -998,6 +1014,12 @@ fn play_led(
     commands: u64,
     scenario: &Value,
 ) -> Result<()> {
+    if scenario["stream_retries_if"]
+        .as_str()
+        .is_some_and(|needle| !needle.is_empty() && prompt.contains(needle))
+    {
+        stream_retries(&play.turn.thread, &play.turn.id, scenario)?;
+    }
     let file = named_file(prompt).unwrap_or_default();
     // How Codex named a command it asked about, measured in M2 R5 at 0.155.1:
     // the user's login shell wrapping it (`/bin/zsh -lc 'python3 -m unittest

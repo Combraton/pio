@@ -53,6 +53,9 @@
 //! `elicit_during` (a list of `initialize`, `account/read`, `thread/start`)
 //! sends a url-mode elicitation before answering each wait it names;
 //! `exit_after_early` then exits once the client has answered it.
+//! `stream_retries` has the plain turn, or a led run whose prompt contains
+//! `stream_retries_if`, report that many stream retries first, as Codex's
+//! `error` notification with `willRetry: true` (`fake_turn::stream_retries`).
 //! `continue_after_turn` (the plain turn) or `continue_after_turn_if` (a led
 //! run's prompt) has the thread start a turn of its own once its turn has
 //! ended, as a goal's continuation does (`fake_turn::continue_thread`:
@@ -575,6 +578,7 @@ pub fn run() -> Result<()> {
                             }
                             continue;
                         }
+                        fake_turn::stream_retries(&thread_id, &turn, &scenario)?;
                         let agent = scenario["agent_text"]
                             .as_str()
                             .unwrap_or("fake agent reply");

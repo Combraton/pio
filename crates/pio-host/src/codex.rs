@@ -559,7 +559,8 @@ fn after_turn(
                 continuing = None;
             }
             "error" => life.event(json!({"kind":"native_error","error":params["error"],
-                                         "after_turn":true}))?,
+                                         "will_retry":params["willRetry"],
+                                         "turn_id":params["turnId"],"after_turn":true}))?,
             _ => {}
         }
     }
@@ -1034,9 +1035,14 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                         )?;
                     turn_status = Some(turn["status"].clone());
                 }
-                "error" => {
-                    life.event(json!({"kind":"native_error","error":message["params"]["error"]}))?
-                }
+                // Codex's `error` notification: with `willRetry` true it is a
+                // stream it is retrying, not the end of the turn (0.157.0,
+                // `ErrorNotification`); kept, so a retry can be counted
+                // (review of L3, round 4, SPEND-10).
+                "error" => life.event(json!({"kind":"native_error",
+                                             "error":message["params"]["error"],
+                                             "will_retry":message["params"]["willRetry"],
+                                             "turn_id":message["params"]["turnId"]}))?,
                 _ => {}
             }
         }

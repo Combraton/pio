@@ -40,7 +40,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'file_change_root_inside',
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
          'file_change_grant_root', 'continuation_interrupted', 'subagent_turn_after_interrupt',
-         'url_elicitation_with_approval_kind_declined']
+         'url_elicitation_with_approval_kind_declined', 'stream_retries_recorded']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
@@ -707,6 +707,7 @@ def run_case(out, name):
                                     'continue_after_turn': True, 'delay_ms': 500},
         continuation_interrupted={'continue_after_turn': True, 'continuation_step_ms': 60000,
                                   'delay_ms': 100},
+        stream_retries_recorded={'stream_retries': 2, 'delay_ms': 100},
         early_declines_in_every_wait={'elicit_during': ['initialize', 'account/read', 'thread/start'],
                                       'delay_ms': 100},
         early_decline_then_exit={'elicit_during': ['account/read'], 'exit_after_early': True},
@@ -870,6 +871,21 @@ def run_case(out, name):
                                    'decline', body, 'application/json')
             exited(case)
             return dict(outcome='pass', network_approval=True, placement='not_classifiable')
+        if name == 'stream_retries_recorded':
+            # Codex's `error` notification for a stream it is retrying: kept
+            # with its `willRetry`, so a runner can count the retries, and not
+            # the end of the turn (review of L3, round 4, SPEND-10).
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = exited(case)
+            errors = events_of(case, 'native_error')
+            assert [(e['will_retry'], e['error']['message']) for e in errors] == [
+                (True, 'Reconnecting... 1/5'), (True, 'Reconnecting... 2/5')], errors
+            own = events_of(case, 'turn_acknowledged')[0]['turn_id']
+            assert all(e['turn_id'] == own for e in errors), errors
+            assert [e['status'] for e in events_of(case, 'turn_completed')] == ['completed']
+            assert final['exit'] == {'code': 0}, final
+            return dict(outcome='pass', retries=len(errors))
         if name == 'continuation_interrupted':
             # A turn Codex starts by itself on the run's own thread once the
             # run's turn has ended, as a goal's continuation does (review of
