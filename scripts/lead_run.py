@@ -233,6 +233,12 @@ does with a permission prompt.
   Codex defers its tools behind `exec` and never names them, so the fake's
   lead, like the live one, says it cannot access the tool and starts
   nothing, and the start row fails;
+- `plugins-decision-absent` (L3) sends no decision for the owner's plugins,
+  apps and MCP servers over the rehearsal's own Codex home, which names two
+  servers by table headers: the runner must refuse, before anything is
+  reserved, naming plugins, apps and the two servers by digest and count,
+  never by name, and leave no tree and no receipt (owner decision,
+  2026-09-26, Q7);
 - `experimental-feature-on` (L3) turns on `features.exec_permission_approvals`
   in the rehearsal's own Codex configuration: the runner must refuse to
   start, before anything is reserved, and leave no tree and no receipt;
@@ -338,6 +344,14 @@ PLANS = {
         # FEATURES_OFF_DECISIONS); the owner's config.toml is not changed.
         # Sent for this plan's threads only.
         features_off_decision='owner-2026-09-26-l3-codex-unmetered-features-off',
+        # Owner decision, 2026-09-26 (Q7, "All off for L3"): "Per launch,
+        # under a dated test-only exception, L3's threads get
+        # features.plugins=false, features.apps=false, and your node_repl,
+        # openaiDeveloperDocs and buffer servers off. Only PIO's lead tool
+        # remains. Your config.toml is untouched." (pio-protocol
+        # PLUGINS_OFF_DECISIONS). Sent for this plan's threads only, with
+        # every server the owner's config.toml names by a table header.
+        plugins_off_decision='owner-2026-09-26-l3-plugins-apps-servers-off',
         files={'alpha.md': 7, 'beta.md': 4},
         briefs={'alpha.md': 'Run the shell command `sleep 30 && wc -l alpha.md`. Then '
                             'report the number of lines in alpha.md. Answer with the '
@@ -679,6 +693,9 @@ select_plan('L1')
 # Not a row: the runner refuses to start, before anything is reserved, when
 # one of Codex's unmetered features is not off (review of L3, round 4, U1).
 UNMETERED_REFUSAL = "The runner refuses a Codex whose unmetered features are not all off"
+# Not a row either: the owner's plugins, apps and MCP servers must be off on
+# L3's threads (owner decision, 2026-09-26, Q7).
+PLUGINS_REFUSAL = "The runner refuses a Codex whose plugins, apps or MCP servers are not all off"
 
 
 def all_off_but(*left, features=None):
@@ -782,6 +799,11 @@ MUTANTS = {
     # run: on a code-mode-only model its tools are deferred behind `exec`
     # and never named, so the lead cannot call them (2026-09-26).
     'lead-tool-deferred': 'The lead started its two runs through the tool',
+    # Not a row: the runner sends no decision for the owner's plugins, apps
+    # and MCP servers, over the rehearsal's own home that names two, and the
+    # live check refuses before anything is reserved (owner decision,
+    # 2026-09-26, Q7).
+    'plugins-decision-absent': PLUGINS_REFUSAL,
     'child-renamed-unchecked': 'Every run stayed within its ceilings',
     # Shapes PIO declines by itself (review of L3, CH-2/F1): the lead's
     # approval asked in a mode PIO does not recognise, and a child's
@@ -936,7 +958,7 @@ PLAN_MUTANTS = {**{m: {'L3'} for m in (
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
                 'child-overspends': {'L3'}, 'child-renamed': {'L3'},
                 'child-renamed-unchecked': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
-                'lead-tool-deferred': {'L3'},
+                'lead-tool-deferred': {'L3'}, 'plugins-decision-absent': {'L3'},
                 'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'},
                 'lead-asked-by-user-input': {'L3'},
                 'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'},
@@ -1061,6 +1083,107 @@ FEATURES_OFF = {'agents.enabled': False, 'features.multi_agent': False,
                 'features.multi_agent_v2': False, 'features.memories': False,
                 'features.memory_tool': False, 'features.goals': False,
                 'web_search': 'disabled', 'features.image_generation': False}
+
+
+# The owner's plugins, apps and MCP servers off per launch (owner decision,
+# 2026-09-26, Q7, "All off for L3"; pio-protocol PLUGINS_OFF_DECISIONS), by
+# the keys `pio_codex::plugins_off` gives: `features.plugins`, and
+# `features.apps` with its legacy alias `features.connectors`, which sorts
+# after it and would decide it (rust-v0.157.0, `features/src/legacy.rs:12-15`).
+# Each of the owner's servers goes as `mcp_servers.<name>.enabled = false`
+# (`config/src/mcp_types.rs:229-231`), and a disabled server is never started
+# (`codex-mcp/src/connection_manager.rs:288-291`).
+PLUGINS_OFF = {'features.plugins': False, 'features.apps': False,
+               'features.connectors': False}
+PLUGINS_OFF_REHEARSAL = 'rehearsal-only-plugins-off'
+# The rehearsal's own Codex home names two MCP servers of its own, by table
+# headers, as the owner's does (a subtable too), so the per-launch set has
+# servers to turn off and the rows have something to see. Never launched: the
+# labeled fake announces a server it would start, and runs no command. It
+# ends with a blank line, as the fake's trust entry expects.
+REHEARSAL_SERVERS = '[mcp_servers.rehearsal_docs]\ncommand = "/usr/bin/false"\n\n' \
+                    '[mcp_servers.rehearsal-repl]\ncommand = "/usr/bin/false"\n\n' \
+                    '[mcp_servers.rehearsal-repl.env]\nREHEARSAL = "1"\n\n'
+
+
+def owner_mcp_servers(codex_home):
+    """The MCP servers the Codex configuration names, read from its table
+    header lines alone: `[mcp_servers.<name>]` and any `[mcp_servers.<name>.*]`
+    subtable. No other line is read, so no command, argument, environment,
+    URL, header or token is. A bare `[mcp_servers]` header is noted: servers
+    written as keys beneath it, or inline, are not visible to a header
+    reader, and the runner refuses rather than leave one on."""
+    path = Path(codex_home) / 'config.toml'
+    names, bare, headers = [], False, 0
+    if path.exists():
+        with open(path, encoding='utf-8', errors='replace') as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped.startswith('['):
+                    continue
+                headers += 1
+                inner = stripped.lstrip('[').split(']', 1)[0]
+                parts, part, quote = [], '', None
+                for c in inner:
+                    if quote:
+                        if c == quote:
+                            quote = None
+                        else:
+                            part += c
+                    elif c in '"\'':
+                        quote = c
+                    elif c == '.':
+                        parts.append(part.strip())
+                        part = ''
+                    else:
+                        part += c
+                parts.append(part.strip())
+                if parts[0] != 'mcp_servers':
+                    continue
+                if len(parts) == 1:
+                    bare = True
+                elif parts[1] and parts[1] not in names:
+                    names.append(parts[1])
+    return dict(read=f'{path.name}: table header lines only', exists=path.exists(),
+                headers=headers, names=names, bare_table=bare)
+
+
+def server_label(name):
+    """A server's name as a receipt may carry it: PIO's own lead tool by
+    name, any other only by its digest (owner rule of 2026-09-26: the
+    owner's server names only as sha256 digests and a count)."""
+    return name if name == LEAD_SERVER else 'sha256:' + sha(name)
+
+
+def plugins_off_record(servers, decision):
+    """Whether the owner's plugins, apps and MCP servers are off on L3's
+    threads, and by which route; names only as digests."""
+    route = f'per launch, under {decision!r}' if decision else None
+    return dict(decision=decision, route=route, keys=PLUGINS_OFF if decision else None,
+                servers=dict(read=servers['read'], count=len(servers['names']),
+                             sha256=sorted(server_label(n) for n in servers['names']),
+                             bare_table=servers['bare_table'],
+                             lead_tool_name_taken=LEAD_SERVER in servers['names']))
+
+
+def plugins_not_off(record):
+    """Each reason the owner's plugins, apps or MCP servers are not all off."""
+    reasons = []
+    if not record['decision']:
+        reasons += ['plugins (no recorded owner decision turns them off per launch; the '
+                    "owner's own key is not read)",
+                    'apps (no recorded owner decision turns them off per launch; the owner\'s '
+                    'own keys are not read)']
+        if record['servers']['count']:
+            reasons.append(f"{record['servers']['count']} MCP server(s) of the owner's "
+                           f"config.toml ({', '.join(record['servers']['sha256'])})")
+    if record['servers']['bare_table']:
+        reasons.append('a bare [mcp_servers] table: servers written as keys beneath it are '
+                       'not visible to a header reader')
+    if record['servers']['lead_tool_name_taken']:
+        reasons.append(f"an MCP server of the owner's named {LEAD_SERVER}, which the lead "
+                       "tool's own table would be merged into")
+    return reasons
 
 
 def feature_setting(features, feature):
@@ -1389,6 +1512,16 @@ class Service:
         self.config_path.write_text(json.dumps(self.config))
         os.chmod(self.config_path, 0o600)
         self.daemon = None
+
+    def plugins_off(self, decision, names):
+        """The owner's plugins, apps and named MCP servers off per launch,
+        under the recorded decision (the service refuses any other beside a
+        real Codex). The names stay in the tree's own service configuration,
+        never in the receipt."""
+        self.config['codex']['plugins_off_decision'] = decision
+        self.config['codex']['mcp_servers_off'] = list(names)
+        self.config_path.write_text(json.dumps(self.config))
+        os.chmod(self.config_path, 0o600)
 
     @staticmethod
     def codex(root, rehearse, scenario):
@@ -2274,7 +2407,10 @@ def codex_scenario(mutant, calls):
         lead=dict(calls=calls, relay_offset=1 if mutant == 'wrong-relay' else 0),
         answer_line_counts=True, led_offset=1 if mutant == 'wrong-child' else 0,
         led_delay_ms=1000 if mutant == 'no-wait' else 30_000, led_delay_if=alpha,
-        command_approval_if=beta, model_provider=CODEX['model_provider'], usage_step=4096)
+        command_approval_if=beta, model_provider=CODEX['model_provider'], usage_step=4096,
+        # Servers Codex would start on every thread unless turned off, as the
+        # owner's plugins and apps would (the fake announces, and runs none).
+        plugin_servers=['rehearsal-plugin'], apps_server=True)
     if mutant == 'wrong-model':
         play['model_reported'] = 'another-model'
     if mutant == 'reviewer-elsewhere':
@@ -2500,6 +2636,29 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
         if planted:
             codex_home.mkdir(parents=True, exist_ok=True)
             (codex_home / 'config.toml').write_text(planted)
+        elif rehearse:
+            # The rehearsal's own servers, named by table headers only.
+            codex_home.mkdir(parents=True, exist_ok=True)
+            (codex_home / 'config.toml').write_text(REHEARSAL_SERVERS)
+        # The owner's plugins, apps and MCP servers off per launch (owner
+        # decision, 2026-09-26, Q7), before anything is reserved. The
+        # servers' names come from table header lines alone; the receipt
+        # carries only their digests and count. Live, the runner refuses
+        # without the decision; `plugins-decision-absent` applies that check
+        # to the rehearsal's own home.
+        servers = owner_mcp_servers(codex_home)
+        decision = None if args.mutant == 'plugins-decision-absent' \
+            else PLAN.get('plugins_off_decision')
+        record['plugins_off'] = plugins_off_record(servers, decision)
+        refused = plugins_not_off(record['plugins_off'])
+        if (not rehearse or args.mutant == 'plugins-decision-absent') and refused:
+            raise SystemExit(
+                "refusing to start: the owner's plugins, apps and MCP servers are not all off "
+                "for L3's threads: " + '; '.join(refused) + '. Each must be off per launch '
+                'under a recorded owner decision the plan sends (pio-protocol '
+                'PLUGINS_OFF_DECISIONS); nothing is started or reserved.')
+        if decision:
+            service.plugins_off(decision, servers['names'])
         # Before anything is reserved or started. Only these keys are read.
         record['codex_features'] = codex_features(codex_home)
         features = record['codex_features']
@@ -3648,6 +3807,45 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                          f"; THE PRE-ALLOWANCE DID NOT HOLD: Codex asked about the lead's "
                          f"tool {len(asked['surfaced'])} time(s) PIO surfaced and "
                          f"{len(asked['declined_by_pio'])} time(s) PIO declined by itself"))
+    if HARNESS == 'codex':
+        # The owner's plugins, apps and MCP servers off on every L3 thread
+        # (owner decision, 2026-09-26, Q7), read from what each run's host
+        # sent: the keys, and each server turned off, as the host read them
+        # back from its own request. Names only as digests.
+        owner = record['plugins_off']['servers']['sha256']
+
+        def carried(run):
+            events_of_run = host.get(run, [])
+            off = next((e for e in events_of_run if e['kind'] == 'plugins_off_sent'), None)
+            wire = next((e for e in events_of_run if e['kind'] == 'mcp_servers_sent'), None) or {}
+            return dict(sent=off and off.get('sent'),
+                        servers_off=None if off is None
+                        else sorted(server_label(n) for n in off.get('servers_off') or []),
+                        turned_off_on_wire=sorted(server_label(n)
+                                                  for n in wire.get('turned_off') or []))
+        rows.add("L3's threads carried plugins, apps and the owner's servers off",
+                 {run: carried(run) for run in RUNS},
+                 {run: dict(sent=PLUGINS_OFF, servers_off=owner, turned_off_on_wire=owner)
+                  for run in RUNS},
+                 note=f"per launch, under {record['plugins_off']['decision']!r}: "
+                      'features.plugins, features.apps and its alias features.connectors false, '
+                      f"and each of the {record['plugins_off']['servers']['count']} server(s) the "
+                      "configuration names by a table header sent as enabled = false; names as "
+                      "sha256 digests. The owner's config.toml is not changed")
+        # And Codex's own word for what started: every server whose startup
+        # it reported on each run's thread. Only the lead's tool, on the
+        # lead's thread alone.
+        rows.add("No MCP server but the lead's tool started on any L3 thread",
+                 {run: sorted({server_label(e.get('name') or '') for e in host.get(run, [])
+                               if e['kind'] == 'mcp_startup' and e.get('own_thread') is not False})
+                  for run in RUNS},
+                 {run: [LEAD_SERVER] if run == LEAD else [] for run in RUNS},
+                 note="Codex's mcpServer/startupStatus/updated on each run's own thread "
+                      '(app-server/src/bespoke_event_handling.rs:202-228 at rust-v0.157.0), '
+                      'before and during the turn; any other name as a digest'
+                      + ('; the fake announces every server Codex would start: the '
+                         "rehearsal home's own, a plugin's and the apps server, unless turned "
+                         'off' if rehearse else ''))
     # The tool's own witness, not the host's account of itself: each
     # launch writes `started`. One is the lead's session; none means the
     # lead never had it, and three means the children did too.
@@ -4480,7 +4678,8 @@ def main():
         record = run(args)
     except BaseException as error:
         if args.mutant in ('setup-fails', 'helper-elsewhere', 'experimental-feature-on',
-                           'experimental-alias-on', *UNMETERED_REFUSED):
+                           'experimental-alias-on', 'plugins-decision-absent',
+                           *UNMETERED_REFUSED):
             root = getattr(args, 'root', None)
             assert root is not None and not Path(root).exists(), (
                 f'the setup failed and left its tree behind: {root}')
@@ -4492,6 +4691,13 @@ def main():
                 assert 'exec_permission_approvals (by exec_permission_approvals)' in str(error), error
             if args.mutant == 'experimental-alias-on':
                 assert 'exec_permission_approvals (by request_permissions)' in str(error), error
+            if args.mutant == 'plugins-decision-absent':
+                # Refused for plugins, apps and the home's two servers, by
+                # digest and count, and never by name.
+                said = str(error)
+                assert 'plugins (' in said and 'apps (' in said, error
+                assert '2 MCP server(s)' in said and said.count('sha256:') == 2, error
+                assert 'rehearsal_docs' not in said and 'rehearsal-repl' not in said, error
             if args.mutant in UNMETERED_REFUSED:
                 # Refused for its own feature, by the key that decided it,
                 # and for no other.

@@ -705,6 +705,43 @@ pub fn features_off() -> Vec<(&'static str, &'static str, Value)> {
     ]
 }
 
+/// The owner's plugins and apps off on a thread, per launch: the dotted keys
+/// a `thread/start` `config` takes, merged over the owner's `config.toml` as
+/// a `-c key=value` is (`app-server/src/config_manager.rs:446-452`), so each
+/// replaces the owner's value for that key on that thread and nothing on
+/// disk changes. Read from source at `rust-v0.157.0` (00c972e), not measured:
+///
+/// - **plugins**: `features.plugins = false` (`features/src/lib.rs:1437-1442`;
+///   no legacy alias, `features/src/legacy.rs`). The thread's plugin input
+///   carries it (`core/src/config/mod.rs:1692-1700`), the plugin manager then
+///   loads no plugin (`core-plugins/src/manager.rs:776-779`), so no plugin
+///   MCP server is registered (`core/src/config/mod.rs:1735-1783`), and a
+///   selected plugin's servers are withheld too (`ext/mcp/src/plugin.rs:123`,
+///   `:207`);
+/// - **apps**: `features.apps = false` (`features/src/lib.rs:1347-1352`) and
+///   its legacy alias `features.connectors = false` (`features/src/legacy.rs:12-15`),
+///   which sorts after it and would decide it (`Features::apply_map` walks a
+///   `BTreeMap`): with apps off the thread's MCP config has
+///   `apps_enabled = false` (`core/src/config/mod.rs:1824`), the `codex_apps`
+///   server is not registered (`core/src/mcp.rs:323-335`,
+///   `ext/mcp/src/lib.rs:50-51`), and no connector is listed
+///   (`core/src/connectors.rs:125-130`, `:141`).
+///
+/// Beside these, each MCP server of the owner's `config.toml` that the
+/// service names is sent as `mcp_servers.<name> = {enabled = false}`, merged
+/// into the owner's own table (`config/src/merge.rs:57-59`, `:75-152`), and a disabled
+/// server is never started (`codex-mcp/src/connection_manager.rs:241-251`,
+/// `:288-291`; `config/src/mcp_types.rs:229-231`). Sent only under the
+/// owner's recorded decision (pio-protocol, `PLUGINS_OFF_DECISIONS`), or a
+/// labeled fake's own token.
+pub fn plugins_off() -> Vec<(&'static str, &'static str, Value)> {
+    vec![
+        ("plugins", "features.plugins", json!(false)),
+        ("apps", "features.apps", json!(false)),
+        ("apps", "features.connectors", json!(false)),
+    ]
+}
+
 /// PATH value to hand to the selected executable, as the durable host will.
 pub fn inherited_path() -> Option<OsString> {
     std::env::var_os("PATH")

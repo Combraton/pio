@@ -838,14 +838,69 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
             .collect();
         life.event(json!({"kind":"features_off_sent","decision":decision,"sent":sent}))?;
     }
+    // The owner's plugins, apps and named MCP servers off, on every thread,
+    // when the service carries the owner's recorded decision (Q7, owner
+    // decision of 2026-09-26): the keys `pio_codex::plugins_off` gives, and
+    // each named server as `{enabled: false}` inside the thread's own
+    // `mcp_servers` table, so the one key `mcp_servers` carries the lead
+    // tool and every server off together: a dotted key for a server beside
+    // it would be applied in no fixed order (the request's overrides are a
+    // `HashMap`, `app-server/src/config_manager.rs:432`, `:449-452`), and a
+    // later `mcp_servers` key replaces whatever a dotted key built under it
+    // (`config/src/overrides.rs:18-68`, the insert at `:64`). Never PIO's
+    // own lead tool, and nothing in the owner's files.
+    if let Some(decision) = life.spec["plugins_off_decision"].as_str() {
+        for (_, key, value) in pio_codex::plugins_off() {
+            params["config"][key] = value;
+        }
+        for name in life.spec["mcp_servers_off"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+        {
+            ensure!(
+                life.spec["lead_tool"]["name"].as_str() != Some(name),
+                "lead_tool_turned_off: a server the service turns off has the lead tool's name"
+            );
+            params["config"]["mcp_servers"][name] = json!({"enabled":false});
+        }
+        // What went on the wire, read back from the request.
+        let sent: serde_json::Map<String, Value> = pio_codex::plugins_off()
+            .into_iter()
+            .map(|(_, key, _)| (key.to_owned(), params["config"][key].clone()))
+            .collect();
+        let servers_off: Vec<&String> = params["config"]["mcp_servers"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(_, server)| **server == json!({"enabled":false}))
+            .map(|(name, _)| name)
+            .collect();
+        life.event(
+            json!({"kind":"plugins_off_sent","decision":decision,"sent":sent,
+                          "servers_off":servers_off}),
+        )?;
+    }
     // What goes on the wire, read back from the request itself rather than
-    // from the spec: every server's name, its per-tool approval modes, and
-    // any server-wide default mode. The spec said what was meant; this says
-    // what was sent (review of L3, CH-1).
-    let written = params["config"]["mcp_servers"]
+    // from the spec: every server PIO launches, its per-tool approval modes,
+    // and any server-wide default mode; and apart, every server sent only to
+    // be turned off. The spec said what was meant; this says what was sent
+    // (review of L3, CH-1).
+    let all = params["config"]["mcp_servers"]
         .as_object()
         .cloned()
         .unwrap_or_default();
+    let turned_off: Vec<&String> = all
+        .iter()
+        .filter(|(_, server)| server["command"].is_null() && server["enabled"] == false)
+        .map(|(name, _)| name)
+        .collect();
+    let written: serde_json::Map<String, Value> = all
+        .iter()
+        .filter(|(_, server)| !server["command"].is_null())
+        .map(|(name, server)| (name.clone(), server.clone()))
+        .collect();
     let names: Vec<&String> = written.keys().collect();
     let servers: serde_json::Map<String, Value> = written
         .iter()
@@ -883,7 +938,8 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         .unwrap_or(Value::Null);
     life.event(
         json!({"kind":"mcp_servers_sent","names":names,"servers":servers,
-                      "settings":settings,"pre_allowed_tools":pre_allowed}),
+                      "settings":settings,"pre_allowed_tools":pre_allowed,
+                      "turned_off":turned_off}),
     )?;
     let lead_server = life.spec["lead_tool"]["name"].as_str().map(str::to_owned);
     let startup_timeout = life.spec["lead_tool"]["startup_timeout_sec"].as_u64();

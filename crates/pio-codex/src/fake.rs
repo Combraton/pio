@@ -69,7 +69,14 @@
 //! access its tool, as L3's first live lead did, and calls nothing. Every
 //! launched server's startup status (`mcpServer/startupStatus/updated`,
 //! `starting` then `ready`) goes to the client, before the `thread/start`
-//! answer for a server marked `required` and after it for any other.
+//! answer for a server marked `required` and after it for any other. A
+//! server the thread's config sends as `enabled = false` is never started.
+//! After the answer the fake announces, and never launches, every other
+//! server Codex would start on the thread: each `[mcp_servers.<name>]` of the
+//! home's `config.toml` (by table header) the thread did not turn off, the
+//! `plugin_servers` the scenario names unless `features.plugins` is off, and
+//! `codex_apps` where the scenario has `apps_server`, unless apps are off (by
+//! the last of `features.apps` and its alias `features.connectors`).
 //! `memory_pipeline` writes, at the first turn, what Codex's memory pipeline
 //! would under the Codex home (`memories/`, `memories_1.sqlite`), unless the
 //! thread's config turned memories off (`crate::features_off`).
@@ -109,6 +116,30 @@ fn write_trust(home: &Path, cwd: &str) -> Result<()> {
         std::fs::write(path, text)?;
     }
     Ok(())
+}
+
+/// The MCP servers a Codex home's `config.toml` names by table header,
+/// `[mcp_servers.<name>]` or a subtable of one, and nothing else of the file.
+fn config_servers(home: &Path) -> Vec<String> {
+    let text = std::fs::read_to_string(home.join("config.toml")).unwrap_or_default();
+    let mut names: Vec<String> = Vec::new();
+    for line in text.lines().map(str::trim) {
+        let Some(inner) = line
+            .strip_prefix('[')
+            .filter(|rest| !rest.starts_with('['))
+            .and_then(|rest| rest.split(']').next())
+        else {
+            continue;
+        };
+        let mut parts = inner.split('.').map(|p| p.trim().trim_matches('"'));
+        if parts.next() == Some("mcp_servers")
+            && let Some(name) = parts.next().filter(|n| !n.is_empty())
+            && !names.iter().any(|n| n == name)
+        {
+            names.push(name.to_owned());
+        }
+    }
+    names
 }
 
 /// One MCP server's startup on a thread, as Codex 0.157.0 tells the
@@ -502,11 +533,22 @@ pub fn run() -> Result<()> {
                         // (`core/src/session/mcp_runtime.rs:148`), after it
                         // for any other.
                         let mut after_answer = Vec::new();
+                        let mut turned_off = Vec::new();
                         for (name, spec) in params["config"]["mcp_servers"]
                             .as_object()
                             .into_iter()
                             .flatten()
                         {
+                            // A server turned off is never started
+                            // (`codex-mcp/src/connection_manager.rs:288-291`).
+                            if spec["enabled"] == false || spec["command"].is_null() {
+                                marker(
+                                    &markers,
+                                    json!({"source":SOURCE,"kind":"mcp_server_off","name":name}),
+                                )?;
+                                turned_off.push(name.clone());
+                                continue;
+                            }
                             let server = McpServer::launch(name, spec)?;
                             marker(
                                 &markers,
@@ -563,6 +605,49 @@ pub fn run() -> Result<()> {
                         send(json!({"id":id,"result":result}))?;
                         send(json!({"method":"thread/started","params":{"thread":thread_value}}))?;
                         for name in &after_answer {
+                            startup_status(&thread_id, name)?;
+                        }
+                        // Every other server Codex would start on this
+                        // thread, announced and never launched: this fake
+                        // runs no command of anyone's. Each server of the
+                        // home's `config.toml`, found by its table header,
+                        // unless the thread turned it off; the plugin
+                        // servers the scenario names, unless the thread
+                        // turned plugins off; and Codex's apps server where
+                        // the scenario has one, unless apps are off (by the
+                        // last of `apps` and its alias `connectors`).
+                        let off = |dotted: &str| config[dotted] == false;
+                        let apps_off = if config["features.connectors"].is_boolean() {
+                            off("features.connectors")
+                        } else {
+                            off("features.apps")
+                        };
+                        let mut others: Vec<(String, &str)> = config_servers(&home)
+                            .into_iter()
+                            .filter(|name| {
+                                !turned_off.contains(name) && !after_answer.contains(name)
+                            })
+                            .map(|name| (name, "config.toml"))
+                            .collect();
+                        if !off("features.plugins") {
+                            others.extend(
+                                scenario["plugin_servers"]
+                                    .as_array()
+                                    .into_iter()
+                                    .flatten()
+                                    .filter_map(Value::as_str)
+                                    .map(|name| (name.to_owned(), "plugin")),
+                            );
+                        }
+                        if scenario["apps_server"] == true && !apps_off {
+                            others.push(("codex_apps".to_owned(), "apps"));
+                        }
+                        for (name, from) in &others {
+                            marker(
+                                &markers,
+                                json!({"source":SOURCE,"kind":"mcp_server_announced","name":name,
+                                       "from":from}),
+                            )?;
                             startup_status(&thread_id, name)?;
                         }
                     }

@@ -40,7 +40,8 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'file_change_root_inside',
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
          'file_change_grant_root', 'continuation_interrupted', 'subagent_turn_after_interrupt',
-         'url_elicitation_with_approval_kind_declined', 'stream_retries_recorded']
+         'url_elicitation_with_approval_kind_declined', 'stream_retries_recorded',
+         'plugins_off_decision_sent']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # The lead tool's own server settings on Codex, as `lead_run.py` sends them
 # for L3 (after its first live run, 2026-09-26).
@@ -285,6 +286,10 @@ FEATURES_OFF = {'agents.enabled': False, 'features.multi_agent': False,
                 'features.memory_tool': False, 'features.goals': False,
                 'web_search': 'disabled', 'features.image_generation': False}
 OTHER_THREADS = 'pio.combraton.dev/other-threads'
+# The owner's plugins and apps off per launch, as the host must send them
+# (`pio_codex::plugins_off`; owner decision, 2026-09-26, Q7).
+PLUGINS_OFF = {'features.plugins': False, 'features.apps': False,
+               'features.connectors': False}
 
 
 def answered_once(case):
@@ -732,6 +737,11 @@ def run_case(out, name):
         continuation_interrupted={'continue_after_turn': True, 'continuation_step_ms': 60000,
                                   'delay_ms': 100},
         stream_retries_recorded={'stream_retries': 2, 'delay_ms': 100},
+        # Servers Codex would start on the thread unless turned off: the
+        # home's own, a plugin's and the apps server (announced by the fake,
+        # never launched).
+        plugins_off_decision_sent={'plugin_servers': ['a-plugin'], 'apps_server': True,
+                                   'delay_ms': 100},
         early_declines_in_every_wait={'elicit_during': ['initialize', 'account/read', 'thread/start'],
                                       'delay_ms': 100},
         early_decline_then_exit={'elicit_during': ['account/read'], 'exit_after_early': True},
@@ -764,6 +774,36 @@ def run_case(out, name):
         if name in ('subagent_thread_attributed', 'subagent_interrupted_with_the_run',
                     'features_off_decision_sent', 'subagent_turn_after_interrupt'):
             return subagent_case(case, name)
+        if name == 'plugins_off_decision_sent':
+            # The owner's plugins, apps and named MCP servers off per launch
+            # (owner decision, 2026-09-26, Q7) on a run with no lead tool, as
+            # every L3 child is: the host sends the keys and each server as
+            # `enabled = false` inside the thread's own `mcp_servers`, reads
+            # them back from its request, and the fake starts none of them.
+            (case.codex_home / 'config.toml').write_text(
+                '[mcp_servers.owner-docs]\ncommand = "/usr/bin/false"\n\n'
+                '[mcp_servers.owner_repl]\ncommand = "/usr/bin/false"\n\n'
+                '[mcp_servers.owner_repl.env]\nX = "1"\n\n')
+            case.configure(plugins_off_decision='rehearsal-only-plugins-off',
+                           mcp_servers_off=['owner-docs', 'owner_repl'])
+            case.start()
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = exited(case)
+            sent = events_of(case, 'plugins_off_sent')
+            assert [(e['decision'], e['sent'], sorted(e['servers_off'])) for e in sent] == [
+                ('rehearsal-only-plugins-off', PLUGINS_OFF, ['owner-docs', 'owner_repl'])], sent
+            wire = events_of(case, 'mcp_servers_sent')
+            assert [(e['names'], sorted(e['turned_off'])) for e in wire] == [
+                ([], ['owner-docs', 'owner_repl'])], wire
+            kinds = [(m['kind'], m.get('name')) for m in case.markers_records()]
+            assert sorted(n for k, n in kinds if k == 'mcp_server_off') == \
+                ['owner-docs', 'owner_repl'], kinds
+            assert [n for k, n in kinds if k in ('mcp_server_announced', 'mcp_server_launched')] \
+                == [], kinds
+            assert events_of(case, 'mcp_startup') == [], events_of(case, 'mcp_startup')
+            assert final['exit'] == {'code': 0}, final
+            return dict(outcome='pass', sent=sent[0]['sent'], servers_off=2)
         if name == 'unqualified_executable_refused':
             daemon = case.start(expect_ready=False)
             code = daemon.wait(timeout=60)

@@ -391,6 +391,13 @@ impl Provider {
                 if host["features_off_decision"].is_string() {
                     spec["features_off_decision"] = host["features_off_decision"].clone();
                 }
+                // The owner's plugins, apps and named MCP servers off on
+                // every thread, under the owner's recorded decision of
+                // 2026-09-26 (Q7); absent otherwise.
+                if host["plugins_off_decision"].is_string() {
+                    spec["plugins_off_decision"] = host["plugins_off_decision"].clone();
+                    spec["mcp_servers_off"] = host["mcp_servers_off"].clone();
+                }
                 // The lead tool, for this run's thread alone, validated above.
                 if let Some(tool) = lead_tool {
                     spec["lead_tool"] = tool.clone();
