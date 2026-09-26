@@ -33,6 +33,7 @@ pio-protocol = { path = "../pio-protocol", default-features = false }
 pio-codex = { path = "../pio-codex" }
 pio-claude = { path = "../pio-claude", default-features = false }
 pio-opencode = { path = "../pio-opencode", default-features = false }
+pio-client = { path = "../pio-client" }
 
 [dev-dependencies]
 tempfile = "3"

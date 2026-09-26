@@ -660,6 +660,7 @@ version = "0.1.0-dev"
 dependencies = [
  "anyhow",
  "pio-claude",
+ "pio-client",
  "pio-codex",
  "pio-core",
  "pio-host",
@@ -667,6 +668,18 @@ dependencies = [
  "pio-protocol",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "pio-client"
+version = "0.1.0-dev"
+dependencies = [
+ "anyhow",
+ "base64",
+ "libc",
+ "serde_json",
+ "sha2",
+ "uuid",
 ]
 
 [[package]]
