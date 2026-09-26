@@ -4,7 +4,7 @@
     "beta": "4"
   },
   "approvals": {
-    "l3": "Owner approval, 2026-09-24 \u2014 L3; owner decisions of 2026-09-25 (issue #12); owner decision of 2026-09-26, \"More headroom\": lead 150,000, child 60,000, in flight 30,000, sequence cap 565,000 and stop 452,000, Codex cap 1,090,000 and stop 872,000",
+    "l3": "Owner approval, 2026-09-24 \u2014 L3; owner decisions of 2026-09-25 (issue #12); owner decision of 2026-09-26, \"More headroom\": lead 150,000, child 60,000, in flight 30,000; owner decision of 2026-09-26 (Q8, \"Raise for attempt 2\"): sequence cap 610,000 and stop 488,000, Codex cap 1,135,000 and stop 908,000, limits per run unchanged",
     "lead_tool": "owner-2026-09-22-m4b-lead-tool",
     "model_exception": "owner-2026-09-19-m2-fixture-runs"
   },
@@ -53,12 +53,12 @@
   },
   "budget": 2,
   "charge": {
-    "codex_cap": 1090000,
+    "codex_cap": 1135000,
     "codex_charged": 36864,
     "ledger": "rehearsal ledger",
     "lines": {
       "L3": {
-        "at": "2026-09-26T07:14:04Z",
+        "at": "2026-09-26T11:09:32Z",
         "charge_basis": "reported_total",
         "charged": 20480,
         "meter_estimate": 20480,
@@ -69,7 +69,7 @@
         "tokens": 20480
       },
       "L3.alpha": {
-        "at": "2026-09-26T07:14:04Z",
+        "at": "2026-09-26T11:09:32Z",
         "charge_basis": "reported_total",
         "charged": 8192,
         "meter_estimate": 8192,
@@ -80,7 +80,7 @@
         "tokens": 8192
       },
       "L3.beta": {
-        "at": "2026-09-26T07:14:04Z",
+        "at": "2026-09-26T11:09:32Z",
         "charge_basis": "reported_total",
         "charged": 8192,
         "meter_estimate": 8192,
@@ -93,29 +93,29 @@
     },
     "measured_against": "charged",
     "reservations_left": [],
-    "sequence_cap": 565000,
+    "sequence_cap": 610000,
     "sequence_charged": 36864,
-    "sequence_stop": 452000,
+    "sequence_stop": 488000,
     "stop_reached": false
   },
   "codex_features": {
     "exec_permission_approvals": null,
     "exec_permission_approvals_key": null,
-    "exists": false,
+    "exists": true,
     "read": "config.toml",
     "request_permissions_tool": null,
     "request_permissions_tool_key": null
   },
-  "commit": "fff09be76c7164ffb6f6d6a5f28f1747137fa92e",
+  "commit": "3798caa0dfe628f29b95ab60afbb41cd3581ebb9",
   "credential_check": {
-    "id": "1a5362c2-a73c-4ce2-afd3-81932490f4c9",
+    "id": "738cfc00-210e-4419-8dc7-b5bb33a2da2e",
     "jsonrpc": "2.0",
     "result": {
       "acknowledgment": {
-        "command_digest": "sha256:89fc4155a14a5f6b41eced44fddeb7769eb40cb366631de7985f0476ea6b8358",
+        "command_digest": "sha256:74ae27566c648c9e8ef87ce7a9b3e1a20cfacfd17e7f845d99c868d82fb36944",
         "command_id": "credential-check",
         "effect_refs": [],
-        "operation_ref": "9fc6ea8d-2adf-49de-be07-e6e3c668fd02",
+        "operation_ref": "4d896e98-e7c6-4e0e-88ee-4e5d5fa7b804",
         "revision": 1,
         "subject": {
           "id": "credential-check",
@@ -144,7 +144,7 @@
         "decision": "allow",
         "words": "rehearsal: the runner answers; no owner is asked"
       },
-      "answered_by_desk_at": "2026-09-26T07:14:13Z",
+      "answered_by_desk_at": "2026-09-26T11:09:42Z",
       "approval": {
         "action_id": "L3.beta.action-1",
         "answer_deadline_seconds": 300,
@@ -153,7 +153,7 @@
           "placement": "inside_fixture",
           "subject": "cwd",
           "target_label": "<fixture>/",
-          "target_sha256": "5d36f94663ef7cc8f75ef4b34ef951097dcbfeb03790aad2969112dc9fe46c0d"
+          "target_sha256": "e5edce5d85729ba0f0527262f920126ca43e1c44818f73e79723ba6e43762dd3"
         },
         "command": "/bin/zsh -lc 'sleep 5 && wc -l beta.md'",
         "grant_root_requested": null,
@@ -168,11 +168,11 @@
         "options": null,
         "persist_offered": null,
         "reason": null,
-        "requested_at": "2026-09-26T07:14:12Z",
+        "requested_at": "2026-09-26T11:09:41Z",
         "server": null
       },
-      "relayed_at": "2026-09-26T07:14:12Z",
-      "requested_at": "2026-09-26T07:14:12Z",
+      "relayed_at": "2026-09-26T11:09:42Z",
+      "requested_at": "2026-09-26T11:09:41Z",
       "run": "L3.beta",
       "sent": "answered",
       "state": "answered"
@@ -213,10 +213,10 @@
       "web_search": "disabled"
     }
   },
-  "finished_at": "2026-09-26T07:14:55Z",
+  "finished_at": "2026-09-26T11:10:24Z",
   "format": "pio-lead-run/2",
   "grant": {
-    "id": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+    "id": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
     "terms": {
       "audience": "conformance-provider",
       "delegation": {
@@ -250,7 +250,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "c3988863-ff08-41a2-9d6d-2cb35f3ee71d",
+    "id": "520c5ae7-58b2-494e-9396-5754e4b75a6a",
     "jsonrpc": "2.0"
   },
   "harness": {
@@ -275,7 +275,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "9513ca71-cee9-4b22-af33-0c6789a461f7",
+    "id": "5e1517ca-f774-43b5-922b-444edf41a466",
     "jsonrpc": "2.0"
   },
   "lead_reads_itself": {
@@ -290,7 +290,7 @@
       },
       "message": "permission_denied"
     },
-    "id": "c8595160-44e8-4ac0-afdc-f52dec665698",
+    "id": "c12713ed-f60e-4edb-9329-64b7be7299ee",
     "jsonrpc": "2.0"
   },
   "lead_submit": {
@@ -329,8 +329,8 @@
   },
   "metering": {
     "error": null,
-    "passes": 320,
-    "seconds": 48.3,
+    "passes": 293,
+    "seconds": 48.4,
     "source": "core.events.read, one query a pass"
   },
   "meters": {
@@ -346,13 +346,13 @@
       "stopped": null,
       "subagents": [],
       "threads": {
-        "fake-thread-18559": 20480
+        "fake-thread-50224": 20480
       },
       "tool_log_calls": 4,
       "turn_status": "completed"
     },
     "L3.alpha": {
-      "bytes": 1108,
+      "bytes": 1137,
       "calls": 0,
       "ceiling": 60000,
       "continued": [],
@@ -363,13 +363,13 @@
       "stopped": null,
       "subagents": [],
       "threads": {
-        "fake-thread-18610": 8192
+        "fake-thread-50439": 8192
       },
       "tool_log_calls": null,
       "turn_status": "completed"
     },
     "L3.beta": {
-      "bytes": 1099,
+      "bytes": 1128,
       "calls": 0,
       "ceiling": 60000,
       "continued": [],
@@ -380,7 +380,7 @@
       "stopped": null,
       "subagents": [],
       "threads": {
-        "fake-thread-19292": 8192
+        "fake-thread-52118": 8192
       },
       "tool_log_calls": null,
       "turn_status": "completed"
@@ -405,7 +405,7 @@
   "model": "gpt-5.6-terra",
   "mutant": null,
   "no_sleep": {
-    "command": "caffeinate -i -s -w 18531",
+    "command": "caffeinate -i -s -w 50060",
     "held": true,
     "held_to_the_end": true,
     "power": "Now drawing from 'AC Power'"
@@ -417,6 +417,25 @@
   "owner_service_before": [
     "4a78b1821d08a04888792ecc690198f073f3c75edd6b03daa2942b161613ea3f"
   ],
+  "plugins_off": {
+    "decision": "owner-2026-09-26-l3-plugins-apps-servers-off",
+    "keys": {
+      "features.apps": false,
+      "features.connectors": false,
+      "features.plugins": false
+    },
+    "route": "per launch, under 'owner-2026-09-26-l3-plugins-apps-servers-off'",
+    "servers": {
+      "bare_table": false,
+      "count": 2,
+      "lead_tool_name_taken": false,
+      "read": "config.toml: table header lines only",
+      "sha256": [
+        "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+        "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+      ]
+    }
+  },
   "preflight": {
     "checked": false,
     "reason": "rehearsal"
@@ -428,7 +447,7 @@
   },
   "reserved": {
     "L3": {
-      "at": "2026-09-26T07:14:04Z",
+      "at": "2026-09-26T11:09:32Z",
       "charge_basis": "reserved",
       "charged": 210000,
       "model": "gpt-5.6-terra",
@@ -437,7 +456,7 @@
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     },
     "L3.alpha": {
-      "at": "2026-09-26T07:14:04Z",
+      "at": "2026-09-26T11:09:32Z",
       "charge_basis": "reserved",
       "charged": 120000,
       "model": "gpt-5.6-terra",
@@ -446,7 +465,7 @@
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     },
     "L3.beta": {
-      "at": "2026-09-26T07:14:04Z",
+      "at": "2026-09-26T11:09:32Z",
       "charge_basis": "reserved",
       "charged": 120000,
       "model": "gpt-5.6-terra",
@@ -455,7 +474,7 @@
       "why": "the worst case this run could spend; the exit path replaces it with the charge, and a runner killed from outside leaves it"
     }
   },
-  "root": "/private/tmp/pio-l1-aafsrtv6",
+  "root": "/private/tmp/pio-l1-brq_tmzk",
   "rows": [
     {
       "expected": "admitted",
@@ -681,6 +700,128 @@
       "row": "The lead's own two tools were pre-allowed, and nothing else"
     },
     {
+      "expected": {
+        "L3": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        },
+        "L3.alpha": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        },
+        "L3.beta": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "per launch, under 'owner-2026-09-26-l3-plugins-apps-servers-off': features.plugins, features.apps and its alias features.connectors false, and each of the 2 server(s) the configuration names by a table header sent as enabled = false; names as sha256 digests. The owner's config.toml is not changed",
+      "observed": {
+        "L3": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        },
+        "L3.alpha": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        },
+        "L3.beta": {
+          "sent": {
+            "features.apps": false,
+            "features.connectors": false,
+            "features.plugins": false
+          },
+          "servers_off": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ],
+          "turned_off_on_wire": [
+            "sha256:5f7716f748c3720b840ef12bcf7102a059593191322731d259bfc0f73020d050",
+            "sha256:bdab0e09779d74a480106177f50c73439dc7a2d071cc8e39e24c950bdbfd095c"
+          ]
+        }
+      },
+      "proven": true,
+      "row": "L3's threads carried plugins, apps and the owner's servers off"
+    },
+    {
+      "expected": {
+        "L3": [
+          "pio-lead"
+        ],
+        "L3.alpha": [],
+        "L3.beta": []
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "Codex's mcpServer/startupStatus/updated on each run's own thread (app-server/src/bespoke_event_handling.rs:202-228 at rust-v0.157.0), before and during the turn; any other name as a digest; the fake announces every server Codex would start: the rehearsal home's own, a plugin's and the apps server, unless turned off",
+      "observed": {
+        "L3": [
+          "pio-lead"
+        ],
+        "L3.alpha": [],
+        "L3.beta": []
+      },
+      "proven": true,
+      "row": "No MCP server but the lead's tool started on any L3 thread"
+    },
+    {
       "expected": 1,
       "holds": true,
       "kind": "row",
@@ -705,6 +846,96 @@
       ],
       "proven": true,
       "row": "The tool reached the lead"
+    },
+    {
+      "expected": "every line, and at least one",
+      "holds": true,
+      "kind": "row",
+      "note": "",
+      "observed": {
+        "lines": 16,
+        "stamped": 16
+      },
+      "proven": true,
+      "row": "Every line of the lead tool's log carries the time it was written"
+    },
+    {
+      "expected": {
+        "L3": {
+          "before_turn": true,
+          "ready": true,
+          "sent": {
+            "omit_tools_from": [
+              "code_mode",
+              "deferred"
+            ],
+            "required": true,
+            "startup_timeout_sec": 30
+          }
+        },
+        "L3.alpha": {
+          "before_turn": null,
+          "ready": null,
+          "sent": null
+        },
+        "L3.beta": {
+          "before_turn": null,
+          "ready": null,
+          "sent": null
+        }
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "the lead tool's own server table as the host sent it: omit_tools_from code_mode and deferred keep its tools in gpt-5.6-terra's own tool list (code-mode-only; core/src/tools/spec_plan.rs:234-266 at rust-v0.157.0), and ready is Codex's mcpServer/startupStatus/updated on the lead's thread before turn/start; the fake computes the exposure from that source",
+      "observed": {
+        "L3": {
+          "before_turn": true,
+          "ready": true,
+          "sent": {
+            "omit_tools_from": [
+              "code_mode",
+              "deferred"
+            ],
+            "required": true,
+            "startup_timeout_sec": 30
+          }
+        },
+        "L3.alpha": {
+          "before_turn": null,
+          "ready": null,
+          "sent": null
+        },
+        "L3.beta": {
+          "before_turn": null,
+          "ready": null,
+          "sent": null
+        }
+      },
+      "proven": true,
+      "row": "The lead's tool was in the model's own list, and ready before its turn"
+    },
+    {
+      "expected": {
+        "names": [
+          "mcp__pio_lead",
+          "read_run",
+          "start_run"
+        ],
+        "sent_is_the_brief": true
+      },
+      "holds": true,
+      "kind": "row",
+      "note": "the digest of the text the host sent at turn/start, and the brief's words: start_run and read_run, namespace mcp__pio_lead",
+      "observed": {
+        "names": [
+          "mcp__pio_lead",
+          "read_run",
+          "start_run"
+        ],
+        "sent_is_the_brief": true
+      },
+      "proven": true,
+      "row": "The lead's brief named its tools as the model sees them"
     },
     {
       "expected": [
@@ -735,13 +966,13 @@
     },
     {
       "expected": [
-        "f2242533-f61e-406b-89cb-311b6b3b98e4"
+        "5f986803-c7d8-4cf4-b6f2-6fa7fca59574"
       ],
       "holds": true,
       "kind": "row",
       "note": "",
       "observed": [
-        "f2242533-f61e-406b-89cb-311b6b3b98e4"
+        "5f986803-c7d8-4cf4-b6f2-6fa7fca59574"
       ],
       "proven": true,
       "row": "Every tool request carried the grant"
@@ -894,7 +1125,7 @@
             "source": "pio-fake-app-server/host"
           },
           "proof_class": "provider_ack_id",
-          "recorded_at": "2026-09-26T07:14:07Z",
+          "recorded_at": "2026-09-26T11:09:36Z",
           "request": "recorded",
           "steer_id": "L3.alpha.steer-1"
         },
@@ -929,12 +1160,12 @@
     {
       "expected": [
         {
-          "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+          "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
           "holder": "lead",
           "recorded_by": "pio"
         },
         {
-          "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+          "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
           "holder": "lead",
           "recorded_by": "pio"
         }
@@ -944,12 +1175,12 @@
       "note": "",
       "observed": [
         {
-          "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+          "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
           "holder": "lead",
           "recorded_by": "pio"
         },
         {
-          "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+          "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
           "holder": "lead",
           "recorded_by": "pio"
         }
@@ -1161,13 +1392,13 @@
           "stopped": null,
           "subagents": [],
           "threads": {
-            "fake-thread-18559": 20480
+            "fake-thread-50224": 20480
           },
           "tool_log_calls": 4,
           "turn_status": "completed"
         },
         "L3.alpha": {
-          "bytes": 1108,
+          "bytes": 1137,
           "calls": 0,
           "ceiling": 60000,
           "continued": [],
@@ -1178,13 +1409,13 @@
           "stopped": null,
           "subagents": [],
           "threads": {
-            "fake-thread-18610": 8192
+            "fake-thread-50439": 8192
           },
           "tool_log_calls": null,
           "turn_status": "completed"
         },
         "L3.beta": {
-          "bytes": 1099,
+          "bytes": 1128,
           "calls": 0,
           "ceiling": 60000,
           "continued": [],
@@ -1195,7 +1426,7 @@
           "stopped": null,
           "subagents": [],
           "threads": {
-            "fake-thread-19292": 8192
+            "fake-thread-52118": 8192
           },
           "tool_log_calls": null,
           "turn_status": "completed"
@@ -1416,22 +1647,22 @@
       "note": "",
       "observed": {
         "L3": {
-          "existed_before": false,
+          "existed_before": true,
           "exists_after": true,
           "format": "pio-codex-config-diff/1",
           "other_changes": false,
           "projects_added": [
             {
               "location": "fixture",
-              "path_sha256": "5d36f94663ef7cc8f75ef4b34ef951097dcbfeb03790aad2969112dc9fe46c0d",
+              "path_sha256": "e5edce5d85729ba0f0527262f920126ca43e1c44818f73e79723ba6e43762dd3",
               "trust_level": "trusted"
             }
           ],
           "projects_changed": [],
           "projects_removed": [],
           "raw_sha256": {
-            "after": "87b2756fc0d9d709588cdac5c3f65fa17bf54d554fa4ad41d085aec0522c11e8",
-            "before": null
+            "after": "f39f2424f889e1d1733426893a8ae863b15401df0593b855806b9dc7801abe43",
+            "before": "888a17752b0cc9018541e552d996410800396bfa99045288776810135d0bc406"
           },
           "unchanged": false
         },
@@ -1444,8 +1675,8 @@
           "projects_changed": [],
           "projects_removed": [],
           "raw_sha256": {
-            "after": "87b2756fc0d9d709588cdac5c3f65fa17bf54d554fa4ad41d085aec0522c11e8",
-            "before": "87b2756fc0d9d709588cdac5c3f65fa17bf54d554fa4ad41d085aec0522c11e8"
+            "after": "f39f2424f889e1d1733426893a8ae863b15401df0593b855806b9dc7801abe43",
+            "before": "f39f2424f889e1d1733426893a8ae863b15401df0593b855806b9dc7801abe43"
           },
           "unchanged": true
         },
@@ -1458,8 +1689,8 @@
           "projects_changed": [],
           "projects_removed": [],
           "raw_sha256": {
-            "after": "87b2756fc0d9d709588cdac5c3f65fa17bf54d554fa4ad41d085aec0522c11e8",
-            "before": "87b2756fc0d9d709588cdac5c3f65fa17bf54d554fa4ad41d085aec0522c11e8"
+            "after": "f39f2424f889e1d1733426893a8ae863b15401df0593b855806b9dc7801abe43",
+            "before": "f39f2424f889e1d1733426893a8ae863b15401df0593b855806b9dc7801abe43"
           },
           "unchanged": true
         }
@@ -1491,10 +1722,10 @@
       "row": "The runner's own steps raised no error"
     },
     {
-      "expected": "no memory file or database added, removed or changed",
+      "expected": "no memory file or database added, removed or changed in size; a later modification time alone, size unchanged, is inconclusive",
       "holds": true,
       "kind": "row",
-      "note": "Codex's own background pipeline, which [features] memories starts at a root thread's first turn: its files and databases by name (a digest for any name Codex did not choose), size and time, never content. A change means it ran, and its model calls report nowhere PIO reads and are outside every meter",
+      "note": "Codex's own background pipeline, which [features] memories starts at a root thread's first turn: its files and databases by name (a digest for any name Codex did not choose), size and time, never content. A size change, or a path added or removed, means something wrote there, and the pipeline's model calls report nowhere PIO reads. A time alone decides nothing: at rust-v0.157.0 every app-server start opens the memories database read-write, in WAL mode, and runs its migrations, whatever features are on (state/src/runtime.rs:172-185; state/src/sqlite.rs:251-293, the pool at :296-310)",
       "observed": {
         "changes": [],
         "memories": {
@@ -1503,7 +1734,8 @@
           "route": "per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'",
           "value": false,
           "why": "features.memory_tool = false, per launch, under 'owner-2026-09-26-l3-codex-unmetered-features-off'"
-        }
+        },
+        "mtime_only": []
       },
       "proven": true,
       "row": "Codex's memory pipeline wrote nothing during the run"
@@ -1519,14 +1751,14 @@
     }
   ],
   "sequence": "M4-lead-codex",
-  "sequence_cap": 565000,
-  "sequence_stop": 452000,
+  "sequence_cap": 610000,
+  "sequence_stop": 488000,
   "spoken": {
     "alpha": "Running `sleep 30 && wc -l alpha.md`.\n7",
     "beta": "Running `sleep 5 && wc -l beta.md`.\n4",
     "lead": "alpha.md: 7\nbeta.md: 4"
   },
-  "started_at": "2026-09-26T07:14:04Z",
+  "started_at": "2026-09-26T11:09:32Z",
   "steer_exited": {
     "alternative": "Steering needs an acknowledged, running native turn",
     "delivery_at_steer": "acknowledged",
@@ -1561,28 +1793,33 @@
   "third_started": true,
   "tool_log": [
     {
+      "at": "2026-09-26T11:09:34.934Z",
       "event": "started",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "lead": "L3"
     },
     {
+      "at": "2026-09-26T11:09:34.935Z",
       "event": "request",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "method": "initialize"
     },
     {
+      "at": "2026-09-26T11:09:34.935Z",
       "event": "request",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "method": "notifications/initialized"
     },
     {
+      "at": "2026-09-26T11:09:34.935Z",
       "event": "request",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "method": "tools/list"
     },
     {
+      "at": "2026-09-26T11:09:36.609Z",
       "event": "request",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "method": "tools/call"
     },
     {
@@ -1590,9 +1827,10 @@
         "brief": "Run the shell command `sleep 30 && wc -l alpha.md`. Then report the number of lines in alpha.md. Answer with the number alone.",
         "name": "alpha"
       },
+      "at": "2026-09-26T11:09:36.657Z",
       "call": 1,
       "event": "tool_call",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "result": {
         "admission": "admitted",
         "run": "L3.alpha",
@@ -1602,17 +1840,19 @@
       "tool": "start_run"
     },
     {
+      "at": "2026-09-26T11:09:38.245Z",
       "call": 1,
       "event": "gate",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "held": false,
       "hold_above": 120000,
       "tool": "start_run",
       "total": 0
     },
     {
+      "at": "2026-09-26T11:09:39.759Z",
       "event": "request",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "method": "tools/call"
     },
     {
@@ -1620,38 +1860,42 @@
         "brief": "Run the shell command `sleep 5 && wc -l beta.md`. Then report the number of lines in beta.md. Answer with the number alone.",
         "name": "beta"
       },
+      "at": "2026-09-26T11:09:40.015Z",
       "call": 2,
       "event": "tool_call",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "result": {
         "admission": "admitted",
         "run": "L3.beta",
         "started": true
       },
-      "seconds": 0.1,
+      "seconds": 0.3,
       "tool": "start_run"
     },
     {
+      "at": "2026-09-26T11:09:41.490Z",
       "call": 2,
       "event": "gate",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "held": false,
       "hold_above": 120000,
       "tool": "start_run",
       "total": 4096
     },
     {
+      "at": "2026-09-26T11:09:43.032Z",
       "event": "request",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "method": "tools/call"
     },
     {
       "arguments": {
         "name": "alpha"
       },
+      "at": "2026-09-26T11:10:13.415Z",
       "call": 3,
       "event": "tool_call",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "result": {
         "exit": {
           "code": 0
@@ -1664,26 +1908,29 @@
       "tool": "read_run"
     },
     {
+      "at": "2026-09-26T11:10:13.416Z",
       "call": 3,
       "event": "gate",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "held": false,
       "hold_above": 120000,
       "tool": "read_run",
       "total": 8192
     },
     {
+      "at": "2026-09-26T11:10:14.954Z",
       "event": "request",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "method": "tools/call"
     },
     {
       "arguments": {
         "name": "beta"
       },
+      "at": "2026-09-26T11:10:15.252Z",
       "call": 4,
       "event": "tool_call",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "result": {
         "exit": {
           "code": 0
@@ -1696,9 +1943,10 @@
       "tool": "read_run"
     },
     {
+      "at": "2026-09-26T11:10:16.640Z",
       "call": 4,
       "event": "gate",
-      "grant": "f2242533-f61e-406b-89cb-311b6b3b98e4",
+      "grant": "5f986803-c7d8-4cf4-b6f2-6fa7fca59574",
       "held": false,
       "hold_above": 120000,
       "tool": "read_run",
@@ -1707,7 +1955,7 @@
   ],
   "unmetered": {
     "decision": "owner-2026-09-26-l3-codex-unmetered-features-off",
-    "exists": false,
+    "exists": true,
     "features": {
       "goals": {
         "key": "features.goals",
@@ -1767,7 +2015,7 @@
       "stopped_by_the_runner": false,
       "subagents": [],
       "threads": {
-        "fake-thread-18559": 20480
+        "fake-thread-50224": 20480
       }
     },
     "L3.alpha": {
@@ -1787,7 +2035,7 @@
       "stopped_by_the_runner": false,
       "subagents": [],
       "threads": {
-        "fake-thread-18610": 8192
+        "fake-thread-50439": 8192
       }
     },
     "L3.beta": {
@@ -1807,7 +2055,7 @@
       "stopped_by_the_runner": false,
       "subagents": [],
       "threads": {
-        "fake-thread-19292": 8192
+        "fake-thread-52118": 8192
       }
     }
   },
@@ -1819,7 +2067,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L3.delivery-1",
-          "determined_at": "2026-09-26T07:14:06Z",
+          "determined_at": "2026-09-26T11:09:35Z",
           "evidence": {
             "class": "native_turn_acknowledged",
             "source": "pio-fake-app-server/host"
@@ -1827,7 +2075,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-26T07:14:06Z"
+              "recorded_at": "2026-09-26T11:09:35Z"
             }
           ],
           "proof_class": "provider_ack_id"
@@ -1849,7 +2097,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "673b3592-11d5-4ba5-861d-71f50b00d967:1:32",
+      "next_cursor": "ae2b06ff-6610-47e5-802f-07e08876ea41:1:32",
       "obligations": [],
       "origin": {
         "call_budget": 2,
@@ -1869,20 +2117,20 @@
           {
             "amount": 20480,
             "basis": "observed",
-            "invocation_id": "189e5e30-cb65-47fa-bd13-369ec8bc42d4",
+            "invocation_id": "caf4bb8d-ae57-41c0-8901-8d84f1b07784",
             "measure": "codex.tokens.total",
-            "recorded_at": "2026-09-26T07:14:49Z"
+            "recorded_at": "2026-09-26T11:10:18Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "86c6b53ab53d4a52f8743c1b42c746d5038c69c2",
+          "base": "ebaac1d5d7e13a94eb9bc041602e3df90d41d70d",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.workspace",
-          "repository": "/private/tmp/pio-l1-aafsrtv6/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-brq_tmzk/fixtures/lead",
           "writer": "owner"
         }
       }
@@ -1894,7 +2142,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L3.alpha.delivery-1",
-          "determined_at": "2026-09-26T07:14:07Z",
+          "determined_at": "2026-09-26T11:09:36Z",
           "evidence": {
             "class": "native_turn_acknowledged",
             "source": "pio-fake-app-server/host"
@@ -1902,7 +2150,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-26T07:14:07Z"
+              "recorded_at": "2026-09-26T11:09:36Z"
             }
           ],
           "proof_class": "provider_ack_id"
@@ -1925,7 +2173,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "673b3592-11d5-4ba5-861d-71f50b00d967:1:32",
+      "next_cursor": "ae2b06ff-6610-47e5-802f-07e08876ea41:1:32",
       "obligations": [],
       "origin": {
         "call_budget": 0,
@@ -1949,13 +2197,13 @@
             "source": "pio-fake-app-server/host"
           },
           "proof_class": "provider_ack_id",
-          "recorded_at": "2026-09-26T07:14:07Z",
+          "recorded_at": "2026-09-26T11:09:36Z",
           "request": "recorded",
           "steer_id": "L3.alpha.steer-1"
         },
         {
           "alternative": "Steering needs an acknowledged, running native turn",
-          "recorded_at": "2026-09-26T07:14:52Z",
+          "recorded_at": "2026-09-26T11:10:21Z",
           "request": "not_supported",
           "steer_id": "L3.alpha.steer-2"
         }
@@ -1966,20 +2214,20 @@
           {
             "amount": 8192,
             "basis": "observed",
-            "invocation_id": "f19fd7dc-1c5f-4553-b282-904ca750ae42",
+            "invocation_id": "f5edfa26-8669-4bff-a330-2ebd7dacb75f",
             "measure": "codex.tokens.total",
-            "recorded_at": "2026-09-26T07:14:40Z"
+            "recorded_at": "2026-09-26T11:10:09Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "86c6b53ab53d4a52f8743c1b42c746d5038c69c2",
+          "base": "ebaac1d5d7e13a94eb9bc041602e3df90d41d70d",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.alpha.workspace",
-          "repository": "/private/tmp/pio-l1-aafsrtv6/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-brq_tmzk/fixtures/lead",
           "writer": "lead"
         }
       }
@@ -1989,9 +2237,9 @@
       "actions": [
         {
           "action_id": "L3.beta.action-1",
-          "answered_at": "2026-09-26T07:14:13Z",
+          "answered_at": "2026-09-26T11:09:42Z",
           "owner": "codex",
-          "requested_at": "2026-09-26T07:14:12Z",
+          "requested_at": "2026-09-26T11:09:41Z",
           "response_effect": "L3.beta.response-1",
           "state": "answered"
         }
@@ -2002,7 +2250,7 @@
         {
           "delivery": "acknowledged",
           "delivery_id": "L3.beta.delivery-1",
-          "determined_at": "2026-09-26T07:14:10Z",
+          "determined_at": "2026-09-26T11:09:40Z",
           "evidence": {
             "class": "native_turn_acknowledged",
             "source": "pio-fake-app-server/host"
@@ -2010,7 +2258,7 @@
           "history": [
             {
               "delivery": "pending",
-              "recorded_at": "2026-09-26T07:14:10Z"
+              "recorded_at": "2026-09-26T11:09:40Z"
             }
           ],
           "proof_class": "provider_ack_id"
@@ -2033,7 +2281,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "673b3592-11d5-4ba5-861d-71f50b00d967:1:32",
+      "next_cursor": "ae2b06ff-6610-47e5-802f-07e08876ea41:1:32",
       "obligations": [],
       "origin": {
         "call_budget": 0,
@@ -2053,20 +2301,20 @@
           {
             "amount": 8192,
             "basis": "observed",
-            "invocation_id": "75d2d799-c563-4605-9a3d-b7bc1a44de53",
+            "invocation_id": "99349df5-407c-4f3f-8b57-ef0599bb8f1f",
             "measure": "codex.tokens.total",
-            "recorded_at": "2026-09-26T07:14:14Z"
+            "recorded_at": "2026-09-26T11:09:44Z"
           }
         ]
       },
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "86c6b53ab53d4a52f8743c1b42c746d5038c69c2",
+          "base": "ebaac1d5d7e13a94eb9bc041602e3df90d41d70d",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.beta.workspace",
-          "repository": "/private/tmp/pio-l1-aafsrtv6/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-brq_tmzk/fixtures/lead",
           "writer": "lead"
         }
       }
@@ -2087,7 +2335,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "673b3592-11d5-4ba5-861d-71f50b00d967:1:32",
+      "next_cursor": "ae2b06ff-6610-47e5-802f-07e08876ea41:1:32",
       "obligations": [],
       "origin": {
         "call_budget": 0,
@@ -2109,11 +2357,11 @@
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "86c6b53ab53d4a52f8743c1b42c746d5038c69c2",
+          "base": "ebaac1d5d7e13a94eb9bc041602e3df90d41d70d",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "L3.third.workspace",
-          "repository": "/private/tmp/pio-l1-aafsrtv6/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-brq_tmzk/fixtures/lead",
           "writer": "lead"
         }
       }
@@ -2135,7 +2383,7 @@
         "generation": 1,
         "id": "codex-host"
       },
-      "next_cursor": "673b3592-11d5-4ba5-861d-71f50b00d967:1:32",
+      "next_cursor": "ae2b06ff-6610-47e5-802f-07e08876ea41:1:32",
       "obligations": [],
       "reason": "capability_unavailable",
       "recovery": [],
@@ -2149,11 +2397,11 @@
       "workspace": {
         "checkpoints": [],
         "lease": {
-          "base": "86c6b53ab53d4a52f8743c1b42c746d5038c69c2",
+          "base": "ebaac1d5d7e13a94eb9bc041602e3df90d41d70d",
           "cleanup": "retain",
           "lease_epoch": 1,
           "lease_id": "credential-check.workspace",
-          "repository": "/private/tmp/pio-l1-aafsrtv6/fixtures/lead",
+          "repository": "/private/tmp/pio-l1-brq_tmzk/fixtures/lead",
           "writer": "owner"
         }
       }

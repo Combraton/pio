@@ -343,20 +343,32 @@ Whether the owner's plugins stay on for PIO's test runs is the owner's decision.
 - The pipeline itself is gated on the thread's configuration, which carried the per-launch override (`memories/write/src/start.rs:34`).
 - The row will be corrected so that a size-preserving change it cannot attribute is inconclusive, not a failure.
 
+**Addendum, 2026-09-26, for attempt 2** (not a rewrite of this receipt): the
+lead's tool is now sent with `omit_tools_from = ["code_mode","deferred"]`,
+`required = true` and `startup_timeout_sec = 30`, and the host waits for it to
+be ready before the lead's turn (`59d25ad`); the owner's plugins, apps and MCP
+servers are off on every L3 thread per launch, the owner's decision Q7
+(`9f2bbf2`); the children's code-mode commands are played in 0.157.0's shape
+(`91cfdec`); the lead's brief names its tools as the model sees them
+(`dbd7efc`); the memory row is corrected as said (`ff1985a`); and the owner
+raised the L3 sequence and Codex stops for a second attempt, Q8 (`81174a1`).
+
 ## `L3-rehearsal.json`
 
 L3 rehearsed against the labeled Codex fake by `scripts/lead_run.py --rehearse
---plan L3` at clean head `fff09be` (`dirty: false`), after round 4 of the
-review of L3 and the owner's decisions of 2026-09-26. **Zero tokens, no model
-call.** The fake is `pio codex fake-app-server` (`pio-fake-app-server`): it
-speaks 0.157.0's app-server shapes and runs no model, tool or command, and
+--plan L3` at clean head `3798caa` (`dirty: false`), for L3's second
+live attempt, after its first (`L3-live.json`, above). **Zero tokens, no
+model call.** The fake is `pio codex fake-app-server` (`pio-fake-app-server`):
+it speaks 0.157.0's app-server shapes and runs no model, tool or command, and
 `serve-codex` does not qualify a labeled fake. Plan: owner approval of
 2026-09-24, the decisions of 2026-09-25 (issue #12), and the owner's
-decisions of 2026-09-26: L3's sizing ("More headroom": lead 150,000, child
-60,000, sequence cap 565,000 and stop 452,000) and Codex's five unmetered
-features off per launch.
+decisions of 2026-09-26: L3's limits ("More headroom": lead 150,000, child
+60,000, a step in flight 30,000), Codex's five unmetered features off per
+launch, the owner's plugins, apps and MCP servers off per launch (Q7, "All
+off for L3"), and the sizing for attempt 2 (Q8, "Raise for attempt 2":
+sequence cap 610,000 and stop 488,000, Codex cap 1,135,000 and stop 908,000).
 
-**44 rows and three records: 41 rows hold, none failed, and three are
+**49 rows and 3 records: 46 rows hold, none failed, and three are
 inconclusive**, the three this rehearsal cannot observe:
 
 - **Codex qualified at the pinned identity**: the labeled fake has no
@@ -372,28 +384,47 @@ inconclusive**, the three this rehearsal cannot observe:
   spawned one. `subagent-spawned` holds it and `subagent-not-stopped` fails
   it.
 
-The owner's OpenCode service row held on this machine: a service of the
-owner's was running before and after, unchanged. Where none runs, as on CI,
+The owner's OpenCode service row held on this machine: a service of the owner's was running before and after, unchanged. Where none runs, as on CI,
 it is inconclusive (`owner-service-absent`).
 
 What L3 shows, as the fake plays it:
 
+- **The lead's tool is in the model's own list** (new after the first live
+  run). The host sent PIO's own server table on the lead's thread with
+  `omit_tools_from = ["code_mode","deferred"]`, `required = true` and
+  `startup_timeout_sec = 30`, read back from its own request, and saw the
+  server `ready` on the lead's thread by Codex's startup status before the
+  lead's turn. The fake runs the lead's thread code-mode-only, as
+  `gpt-5.6-terra` runs, and computes the tools' exposure from Codex's source:
+  here `DirectModelOnly`, so its lead calls them. Sent as the first live run
+  sent it (no `omit_tools_from`), the tools are deferred, the fake's lead
+  says it cannot access its tool and starts nothing, and the start row fails
+  (`lead-tool-deferred`). Every line of the tool's log carries its time.
+- **The lead's brief names its tools as the model sees them**: `start_run`
+  and `read_run`, namespace `mcp__pio_lead`, read from the digest of the text
+  the host sent (`brief-unnamed` fails it with the first live run's brief).
+- **The owner's plugins, apps and MCP servers are off on every thread**,
+  lead and children, per launch under `owner-2026-09-26-l3-plugins-apps-servers-off`:
+  each thread's host sent `features.plugins`, `features.apps` and
+  `features.connectors` false and the 2 servers the rehearsal home's
+  `config.toml` names by table headers as `enabled = false` (in the receipt
+  only as digests and a count), and no server but the lead's tool started on
+  any thread, by the startup statuses the fake sends as Codex would for
+  every server it starts: the rehearsal home's, a plugin's and the apps
+  server, unless turned off. Without the decision the runner refuses before
+  anything is reserved (`plugins-decision-absent`); a host that turned them
+  off on the lead's thread alone fails both rows (a source mutant, run by
+  hand) and the matrix case `plugins_off_decision_sent`.
 - Codex's five unmetered features are off on every thread per launch,
-  under the owner's decision `owner-2026-09-26-l3-codex-unmetered-features-off`,
-  which the L3 plan sends: the receipt's route for sub-agents, memories,
-  goals, standalone web search and image generation is "per launch" for
-  each, and every thread's `thread/start` config carried exactly the eight
-  keys of `pio_codex::features_off` (`features_off_sent`, read back by the
-  host from its own request). The Codex home here has no `config.toml`, so
-  no owner key was read; live, the owner's are read by those keys alone
-  (`memories = true`, nothing else, on 2026-09-26), and without the decision
-  the runner refuses for all five (`decision-absent`).
-- The lead tool is on the lead's thread only. The host read back from its
-  own `thread/start` request exactly `start_run` and `read_run` at
-  `approval_mode: approve` and no server-wide default; the children's
-  threads carried no server. Nothing was asked about the lead's tool, by
-  any path, and PIO declined nothing by itself, before, during or after a
-  turn (record: empty for all three runs).
+  under `owner-2026-09-26-l3-codex-unmetered-features-off`: the route for
+  each is "per launch", and every thread's `thread/start` config carried
+  exactly the eight keys of `pio_codex::features_off` (`features_off_sent`).
+  Without the decision the runner refuses for all five (`decision-absent`).
+- The lead tool is on the lead's thread only, with exactly `start_run` and
+  `read_run` at `approval_mode: approve` and no server-wide default; the
+  children's threads launched no server. Nothing was asked about the lead's
+  tool, by any path, and PIO declined nothing by itself (record: empty for
+  all three runs).
 - Each thread's model and provider (`gpt-5.6-terra`, `openai`) were checked
   from `thread/start`'s answer before its first turn. `approvalsReviewer` is
   `user` on all three.
@@ -401,35 +432,45 @@ What L3 shows, as the fake plays it:
   was `active` and `acknowledged`, and acknowledged with `provider_ack_id`.
   Behavior is `not_observed`.
 - The lead's `read_run` of `alpha` took 30.4 s and returned `exited`.
-- Each child said what it was about to run before its command, as measured
-  on this model (``Running `sleep 30 && wc -l alpha.md`.``), then answered;
-  the count row read each child's last message after its last command: 7
-  and 4. The lead's answer came one message per file and was read as two
-  lines.
+- Each child said what it was about to run before its command
+  (``Running `sleep 30 && wc -l alpha.md`.``), then answered; the count row
+  read each child's last message after its last command: 7 and 4. The fake
+  plays the children's commands, and `beta`'s approval, in the shape
+  rust-v0.157.0's source gives a nested `tools.exec_command` in code mode:
+  an `exec-<uuid>` item started before the request, the command
+  `/bin/zsh -lc 'sleep 5 && wc -l beta.md'`, no `reason` (seen by driving
+  the fake directly; the receipt carries the command and its placement).
 - `beta`'s command approval came to the desk with its placement
-  (`inside_fixture`, `<fixture>/`), no network ask and a null reason, was
-  answered `allow` by the rehearsal, and was sent as
-  `{"decision": "accept"}`.
-- The lead's tool answered four calls, each through its gate (one gate
-  line each in its log); none was handed back past the hold (120,000), and
-  no result reached the lead that its tool never saw.
+  (`inside_fixture`, `<fixture>/`) and no network ask, was answered `allow`
+  by the rehearsal, and was sent as `{"decision": "accept"}`; the relay
+  rehearsal answers it from the owner's advance decision. Live, under
+  `on-request` in a `workspace-write` sandbox, Codex does not ask about
+  either child's command at all (below), and the desk row is inconclusive.
+- The lead's tool answered four calls, each through its gate; none was
+  handed back past the hold (120,000), and no result reached the lead that
+  its tool never saw.
 - Every model step was 4,096 tokens, within the 30,000 the bound assumes in
-  flight (the host's own usage events: the lead 5 steps, each child 2). No
-  run had a thread but its own, no run took a turn of its own after its turn
-  had ended (each host read its run's thread for three seconds after the
-  turn), and every exit carried both lists (empty). No stream retry was
-  reported. No execution under the lead but the plan's three.
-- Codex's memory state did not change (there is none in a labeled fake's
-  home, and memories were off per launch).
+  flight (the lead 5 steps, each child 2). No run had a thread but its own,
+  no run took a turn of its own after its turn had ended, and every exit
+  carried both lists (empty). No stream retry was reported. No execution
+  under the lead but the plan's three.
+- Codex's memory state did not change. A time that moves alone, size
+  unchanged, is now inconclusive rather than failed (`memory-mtime-only`),
+  and a size change fails (`memory-db-grew`).
 - Codex's runs were metered on the event stream and on each run's own host
-  events by a thread of their own: 320 passes in 48.3 s. No stop and no
+  events by a thread of their own: 293 passes in 48.4 s. No stop and no
   silence.
 - The charge is Codex's reported totals, 20,480 + 8,192 + 8,192 = 36,864,
-  on the rehearsal's own ledger, read with each run's host events afresh:
-  each at least what the run could have spent, and each within its share.
-  The reservations, written immediately before the lead's submit (210,000 +
-  120,000 + 120,000 = 450,000), were replaced and none is left. Every
-  submit made an execution, and no probe was admitted.
+  on the rehearsal's own ledger: each at least what the run could have
+  spent, and each within its share. The reservations, written immediately
+  before the lead's submit (210,000 + 120,000 + 120,000 = 450,000), were
+  replaced and none is left. Every submit made an execution, and no probe
+  was admitted.
+- The live runner's ledger checks, run dry at `81174a1` against a copy of
+  the Codex ledger (build and preflight stubbed, the live tree an
+  assertion), pass `--attempt L3-attempt-2` with the sequence at 36,126 and
+  Codex at 457,576, and refuse a third attempt once the second has charged
+  more than 423 (`--sizing-selftest` pins the same on made-up ledgers).
 
 **What only the live run can show.** These are the places where
 `lead_run.py` takes a different branch live, or where a row that holds here
