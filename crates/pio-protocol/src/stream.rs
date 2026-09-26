@@ -54,8 +54,8 @@ pub const FEATURES_OFF_REHEARSAL: &str = "rehearsal-only-features-off";
 ///
 /// **Owner decision, 2026-09-26** (answering Q7, chose "All off for L3"):
 /// "Per launch, under a dated test-only exception, L3's threads get
-/// features.plugins=false, features.apps=false, and your node_repl,
-/// openaiDeveloperDocs and buffer servers off. Only PIO's lead tool remains.
+/// features.plugins=false, features.apps=false, and your [three named MCP
+/// servers, names redacted] off. Only PIO's lead tool remains.
 /// Your config.toml is untouched." L3's first live lead called a tool of the
 /// owner's Computer Use plugin, which Codex approves without asking as
 /// read-only. L3's runner sends this for L3's threads only, with every

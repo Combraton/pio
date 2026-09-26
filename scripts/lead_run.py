@@ -357,8 +357,8 @@ PLANS = {
         features_off_decision='owner-2026-09-26-l3-codex-unmetered-features-off',
         # Owner decision, 2026-09-26 (Q7, "All off for L3"): "Per launch,
         # under a dated test-only exception, L3's threads get
-        # features.plugins=false, features.apps=false, and your node_repl,
-        # openaiDeveloperDocs and buffer servers off. Only PIO's lead tool
+        # features.plugins=false, features.apps=false, and your [three named MCP
+        # servers, names redacted] off. Only PIO's lead tool
         # remains. Your config.toml is untouched." (pio-protocol
         # PLUGINS_OFF_DECISIONS). Sent for this plan's threads only, with
         # every server the owner's config.toml names by a table header.
