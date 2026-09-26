@@ -351,7 +351,8 @@ servers are off on every L3 thread per launch, the owner's decision Q7
 (`9f2bbf2`); the children's code-mode commands are played in 0.157.0's shape
 (`91cfdec`); the lead's brief names its tools as the model sees them
 (`dbd7efc`); the memory row is corrected as said (`ff1985a`); and the owner
-raised the L3 sequence and Codex stops for a second attempt, Q8 (`81174a1`).
+raised the L3 sequence and Codex stops for a second attempt, Q8 (`81174a1`),
+and then each child's ceiling to 90,000 with the stops to match, Q9.
 
 ## `L3-rehearsal.json`
 
@@ -505,8 +506,9 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
 - **The sizing.** Codex reports a step once its tool has finished (M2 R5,
   R6), so a report that crosses a ceiling arrives with the next step begun.
   From the code, each run can reach its ceiling plus two steps. The limits
-  are the owner's of 2026-09-26 ("More headroom"): a child 60,000 + 2 x
-  30,000 = 120,000, and the lead 150,000 + 2 x 30,000 = 210,000. The lead's
+  are the owner's of 2026-09-26 ("More headroom", and for each child Q9,
+  "Child 90k"): a child 90,000 + 2 x 30,000 = 150,000, and the lead 150,000
+  + 2 x 30,000 = 210,000. The lead's
   tool withholds any response (a result, an error or an unknown tool) once
   the lead has reported more than 120,000, and the meter stops the lead
   when a result its tool never saw comes back past 120,000; that keeps a
@@ -515,20 +517,25 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   own shell, another MCP server, a refused approval) is back, with the next
   step begun, before anything can see it, when the lead may be just under
   150,000 (review of L3, round 2, SB-1; `lead-shell-past-hold`). The worst
-  case is **450,000** (210,000 + 2 x 120,000). For the second attempt it is
-  within the L3 sequence's 488,000 stop (cap 610,000; owner, 2026-09-26, Q8)
-  after attempt 1's 36,126 (486,126), and, with Codex's 457,576 used, under
-  the 908,000 Codex stop (cap 1,135,000): 907,576 (`--sizing-selftest`).
-  Attempt 1 was checked against 452,000 (cap 565,000) and 872,000 (cap
-  1,090,000), with Codex's 421,450 used: 871,450. Under the limits of
+  case is **510,000** (210,000 + 2 x 150,000). For the second attempt it is
+  within the L3 sequence's 548,000 stop (cap 685,000; owner, 2026-09-26, Q9)
+  after attempt 1's 36,126 (546,126), and, with Codex's 457,576 used, under
+  the 968,000 Codex stop (cap 1,210,000): 967,576 (`--sizing-selftest`). The
+  owner raised the child ceiling from 60,000 because `alpha`'s 30-second
+  command outlasts both of code mode's yields (below); expected spend is
+  unchanged, only the reservation grows. Under Q8, earlier that day (child
+  60,000, worst case 450,000), the stops were 488,000 (cap 610,000) and
+  908,000 (cap 1,135,000). Attempt 1 was checked against 452,000 (cap
+  565,000) and 872,000 (cap 1,090,000), with Codex's 421,450 used: 871,450.
+  Under the limits of
   2026-09-24 (lead 125,000, child 50,000, sequence cap 400,000 and stop
   320,000, Codex cap 1,000,000 and stop 800,000) it was 405,000, past every
   one of them, and the live runner refused L3 until the owner decided the
   sizing. That figure holds only with Codex's unmetered features off
   (below). With sub-agents on, each run could also start sub-agents in one
-  step before its stop lands, each with a step in flight: **720,000** for
-  multi-agent V2 (three resident per run, 450,000 + 3 x 3 x 30,000) and
-  **990,000** for V1 (six), from Codex's source at rust-v0.157.0 and not
+  step before its stop lands, each with a step in flight: **780,000** for
+  multi-agent V2 (three resident per run, 510,000 + 3 x 3 x 30,000) and
+  **1,050,000** for V1 (six), from Codex's source at rust-v0.157.0 and not
   measured. The bound rests on a step being at most
   30,000; the runner now checks every report against that, stops a run
   whose step is larger, and charges its largest step in flight
@@ -723,7 +730,8 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   10 s, at most 30 s (`core/src/tools/handlers/unified_exec.rs:62-64`,
   `core/src/unified_exec/mod.rs:77`, `:218-224`): `alpha`'s 30-second command
   outlasts both, so live it takes at least one more model step (`wait`, or a
-  poll) than the fake plays, which is not modelled here.
+  poll) than the fake plays, which is not modelled here. For that the owner
+  raised each child's ceiling to 90,000 (Q9, 2026-09-26, "Child 90k").
 - **Command approvals.** The fake asks about `beta`'s command because its
   scenario says to, in the code-mode shape above, named `/bin/zsh -lc '…'`
   as M2 R5 measured and 0.157.0's source builds it. Live, `on-request` in a

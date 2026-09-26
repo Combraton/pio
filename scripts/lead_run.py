@@ -193,7 +193,8 @@ does with a permission prompt.
   meter must cancel every run still going itself, within seconds, before
   alpha reaches its ceiling, and the run ends with the error;
 - `probe-over-share` (L3) is `third-admitted` with the admitted third run
-  taking one 150,000-token step: it is metered and stopped like any run,
+  taking one step a whole step past its share (180,000 against 150,000): it
+  is metered and stopped like any run,
   charged through the same branches (at least its share, and at least what
   it was seen to spend plus a step in flight), and the share row, which now
   covers probes, fails; `probe-charged-flat` charges it its flat share, as
@@ -216,7 +217,8 @@ does with a permission prompt.
 - `step-past-in-flight` (L3) has `alpha` take a 40,000-token step: the
   runner must stop it, and the in-flight row fails;
 - `stopped-past-share` (L3) has `alpha`, stopped at its ceiling, ignore the
-  stop and answer: it is charged its 90,000 and a step, past its share, and
+  stop and answer: it is charged what it reported (150,000) and a step, past
+  its share, and
   the share row fails; `stopped-charge-capped` caps that charge at the share,
   and the floor row fails; `deadline-interrupted` has the host's own
   deadline interrupt `alpha`, which is charged as a stopped run, and
@@ -344,9 +346,9 @@ PLANS = {
         harness='codex',
         approval='Owner approval, 2026-09-24 — L3; owner decisions of 2026-09-25 (issue '
                  '#12); owner decision of 2026-09-26, "More headroom": lead 150,000, child '
-                 '60,000, in flight 30,000; owner decision of 2026-09-26 (Q8, "Raise for '
-                 'attempt 2"): sequence cap 610,000 and stop 488,000, Codex cap 1,135,000 and '
-                 'stop 908,000, limits per run unchanged',
+                 '60,000, in flight 30,000; owner decision of 2026-09-26 (Q9, "Child 90k"): '
+                 'child 90,000, worst case 510,000, sequence cap 685,000 and stop 548,000, '
+                 'Codex cap 1,210,000 and stop 968,000',
         # Owner decision, 2026-09-26 ("Per-launch override"): L3's Codex
         # threads are launched with Codex's five unmetered features off, per
         # launch, under this dated decision (pio-protocol
@@ -383,10 +385,19 @@ for _plan in PLANS.values():
 # 320,000. Owner decision, 2026-09-26 (Q8, "Raise for attempt 2"), after
 # L3's first live attempt charged 36,126: "L3 sequence cap 610,000, stop
 # 488,000 (36,126 + 450,000 = 486,126). Codex cap 1,135,000, stop 908,000
-# (457,576 + 450,000 = 907,576). Limits per run unchanged." So the L3
-# sequence (M4-lead-codex) cap is 610,000 with its stop at 488,000 (it was
-# 565,000 and 452,000), and the Codex cap 1,135,000 with its stop at
-# 908,000 (codex_live_run.CAP, STOP_AT; it was 1,090,000 and 872,000). Codex's
+# (457,576 + 450,000 = 907,576). Limits per run unchanged." Owner decision,
+# 2026-09-26 (Q9, "Child 90k"), after the source showed that alpha's
+# 30-second command outlasts both of code mode's yields, so it takes at least
+# one more model step than a direct call: "Child ceiling 90,000; worst case
+# 510,000. L3 sequence cap 685,000 / stop 548,000 (36,126 + 510,000 =
+# 546,126). Codex cap 1,210,000 / stop 968,000 (457,576 + 510,000 =
+# 967,576). Expected spend is unchanged (~150-250k); only the worst-case
+# reservation grows." So each child's ceiling is 90,000 (share 150,000), the
+# lead's still 150,000 (share 210,000), a step in flight still 30,000; the L3
+# sequence (M4-lead-codex) cap is 685,000 with its stop at 548,000 (it was
+# 610,000 and 488,000 under Q8, 565,000 and 452,000 before), and the Codex
+# cap 1,210,000 with its stop at 968,000 (codex_live_run.CAP, STOP_AT; it was
+# 1,135,000 and 908,000 under Q8, 1,090,000 and 872,000 before). Codex's
 # reported total covers every step of a turn (review 48, from M2's host
 # events), so it is what a run is charged, and it arrives after every step,
 # so the runner can stop a run by it. A step on this harness and model was
@@ -396,8 +407,8 @@ for _plan in PLANS.values():
 # in two steps.
 CODEX = dict(
     model='gpt-5.6-terra', model_provider='openai', sequence='M4-lead-codex',
-    sequence_cap=610_000, sequence_stop=488_000, lead_ceiling=150_000,
-    child_ceiling=60_000, in_flight=30_000, ledger='Codex ledger',
+    sequence_cap=685_000, sequence_stop=548_000, lead_ceiling=150_000,
+    child_ceiling=90_000, in_flight=30_000, ledger='Codex ledger',
     live=codex_live_run,
     # Where the rehearsal's Codex comes from, in the receipt (owner decision
     # for L3, 2026-09-25: the record says so).
@@ -2485,9 +2496,9 @@ def codex_scenario(mutant, calls):
                   'stopped-charge-capped', 'meter-dies'):
         # alpha runs its command once more than its ceiling holds in steps,
         # each a 30,000-token step, the most the bound allows in flight
-        # (review of L3, round 3, SPEND-4): three times at a ceiling of
-        # 60,000. Codex reports each once its command has finished, so the
-        # report that reaches the ceiling (60,000) arrives with the next step
+        # (review of L3, round 3, SPEND-4): four times at a ceiling of
+        # 90,000. Codex reports each once its command has finished, so the
+        # report that reaches the ceiling (90,000) arrives with the next step
         # in flight, and the runner stops alpha then; a child's model step
         # here takes six seconds, longer than the stop takes to reach it
         # (about 1.5 s against this service), as a real step does.
@@ -2495,15 +2506,16 @@ def codex_scenario(mutant, calls):
                     led_commands=CHILD_CEILING // CODEX['in_flight'] + 1, led_step_ms=6000)
     if mutant in ('stopped-past-share', 'stopped-charge-capped'):
         # And ignores the stop: it runs its last command and answers, both
-        # reported (120,000 in all), and exits by itself (SPEND-7).
+        # reported (150,000 in all), and exits by itself (SPEND-7).
         play['led_ignores_interrupt_if'] = alpha
     if mutant == 'step-past-in-flight':
         # One step of 40,000: under the ceiling, past the in-flight bound.
         play.update(led_heavy_if=alpha, led_heavy_step=40_000, led_step_ms=6000)
     if mutant in ('probe-over-share', 'probe-charged-flat'):
         # The third run the runner's probe starts, admitted, takes one step
-        # of 150,000, past its share (review of L3, round 4, SPEND-12).
-        play.update(led_heavy_if=THIRD_BRIEF, led_heavy_step=150_000)
+        # a whole step past its share (180,000 against 150,000; review of L3,
+        # round 4, SPEND-12).
+        play.update(led_heavy_if=THIRD_BRIEF, led_heavy_step=CHILD_SHARE + CODEX['in_flight'])
     if mutant in ('late-step-after-halt', 'stale-meter-charged'):
         # The same step, reported only once the runner is on its way out.
         play.update(led_heavy_if=alpha, led_heavy_step=40_000)
@@ -2530,7 +2542,7 @@ def codex_scenario(mutant, calls):
         play.update(spawn_agent_if=alpha, subagent_steps=3, subagent_step_ms=1500)
     if mutant in ('stop-ignored', 'not-exited-charged-share'):
         # alpha's first step alone is past its ceiling, and by more than its
-        # share less a step (100,000 against 60,000 and 120,000); it
+        # share less a step (130,000 against 90,000 and 150,000); it
         # acknowledges the interrupt and goes on, answering two and a half
         # minutes later, so it is still running when its usage is read.
         play.update(led_heavy_if=alpha, led_heavy_step=CHILD_SHARE - CODEX['in_flight'] + 10_000,
@@ -4460,13 +4472,18 @@ def live_precheck(book, names, sequence_stop=None, harness_stop=None):
 
 
 def sizing_selftest():
-    """L3's second attempt against the owner's sizing of 2026-09-26 (Q8), on
-    a made-up ledger holding what the Codex ledger held after attempt 1:
-    the L3 sequence at 36,126 and Codex at 457,576. Attempt 2 fits; under
-    the sizing before Q8 it did not (the negative control); and once
-    attempt 2 has charged more than 1,874 the sequence stop refuses a
-    third, and more than 423 the Codex stop does."""
+    """L3's second attempt against the owner's sizing of 2026-09-26 (Q9,
+    "Child 90k"), on a made-up ledger holding what the Codex ledger held
+    after attempt 1: the L3 sequence at 36,126 and Codex at 457,576. The
+    shares are 210,000 and 150,000 and the worst case 510,000; attempt 2
+    fits (546,126 within 548,000, 967,576 under 968,000); under the sizing
+    before Q9 (Q8's 488,000 and 908,000) it does not (the negative control);
+    and once attempt 2 has charged more than 1,874 the sequence stop refuses
+    a third, and more than 423 the Codex stop does."""
     select_plan('L3')
+    assert (LEAD_CEILING, CHILD_CEILING, CODEX['in_flight']) == (150_000, 90_000, 30_000)
+    assert (LEAD_SHARE, CHILD_SHARE, WORST_CASE) == (210_000, 150_000, 510_000), \
+        (LEAD_SHARE, CHILD_SHARE, WORST_CASE)
     other = 457_576 - 36_126
     book = {'runs': {'M2-runs': dict(tokens=other, charged=other),
                      'L3': dict(sequence=SEQUENCE, charged=36_126, tokens=36_126)}}
@@ -4476,7 +4493,9 @@ def sizing_selftest():
     seen = live_precheck(book, second)
     assert (seen['sequence_charged'], seen['harness_charged']) == (36_126, 457_576), seen
     assert (SEQUENCE_CAP, SEQUENCE_STOP, live.CAP, live.STOP_AT) == \
-        (610_000, 488_000, 1_135_000, 908_000), 'the owner sized L3 attempt 2 otherwise'
+        (685_000, 548_000, 1_210_000, 968_000), 'the owner sized L3 attempt 2 otherwise'
+    assert 36_126 + WORST_CASE == 546_126 <= SEQUENCE_STOP
+    assert 457_576 + WORST_CASE == 967_576 < live.STOP_AT
 
     def refused(check):
         try:
@@ -4484,10 +4503,10 @@ def sizing_selftest():
         except SystemExit as stop:
             return str(stop)
         raise AssertionError('not refused')
-    before_q8 = refused(lambda: live_precheck(book, second, 452_000, 872_000))
-    assert 'past the 452000 stop' in before_q8, before_q8
-    for charged, why in ((1_875, 'past the 488000 stop'), (1_874, 'reach 908000'),
-                         (36_126, 'past the 488000 stop')):
+    before_q9 = refused(lambda: live_precheck(book, second, 488_000, 908_000))
+    assert 'past the 488000 stop' in before_q9, before_q9
+    for charged, why in ((1_875, 'past the 548000 stop'), (1_874, 'reach 968000'),
+                         (36_126, 'past the 548000 stop')):
         after = {'runs': dict(book['runs'], **{second[LEAD]: dict(
             sequence=SEQUENCE, charged=charged, tokens=charged)})}
         said = refused(lambda: live_precheck(after, third))
@@ -4495,8 +4514,9 @@ def sizing_selftest():
     after = {'runs': dict(book['runs'], **{second[LEAD]: dict(sequence=SEQUENCE, charged=423,
                                                                 tokens=423)})}
     live_precheck(after, third)
-    print('sizing selftest: attempt 2 fits under 488,000 and 908,000; the sizing before Q8 '
-          'refused it; a third is refused once attempt 2 has charged more than 423')
+    print('sizing selftest: shares 210,000 and 150,000, worst case 510,000; attempt 2 fits under '
+          '548,000 and 968,000; the sizing before Q9 refused it; a third is refused once '
+          'attempt 2 has charged more than 423')
 
 
 def names_of(record):
@@ -4760,13 +4780,16 @@ def charge_selftest():
         meters = {f'{LEAD}.alpha': gauge}
         entry = codex_usage(views, meters, {f'{LEAD}.alpha'}, stopped)[f'{LEAD}.alpha']
         return entry['charged'], entry['basis']
+    # Reports just under the child's share less a step, so that the report
+    # plus a step is past the share (Q9: 125,000 and 130,000 against 150,000).
+    near, past = CHILD_SHARE - step + 5_000, CHILD_SHARE - step + 10_000
     cases = [
-        ('silenced past its share', run(95_000, silenced=True), (), (95_000 + step, SILENT_BASIS)),
-        ('interrupted by the host', run(100_000, turn_status='interrupted'), (),
-         (100_000 + step, STOPPED_BASIS)),
-        ('stopped past its share', run(100_000), (f'{LEAD}.alpha',), (100_000 + step, STOPPED_BASIS)),
-        ('a step past the bound', run(60_000, largest_step=40_000), (f'{LEAD}.alpha',),
-         (100_000, STOPPED_BASIS)),
+        ('silenced past its share', run(near, silenced=True), (), (near + step, SILENT_BASIS)),
+        ('interrupted by the host', run(past, turn_status='interrupted'), (),
+         (past + step, STOPPED_BASIS)),
+        ('stopped past its share', run(past), (f'{LEAD}.alpha',), (past + step, STOPPED_BASIS)),
+        ('a step past the bound', run(CHILD_CEILING, largest_step=40_000), (f'{LEAD}.alpha',),
+         (CHILD_CEILING + 40_000, STOPPED_BASIS)),
         ('with a sub-agent', run(40_000, subagents=[dict(thread_id='t')]), (f'{LEAD}.alpha',),
          (40_000 + 2 * step, STOPPED_BASIS)),
     ]
@@ -5051,7 +5074,7 @@ def main():
             assert stops and any('the bound assumes' in w for w in stops[0]['why']), stops
             assert spent['charged'] >= spent['reported_total'] + 40_000, spent
         if args.mutant == 'stopped-past-share':
-            # Stopped at 60,000, answered anyway, and charged its report and
+            # Stopped at 90,000, answered anyway, and charged its report and
             # a step, past its share, uncapped.
             assert spent['reported_total'] == (CHILD_CEILING // CODEX['in_flight'] + 2) \
                 * CODEX['in_flight'], spent
