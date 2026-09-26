@@ -29,11 +29,18 @@ pub const MODEL_EXCEPTION: &str = "owner-2026-09-19-m2-fixture-runs";
 /// `pio_codex::features_off` lists, in every thread's `thread/start` config
 /// and never in the owner's files (review of L3, round 3, SPEND-2; round 4,
 /// SPEND-8, SPEND-9, and the web-search and image-generation gaps). One
-/// override set, one decision list. **None is recorded**: the owner decides
-/// whether L3 runs with this or with their own configuration turning each
-/// feature off, and records the decision here by its date. Until then a
-/// real Codex refuses the setting.
-pub const FEATURES_OFF_DECISIONS: &[&str] = &[];
+/// override set, one decision list; a real Codex refuses any decision not
+/// recorded here.
+///
+/// **Owner decision, 2026-09-26** (answering "Q6: ... how should they be
+/// turned off?", chose "Per-launch override"): "L3's Codex threads are
+/// launched with these five off, per launch, under a dated test-only
+/// exception like the lead-tool pre-allowance. Your ~/.codex/config.toml is
+/// not changed." It covers exactly the five: sub-agents (the three keys),
+/// memories, goals, standalone web search and image generation, as
+/// `pio_codex::features_off` lists them. L3's runner sends it for L3's
+/// threads only.
+pub const FEATURES_OFF_DECISIONS: &[&str] = &["owner-2026-09-26-l3-codex-unmetered-features-off"];
 /// The same setting for a labeled fake only, so the rehearsal and the
 /// matrix exercise what would go on the wire. Refused beside a real Codex.
 pub const FEATURES_OFF_REHEARSAL: &str = "rehearsal-only-features-off";
@@ -652,8 +659,8 @@ mod tests {
         assert_eq!(plain["thread"]["model"], Value::Null);
     }
     /// Codex's unmetered features off per launch (review of L3, rounds 3 and
-    /// 4): only a recorded owner decision, of which there is none yet, or
-    /// the rehearsal's own token beside a labeled fake.
+    /// 4): only a recorded owner decision, the one of 2026-09-26, or the
+    /// rehearsal's own token beside a labeled fake.
     #[test]
     fn features_off_needs_a_recorded_decision() {
         let dir = tempfile::tempdir().unwrap();
@@ -689,19 +696,42 @@ mod tests {
             format!("{error:#}").contains("unsupported codex setting: agents_off_decision"),
             "{error:#}"
         );
-        // The rehearsal's token is refused beside a real Codex, before any
-        // qualification is attempted.
+        // Beside a real Codex, the rehearsal's token and any unrecorded
+        // decision are refused before any qualification is attempted, and a
+        // Codex given no decision at all gets none.
         let mut real = codex_config(dir.path(), plan, Value::Null);
         real["labeled_fake"] = json!(false);
-        real["features_off_decision"] = json!(FEATURES_OFF_REHEARSAL);
+        for decision in [
+            json!(FEATURES_OFF_REHEARSAL),
+            json!("owner-2026-09-26-l3-agents-off"),
+            json!(""),
+        ] {
+            real["features_off_decision"] = decision.clone();
+            let error = codex_host_config(dir.path(), &real).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("not a recorded owner decision"),
+                "{error:#} for {decision}"
+            );
+        }
+        // The one recorded decision passes that check, and a real Codex is
+        // then qualified as ever (this test's executable is not Codex, so
+        // qualification is what refuses it).
+        real["features_off_decision"] = json!(FEATURES_OFF_DECISIONS[0]);
         let error = codex_host_config(dir.path(), &real).unwrap_err();
         assert!(
-            format!("{error:#}").contains("not a recorded owner decision"),
+            !format!("{error:#}").contains("not a recorded owner decision"),
             "{error:#}"
         );
-        assert!(
-            FEATURES_OFF_DECISIONS.is_empty(),
-            "no owner decision is recorded yet"
+        // And beside the labeled fake too.
+        fake["features_off_decision"] = json!(FEATURES_OFF_DECISIONS[0]);
+        assert_eq!(
+            codex_host_config(dir.path(), &fake).unwrap()["features_off_decision"],
+            FEATURES_OFF_DECISIONS[0]
+        );
+        assert_eq!(
+            FEATURES_OFF_DECISIONS,
+            &["owner-2026-09-26-l3-codex-unmetered-features-off"],
+            "exactly the owner's decision of 2026-09-26"
         );
     }
 

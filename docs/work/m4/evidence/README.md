@@ -467,9 +467,8 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   after `turn/completed`), standalone web search (`web.run`, its own model
   call) and image generation (a separate endpoint). **Live, the runner
   refuses to start unless each is off for L3's threads**, by the owner's own
-  `~/.codex/config.toml` or per launch under a recorded owner decision
-  (`--features-off-decision`, recorded in pio-protocol's
-  `FEATURES_OFF_DECISIONS`), which puts every key of
+  `~/.codex/config.toml` or per launch under a recorded owner decision,
+  which puts every key of
   `pio_codex::features_off` in each thread's config: `agents.enabled`,
   `features.multi_agent` and `features.multi_agent_v2` false,
   `features.memories` and its legacy alias `features.memory_tool` false,
@@ -492,7 +491,20 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   `override-misses-alias` models an override without `memory_tool` beside
   the owner's `memory_tool = true`: each is refused for its own feature and
   no other. `overrides-on` turns all five off per launch over a home that
-  turns each on, and holds. Behind the override, the host keeps reading a
+  turns each on, and holds. **Owner decision, 2026-09-26** ("Per-launch
+  override"): "L3's Codex threads are launched with these five off, per
+  launch, under a dated test-only exception like the lead-tool
+  pre-allowance. Your ~/.codex/config.toml is not changed." It is recorded
+  as `owner-2026-09-26-l3-codex-unmetered-features-off` in pio-protocol's
+  `FEATURES_OFF_DECISIONS`, the one entry there, and the L3 plan sends it for
+  its own threads and no other plan's, live and rehearsed; the receipt
+  records each feature's route. Read by those keys alone, the owner's
+  configuration leaves all five on, so live the route for each is per
+  launch; without the decision the runner refuses for all five
+  (`decision-absent`, over the owner's keys as read). The rehearsal's own
+  token remains for the matrix and for the mutants that model the override
+  (`overrides-on`, `override-misses-alias`); the mutants that play a Codex
+  whose features are on send none. Behind the override, the host keeps reading a
   run's own thread for three seconds after its turn has ended: a turn Codex
   starts there by itself (a goal's continuation) is interrupted, carried on
   the exit (`pio.combraton.dev/continuations`), and its run charged as cut

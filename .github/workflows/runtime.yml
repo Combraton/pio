@@ -233,7 +233,7 @@ jobs:
                    subagent-spawned subagent-not-stopped subagent-uncounted \
                    subagents-unguarded subagents-multi-agent-only step-past-in-flight \
                    memory-unguarded memory-alias goals-unguarded web-search-unguarded \
-                   image-generation-unguarded override-misses-alias \
+                   image-generation-unguarded override-misses-alias decision-absent \
                    goal-continued continuation-uncharged late-step-after-halt stale-meter-charged \
                    probe-over-share probe-charged-flat \
                    stopped-past-share stopped-charge-capped deadline-interrupted \

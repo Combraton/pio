@@ -181,6 +181,10 @@ does with a permission prompt.
   `override-misses-alias` sends the fake's token with a modelled override
   that lacks `memory_tool`, beside the owner's `memory_tool = true`, which
   still decides: it must refuse too (review of L3, round 4, U1);
+  `decision-absent` sends no decision over the owner's own keys as read on
+  2026-09-26 (`memories = true` and nothing else): all five must be named
+  and refused, as a real Codex without L3's decision would be (owner
+  decision, 2026-09-26, "Per-launch override");
 - `lead-exit-uncarried` (L3) drops the lead's list of what PIO declined, as
   if its exit carried none and it was not seen to exit: the pre-allowance
   row must be inconclusive, not held; `owner-service-absent` empties both
@@ -323,6 +327,12 @@ PLANS = {
                  '#12); owner decision of 2026-09-26, "More headroom": lead 150,000, child '
                  '60,000, in flight 30,000, sequence cap 565,000 and stop 452,000, Codex cap '
                  '1,090,000 and stop 872,000',
+        # Owner decision, 2026-09-26 ("Per-launch override"): L3's Codex
+        # threads are launched with Codex's five unmetered features off, per
+        # launch, under this dated decision (pio-protocol
+        # FEATURES_OFF_DECISIONS); the owner's config.toml is not changed.
+        # Sent for this plan's threads only.
+        features_off_decision='owner-2026-09-26-l3-codex-unmetered-features-off',
         files={'alpha.md': 7, 'beta.md': 4},
         briefs={'alpha.md': 'Run the shell command `sleep 30 && wc -l alpha.md`. Then '
                             'report the number of lines in alpha.md. Answer with the '
@@ -672,6 +682,9 @@ UNMETERED_PLANTED = {
     'web-search-unguarded': all_off_but('standalone web search'),
     'image-generation-unguarded': all_off_but('image generation'),
     'override-misses-alias': '[features]\nmemory_tool = true\n',
+    # The owner's own configuration as read by those keys alone on
+    # 2026-09-26 (memories = true, nothing else), and no decision sent.
+    'decision-absent': '[features]\nmemories = true\n',
     # Every feature on in the owner's own configuration, each by its own key
     # and its alias where it has one: the override must beat them all. It
     # ends with a blank line, as the fake's trust entry expects, so that
@@ -689,12 +702,18 @@ UNMETERED_REFUSED = {
     'goals-unguarded': ('goals', "Codex's default: on"),
     'web-search-unguarded': ('standalone web search', "Codex's default: cached"),
     'image-generation-unguarded': ('image generation', "Codex's default: on"),
-    'override-misses-alias': ('memories', "features.memory_tool = true, the owner's config.toml")}
+    'override-misses-alias': ('memories', "features.memory_tool = true, the owner's config.toml"),
+    'decision-absent': ('all five', "features.memories = true, the owner's config.toml")}
 # The mutants whose lead has a budget of three, so the runner's third start
 # is admitted.
 THIRD_ADMITTED = ('third-admitted', 'probe-over-share', 'probe-charged-flat')
 # The mutants that send the fake's own token.
 OVERRIDE_MUTANTS = ('overrides-on', 'override-misses-alias')
+# The mutants that play a Codex whose unmetered features are on: L3's
+# decision is not sent for them, so the fake does what each feature does,
+# and the rows behind the override are shown to catch it.
+FEATURES_ON_MUTANTS = ('subagent-spawned', 'subagent-not-stopped', 'subagent-uncounted',
+                       'memory-pipeline-ran', 'goal-continued', 'continuation-uncharged')
 
 MUTANTS = {
     'no-tool': 'Only the lead got the tool',
@@ -805,7 +824,7 @@ MUTANTS = {
     **{m: UNMETERED_REFUSAL for m in (
         'subagents-unguarded', 'subagents-multi-agent-only', 'memory-unguarded', 'memory-alias',
         'goals-unguarded', 'web-search-unguarded', 'image-generation-unguarded',
-        'override-misses-alias')},
+        'override-misses-alias', 'decision-absent')},
     # A child's first step is 40,000, past the 30,000 the bound assumes in
     # flight: the runner must stop it, and the row fails (SPEND-4).
     'step-past-in-flight': 'Every step stayed within the in-flight bound',
@@ -880,7 +899,7 @@ PLAN_MUTANTS = {**{m: {'L3'} for m in (
                     'subagent-spawned', 'subagent-not-stopped', 'subagent-uncounted',
                     'subagents-unguarded', 'subagents-multi-agent-only', 'overrides-on',
                     'memory-unguarded', 'memory-alias', 'goals-unguarded', 'web-search-unguarded',
-                    'image-generation-unguarded', 'override-misses-alias',
+                    'image-generation-unguarded', 'override-misses-alias', 'decision-absent',
                     'step-past-in-flight', 'stopped-past-share', 'stopped-charge-capped',
                     'deadline-interrupted', 'interrupted-charged-reported',
                     'memory-pipeline-ran', 'meter-dies', 'lead-exit-uncarried',
@@ -1006,8 +1025,8 @@ FEATURE_KEYS = {'exec_permission_approvals': ('exec_permission_approvals', 'requ
                 'request_permissions_tool': ('request_permissions_tool',)}
 # A labeled fake's own token for turning Codex's unmetered features off per
 # launch (sub-agents among them); a real Codex takes only a recorded owner
-# decision (pio-protocol stream.rs, FEATURES_OFF_DECISIONS, empty until the
-# owner decides).
+# decision (pio-protocol stream.rs, FEATURES_OFF_DECISIONS: the owner's of
+# 2026-09-26, which the L3 plan sends).
 FEATURES_OFF_REHEARSAL = 'rehearsal-only-features-off'
 # What the host puts in each thread's config under that decision or token,
 # key by key (pio_codex::features_off, rust-v0.157.0; review of L3, round 4).
@@ -2416,11 +2435,15 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
     rows = Rows(rehearse)
     # Sub-agents off per launch: the owner's recorded decision, live, or the
     # labeled fake's own token (review of L3, round 3, SPEND-2).
-    # Codex's unmetered features off per launch: the owner's recorded
-    # decision, live, or the labeled fake's own token (review of L3, round
-    # 3, SPEND-2; round 4, U1).
+    # Codex's unmetered features off per launch (review of L3, round 3,
+    # SPEND-2; round 4, U1): the plan's own recorded owner decision, L3's
+    # alone (owner decision, 2026-09-26), live and rehearsed alike. The
+    # labeled fake's own token for the mutants that model the override
+    # itself; none for those that play a Codex whose features are on, or
+    # that apply the live check to a home without the decision.
     features_off = FEATURES_OFF_REHEARSAL if args.mutant in OVERRIDE_MUTANTS \
-        else args.features_off_decision
+        else None if args.mutant in (*UNMETERED_REFUSED, *FEATURES_ON_MUTANTS) \
+        else PLAN.get('features_off_decision')
     service = Service(root, rehearse, scenario(args.mutant), args.mutant,
                       features_off=features_off)
     if HARNESS == 'opencode':
@@ -2482,8 +2505,8 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
                 "refusing to start: Codex's unmetered, default-on features are not all off for "
                 "L3's threads: " + '; '.join(f'{f} ({why})' for f, why in not_off.items())
                 + ". Each must be off, by the owner's own config.toml or per launch under a "
-                'recorded owner decision (--features-off-decision; pio-protocol '
-                'FEATURES_OFF_DECISIONS); nothing is started or reserved.')
+                "recorded owner decision the plan sends (pio-protocol FEATURES_OFF_DECISIONS); "
+                'nothing is started or reserved.')
     # `--relay`: a rehearsal whose desk waits for answer files, as a live
     # one does, so the relay that will run beside the live run is rehearsed
     # against the requests this code actually writes.
@@ -4362,11 +4385,6 @@ def main():
     parser.add_argument('--relay', action='store_true',
                         help='rehearsal only: the desk waits for answer files, as live, '
                              'so a relay can answer them')
-    parser.add_argument('--features-off-decision',
-                        help="L3: the owner's dated decision to turn Codex's unmetered features "
-                             "off per launch (pio_codex::features_off, in each thread's config); "
-                             "a real Codex takes it only once it is recorded in pio-protocol's "
-                             'FEATURES_OFF_DECISIONS')
     parser.add_argument('--charge-selftest', action='store_true',
                         help="check the Codex charge's corners on made-up runs, and exit")
     parser.add_argument('--inner', action='store_true', help=argparse.SUPPRESS)
@@ -4414,7 +4432,8 @@ def main():
                 # and for no other.
                 feature, why = UNMETERED_REFUSED[args.mutant]
                 named = {f for f in UNMETERED if f'{f} (' in str(error)}
-                assert named == {feature} and why in str(error), error
+                wanted_features = set(UNMETERED) if feature == 'all five' else {feature}
+                assert named == wanted_features and why in str(error), error
             print(f'mutant {args.mutant}: dies on {MUTANTS[args.mutant]!r}: '
                   f'{type(error).__name__}, and the tree is gone: {redact(str(error))[:600]}')
             raise SystemExit(1)
