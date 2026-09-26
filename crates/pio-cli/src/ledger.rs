@@ -1,14 +1,17 @@
-//! Bounded caller ledger, physically separate from the service journal. It owns
-//! request identities and correlations, never copied service execution state.
+//! The caller ledger behind `pio client submit` and `pio client reconcile`:
+//! bounded, physically separate from the service journal, and written
+//! before any I/O. It owns request identities and correlations, never
+//! copied service execution state.
+//!
+//! Moved here from `pio_protocol::client` for M4 T1, with one change: it
+//! reaches the service through `pio_client`, the public client the rest of
+//! `pio client` and the screen use, rather than a wire of its own. What it
+//! records and prints is unchanged: the response frame exactly as it came.
 use anyhow::{Context, Result, ensure};
+use pio_client::{Client, Credential, Options};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
-use std::{
-    io::{BufRead, BufReader, Read, Write},
-    os::unix::net::UnixStream,
-    path::Path,
-    time::Duration,
-};
+use std::{path::Path, time::Duration};
 
 struct Ledger {
     db: Connection,
@@ -43,7 +46,7 @@ impl Ledger {
             request["command_id"].is_string() && request["command_digest"].is_string(),
             "stable command identity required"
         );
-        let id = pio_core::digest(&crate::encoding::canonical(&json!([
+        let id = pio_client::digest(&pio_client::canonical(&json!([
             endpoint,
             principal,
             request["command_id"]
@@ -96,59 +99,27 @@ impl Ledger {
         Ok(())
     }
 }
-struct Wire {
-    writer: UnixStream,
-    reader: BufReader<UnixStream>,
+/// The service's strict encoding/1 parse, for a request file: the ledger
+/// must hold exactly the bytes' meaning the service will digest.
+fn parse(bytes: &[u8]) -> Result<Value> {
+    Ok(pio_protocol::encoding::parse(bytes)?)
 }
-impl Wire {
-    fn connect(socket: &Path, credential: &str) -> Result<Self> {
-        let writer = UnixStream::connect(socket)?;
-        ensure!(pio_host::same_user(&writer), "service peer UID mismatch");
-        writer.set_read_timeout(Some(Duration::from_secs(5)))?;
-        writer.set_write_timeout(Some(Duration::from_secs(5)))?;
-        let mut wire = Self {
-            reader: BufReader::new(writer.try_clone()?),
-            writer,
-        };
-        let auth = wire.query("core.authenticate", json!({"credential":credential}))?;
-        ensure!(
-            auth.get("result").is_some(),
-            "service authentication refused"
-        );
-        let negotiation=wire.query("core.negotiate",json!({"caller":{"name":"pio-caller","version":"0.1.0-dev"},"receive_limits":{"max_frame_bytes":1048576},"profiles":[{"name":"core","majors":[1],"required":true,"required_features":["core.events","core.capabilities","core.effects"],"optional_features":[]},{"name":"execution","majors":[1],"required":true,"required_features":[],"optional_features":[]}]}))?;
-        ensure!(
-            negotiation.get("result").is_some(),
-            "service negotiation refused"
-        );
-        Ok(wire)
-    }
-    fn query(&mut self, operation: &str, payload: Value) -> Result<Value> {
-        self.call(&json!({"operation":operation,"message_id":uuid::Uuid::new_v4().to_string(),"payload":payload}))
-    }
-    fn call(&mut self, request: &Value) -> Result<Value> {
-        let id = uuid::Uuid::new_v4().to_string();
-        let mut bytes = serde_json::to_vec(
-            &json!({"jsonrpc":"2.0","id":id,"method":request["operation"],"params":request}),
-        )?;
-        bytes.push(b'\n');
-        self.writer.write_all(&bytes)?;
-        loop {
-            let mut bytes = vec![];
-            self.reader
-                .by_ref()
-                .take(1048577)
-                .read_until(b'\n', &mut bytes)?;
-            ensure!(
-                bytes.len() <= 1048576 && bytes.last() == Some(&b'\n'),
-                "invalid or closed response stream"
-            );
-            let response = crate::encoding::parse(&bytes)?;
-            if response["id"] == id {
-                return Ok(response);
-            }
-        }
-    }
+
+/// A session for the ledger. Authentication or negotiation refused is an
+/// error here, as it was: nothing can be submitted or reconciled.
+fn connect(socket: &Path, credential: &Credential) -> Result<Client> {
+    Client::connect(
+        socket,
+        credential,
+        &Options {
+            timeout: Duration::from_secs(5),
+            grant: None,
+            caller: "pio-caller".into(),
+        },
+    )
+    .map_err(|failure| anyhow::anyhow!("{failure}"))
 }
+
 /// On restart reconcile pending identities before any retry. An empty query
 /// does not prove non-submission after history loss; leave it pending explicitly.
 pub fn run(
@@ -158,19 +129,14 @@ pub fn run(
     request_path: Option<&Path>,
     basis_path: Option<&Path>,
 ) -> Result<Value> {
-    let credential = std::fs::read_to_string(credential_path)?;
-    let credential = credential.trim();
-    let principal = credential
-        .strip_prefix("ccred1.")
-        .and_then(|s| s.rsplit_once('.'))
-        .context("credential format")?
-        .0;
+    let credential = Credential::read(credential_path)?;
+    let principal = credential.principal();
     let endpoint = socket.to_str().context("UTF-8 socket path")?;
     let mut ledger = Ledger::open(root)?;
     if let Some(path) = request_path {
-        let request = crate::encoding::parse(&std::fs::read(path)?)?;
+        let request = parse(&std::fs::read(path)?)?;
         let basis = if let Some(path) = basis_path {
-            crate::encoding::parse(&std::fs::read(path)?)?
+            parse(&std::fs::read(path)?)?
         } else {
             json!({})
         };
@@ -188,15 +154,15 @@ pub fn run(
             }
         }
         if inserted {
-            let mut wire = Wire::connect(socket, credential)?;
-            let response = wire.call(&request)?;
+            let mut wire = connect(socket, &credential)?;
+            let response = wire.call_frame(&request)?;
             ledger.observe(&id, &response)?;
             return Ok(json!({"caller_operation":id,"response":response}));
         }
     }
     let rows=ledger.db.prepare("SELECT id,request FROM operations WHERE status='pending' AND endpoint=? AND principal=? ORDER BY rowid")?
         .query_map(params![endpoint,principal],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<std::result::Result<Vec<_>,_>>()?;
-    let mut wire = Wire::connect(socket, credential)?;
+    let mut wire = connect(socket, &credential)?;
     let mut outcomes = vec![];
     for (id, raw) in rows {
         let request: Value = serde_json::from_str(&raw)?;
@@ -204,14 +170,14 @@ pub fn run(
         if let Some(grant) = request.get("grant") {
             query["grant"] = grant.clone();
         }
-        let observed = wire.call(&query)?;
+        let observed = wire.call_frame(&query)?;
         if observed["result"]["executions"]
             .as_array()
             .is_some_and(|a| a.contains(&request["subject"]))
         {
             // Fetch the original acknowledgment by exact idempotent replay; no
             // new command, digest, generation, subject or authority is invented.
-            let response = wire.call(&request)?;
+            let response = wire.call_frame(&request)?;
             ledger.observe(&id, &response)?;
             outcomes
                 .push(json!({"caller_operation":id,"reconciliation":observed,"response":response}));

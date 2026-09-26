@@ -22,7 +22,7 @@ def main():
     case.config['fake_host']=dict(duration_ms=100,fault='')
     case.config['protocol']['faults']={'response_internal_error':[{'operation':'execution.submit','times':1}]}
     case.config_path.write_text(json.dumps(case.config))
-    common=['--store',str(caller),'--socket',str(case.root/'public.sock'),'--credential-file',str(credential)]
+    common=['--store',str(caller),'--socket',str(case.root/'public.sock'),'--credential-file',str(credential),'--json']
     try:
         # Unavailable endpoint: the request survives before any network I/O.
         initial=subprocess.run([str(BINARY),'client','submit',*common,'--request',str(request),'--basis',str(basis)],capture_output=True,text=True)

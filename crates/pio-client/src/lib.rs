@@ -10,6 +10,7 @@ pub mod board;
 pub mod client;
 pub mod replay;
 pub mod walk;
+pub mod watch;
 pub mod wire;
 
 pub use client::{

@@ -34,6 +34,10 @@ pio-codex = { path = "../pio-codex" }
 pio-claude = { path = "../pio-claude", default-features = false }
 pio-opencode = { path = "../pio-opencode", default-features = false }
 pio-client = { path = "../pio-client" }
+rusqlite.workspace = true
+uuid.workspace = true
+libc.workspace = true
+base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"

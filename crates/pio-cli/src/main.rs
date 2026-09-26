@@ -1,5 +1,7 @@
 use anyhow::{Context, Result, bail};
 use std::path::Path;
+mod client_cli;
+mod ledger;
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -386,42 +388,8 @@ fn run() -> Result<()> {
                 ))?
             );
         }
-        Some("client") => {
-            let option = |name: &str| -> Result<&Path> {
-                let index = args
-                    .iter()
-                    .position(|a| a == name)
-                    .context("missing client option")?;
-                Ok(Path::new(
-                    args.get(index + 1).context("missing option value")?,
-                ))
-            };
-            let action = args.get(1).context("client requires submit or reconcile")?;
-            anyhow::ensure!(
-                ["submit", "reconcile"].contains(&action.as_str()),
-                "unknown client action"
-            );
-            let request = if action == "submit" {
-                Some(option("--request")?)
-            } else {
-                None
-            };
-            let basis = if args.iter().any(|a| a == "--basis") {
-                Some(option("--basis")?)
-            } else {
-                None
-            };
-            println!(
-                "{}",
-                pio_protocol::client::run(
-                    option("--store")?,
-                    option("--socket")?,
-                    option("--credential-file")?,
-                    request,
-                    basis
-                )?
-            );
-        }
+        // Everything a caller does, through the public client (M4 rule 1).
+        Some("client") => client_cli::run(&args[1..])?,
         Some("fake") => {
             let action = args.get(1).context(
                 "fake requires daemon, request, host, child, identity or fill-projection",

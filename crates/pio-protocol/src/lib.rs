@@ -1,4 +1,6 @@
-mod encoding;
+/// The encoding/1 value domain: the strict parse the service applies to
+/// every frame, and the canonical form commands are digested in.
+pub mod encoding;
 mod provider;
 mod schemas;
 mod stream;
@@ -18,8 +20,6 @@ mod persistence;
 mod execution;
 
 mod output;
-
-pub mod client;
 
 pub mod transcript;
 
