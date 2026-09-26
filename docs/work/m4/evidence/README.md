@@ -406,7 +406,42 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   case is **405,000** (185,000 + 2 x 110,000), past the 320,000 stop, the
   400,000 cap and, with Codex's 421,450 used, the 800,000 Codex stop, so
   **the live runner refuses to start L3** until the owner decides the
-  sizing. The limits are the owner's and are unchanged.
+  sizing. The limits are the owner's and are unchanged. That figure holds
+  only with sub-agents off (below). With them on, each run could also start
+  sub-agents in one step before its stop lands, each with a step in flight:
+  **675,000** for multi-agent V2 (three resident per run, 405,000 + 3 x 3
+  x 30,000) and **945,000** for V1 (six), from Codex's source at
+  rust-v0.157.0 and not measured. The bound rests on a step being at most
+  30,000; the runner now checks every report against that, stops a run
+  whose step is larger, and charges its largest step in flight
+  (`step-past-in-flight`; round 3, SPEND-4). Codex retries a dropped stream
+  up to 5 times and a failed request up to 4 by default, and records usage
+  only on a completed response: whatever a dropped attempt is billed is
+  never reported and is outside the bound (not measured).
+- **Sub-agents.** Codex 0.157.0 has `multi_agent` on by default and
+  attaches every thread it creates to every initialized connection, so a
+  sub-agent a run spawns reports on PIO's connection. The host now tells
+  threads apart: another thread's notifications never end the run's turn
+  or speak in its output, its requests are declined by PIO, its usage is
+  added to the run's (the run's usage is the sum over its threads), it is
+  interrupted with the run, and the run's exit carries it
+  (`pio.combraton.dev/other-threads`). The runner stops a run the moment
+  one appears and charges it a step in flight on each of its threads; the
+  rows "No run spawned a sub-agent" and "Every run that spawned a sub-agent
+  was stopped when it appeared" judge it (`subagent-spawned`,
+  `subagent-not-stopped`, `subagent-uncounted`). **Live, the runner refuses
+  to start unless sub-agents are off**, either by the owner's own
+  `[agents] enabled = false` (with `features.multi_agent_v2` not on) or per
+  launch under a recorded owner decision (`--agents-off-decision`, which
+  puts `agents.enabled = false`, `features.multi_agent = false` and
+  `features.multi_agent_v2 = false` in each thread's config). The owner
+  decides which; no decision is recorded. `multi_agent = false` alone is not
+  enough: at rust-v0.157.0 the model catalog's multi-agent version wins over
+  it, and `gpt-5.6-terra`'s bundled entry names V2
+  (`subagents-multi-agent-only`). What the fake spawns is 0.157.0's shape
+  read from source (a `subAgentActivity` item, then the agent's own
+  thread), not a measurement; whether the live model would spawn at all is
+  not known.
 - **The pre-allowance.** Whether Codex honours the per-thread
   `tools.<name>.approval_mode: approve` and asks nothing before the lead's
   tool calls. The fake implements that mode itself, so the row shows that
@@ -488,13 +523,19 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   (`lead_tool.py --selftest`). No run is stopped in this rehearsal, so the
   row "Every stop the runner made reached Codex" is **inconclusive**;
   `child-overspends` must hold it and `ceiling-cancel-never-sent` fails it.
-  A run the runner stops is charged what it reported plus one step, not
-  capped; one not seen exited, its share or what it reported or its meter
-  saw plus a step, if more; one stopped for silence or with no usage, its
-  share or what it reported, if more; a submit that made no execution,
-  nothing. Two rows judge that: the charge covers what each run could have
-  spent (a floor worked out from the views and meters, not from the charge),
-  and each charge stays within its reserved share. A Codex that ignored an
+  A run whose turn was cut short, by the runner's stop or by an interrupt
+  the host sent (its own deadline, a cancel), is charged what it reported
+  plus a step in flight on each of its threads (30,000, or its largest
+  step, if larger), not capped (`stopped-past-share`, and
+  `stopped-charge-capped` for the cap put back; `deadline-interrupted`, and
+  `interrupted-charged-reported` for a charge that reads the runner's stops
+  alone); one not seen exited, or stopped for silence, its share or that,
+  if more; one with no usage, its share; a submit that made no execution,
+  nothing. `lead_run.py --charge-selftest` checks the corners no play
+  reaches. Two rows judge that: the charge covers what each run could have
+  spent (a floor worked out from the views, the meters and the host's own
+  usage events, not from the charge), and each charge stays within its
+  reserved share. A Codex that ignored an
   interrupt (`stop-ignored`) fails the share row and the stop row. Whether
   Codex bills an aborted step beyond what it reports is not measured. A run
   active for 150 s with no usage is stopped (`usage-suppressed`,

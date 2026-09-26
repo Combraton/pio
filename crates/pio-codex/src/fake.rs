@@ -39,6 +39,10 @@
 //! in Codex's own shell tool instead of an MCP call. A led run whose prompt
 //! contains `led_ignores_interrupt_if` acknowledges `turn/interrupt` and goes
 //! on; `led_answer_ms` is how long a led run's answering step takes.
+//! Where a led run's prompt contains `led_step_if`, every step is
+//! `led_step` tokens; where it contains `led_commands_if`, it runs its
+//! command `led_commands` times, a step each (the later ones
+//! `led_repeat_delay_ms` long), before it answers.
 //! `spawn_agent_if` (a led run's prompt) or `spawn_agent` (the plain turn)
 //! spawns a sub-agent as Codex 0.157.0 does (`fake_turn::spawn_agent`):
 //! `subagent_steps`, `subagent_step`, `subagent_step_ms` and

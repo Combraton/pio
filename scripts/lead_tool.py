@@ -88,6 +88,10 @@ METER = os.environ.get('PIO_LEAD_METER', '')
 # the meter must have begun a pass this long after the call arrived.
 FRESH = 1.5
 METER_WAIT = 30
+# The host's own deadline for each run it starts, in seconds: 900, unless the
+# runner shortens it for a rehearsal's mutant (review of L3, round 3,
+# SPEND-6).
+DEADLINE = int(os.environ.get('PIO_LEAD_DEADLINE') or 900)
 # The plan's children, by name (`PIO_LEAD_CHILDREN`, comma-separated). A
 # start under any other name is refused here, before it reaches the service:
 # a child the runner does not know by name is a run nothing meters, stops or
@@ -190,7 +194,7 @@ def start_run(name, brief):
         'execution.submit',
         dict(brief=dict(digest=digest(body), media_type='text/plain'),
              workspace=dict(repository=WORKSPACE, base=BASE, cleanup='retain'),
-             timeouts=dict(delivery=300, execution_deadline=900),
+             timeouts=dict(delivery=300, execution_deadline=DEADLINE),
              # Bound to the grant: the initiator must be this lead, and the
              # depth exactly one below it. PIO refuses anything else.
              origin=dict(initiator=dict(kind='execution.execution', id=LEAD),

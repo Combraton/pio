@@ -791,7 +791,12 @@ pub(crate) fn led(
         turn: turn.clone(),
         waiting,
         markers,
-        step: scenario["usage_step"].as_u64().unwrap_or(4096),
+        // Every step's tokens, or this run's own where its prompt says so.
+        step: if named("led_step_if") {
+            scenario["led_step"].as_u64().unwrap_or(30_000)
+        } else {
+            scenario["usage_step"].as_u64().unwrap_or(4096)
+        },
         // Only the first step: the one that runs the command.
         first: named("led_heavy_if").then(|| scenario["led_heavy_step"].as_u64().unwrap_or(60_000)),
         think: scenario["led_step_ms"]
@@ -818,8 +823,16 @@ pub(crate) fn led(
         .store(named("led_ignores_interrupt_if"), Ordering::SeqCst);
     let offset = scenario["led_offset"].as_i64().unwrap_or(0);
     let spawns = named("spawn_agent_if");
+    // How many steps run the command before the answer: one, or
+    // `led_commands` where the prompt contains `led_commands_if`, each a
+    // model step reported once its command has finished.
+    let commands = if named("led_commands_if") {
+        scenario["led_commands"].as_u64().unwrap_or(2)
+    } else {
+        1
+    };
     if let Err(error) = play_led(
-        &play, &cwd, &prompt, delay, asks, grant, offset, spawns, &scenario,
+        &play, &cwd, &prompt, delay, asks, grant, offset, spawns, commands, &scenario,
     ) {
         let _ = play.marker(json!({"kind":"led_script_failed","error":format!("{error:#}")}));
         let _ = turn.complete("failed");
@@ -836,6 +849,7 @@ fn play_led(
     grant: bool,
     offset: i64,
     spawns: bool,
+    commands: u64,
     scenario: &Value,
 ) -> Result<()> {
     let file = named_file(prompt).unwrap_or_default();
@@ -914,28 +928,48 @@ fn play_led(
             return play.turn.complete("completed");
         }
     }
-    play.item(
-        "item/started",
-        json!({"type":"commandExecution","id":"item-command","command":&command,"cwd":cwd,
-               "status":"inProgress","commandActions":[]}),
-    )?;
-    let started = Instant::now();
-    if !play.wait(Duration::from_millis(delay)) {
-        return Ok(());
+    let mut lines = None;
+    for n in 0..commands {
+        if n > 0 {
+            // A later step runs the command again, after thinking.
+            if !play.think() {
+                return Ok(());
+            }
+            play.responded();
+        }
+        let id = if n == 0 {
+            "item-command".to_owned()
+        } else {
+            format!("item-command-{}", n + 1)
+        };
+        play.item(
+            "item/started",
+            json!({"type":"commandExecution","id":id,"command":&command,"cwd":cwd,
+                   "status":"inProgress","commandActions":[]}),
+        )?;
+        let started = Instant::now();
+        let wait = if n == 0 {
+            delay
+        } else {
+            scenario["led_repeat_delay_ms"].as_u64().unwrap_or(1000)
+        };
+        if !play.wait(Duration::from_millis(wait)) {
+            return Ok(());
+        }
+        lines = std::fs::read_to_string(Path::new(cwd).join(&file))
+            .map(|text| text.lines().count() as i64)
+            .ok();
+        play.item(
+            "item/completed",
+            json!({"type":"commandExecution","id":id,"command":&command,"cwd":cwd,
+                   "status":"completed","commandActions":[],"exitCode":0,
+                   "aggregatedOutput":lines.map(|n| format!("{n} {file}\n")),
+                   "durationMs":started.elapsed().as_millis() as u64}),
+        )?;
+        // This step's usage, now that its command has finished (M2 R5,
+        // R6); the next step begins.
+        play.step(true)?;
     }
-    let lines = std::fs::read_to_string(Path::new(cwd).join(&file))
-        .map(|text| text.lines().count() as i64)
-        .ok();
-    play.item(
-        "item/completed",
-        json!({"type":"commandExecution","id":"item-command","command":&command,"cwd":cwd,
-               "status":"completed","commandActions":[],"exitCode":0,
-               "aggregatedOutput":lines.map(|n| format!("{n} {file}\n")),
-               "durationMs":started.elapsed().as_millis() as u64}),
-    )?;
-    // The first step's usage, now that its command has finished (M2 R5,
-    // R6); the step that answers begins.
-    play.step(true)?;
     if !play.wait(play.answer) {
         return Ok(());
     }

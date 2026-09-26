@@ -158,6 +158,25 @@ does with a permission prompt.
   the shell's result met by a stop; `tool-error-ungated` (errors skip the
   gate) and `meter-ignores-items` (the meter blind to such results) must each
   fail the row that checks every result against the hold;
+- `subagent-spawned` (L3) has `alpha` spawn a sub-agent as Codex 0.157.0
+  does: the runner must stop `alpha` when the agent appears and charge it a
+  step in flight on each of its threads, and "No run spawned a sub-agent"
+  fails; `subagent-not-stopped` skips the stop and
+  `subagent-uncounted` charges `alpha`'s own thread alone, and each fails
+  the row that judges it; `subagents-off` turns sub-agents off per launch
+  under the fake's own token, and the row must hold;
+  `subagents-unguarded` and `subagents-multi-agent-only` apply the live
+  check to the rehearsal's own Codex home (its defaults, and `multi_agent =
+  false` alone), which must refuse;
+- `step-past-in-flight` (L3) has `alpha` take a 40,000-token step: the
+  runner must stop it, and the in-flight row fails;
+- `stopped-past-share` (L3) has `alpha`, stopped at its ceiling, ignore the
+  stop and answer: it is charged its 90,000 and a step, past its share, and
+  the share row fails; `stopped-charge-capped` caps that charge at the share,
+  and the floor row fails; `deadline-interrupted` has the host's own
+  deadline interrupt `alpha`, which is charged as a stopped run, and
+  `interrupted-charged-reported` charges it its report alone, and the floor
+  row fails;
 - `child-renamed` (L3) has the lead start and read its children as
   `alpha_run` and `beta_run`: its tool refuses both, since only the plan's
   children may be started, so the start row fails and nothing runs;
@@ -433,6 +452,15 @@ def select_plan(name):
         LEAD_SHARE = LEAD_CEILING + 2 * step
         CHILD_SHARE = CHILD_CEILING + 2 * step
         WORST_CASE = LEAD_SHARE + 2 * CHILD_SHARE
+        # With sub-agents on (Codex 0.157.0's default), each run could also
+        # start sub-agents in one step before the stop lands, each with a
+        # step in flight: at most three resident per run for multi-agent V2
+        # (max_concurrent_threads_per_session 4, less the root; the version
+        # gpt-5.6-terra's bundled catalog entry names), six for V1
+        # (DEFAULT_AGENT_MAX_THREADS). Read from source at rust-v0.157.0, not
+        # measured (review of L3, round 3, SPEND-2).
+        SUBAGENTS_ON = {version: WORST_CASE + len(RUNS) * resident * step
+                        for version, resident in (('v2', 3), ('v1', 6))}
         BOUND = dict(
             call_ceiling=CALL_CEILING, lead_ceiling=LEAD_CEILING,
             child_ceiling=CHILD_CEILING, in_flight=step, hold_above=HOLD_ABOVE,
@@ -447,9 +475,28 @@ def select_plan(name):
             child='at most its ceiling, plus the step that crossed it (reported only after '
                   'its command) and the step in flight when the stop lands',
             usage_silence=USAGE_SILENCE,
-            assumes=["Codex's reported total covers every step of a turn (review 48)",
+            subagents=dict(
+                off=f'{WORST_CASE}: with sub-agents off, by [agents] enabled = false in the '
+                    "owner's configuration or per launch under a recorded owner decision, "
+                    'Codex offers no collaboration tool and the bound above stands',
+                on=SUBAGENTS_ON,
+                on_how=f'{WORST_CASE} plus, for each of the {len(RUNS)} runs, a step in flight '
+                       'on every sub-agent it could start in one step before the stop lands: '
+                       'three for multi-agent V2, six for V1 (rust-v0.157.0, not measured); '
+                       'the live runner refuses to start with sub-agents on'),
+            assumes=["Codex's reported total covers every step of a turn (review 48), and a "
+                     "run's usage is the sum over its threads (round 3)",
                      'a step on this harness and model is at most 30,000 tokens '
-                     '(measured about 22,000 to 24,500, M2 R4 to R6)',
+                     '(measured about 22,000 to 24,500, M2 R4 to R6); the runner checks every '
+                     'report and stops a run whose step is larger, and charges its largest '
+                     'step in flight (review of L3, round 3, SPEND-4)',
+                     'no run has a sub-agent: sub-agents are off, and a run whose sub-agent '
+                     'appears anyway is stopped at once and charged a step on each of its '
+                     'threads (round 3, SPEND-2)',
+                     'Codex retries a dropped stream up to 5 times and a failed request up to '
+                     '4 by default (model-provider-info, rust-v0.157.0) and records usage only '
+                     'on a completed response: what a dropped attempt is billed, if anything, '
+                     'is never reported and is not in this bound (not measured)',
                      'Codex reports a step once its tool has finished, before the next '
                      "step calls a tool (M2 R5, R6), and the report reaches the runner's "
                      'meter within 1.5 s',
@@ -562,6 +609,32 @@ MUTANTS = {
     # The runner reads every message a child said, as it did, not its
     # answer: a preamble that quotes the command is taken for the count.
     'first-number-of-all': 'Each child reported the true count',
+    # A child that spawns a sub-agent, as Codex 0.157.0 does (review of L3,
+    # round 3, SPEND-2): the runner must stop it when the agent appears and
+    # charge it a step in flight on each of its threads. With the stop
+    # skipped, or the charge blind to the agent's thread, the rows that
+    # check each fail.
+    'subagent-spawned': 'No run spawned a sub-agent',
+    'subagent-not-stopped': 'Every run that spawned a sub-agent was stopped when it appeared',
+    'subagent-uncounted': "Every run's charge covers what it could have spent",
+    # The live check on sub-agents, applied to the rehearsal's own Codex
+    # home: its defaults, and `multi_agent = false` alone.
+    'subagents-unguarded': 'The runner refuses a Codex whose runs can spawn sub-agents',
+    'subagents-multi-agent-only': 'The runner refuses a Codex whose runs can spawn sub-agents',
+    # A child's first step is 40,000, past the 30,000 the bound assumes in
+    # flight: the runner must stop it, and the row fails (SPEND-4).
+    'step-past-in-flight': 'Every step stayed within the in-flight bound',
+    # A child stopped at its ceiling that ignores the stop, answers and
+    # exits: charged what it reported plus a step, past its share, so the
+    # share row fails; with the round-1 cap put back, the floor row fails
+    # (SPEND-7).
+    'stopped-past-share': "Every run's charge stayed within its reserved share",
+    'stopped-charge-capped': "Every run's charge covers what it could have spent",
+    # A child the host's own execution deadline interrupts: charged as a
+    # stopped run; with the charge reading the runner's stops alone, the
+    # floor row fails (SPEND-6).
+    'deadline-interrupted': 'Each child reported the true count',
+    'interrupted-charged-reported': "Every run's charge covers what it could have spent",
 }
 # L1b only: a mutant that must leave its row **inconclusive**, not failed. A
 # desk that was never asked has decided nothing, and must not say it has
@@ -574,9 +647,17 @@ INCONCLUSIVE_MUTANTS = {'no-ask': 'Every approval was decided at the desk'}
 HOLDING_MUTANTS = {'alpha-outlasts': 'A read_run waited for its run: until it exited, or to the wait limit',
                    # L3: the committed record itself, planted: the row must
                    # hold, so it is not a row that can only fail.
-                   'qualified-as-committed': 'Codex qualified at the pinned identity'}
+                   'qualified-as-committed': 'Codex qualified at the pinned identity',
+                   # L3: sub-agents turned off per launch, under the labeled
+                   # fake's own token: the child that would spawn one does not.
+                   'subagents-off': 'No run spawned a sub-agent'}
 # The plans a mutant belongs to; any other mutant belongs to every plan.
-PLAN_MUTANTS = {'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
+PLAN_MUTANTS = {**{m: {'L3'} for m in (
+                    'subagent-spawned', 'subagent-not-stopped', 'subagent-uncounted',
+                    'subagents-unguarded', 'subagents-multi-agent-only', 'subagents-off',
+                    'step-past-in-flight', 'stopped-past-share', 'stopped-charge-capped',
+                    'deadline-interrupted', 'interrupted-charged-reported')},
+                'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
                 'child-overspends': {'L3'}, 'child-renamed': {'L3'},
@@ -694,13 +775,20 @@ WIDENING_FEATURES = ('exec_permission_approvals', 'request_permissions_tool')
 # feature's keys in that order decides it (review of L3, round 3, SPEND-3).
 FEATURE_KEYS = {'exec_permission_approvals': ('exec_permission_approvals', 'request_permissions'),
                 'request_permissions_tool': ('request_permissions_tool',)}
+# Codex's sub-agents (review of L3, round 3, SPEND-2): `multi_agent` and its
+# legacy alias `collab` (legacy.rs, rust-v0.157.0).
+AGENT_KEYS = {'multi_agent': ('multi_agent', 'collab')}
+# A labeled fake's own token for turning sub-agents off per launch; a real
+# Codex takes only a recorded owner decision (pio-protocol stream.rs,
+# AGENTS_OFF_DECISIONS, empty until the owner decides).
+AGENTS_OFF_REHEARSAL = 'rehearsal-only-agents-off'
 
 
 def feature_setting(features, feature):
     """What Codex would make of one feature from a `[features]` table, and
     the key that decided it: `None` where no key names it (Codex's default)
     or the deciding key holds something Codex would not read as a switch."""
-    keys = sorted(k for k in FEATURE_KEYS[feature] if k in features)
+    keys = sorted(k for k in {**FEATURE_KEYS, **AGENT_KEYS}[feature] if k in features)
     if not keys:
         return None, None
     value = features[keys[-1]]
@@ -727,6 +815,50 @@ def codex_features(codex_home):
     for feature in FEATURE_KEYS:
         record[feature], record[f'{feature}_key'] = feature_setting(features, feature)
     return record
+
+
+def codex_agents(codex_home):
+    """Whether this Codex can spawn sub-agents on L3's threads, from the
+    keys that decide it and nothing else: `[features]` `multi_agent` (or its
+    alias `collab`) and `multi_agent_v2`, and `[agents]` `enabled`.
+
+    At rust-v0.157.0 a thread's multi-agent version is, in order: V2 if
+    `features.multi_agent_v2` is on; Disabled if `agents.enabled` is false;
+    else the model catalog's version; else V1 if `multi_agent` is on
+    (`Config::multi_agent_version_override`, `multi_agent_version_for_model`).
+    `gpt-5.6-terra`'s bundled catalog entry says `v2`, so `multi_agent =
+    false` alone leaves it on; only `agents.enabled = false`, with
+    `multi_agent_v2` not on, turns it off whatever the catalog says."""
+    path = Path(codex_home) / 'config.toml'
+    record = dict(read=path.name, exists=path.exists(), multi_agent=None, multi_agent_key=None,
+                  multi_agent_v2=None, agents_enabled=None)
+    if not path.exists():
+        return record
+    try:
+        config = tomllib.loads(path.read_text())
+    except tomllib.TOMLDecodeError as error:
+        raise SystemExit(f'refusing to start: {path.name} is unreadable, so whether Codex '
+                         f'can spawn sub-agents cannot be checked: {error}')
+    features = config.get('features') if isinstance(config.get('features'), dict) else {}
+    record['multi_agent'], record['multi_agent_key'] = feature_setting(features, 'multi_agent')
+    v2 = features.get('multi_agent_v2')
+    record['multi_agent_v2'] = v2 if isinstance(v2, bool) else (
+        v2.get('enabled') if isinstance(v2, dict) and isinstance(v2.get('enabled'), bool) else None)
+    agents = config.get('agents') if isinstance(config.get('agents'), dict) else {}
+    record['agents_enabled'] = agents.get('enabled') if isinstance(agents.get('enabled'), bool) \
+        else None
+    return record
+
+
+def subagents_off(settings, decision):
+    """How sub-agents are off for L3, or None if they are not: by the owner's
+    own configuration (`[agents] enabled = false`, `multi_agent_v2` not on),
+    or by a decision that turns them off per launch."""
+    if settings['agents_enabled'] is False and settings['multi_agent_v2'] is not True:
+        return "the owner's configuration: [agents] enabled = false, multi_agent_v2 not on"
+    if decision:
+        return f'per launch, under the decision {decision!r}'
+    return None
 
 
 def fresh_credential(principal):
@@ -777,7 +909,7 @@ class Service:
     """One service for the lead and its children, rehearsed or live:
     `serve-opencode` for L1 and L1b, `serve-codex` for L3."""
 
-    def __init__(self, root, rehearse, scenario, mutant=None):
+    def __init__(self, root, rehearse, scenario, mutant=None, agents_off=None):
         self.root = root
         self.rehearse = rehearse
         self.store = root / 'store'
@@ -794,6 +926,9 @@ class Service:
         if HARNESS == 'codex':
             self.config = dict(format='pio-codex-service/1', protocol=protocol,
                                codex=self.codex(root, rehearse, scenario))
+            if agents_off:
+                # Sub-agents off per launch (review of L3, round 3, SPEND-2).
+                self.config['codex']['agents_off_decision'] = agents_off
         else:
             self.config = self.opencode(root, rehearse, scenario, protocol)
         if mutant == 'service-never-ready':
@@ -1180,6 +1315,20 @@ class CodexMeter(Meter):
         self.untooled = []
         # The actions it is waiting on.
         self.asking = set()
+        # From the run's own host events, followed in the order the host
+        # wrote them (review of L3, round 3, SPEND-2 and SPEND-4): each
+        # thread's last total, the run's total as the host summed it, the
+        # largest model step any report showed, every thread the run did not
+        # start, and how its own turn ended.
+        self.invocation = None
+        self.host_path = None
+        self.host_offset = 0
+        self.threads = {}
+        self.own_total = 0
+        self.host_total = 0
+        self.largest_step = 0
+        self.subagents = []
+        self.turn_status = None
 
     def read(self, caller):
         raw, self.offset = spool(caller, self.identity, self.offset)
@@ -1202,9 +1351,51 @@ class CodexMeter(Meter):
     def estimate(self):
         return self.total
 
+    def host_event(self, event):
+        """One event from the run's own host events file."""
+        kind = event.get('kind')
+        if kind == 'usage':
+            thread = event.get('thread_id') or 'own'
+            total = (event.get('total') or {}).get('totalTokens')
+            last = (event.get('last') or {}).get('totalTokens')
+            if isinstance(total, int):
+                previous = self.threads.get(thread, 0)
+                self.largest_step = max(self.largest_step, total - previous)
+                self.threads[thread] = max(previous, total)
+                if event.get('own_thread', True):
+                    self.own_total = max(self.own_total, total)
+            if isinstance(last, int):
+                self.largest_step = max(self.largest_step, last)
+            summed = event.get('run_total', total)
+            if isinstance(summed, int):
+                self.host_total = max(self.host_total, summed)
+        elif kind == 'other_thread':
+            self.subagents.append(dict(thread_id=event.get('thread_id'), how=event.get('how'),
+                                       at=now()))
+            print(f"SUB-AGENT {self.identity}: {event.get('thread_id')} "
+                  f"({(event.get('how') or {}).get('by')})", flush=True)
+        elif kind == 'turn_completed':
+            self.turn_status = event.get('status')
+        elif self.identity == LEAD and untooled(event):
+            self.untooled.append(dict(item_type=event.get('item_type'), status=event.get('status'),
+                                      server=event.get('server'), total=self.host_total))
+
+    def allowance(self):
+        """A step in flight on each of the run's threads when it is stopped:
+        the step the bound assumes, or the largest the run was seen to take,
+        if larger (review of L3, round 3, SPEND-4 and SPEND-2)."""
+        return max(CODEX['in_flight'], self.largest_step) * (1 + len(self.subagents))
+
+    def summary(self, tool_calls=None):
+        return dict(super().summary(tool_calls), threads=dict(self.threads),
+                    host_total=self.host_total, largest_step=self.largest_step,
+                    subagents=list(self.subagents), turn_status=self.turn_status)
+
     def observe(self, event):
         """One event from the run's stream."""
         payload = event.get('payload') or {}
+        if event['type'] == 'execution.usage.observed' and payload.get('invocation_id'):
+            self.invocation = payload['invocation_id']
         if event['type'] == 'execution.usage.observed' and isinstance(payload.get('amount'), int):
             if payload['amount'] > self.total:
                 self.silent = 0.0
@@ -1249,40 +1440,37 @@ class CodexMetering(threading.Thread):
         self.error = None
         self.passes = 0
         self.seconds = 0.0
-        # The lead's own host events, followed in the order the host wrote
-        # them, for results the lead's tool never sees (review of L3, round
-        # 2, SB-1).
-        self.lead_events = None
-        self.lead_offset = 0
-        self.lead_host_total = 0
+        # Every run's own host events, followed in the order the host wrote
+        # them: for results the lead's tool never sees (review of L3, round
+        # 2, SB-1), each step's size (round 3, SPEND-4) and every thread a
+        # run did not start (round 3, SPEND-2).
 
-    def watch_lead_items(self):
-        """A result the lead tool never sees (Codex's own shell, another MCP
-        server, a refused approval) starts the lead's next step before
-        anything can hold it. Each one that comes back while the lead's total
-        in the host's own order is past the hold is marked on its gauge, and
-        the meter stops the lead. Read from the host's events file, where each
-        usage report and each completed item sit in the order they came."""
-        if self.lead_events is None:
-            self.lead_events = lead_events_path(self.service)
-        if self.lead_events is None or not self.lead_events.exists():
-            return
-        with open(self.lead_events, 'rb') as handle:
-            handle.seek(self.lead_offset)
-            data = handle.read()
-        whole = data[:data.rfind(b'\n') + 1]
-        self.lead_offset += len(whole)
-        gauge = self.meters[LEAD]
-        for line in whole.splitlines():
-            event = json.loads(line)
-            if event.get('kind') == 'usage':
-                total = (event.get('total') or {}).get('totalTokens')
-                if isinstance(total, int):
-                    self.lead_host_total = max(self.lead_host_total, total)
-            elif untooled(event):
-                entry = dict(item_type=event.get('item_type'), status=event.get('status'),
-                             server=event.get('server'), total=self.lead_host_total)
-                gauge.untooled.append(entry)
+    def briefs(self):
+        """Each run's brief, by which the journal names its invocation: the
+        lead's, the plan's children's, and any other the lead's tool
+        started."""
+        briefs = {LEAD: BRIEF, **{f'{LEAD}.{c}': child_brief(f) for c, f in CHILDREN.items()}}
+        briefs.update({f"{LEAD}.{e['arguments'].get('name')}": e['arguments'].get('brief', '')
+                       for e in tool_log(self.root) if e.get('event') == 'tool_call'
+                       and e.get('tool') == 'start_run'})
+        return briefs
+
+    def watch_host_events(self):
+        briefs = None
+        for identity, gauge in list(self.meters.items()):
+            if gauge.host_path is None:
+                briefs = briefs if briefs is not None else self.briefs()
+                gauge.host_path = host_events_file(self.service, gauge.invocation,
+                                                   briefs.get(identity))
+            if gauge.host_path is None or not gauge.host_path.exists():
+                continue
+            with open(gauge.host_path, 'rb') as handle:
+                handle.seek(gauge.host_offset)
+                data = handle.read()
+            whole = data[:data.rfind(b'\n') + 1]
+            gauge.host_offset += len(whole)
+            for line in whole.splitlines():
+                gauge.host_event(json.loads(line))
 
     def run(self):
         began = time.monotonic()
@@ -1324,7 +1512,7 @@ class CodexMetering(threading.Thread):
                     if len(result['items']) < payload['limit']:
                         break
                 self.passes += 1
-                self.watch_lead_items()
+                self.watch_host_events()
                 codex_meter(owner, self.meters, self.root, self.record)
                 # What the lead's tool reads before it hands back a result.
                 lead = self.meters[LEAD]
@@ -1597,15 +1785,29 @@ def codex_scenario(mutant, calls):
     if mutant == 'reviewer-elsewhere':
         play['approvals_reviewer'] = 'auto_review'
     if mutant in ('child-overspends', 'ceiling-cancel-never-sent', 'stop-charged-reported',
-                  'child-renamed', 'child-renamed-unchecked'):
-        # alpha's first step, the one that runs its command, is past the
-        # child's ceiling. Codex reports it once the command has finished,
-        # so the runner stops alpha while its answering step is in flight;
-        # a child's model step here takes six seconds, longer than the stop
-        # takes to reach it (about 1.5 s against this service), as a real
-        # step does.
-        play.update(led_heavy_if=alpha, led_heavy_step=CHILD_CEILING + 10_000,
-                    led_step_ms=6000)
+                  'child-renamed', 'child-renamed-unchecked', 'stopped-past-share',
+                  'stopped-charge-capped'):
+        # alpha runs its command twice, each a 30,000-token step, the most
+        # the bound allows in flight (review of L3, round 3, SPEND-4). Codex
+        # reports each once its command has finished, so the second report,
+        # 60,000, crosses the child's ceiling and the runner stops alpha
+        # while its answering step is in flight; a child's model step here
+        # takes six seconds, longer than the stop takes to reach it (about
+        # 1.5 s against this service), as a real step does.
+        play.update(led_step_if=alpha, led_step=CODEX['in_flight'], led_commands_if=alpha,
+                    led_commands=2, led_step_ms=6000)
+    if mutant in ('stopped-past-share', 'stopped-charge-capped'):
+        # And ignores the stop: it answers, a third step reported at 90,000,
+        # and exits by itself (SPEND-7).
+        play['led_ignores_interrupt_if'] = alpha
+    if mutant == 'step-past-in-flight':
+        # One step of 40,000: under the ceiling, past the in-flight bound.
+        play.update(led_heavy_if=alpha, led_heavy_step=40_000, led_step_ms=6000)
+    if mutant in ('subagent-spawned', 'subagent-not-stopped', 'subagent-uncounted',
+                  'subagents-off'):
+        # alpha's first step also spawns a sub-agent, as 0.157.0 does, which
+        # takes three steps of its own unless stopped.
+        play.update(spawn_agent_if=alpha, subagent_steps=3, subagent_step_ms=1500)
     if mutant in ('stop-ignored', 'not-exited-charged-share'):
         # alpha's first step alone is 90,000, past its ceiling; it
         # acknowledges the interrupt and goes on, answering two and a half
@@ -1745,7 +1947,11 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
     awake = NoSleep(required=not rehearse)
     record['no_sleep'] = awake.record
     rows = Rows(rehearse)
-    service = Service(root, rehearse, scenario(args.mutant), args.mutant)
+    # Sub-agents off per launch: the owner's recorded decision, live, or the
+    # labeled fake's own token (review of L3, round 3, SPEND-2).
+    agents_off = AGENTS_OFF_REHEARSAL if args.mutant == 'subagents-off' \
+        else args.agents_off_decision
+    service = Service(root, rehearse, scenario(args.mutant), args.mutant, agents_off=agents_off)
     if HARNESS == 'opencode':
         config_dir = Path(service.config['opencode']['config_dir'])
         if args.mutant == 'helper-elsewhere':
@@ -1768,7 +1974,10 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
             # The same feature by Codex's legacy alias, which, sorted after the
             # canonical key, overrides it (review of L3, round 3, SPEND-3).
             'experimental-alias-on': '[features]\nexec_permission_approvals = false\n'
-                                     'request_permissions = true\n'}.get(args.mutant)
+                                     'request_permissions = true\n',
+            # multi_agent off alone: the model's catalog still turns
+            # sub-agents on (review of L3, round 3, SPEND-2).
+            'subagents-multi-agent-only': '[features]\nmulti_agent = false\n'}.get(args.mutant)
         if planted:
             codex_home.mkdir(parents=True, exist_ok=True)
             (codex_home / 'config.toml').write_text(planted)
@@ -1784,6 +1993,22 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
             raise SystemExit('refusing to start: the Codex configuration turns on '
                              f'{widening}: a command approval could then ask for permissions '
                              'PIO is never shown, and an allow would grant them')
+        # Sub-agents (review of L3, round 3, SPEND-2): no plan has one, and a
+        # sub-agent's spend is outside every share. Live, refused unless the
+        # owner's configuration turns them off or a recorded owner decision
+        # turns them off per launch; the owner decides which. A rehearsal
+        # records what it read, and its mutants apply the live check.
+        record['subagents'] = dict(codex_agents(codex_home), decision=agents_off)
+        record['subagents']['off'] = subagents_off(record['subagents'], agents_off)
+        live_check = not rehearse or args.mutant in ('subagents-unguarded',
+                                                     'subagents-multi-agent-only')
+        if live_check and record['subagents']['off'] is None:
+            raise SystemExit(
+                'refusing to start: Codex can spawn sub-agents on these threads. Its '
+                "configuration does not turn them off ([agents] enabled = false, with "
+                'features.multi_agent_v2 not on; multi_agent = false alone is not enough for '
+                f"{MODEL}, whose catalog entry names multi-agent v2), and no owner decision "
+                'turns them off per launch (--agents-off-decision). The owner decides which.')
     # `--relay`: a rehearsal whose desk waits for answer files, as a live
     # one does, so the relay that will run beside the live run is rehearsed
     # against the requests this code actually writes.
@@ -1941,6 +2166,11 @@ def watch(args, record, service, desk, meters, state):
                      dict(name='PIO_LEAD_LOG', value=str(root / 'lead-tool.jsonl')),
                      dict(name='PIO_LEAD_CALL_CEILING', value=str(CALL_CEILING)),
                      dict(name='PIO_LEAD_STOP', value=str(root / 'lead-stop')),
+                     # The host's own deadline for each child, shortened for
+                     # the mutants it interrupts (review of L3, round 3,
+                     # SPEND-6).
+                     dict(name='PIO_LEAD_DEADLINE', value='20' if args.mutant in (
+                         'deadline-interrupted', 'interrupted-charged-reported') else '900'),
                      # Only the plan's children, by name (review of L3,
                      # round 3, SPEND-1). `child-renamed-unchecked` stands
                      # for a tool whose check let other names through: the
@@ -2070,19 +2300,61 @@ def untooled(event):
                 and event.get('status') == 'completed')
 
 
-def lead_events_path(service):
-    """The lead's own host events file: its invocation, found in the journal
-    by the lead brief's digest, as host_events finds it. None until the lead
-    has one."""
-    journal = service.store / 'journal.sqlite3'
-    if not journal.exists():
-        return None
-    digest = 'sha256:' + sha(BRIEF)
-    with contextlib.closing(sqlite3.connect(f'file:{journal}?mode=ro', uri=True)) as db:
-        states = [json.loads(r[0]) for r in db.execute('select state from invocations')]
-    invocation = next((s['invocation_id'] for s in states
-                       if (s.get('payload') or {}).get('brief', {}).get('digest') == digest), None)
+def host_events_file(service, invocation, brief):
+    """A run's own host events file: by its invocation, where the stream has
+    named it, else the one whose launch carries the run's brief digest, as
+    host_events finds it. None until there is one."""
+    if invocation is None and brief is not None:
+        journal = service.store / 'journal.sqlite3'
+        if not journal.exists():
+            return None
+        digest = 'sha256:' + sha(brief)
+        with contextlib.closing(sqlite3.connect(f'file:{journal}?mode=ro', uri=True)) as db:
+            states = [json.loads(r[0]) for r in db.execute('select state from invocations')]
+        invocation = next((s['invocation_id'] for s in states
+                           if (s.get('payload') or {}).get('brief', {}).get('digest') == digest),
+                          None)
     return service.store / f'{HARNESS}-{invocation}.events.jsonl' if invocation else None
+
+
+def host_steps(events):
+    """What a run's own host events say of its spend, worked out afresh from
+    the file: the sum of each thread's last total, the largest model step
+    (a report's last step, or the rise between two reports on one thread),
+    how many reports, every thread it did not start, and whether its own
+    turn ended interrupted."""
+    threads, largest, steps, others, interrupted = {}, 0, 0, [], False
+    for event in events:
+        if event['kind'] == 'usage':
+            thread = event.get('thread_id') or 'own'
+            total = (event.get('total') or {}).get('totalTokens')
+            last = (event.get('last') or {}).get('totalTokens')
+            if isinstance(total, int):
+                largest = max(largest, total - threads.get(thread, 0))
+                threads[thread] = max(threads.get(thread, 0), total)
+                steps += 1
+            if isinstance(last, int):
+                largest = max(largest, last)
+        elif event['kind'] == 'other_thread' and event.get('thread_id') not in others:
+            others.append(event.get('thread_id'))
+        elif event['kind'] == 'turn_completed':
+            interrupted = event.get('status') == 'interrupted'
+    return dict(sum=sum(threads.values()), largest=largest, steps=steps, others=others,
+                interrupted=interrupted)
+
+
+OTHER_THREADS = 'pio.combraton.dev/other-threads'
+
+
+def other_threads_carried(stream):
+    """Each run's list of threads it did not start, as its exit carried it;
+    None for a run whose exit carried none."""
+    return {e['subject']['id']: (e.get('payload') or {}).get(OTHER_THREADS)
+            for e in stream if e['type'] == 'execution.exit.observed'}
+
+
+def u_ran(entry):
+    return entry['basis'] not in ('refused before any model call', NO_SUCH_EXECUTION)
 
 
 def lead_calls(root):
@@ -2143,6 +2415,17 @@ def codex_meter(owner, meters, root, record):
                         f"with {past[0]['total']} tokens reported, past {HOLD_ABOVE}")
         if gauge.total >= gauge.ceiling:
             over.append(f'{gauge.total} tokens reported, past {gauge.ceiling}')
+        if gauge.subagents and record.get('mutant') != 'subagent-not-stopped':
+            # No plan has a sub-agent: its spend is outside every share
+            # (review of L3, round 3, SPEND-2).
+            first = gauge.subagents[0]
+            over.append(f"a sub-agent thread appeared ({first['thread_id']}, "
+                        f"{(first['how'] or {}).get('by')}); no plan has one")
+        if gauge.largest_step > CODEX['in_flight']:
+            # The bound's one premise is broken: a step larger than the one
+            # it allows in flight (review of L3, round 3, SPEND-4).
+            over.append(f'a step of {gauge.largest_step} tokens, past the '
+                        f"{CODEX['in_flight']} the bound assumes in flight")
         if gauge.silent >= USAGE_SILENCE:
             # Nothing reported, so nothing can stop it at its ceiling: stop
             # it now, loudly, and charge it its whole share.
@@ -2237,6 +2520,10 @@ def settle(record, service, meters, state, root):
                        for e in log if e.get('event') == 'tool_call'
                        and e.get('tool') == 'start_run'})
         host = service.host_events(views, briefs)
+        # What each run's host sent to turn sub-agents off, where it did.
+        record['agents_off_sent'] = {i: next((e.get('sent') for e in host.get(i, [])
+                                              if e['kind'] == 'agents_off_sent'), None)
+                                     for i in host}
         if HARNESS == 'opencode':
             sessions = {i: next((e.get('session_id') for e in host.get(i, [])
                                  if e['kind'] == 'session_created'), None)
@@ -2376,29 +2663,36 @@ def opencode_usage(views, meters, submitted, steps=None):
     return usage
 
 
-STOPPED_BASIS = 'stopped by the runner: what it reported, plus one step in flight'
+STOPPED_BASIS = ('stopped by the runner, or its turn interrupted: what it reported, plus a '
+                 'step in flight on each of its threads')
 NOT_EXITED_BASIS = ('not seen exited when its usage was read: its whole share, or what it '
-                    'reported or its meter saw plus one step in flight, if more')
+                    'reported or its meter saw plus a step in flight on each of its threads, '
+                    'if more')
 SILENT_BASIS = (f'stopped by the runner after {USAGE_SILENCE} s of activity with no usage '
-                'reported: its whole share, or what it reported, if more')
+                'reported: its whole share, or what it reported plus a step in flight on each '
+                'of its threads, if more')
 
 
 def codex_usage(views, meters, submitted, stopped=(), mutant=None):
     """Codex's reported total for each run, which covers every step of its
-    turn (review 48), so it is what a run that ended by itself is charged.
+    turn (review 48) and, from round 3, every thread it had: so it is what a
+    run that ended by itself is charged.
 
-    A run the runner stopped (at a ceiling or on the way out) may have had a
-    step in flight that Codex bills and that the report the runner read
-    does not hold, so it is charged what it reported plus one step in
-    flight, **not capped at its share**: a run that spent past its share is
-    charged past it, and the row that checks the share fails (review of L3,
-    round 2, SB-2). A run still not exited when its usage was read is
-    charged its whole share, or what it reported or its own meter saw plus a
-    step, if that is more; one stopped for silence, or that reported
-    nothing, its whole share or what it reported, if more. Never below what
-    was reported or observed, and never nothing (F2)."""
+    A run whose turn was cut short, by the runner's stop or by an interrupt
+    the host sent (its own deadline, a cancel), may have had a step in
+    flight on each of its threads that Codex bills and that no report holds,
+    so it is charged what it reported plus that allowance, **not capped at
+    its share**: a run that spent past its share is charged past it, and the
+    row that checks the share fails (review of L3, round 2, SB-2). The
+    allowance is a step per thread: the step the bound assumes, or the
+    largest the run was seen to take, if larger (round 3, SPEND-4), times
+    its own thread and every sub-agent's (SPEND-2). A run still not exited
+    when its usage was read is charged its whole share, or what it reported
+    or its own meter saw plus the allowance, if that is more; one stopped
+    for silence the same (round 3, SPEND-6); one that reported nothing, its
+    whole share or what was seen, if more. Never below what was reported or
+    observed, and never nothing (F2)."""
     usage = {}
-    in_flight = CODEX['in_flight']
     for identity in runs(meters):
         current = views.get(identity) or {}
         if current.get('admission') == 'refused':
@@ -2410,27 +2704,46 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None):
         reported = observations[0]['amount'] if observations else None
         gauge = meters[identity]
         share = LEAD_SHARE if identity == LEAD else CHILD_SHARE
+        allowance = gauge.allowance()
+        # Cut short: by the runner, or by an interrupt the host sent and
+        # the turn ended on (round 3, SPEND-6).
+        cut = identity in stopped or gauge.turn_status == 'interrupted' \
+            or (current.get('cancellation') or {}).get('outcome') == 'cancelled'
+        if mutant == 'interrupted-charged-reported':
+            cut = identity in stopped
+        # What PIO saw it spend: its report (the sum over its threads), its
+        # own meter's total, or the sum of its threads' host reports, if
+        # higher (the meter is all there is when the service cannot be asked).
+        seen = max(reported if isinstance(reported, int) else 0, gauge.total,
+                   sum(gauge.threads.values()))
+        if mutant == 'subagent-uncounted':
+            # A PIO that counted the run's own thread alone.
+            reported = gauge.own_total or reported
+            seen = reported if isinstance(reported, int) else 0
+            allowance = max(CODEX['in_flight'], gauge.largest_step)
         entry = dict(reported_total=reported if isinstance(reported, int) else None,
                      meter_estimate=gauge.estimate(), share=share,
-                     stopped_by_the_runner=identity in stopped)
-        # What PIO saw it spend: its report, or its own meter's total if
-        # higher (the meter is all there is when the service cannot be asked).
-        seen = max(reported if isinstance(reported, int) else 0, gauge.total)
+                     stopped_by_the_runner=identity in stopped, cut_short=cut,
+                     allowance=allowance, threads=dict(gauge.threads) or None,
+                     subagents=[s['thread_id'] for s in gauge.subagents])
         if current.get('runtime') != 'exited':
             entry.update(charged=share if mutant == 'not-exited-charged-share'
-                         else max(share, seen + in_flight), basis=NOT_EXITED_BASIS)
+                         else max(share, seen + allowance), basis=NOT_EXITED_BASIS)
         elif gauge.silenced:
-            entry.update(charged=max(share, seen), basis=SILENT_BASIS)
+            entry.update(charged=max(share, seen + allowance), basis=SILENT_BASIS)
         elif isinstance(reported, int) and reported > 0:
-            if identity in stopped and mutant != 'stop-charged-reported':
-                entry.update(charged=seen + in_flight, basis=STOPPED_BASIS, in_flight=in_flight)
+            if cut and mutant != 'stop-charged-reported':
+                charged = seen + allowance
+                if mutant == 'stopped-charge-capped':
+                    # The round-1 cap, put back (review of L3, round 3, SPEND-7).
+                    charged = min(charged, share)
+                entry.update(charged=charged, basis=STOPPED_BASIS, in_flight=allowance)
             else:
                 entry.update(charged=seen, basis='reported_total')
         else:
             entry.update(usage='unknown', charged=max(share, seen), basis='allowance')
         usage[identity] = entry
     return usage
-
 
 def running_steer(s):
     """The running steer holds only against a turn that was running and
@@ -2973,6 +3286,7 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
         # least its whole share if it still ran, reported nothing, or was
         # stopped for silence.
         step, floors, within = CODEX['in_flight'], {}, {}
+        observed_steps = {run: host_steps(host.get(run, [])) for run in usage}
         for run, u in usage.items():
             if u['basis'] in ('refused before any model call', NO_SUCH_EXECUTION):
                 continue
@@ -2980,23 +3294,66 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
             share = LEAD_SHARE if run == LEAD else CHILD_SHARE
             reported = ((current.get('usage') or {}).get('observations') or [{}])[0].get('amount')
             gauge = record['meters'].get(run) or {}
-            seen = max(reported if isinstance(reported, int) else 0, gauge.get('estimate') or 0)
+            steps_seen = observed_steps[run]
+            seen = max(reported if isinstance(reported, int) else 0, gauge.get('estimate') or 0,
+                       steps_seen['sum'])
             running = current.get('runtime') != 'exited'
-            floor = seen + (step if run in stops or running else 0)
+            cut = run in stops or steps_seen['interrupted'] \
+                or (current.get('cancellation') or {}).get('outcome') == 'cancelled'
+            allowance = max(step, steps_seen['largest']) * (1 + len(steps_seen['others']))
+            floor = seen + (allowance if cut or running else 0)
             if running or not isinstance(reported, int) or reported <= 0 or gauge.get('silenced'):
                 floor = max(floor, share)
             floors[run] = dict(charged=u['charged'], at_least=floor, reported=reported,
-                               meter=gauge.get('estimate'), stopped=run in stops,
+                               meter=gauge.get('estimate'), threads_sum=steps_seen['sum'],
+                               allowance=allowance, stopped=run in stops, cut_short=cut,
                                running=running, silenced=bool(gauge.get('silenced')))
             within[run] = dict(charged=u['charged'], share=share)
         rows.add("Every run's charge covers what it could have spent", dict(runs=floors),
-                 'for every run that ran: at least what it reported or its meter saw, plus a '
-                 'step in flight if it was stopped or still ran, and its whole share if it '
-                 'still ran, reported nothing or went silent',
+                 'for every run that ran: at least what it reported, its meter saw or its '
+                 'threads reported, plus a step in flight on each of its threads if it was '
+                 'stopped, interrupted or still ran, and its whole share if it still ran, '
+                 'reported nothing or went silent',
                  holds=lambda o: bool(o['runs']) and all(
                      r['charged'] >= r['at_least'] for r in o['runs'].values()),
-                 note=f'in flight: {step} a step; worked out from the views and meters, not '
-                      'from the charge')
+                 note=f'a step in flight: {step}, or the largest seen, if larger; worked out '
+                      "from the views, the meters and the host's own usage events, not from "
+                      'the charge')
+        # The bound's one premise, checked: no model step larger than the
+        # step it allows in flight (review of L3, round 3, SPEND-4). From the
+        # host's own usage events: each report's last step, and the rise
+        # between two reports on the same thread.
+        rows.add('Every step stayed within the in-flight bound',
+                 {run: dict(largest=o['largest'], steps=o['steps'])
+                  for run, o in observed_steps.items() if o['steps']},
+                 f"no model step, on any thread of any run, past {step} tokens",
+                 holds=lambda o: None if not o else all(
+                     r['largest'] <= step for r in o.values()),
+                 note="each report's last step and the rise between reports, from the "
+                      "host's own usage events; a run past it is stopped")
+        # No plan has a sub-agent, and one that appears is stopped at once
+        # (review of L3, round 3, SPEND-2): from the host's own events and
+        # from what each exit carried.
+        carried = other_threads_carried(stream)
+        exited_runs = [r for r in usage if (views.get(r) or {}).get('runtime') == 'exited'
+                       and u_ran(usage[r])]
+        spawned = {run: sorted({*observed_steps[run]['others'],
+                                *(t['thread_id'] for t in (carried.get(run) or []))})
+                   for run in usage if u_ran(usage[run])}
+        rows.add('No run spawned a sub-agent',
+                 dict(threads=spawned,
+                      not_carried=[r for r in exited_runs if carried.get(r) is None]),
+                 'no thread but its own on any run: no plan has a sub-agent',
+                 holds=lambda o: not any(o['threads'].values()) and not o['not_carried'],
+                 note="the host's other_thread events, and the list each exit carries "
+                      '(pio.combraton.dev/other-threads); an exit without it is not nothing')
+        stopped_for = {run: any('sub-agent' in w for s in record.get('ceiling_stops', [])
+                                if s['run'] == run for w in s['why'])
+                       for run, threads in spawned.items() if threads}
+        rows.add('Every run that spawned a sub-agent was stopped when it appeared',
+                 stopped_for, 'each such run stopped by the runner, for its sub-agent',
+                 holds=lambda o: None if not o else all(o.values()),
+                 note='none spawned, nothing to judge')
         rows.add("Every run's charge stayed within its reserved share",
                  dict(runs=within, total=sum(r['charged'] for r in within.values()),
                       worst_case=WORST_CASE),
@@ -3303,6 +3660,46 @@ def runner_killed(args):
     raise SystemExit(1)
 
 
+def charge_selftest():
+    """The Codex charge's corners that no play reaches, on made-up runs:
+    one stopped for silence past its share (review of L3, round 3,
+    SPEND-6), one the host's own deadline interrupted and the runner never
+    stopped (SPEND-6), one stopped past its share (uncapped, SPEND-7), one
+    with a step past the bound (SPEND-4), and one with a sub-agent
+    (SPEND-2)."""
+    select_plan('L3')
+    step = CODEX['in_flight']
+
+    def run(reported, **fields):
+        gauge = CodexMeter(f'{LEAD}.alpha', CHILD_CEILING)
+        gauge.total = reported
+        for key, value in fields.items():
+            setattr(gauge, key, value)
+        view = dict(admission='admitted', runtime='exited',
+                    usage=dict(observations=[dict(amount=reported)]))
+        return view, gauge
+
+    def charged(view, gauge, stopped=()):
+        views = {f'{LEAD}.alpha': view}
+        meters = {f'{LEAD}.alpha': gauge}
+        entry = codex_usage(views, meters, {f'{LEAD}.alpha'}, stopped)[f'{LEAD}.alpha']
+        return entry['charged'], entry['basis']
+    cases = [
+        ('silenced past its share', run(95_000, silenced=True), (), (95_000 + step, SILENT_BASIS)),
+        ('interrupted by the host', run(100_000, turn_status='interrupted'), (),
+         (100_000 + step, STOPPED_BASIS)),
+        ('stopped past its share', run(100_000), (f'{LEAD}.alpha',), (100_000 + step, STOPPED_BASIS)),
+        ('a step past the bound', run(60_000, largest_step=40_000), (f'{LEAD}.alpha',),
+         (100_000, STOPPED_BASIS)),
+        ('with a sub-agent', run(40_000, subagents=[dict(thread_id='t')]), (f'{LEAD}.alpha',),
+         (40_000 + 2 * step, STOPPED_BASIS)),
+    ]
+    for name, (view, gauge), stopped, want in cases:
+        got = charged(view, gauge, stopped)
+        assert got == want, (name, got, want)
+    print(f'charge selftest: {len(cases)} corners charged as the rules say')
+
+
 def main():
     if '--watch-runner' in sys.argv:
         watch_args = argparse.ArgumentParser()
@@ -3329,8 +3726,17 @@ def main():
     parser.add_argument('--relay', action='store_true',
                         help='rehearsal only: the desk waits for answer files, as live, '
                              'so a relay can answer them')
+    parser.add_argument('--agents-off-decision',
+                        help="L3: the owner's dated decision to turn Codex's sub-agents off "
+                             "per launch (agents.enabled = false in each thread's config); "
+                             "a real Codex takes it only once it is recorded in pio-protocol's "
+                             'AGENTS_OFF_DECISIONS')
+    parser.add_argument('--charge-selftest', action='store_true',
+                        help="check the Codex charge's corners on made-up runs, and exit")
     parser.add_argument('--inner', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.charge_selftest:
+        return charge_selftest()
     select_plan(args.plan)
     if args.mutant and args.plan not in PLAN_MUTANTS.get(args.mutant, {args.plan}):
         raise SystemExit(f'mutant {args.mutant} belongs to plans '
@@ -3355,7 +3761,8 @@ def main():
         record = run(args)
     except BaseException as error:
         if args.mutant in ('setup-fails', 'helper-elsewhere', 'experimental-feature-on',
-                           'experimental-alias-on'):
+                           'experimental-alias-on', 'subagents-unguarded',
+                           'subagents-multi-agent-only'):
             root = getattr(args, 'root', None)
             assert root is not None and not Path(root).exists(), (
                 f'the setup failed and left its tree behind: {root}')
@@ -3367,6 +3774,8 @@ def main():
                 assert 'exec_permission_approvals (by exec_permission_approvals)' in str(error), error
             if args.mutant == 'experimental-alias-on':
                 assert 'exec_permission_approvals (by request_permissions)' in str(error), error
+            if args.mutant in ('subagents-unguarded', 'subagents-multi-agent-only'):
+                assert 'can spawn sub-agents' in str(error), error
             print(f'mutant {args.mutant}: dies on {MUTANTS[args.mutant]!r}: '
                   f'{type(error).__name__}, and the tree is gone')
             raise SystemExit(1)
@@ -3391,6 +3800,16 @@ def main():
         if args.mutant == 'qualified-as-committed':
             print(f'mutant {args.mutant}: holds on {wanted!r}, against the committed record '
                   f"for {row['observed']['ran']['pinned']['version']}")
+            return
+        if args.mutant == 'subagents-off':
+            # Off per launch on every thread, and so nothing spawned.
+            assert record['subagents']['off'].startswith('per launch'), record['subagents']
+            assert all(sent == {'agents.enabled': False, 'features.multi_agent': False,
+                                'features.multi_agent_v2': False}
+                       for sent in record['agents_off_sent'].values()) \
+                and record['agents_off_sent'], record['agents_off_sent']
+            print(f'mutant {args.mutant}: holds on {wanted!r}, with agents.enabled = false on '
+                  f"{len(record['agents_off_sent'])} threads")
             return
         at_limit = [r for r in row['observed'] if r['runtime'] not in ('exited', None)
                     and (r['seconds'] or 0) >= READ_WAIT]
@@ -3510,6 +3929,45 @@ def main():
             lines = record['charge']['lines']
             assert all(lines[f'{names_of(record)}{i[len(LEAD):]}']['charged']
                        == record['usage'][i]['charged'] > 0 for i in renamed), lines
+        def row_of(name):
+            return next(r for r in record['rows'] if r['row'] == name)
+        alpha = f'{LEAD}.alpha'
+        spent = record['usage'].get(alpha, {})
+        stops = [s for s in record.get('ceiling_stops', []) if s['run'] == alpha]
+        if args.mutant == 'subagent-spawned':
+            # Stopped when its agent appeared, charged a step in flight on
+            # each of its two threads, and both rows that judge that hold.
+            assert stops and any('sub-agent' in w for w in stops[0]['why']), stops
+            assert spent['subagents'] and spent['basis'] == STOPPED_BASIS, spent
+            assert spent['charged'] >= (spent['reported_total'] or 0) + 2 * CODEX['in_flight'], spent
+            for name in ('Every run that spawned a sub-agent was stopped when it appeared',
+                         "Every run's charge covers what it could have spent"):
+                assert row_of(name)['holds'] is True, row_of(name)
+            assert row_of('No run spawned a sub-agent')['observed']['threads'][alpha], \
+                row_of('No run spawned a sub-agent')
+        if args.mutant == 'subagent-not-stopped':
+            assert not any('sub-agent' in w for s in stops for w in s['why']), stops
+        if args.mutant == 'subagent-uncounted':
+            floor = row_of("Every run's charge covers what it could have spent")['observed']
+            assert floor['runs'][alpha]['charged'] < floor['runs'][alpha]['at_least'], floor
+        if args.mutant == 'step-past-in-flight':
+            assert stops and any('the bound assumes' in w for w in stops[0]['why']), stops
+            assert spent['charged'] >= spent['reported_total'] + 40_000, spent
+        if args.mutant == 'stopped-past-share':
+            # Stopped at 60,000, answered anyway, and charged its report and
+            # a step, past its share, uncapped.
+            assert spent['reported_total'] == 3 * CODEX['in_flight'], spent
+            assert spent['charged'] == spent['reported_total'] + CODEX['in_flight'] > CHILD_SHARE, spent
+            assert row_of("Every run's charge covers what it could have spent")['holds'] is True
+        if args.mutant == 'stopped-charge-capped':
+            assert spent['charged'] == CHILD_SHARE, spent
+            assert row_of("Every run's charge stayed within its reserved share")['holds'] is True
+        if args.mutant == 'deadline-interrupted':
+            # The host's own deadline cut alpha short, not the runner: charged
+            # as a stopped run, and the floor holds.
+            assert not stops and spent['cut_short'] and spent['basis'] == STOPPED_BASIS, spent
+            assert spent['charged'] == spent['reported_total'] + CODEX['in_flight'], spent
+            assert row_of("Every run's charge covers what it could have spent")['holds'] is True
         if args.mutant == 'third-admitted':
             probe = record['probes_admitted'].get(f'{LEAD}.third')
             assert probe and probe['basis'] == PROBE_BASIS and probe['charged'] == CHILD_SHARE, \
