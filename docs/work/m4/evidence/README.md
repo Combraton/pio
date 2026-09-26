@@ -520,7 +520,12 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   takes a median 167 ms, a stop about 1.5 s to reach a run, and the meter's
   passes and seconds are in each receipt (`metering`). The lead's tool waits
   for a meter pass that began 1.5 s after its call arrived
-  (`lead_tool.py --selftest`). No run is stopped in this rehearsal, so the
+  (`lead_tool.py --selftest`). If the meter thread itself fails, it holds
+  the lead's tool and cancels every run still going on a connection of its
+  own, at once (`meter-dies`: all three cancelled within two seconds); the
+  runner's own third start runs on a thread of its own, so the watch loop
+  never sits a minute in the tool's wait (review of L3, round 3,
+  SPEND-5). No run is stopped in this rehearsal, so the
   row "Every stop the runner made reached Codex" is **inconclusive**;
   `child-overspends` must hold it and `ceiling-cancel-never-sent` fails it.
   A run whose turn was cut short, by the runner's stop or by an interrupt

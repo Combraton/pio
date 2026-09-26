@@ -168,6 +168,9 @@ does with a permission prompt.
   `subagents-unguarded` and `subagents-multi-agent-only` apply the live
   check to the rehearsal's own Codex home (its defaults, and `multi_agent =
   false` alone), which must refuse;
+- `meter-dies` (L3) fails the meter thread as the third start begins: the
+  meter must cancel every run still going itself, within seconds, before
+  alpha reaches its ceiling, and the run ends with the error;
 - `memory-pipeline-ran` (L3) has the fake write, at its first turn, what
   Codex's memory pipeline writes under the Codex home: the memory row must
   fail, listing each path by a Codex-chosen name or a digest, and no name a
@@ -231,7 +234,7 @@ import opencode_live_run as live
 from approval_desk import ASKS
 from board_fold import Caller
 from check_private_paths import redact
-from lead_tool import READ_WAIT, final_answer, message_text
+from lead_tool import HOLD, METER_WAIT, READ_WAIT, final_answer, message_text
 from public_api import command
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -330,6 +333,9 @@ CODEX = dict(
                       'which sends the request, changed (analytics on a refused answer), and so '
                       'did the persistence helpers PIO never triggers'))
 WAITED = 20
+# The longest the lead's tool can take to answer a call once its result is
+# ready: the wait for a fresh meter pass and a hold.
+METER_WAIT_AND_HOLD = METER_WAIT + HOLD
 # The committed qualification records, one per pin (M2 and its re-pins).
 QUALIFICATIONS = ROOT / 'docs/work/m2/codex-qualification'
 # Never run unmetered (review of L3, F9): a Codex run that has been active
@@ -649,6 +655,10 @@ MUTANTS = {
     # S6): the row that lists them fails, and no name an owner's session
     # could have given is in the receipt.
     'memory-pipeline-ran': "Codex's memory pipeline wrote nothing during the run",
+    # The meter thread fails as the third start begins (review of L3, round
+    # 3, SPEND-5): it must stop every run itself, at once, and the run ends
+    # with the error.
+    'meter-dies': 'The run finished without an error',
 }
 # L1b only: a mutant that must leave its row **inconclusive**, not failed. A
 # desk that was never asked has decided nothing, and must not say it has
@@ -671,7 +681,7 @@ PLAN_MUTANTS = {**{m: {'L3'} for m in (
                     'subagents-unguarded', 'subagents-multi-agent-only', 'subagents-off',
                     'step-past-in-flight', 'stopped-past-share', 'stopped-charge-capped',
                     'deadline-interrupted', 'interrupted-charged-reported',
-                    'memory-pipeline-ran')},
+                    'memory-pipeline-ran', 'meter-dies')},
                 'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
@@ -1612,6 +1622,10 @@ class CodexMetering(threading.Thread):
                     if len(result['items']) < payload['limit']:
                         break
                 self.passes += 1
+                if self.record.get('mutant') == 'meter-dies' and self.record.get('third_started'):
+                    # The meter itself fails, as the third start begins
+                    # (review of L3, round 3, SPEND-5).
+                    raise RuntimeError('meter-dies: the meter failed mid-run')
                 self.watch_host_events()
                 codex_meter(owner, self.meters, self.root, self.record)
                 # What the lead's tool reads before it hands back a result.
@@ -1625,9 +1639,34 @@ class CodexMetering(threading.Thread):
                 self.halt.wait(0.1)
         except Exception as caught:
             self.error = redact(repr(caught))[:500]
+            # Never run unmetered, whatever else is going on (review of L3,
+            # round 3, SPEND-5): the lead's tool holds from now, and every
+            # run still going is cancelled here, on a connection of its own,
+            # not when the watch loop next looks.
+            self.stop_everything()
         finally:
             self.seconds = round(time.monotonic() - began, 1)
             owner.close()
+
+    def stop_everything(self):
+        died = dict(at=now(), error=self.error, cancelled={})
+        with contextlib.suppress(OSError):
+            (self.root / 'lead-stop').touch()
+        try:
+            owner = self.service.owner()
+            try:
+                for identity in list(self.meters):
+                    current = view(owner, identity) or {}
+                    if current.get('admission') == 'admitted' \
+                            and current.get('runtime') != 'exited':
+                        died['cancelled'][identity] = cancel(owner, identity, 'meter-died')
+            finally:
+                owner.close()
+        except Exception as caught:
+            died['cancel_error'] = redact(repr(caught))[:500]
+        died['done_at'] = now()
+        self.record['meter_died'] = died
+        print(f"METER DIED: {self.error}; cancelled {sorted(died['cancelled'])}", flush=True)
 
 
 def tool_log(root):
@@ -1886,7 +1925,7 @@ def codex_scenario(mutant, calls):
         play['approvals_reviewer'] = 'auto_review'
     if mutant in ('child-overspends', 'ceiling-cancel-never-sent', 'stop-charged-reported',
                   'child-renamed', 'child-renamed-unchecked', 'stopped-past-share',
-                  'stopped-charge-capped'):
+                  'stopped-charge-capped', 'meter-dies'):
         # alpha runs its command twice, each a 30,000-token step, the most
         # the bound allows in flight (review of L3, round 3, SPEND-4). Codex
         # reports each once its command has finished, so the second report,
@@ -2367,19 +2406,38 @@ def watch(args, record, service, desk, meters, state):
             probe_spec = dict(spec, env=[dict(v, value=f"{v['value']},third")
                                          if v['name'] == 'PIO_LEAD_CHILDREN' else v
                                          for v in spec['env']])
-            instance = ToolInstance(probe_spec, root / 'runner-tool.jsonl')
-            try:
-                record['third'] = dict(
-                    result=instance.tool('start_run', name='third',
-                                         brief='a third run the budget does not allow'),
-                    lead_runtime=view(owner, LEAD)['runtime'])
-            finally:
-                instance.close()
+            # On a thread of its own (review of L3, round 3, SPEND-5): the
+            # tool may wait up to a minute for the meter and a hold, and the
+            # watch loop must not stop looking meanwhile.
+            record['third'] = dict(pending=True)
+            record['third_started'] = True
+
+            def third_start(spec=probe_spec, service=service):
+                instance = ToolInstance(spec, root / 'runner-tool.jsonl')
+                caller = service.owner()
+                try:
+                    result = instance.tool('start_run', name='third',
+                                           brief='a third run the budget does not allow')
+                    record['third'] = dict(result=result,
+                                           lead_runtime=(view(caller, LEAD) or {}).get('runtime'))
+                except Exception as caught:
+                    record['third'] = dict(error=redact(repr(caught))[:500])
+                finally:
+                    caller.close()
+                    with contextlib.suppress(Exception):
+                        instance.close()
+            state['third_thread'] = threading.Thread(target=third_start, name='third-start',
+                                                     daemon=True)
+            state['third_thread'].start()
         over = lambda v: not v or v.get('admission') == 'refused' or v.get('runtime') == 'exited'
         if all(over(views[i]) for i in views):
             break
         time.sleep(0.25)
 
+    if state.get('third_thread') is not None:
+        # The probe's answer, before its row is judged: at most the tool's
+        # meter wait and hold.
+        state['third_thread'].join(timeout=METER_WAIT_AND_HOLD + 10)
     record['steer_exited'] = steer(lead_grant, f'{LEAD}.alpha')
     record['lead_answer'] = respond(lead_grant, f'{LEAD}.alpha', f'{LEAD}.alpha.action-1',
                                     'allow',
@@ -3148,9 +3206,11 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
              note='to the end of their turns: a child that was cancelled did not')
     third = record.get('third')
     rows.add('A third start is refused by PIO',
-             third and dict(started=third['result'].get('started'),
-                            code=(third['result'].get('refused') or {}).get('code'),
-                            lead_running=third['lead_runtime'] != 'exited'),
+             # Still pending, or failed, is what it is: not a refusal.
+             dict(started=third['result'].get('started'),
+                  code=(third['result'].get('refused') or {}).get('code'),
+                  lead_running=third['lead_runtime'] != 'exited')
+             if third and 'result' in third else third,
              dict(started=False, code='call_budget_spent', lead_running=True))
     led = sorted(e['subject']['id'] for e in stream
                  if e['type'] == 'execution.exit.observed'
@@ -4087,6 +4147,17 @@ def main():
             assert not stops and spent['cut_short'] and spent['basis'] == STOPPED_BASIS, spent
             assert spent['charged'] == spent['reported_total'] + CODEX['in_flight'], spent
             assert row_of("Every run's charge covers what it could have spent")['holds'] is True
+        if args.mutant == 'meter-dies':
+            # Every run still going was cancelled by the meter itself, within
+            # seconds of its failing, and alpha never reached the ceiling it
+            # passed unstopped at 866a903.
+            died = record['meter_died']
+            assert set(died['cancelled']) >= {LEAD, alpha}, died
+            took = (time.mktime(time.strptime(died['done_at'], '%Y-%m-%dT%H:%M:%SZ'))
+                    - time.mktime(time.strptime(died['at'], '%Y-%m-%dT%H:%M:%SZ')))
+            assert took <= 5, died
+            assert (spent.get('reported_total') or 0) < CHILD_CEILING, spent
+            assert 'the meter stopped' in record['error']['message'], record['error']
         if args.mutant == 'memory-pipeline-ran':
             changes = row_of("Codex's memory pipeline wrote nothing during the run")['observed']
             paths = {c['path'] for c in changes['changes']}
