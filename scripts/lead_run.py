@@ -233,6 +233,9 @@ does with a permission prompt.
   Codex defers its tools behind `exec` and never names them, so the fake's
   lead, like the live one, says it cannot access the tool and starts
   nothing, and the start row fails;
+- `brief-unnamed` (L3) sends the lead the brief L3's first live run sent,
+  which names no tool as the model sees it: the row that reads the brief
+  the host sent fails;
 - `plugins-decision-absent` (L3) sends no decision for the owner's plugins,
   apps and MCP servers over the rehearsal's own Codex home, which names two
   servers by table headers: the runner must refuse, before anything is
@@ -514,10 +517,24 @@ def child_brief(name):
 LEAD_PAST_HOLD_STEP = 29_000
 
 
-def lead_brief():
+# How the lead's two tools reach a Codex model: the server `pio-lead`'s tools
+# in the namespace `mcp__pio_lead` (rust-v0.157.0: the server's name,
+# sanitized and prefixed `mcp__`, `codex-mcp/src/tools.rs:228-234` from
+# `codex-mcp/src/rmcp_client.rs:850`; the namespace spec,
+# `core/src/tools/handlers/mcp.rs:504-505`), each tool by its own name.
+LEAD_NAMESPACE = 'mcp__pio_lead'
+
+
+def lead_brief(named=True):
+    """The lead's brief. On Codex it names the tools as the model sees them
+    (L3's first live lead said it could not access "a `pio-lead` tool");
+    `named=False` is the brief L3's first live run sent."""
     a, b = FILES
-    return (f'There are two files in this workspace, {a} and {b}. Use the '
-            'pio-lead tool, and nothing else, to do this. Call start_run twice: '
+    tools = (f'Use only the pio-lead tools start_run and read_run (namespace '
+             f'{LEAD_NAMESPACE}), and nothing else, to do this.'
+             if HARNESS == 'codex' and named
+             else 'Use the pio-lead tool, and nothing else, to do this.')
+    return (f'There are two files in this workspace, {a} and {b}. {tools} Call start_run twice: '
             "name 'alpha' with the brief '" + child_brief(a) + "', and name "
             "'beta' with the brief '" + child_brief(b) + "'. Then call "
             'read_run for alpha and for beta, again until its runtime is exited. Do '
@@ -804,6 +821,9 @@ MUTANTS = {
     # live check refuses before anything is reserved (owner decision,
     # 2026-09-26, Q7).
     'plugins-decision-absent': PLUGINS_REFUSAL,
+    # The lead's brief as L3's first live run sent it, naming no tool as
+    # the model sees it (2026-09-26).
+    'brief-unnamed': "The lead's brief named its tools as the model sees them",
     'child-renamed-unchecked': 'Every run stayed within its ceilings',
     # Shapes PIO declines by itself (review of L3, CH-2/F1): the lead's
     # approval asked in a mode PIO does not recognise, and a child's
@@ -959,6 +979,7 @@ PLAN_MUTANTS = {**{m: {'L3'} for m in (
                 'child-overspends': {'L3'}, 'child-renamed': {'L3'},
                 'child-renamed-unchecked': {'L3'}, 'lead-asked-in-openai-form': {'L3'},
                 'lead-tool-deferred': {'L3'}, 'plugins-decision-absent': {'L3'},
+                'brief-unnamed': {'L3'},
                 'child-asks-permissions': {'L3'}, 'first-number-of-all': {'L3'},
                 'lead-asked-by-user-input': {'L3'},
                 'ceiling-cancel-never-sent': {'L3'}, 'stop-charged-reported': {'L3'},
@@ -2604,6 +2625,11 @@ def run_in(args, record, rehearse, root, names, book_path, started_at):
     # labeled fake's own token for the mutants that model the override
     # itself; none for those that play a Codex whose features are on, or
     # that apply the live check to a home without the decision.
+    if args.mutant == 'brief-unnamed':
+        # The brief L3's first live run sent, which named no tool as the
+        # model sees it.
+        global BRIEF
+        BRIEF = lead_brief(named=False)
     features_off = FEATURES_OFF_REHEARSAL if args.mutant in OVERRIDE_MUTANTS \
         else None if args.mutant in (*UNMETERED_REFUSED, *FEATURES_ON_MUTANTS) \
         else PLAN.get('features_off_decision')
@@ -3885,6 +3911,16 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                       "and ready is Codex's mcpServer/startupStatus/updated on the lead's thread "
                       'before turn/start' + ('; the fake computes the exposure from that source'
                                             if rehearse else ''))
+        # The brief the lead's turn carried, by the digest the host took of
+        # the text it sent, and the tools it names as the model sees them.
+        sent_brief = next((e.get('input_sha256') for e in host.get(LEAD, [])
+                           if e['kind'] == 'turn_start_sent'), None)
+        rows.add("The lead's brief named its tools as the model sees them",
+                 dict(sent_is_the_brief=sent_brief == sha(BRIEF),
+                      names=[n for n in (LEAD_NAMESPACE, 'read_run', 'start_run') if n in BRIEF]),
+                 dict(sent_is_the_brief=True, names=[LEAD_NAMESPACE, 'read_run', 'start_run']),
+                 note="the digest of the text the host sent at turn/start, and the brief's "
+                      'words: start_run and read_run, namespace mcp__pio_lead')
     calls = [e for e in log if e.get('event') == 'tool_call']
     rows.add('The lead started its two runs through the tool',
              sorted((e['arguments'].get('name'), e['result'].get('started'))

@@ -234,6 +234,7 @@ jobs:
           export -f l3_mutant
           printf '%s\n' wrong-model reviewer-elsewhere no-pre-allow child-overspends no-wait \
                    child-renamed child-renamed-unchecked lead-tool-deferred plugins-decision-absent \
+                   brief-unnamed \
                    subagent-spawned subagent-not-stopped subagent-uncounted \
                    subagents-unguarded subagents-multi-agent-only step-past-in-flight \
                    memory-unguarded memory-alias goals-unguarded web-search-unguarded \
