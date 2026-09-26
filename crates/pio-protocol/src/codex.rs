@@ -1307,8 +1307,27 @@ impl Provider {
                         .unwrap_or_else(|| format!("{id}.invocation-1"));
                     let observation = json!({"invocation_id":invocation,"basis":"observed","measure":profile.usage_measure,"amount":total,"recorded_at":self.now});
                     e["view"]["usage"]["observations"] = json!([observation.clone()]);
-                    e["view"]["usage"]["liability"] = "resolved".into();
+                    // A report its host marks not final (Codex's per-step
+                    // reports, D5) leaves the liability open until the
+                    // host says the run's usage is final.
+                    e["view"]["usage"]["liability"] = if event["final"] == false {
+                        "unresolved"
+                    } else {
+                        "resolved"
+                    }
+                    .into();
                     self.execution_event(e, "execution.usage.observed", observation, None);
+                }
+            }
+            // D5: the run's own turn completed and nothing was cut short, so
+            // the last report stands as the run's usage.
+            "usage_final" => {
+                e[&ns]["usage_final"] = event["run_total"].clone();
+                if e["view"]["usage"]["observations"]
+                    .as_array()
+                    .is_some_and(|a| !a.is_empty())
+                {
+                    e["view"]["usage"]["liability"] = "resolved".into();
                 }
             }
             // The end of a turn Codex started by itself after the run's own

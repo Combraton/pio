@@ -994,6 +994,11 @@ def run_case(out, name):
             import base64
             assert 'SENTINEL-continued' not in base64.b64decode(output['data_base64']).decode()
             assert final['exit'] == {'code': 0}, final
+            # D5: the run's turn completed and reported its usage, but the
+            # continuation it interrupted may have spent a step never
+            # reported, so the usage is observed and the liability open.
+            assert final['usage']['observations'] and final['usage']['liability'] == 'unresolved', final['usage']
+            assert events_of(case, 'usage_final') == [], events_of(case, 'usage_final')
             return dict(outcome='pass', continuation=carried[0])
         if name == 'user_input_declined':
             # Codex's other route for an MCP tool-call approval: declined by
@@ -1479,6 +1484,10 @@ def run_case(out, name):
         delivery = final['deliveries'][0]
         assert final['delivery'] == 'acknowledged' and delivery['proof_class'] == 'provider_ack_id', final
         assert final['exit'] == {'code': 0} and final['usage']['observations'][0]['amount'] == 42 and final['usage']['liability'] == 'resolved', final
+        # D5: resolved because the turn completed with its final usage, which
+        # the host says once the run is over, and not at the step's report.
+        assert [(u['final'], u['run_total']) for u in events_of(case, 'usage')] == [(False, 42)]
+        assert [u['run_total'] for u in events_of(case, 'usage_final')] == [42]
         received = [m for m in case.markers_records() if m['kind'] == 'turn_received']
         assert len(received) == 1 and 'sha256:' + received[0]['input_sha256'] == digest(brief), received
         with case.client() as c:

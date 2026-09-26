@@ -226,7 +226,7 @@ impl OtherThreads {
                                   "turn_id":params["turnId"],
                                   "total":params["tokenUsage"]["total"],
                                   "last":params["tokenUsage"]["last"],
-                                  "run_total":self.run_total()}))?;
+                                  "run_total":self.run_total(),"final":false}))?;
             }
             "turn/started" => {
                 if let Some(turn) = params["turn"]["id"].as_str() {
@@ -564,6 +564,8 @@ const INTERRUPTED_WAIT: Duration = Duration::from_secs(10);
 /// its end is a `turn_completed` marked `continuation`. A request there is
 /// declined by PIO: nobody is asked after the run's turn has ended. Bounded
 /// by the grace period and the wait, however the app-server behaves.
+/// Returns whether a continuation started: a turn it interrupted, whose
+/// step in flight may never be reported.
 fn after_turn(
     life: &mut Lifecycle,
     app: &mut AppServer,
@@ -571,11 +573,12 @@ fn after_turn(
     requests: &mut BTreeMap<u64, String>,
     thread_id: &str,
     own_turn: Option<&str>,
-) -> Result<()> {
+) -> Result<bool> {
     let ended = Instant::now();
     let grace = ended + CONTINUATION_GRACE;
     let last = grace + INTERRUPTED_WAIT;
     let mut continuing: Option<String> = None;
+    let mut continued = false;
     loop {
         // Every other thread's turn still running, each once: one begun
         // after the run's own turn ended is interrupted too.
@@ -583,7 +586,7 @@ fn after_turn(
         let now = Instant::now();
         let busy = continuing.is_some() || !others.turns.is_empty();
         if now >= last || (now >= grace && !busy) {
-            return Ok(());
+            return Ok(continued);
         }
         let Some(message) = app.receive(Duration::from_millis(25))? else {
             continue;
@@ -633,6 +636,7 @@ fn after_turn(
                 life.event(json!({"kind":"control_sent","control_id":"continuation",
                                   "method":"turn/interrupt","turn_id":turn}))?;
                 continuing = Some(turn.to_owned());
+                continued = true;
             }
             "thread/tokenUsage/updated" => {
                 if let Some(total) = params["tokenUsage"]["total"]["totalTokens"].as_u64() {
@@ -643,7 +647,7 @@ fn after_turn(
                                   "turn_id":params["turnId"],"after_turn":true,
                                   "total":params["tokenUsage"]["total"],
                                   "last":params["tokenUsage"]["last"],
-                                  "run_total":others.run_total()}),
+                                  "run_total":others.run_total(),"final":false}),
                 )?;
             }
             "turn/completed" if continuing.as_deref() == params["turn"]["id"].as_str() => {
@@ -1228,12 +1232,15 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                     if let Some(total) = params["tokenUsage"]["total"]["totalTokens"].as_u64() {
                         others.totals.insert(thread_id.clone(), total);
                     }
+                    // A step's report, never the turn's last word: whether
+                    // it is final is known only once the turn has ended
+                    // (D5, `usage_final`).
                     life.event(
                         json!({"kind":"usage","thread_id":thread_id,"own_thread":true,
                                           "turn_id":params["turnId"],
                                           "total":params["tokenUsage"]["total"],
                                           "last":params["tokenUsage"]["last"],
-                                          "run_total":others.run_total()}),
+                                          "run_total":others.run_total(),"final":false}),
                     )?;
                 }
                 "serverRequest/resolved" => {
@@ -1389,7 +1396,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
     // goal's continuation, review of L3, round 4, SPEND-9) is recorded,
     // interrupted and waited for, and its usage counted, so the run reads
     // as cut short rather than ended by itself.
-    after_turn(
+    let continued = after_turn(
         life,
         app,
         &mut others,
@@ -1397,6 +1404,20 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         &thread_id,
         turn_id.as_deref(),
     )?;
+    // D5. Codex reports usage a step at a time, so no report is the run's
+    // last word until the run is over. It is final only when the run's own
+    // turn completed and nothing was cut short: no thread of the run was
+    // interrupted (a sub-agent at the end, or a continuation), since Codex
+    // reports an interrupted step only if its response had completed. Then,
+    // and only then, the liability is resolved; a turn interrupted, failed
+    // or lost with its host stays unresolved, whatever it reported.
+    let cut_short = continued || !others.interrupted.is_empty();
+    if turn_status.as_ref().and_then(Value::as_str) == Some("completed")
+        && !cut_short
+        && !others.totals.is_empty()
+    {
+        life.event(json!({"kind":"usage_final","run_total":others.run_total()}))?;
+    }
     // Every thread this run did not start, with how it appeared and what it
     // reported, for the exit to carry.
     life.event(json!({"kind":"other_threads","threads":others.list()}))?;

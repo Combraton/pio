@@ -1098,6 +1098,56 @@ fn an_answer_to_a_run_no_longer_running_is_refused() {
     }
 }
 
+/// D5: a Codex run's usage liability is resolved only by its final usage,
+/// which the host reports once the run's turn completed and nothing was cut
+/// short. A step's report leaves it open, and a run that ends without the
+/// final word (interrupted, or its host lost) keeps it open.
+#[test]
+fn codex_usage_liability_waits_for_the_final_report() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut p, _) = codex_with_pending_action(&root.path().join("store"), root.path(), 120);
+    let mut e = p.data.executions["e"].clone();
+    e["view"]["usage"] = json!({"observations":[],"liability":"none"});
+    let step = json!({"kind":"usage","own_thread":true,"total":{"totalTokens":30000},"run_total":30000,"final":false});
+    p.native_event(&mut e, "e", &step).unwrap();
+    assert_eq!(e["view"]["usage"]["observations"][0]["amount"], 30000);
+    assert_eq!(
+        e["view"]["usage"]["liability"], "unresolved",
+        "a step's report is not final"
+    );
+    // Interrupted, or its host lost: the run exits without the final word.
+    let mut lost = e.clone();
+    p.native_event(
+        &mut lost,
+        "e",
+        &json!({"kind":"turn_completed","status":"interrupted"}),
+    )
+    .unwrap();
+    p.native_event(
+        &mut lost,
+        "e",
+        &json!({"kind":"app_server_exited","code":0}),
+    )
+    .unwrap();
+    assert_eq!(lost["view"]["usage"]["liability"], "unresolved");
+    // Completed, nothing cut short: the host's final word resolves it.
+    p.native_event(
+        &mut e,
+        "e",
+        &json!({"kind":"turn_completed","status":"completed"}),
+    )
+    .unwrap();
+    p.native_event(
+        &mut e,
+        "e",
+        &json!({"kind":"usage_final","run_total":30000}),
+    )
+    .unwrap();
+    p.native_event(&mut e, "e", &json!({"kind":"app_server_exited","code":0}))
+        .unwrap();
+    assert_eq!(e["view"]["usage"]["liability"], "resolved");
+}
+
 /// D1: `execution.discovery.list` must report the running service's own
 /// harness, never Codex's by default, for every native adapter.
 #[test]
