@@ -168,6 +168,14 @@ pub struct Profile {
     pub delivery_evidence: &'static str,
     pub ack_proof_field: &'static str,
     pub usage_measure: &'static str,
+    /// Whether a `usage` report from this harness prices the whole turn, or
+    /// only the model step it arrived with. Codex's app-server and Claude's
+    /// `result` total the turn; OpenCode's `session/prompt` result does not
+    /// (D4: measured on `L1b`, an 11,514-token last step against a turn the
+    /// store's steps put at 96,495). PIO cannot see the rest of a multi-step
+    /// turn's spend from the protocol, so a partial report is recorded as
+    /// such rather than resolved.
+    pub usage_covers_whole_turn: bool,
     /// Decisions PIO may forward. Anything else widens a permission.
     pub decisions: &'static [&'static str],
     /// How cancel is actually performed, in the words the receipt uses.
@@ -201,6 +209,7 @@ pub const PROFILES: &[Profile] = &[
         delivery_evidence: "native_turn_acknowledged",
         ack_proof_field: "turn_id",
         usage_measure: "codex.tokens.total",
+        usage_covers_whole_turn: true,
         decisions: &["accept", "decline", "cancel"],
         cancel_description: "turn/interrupt, in band",
         session_event: "thread_started",
@@ -224,6 +233,7 @@ pub const PROFILES: &[Profile] = &[
         delivery_evidence: "native_replay_echo",
         ack_proof_field: "replay_matches_sent",
         usage_measure: "claude.tokens.total",
+        usage_covers_whole_turn: true,
         decisions: &["allow", "deny"],
         // Measured: the in-band interrupt is unverified against 2.1.278.
         cancel_description: "SIGINT, escalating to SIGKILL, not in band",
@@ -249,6 +259,7 @@ pub const PROFILES: &[Profile] = &[
         delivery_evidence: "native_session_update",
         ack_proof_field: "first_session_update",
         usage_measure: "opencode.tokens.total",
+        usage_covers_whole_turn: false,
         decisions: &["allow", "deny"],
         cancel_description: "session/cancel, in band, escalating to SIGKILL",
         session_event: "session_started",
@@ -1108,9 +1119,26 @@ impl Provider {
                         .as_str()
                         .map(str::to_owned)
                         .unwrap_or_else(|| format!("{id}.invocation-1"));
-                    let observation = json!({"invocation_id":invocation,"basis":"observed","measure":profile.usage_measure,"amount":total,"recorded_at":self.now});
+                    // D4: a harness whose `usage` report prices only the
+                    // model step it arrived with (OpenCode's `session/prompt`
+                    // result, never the running `usage_update` total) cannot
+                    // be recorded as an observed, resolved total — a
+                    // multi-step turn's real cost is higher and PIO cannot
+                    // see it from the protocol. The figure is kept (it is
+                    // real, and a floor), but named for what it covers and
+                    // left owing.
+                    let (basis, measure, liability) = if profile.usage_covers_whole_turn {
+                        ("observed", profile.usage_measure.to_owned(), "resolved")
+                    } else {
+                        (
+                            "estimated",
+                            format!("{}.last_step_only", profile.usage_measure),
+                            "unresolved",
+                        )
+                    };
+                    let observation = json!({"invocation_id":invocation,"basis":basis,"measure":measure,"amount":total,"recorded_at":self.now});
                     e["view"]["usage"]["observations"] = json!([observation.clone()]);
-                    e["view"]["usage"]["liability"] = "resolved".into();
+                    e["view"]["usage"]["liability"] = liability.into();
                     self.execution_event(e, "execution.usage.observed", observation, None);
                 }
             }
