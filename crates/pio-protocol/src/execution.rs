@@ -663,7 +663,7 @@ impl Provider {
     }
     fn execution_discovery(&self) -> Value {
         if self.native() {
-            return self.codex_discovery();
+            return self.native_discovery();
         }
         if self.durable.is_some() {
             // The adapter is built into this executable and this live controller

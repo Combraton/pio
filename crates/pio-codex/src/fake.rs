@@ -361,8 +361,15 @@ pub fn run() -> Result<()> {
                         // decision. Record which one happened.
                         let refusal = message.get("error").cloned();
                         let decision = message["result"]["decision"].as_str().unwrap_or("cancel");
+                        // D16: an accepted command approval's item completes
+                        // by the command's own exit, not by the decision.
+                        // Measured (docs/work/m2/codex-live/R6.json,
+                        // "approval-allow"): the live accept still gave
+                        // `failed` for the commandExecution item. The fake
+                        // plays that observed outcome rather than a
+                        // decision-shaped guess.
                         let status = if refusal.is_none() && decision == "accept" {
-                            "completed"
+                            "failed"
                         } else {
                             "declined"
                         };
