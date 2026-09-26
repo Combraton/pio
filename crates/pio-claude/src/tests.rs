@@ -508,6 +508,54 @@ fn pin_names_the_identity_directory_and_the_requalification_record() {
     assert_eq!(record["stream_identity"], stream);
 }
 
+/// D11. The product holds each run's `system/init` to the pinned stream
+/// identity: the key set and the capability list, with both digests
+/// recorded. A labeled fake may carry its label key and nothing else.
+#[test]
+fn init_is_held_to_the_pinned_stream_identity() {
+    let pinned: Value = serde_json::from_str(QUALIFIED_STREAM).unwrap();
+    let mut init = serde_json::Map::new();
+    for key in pinned["init_keys"].as_array().unwrap() {
+        init.insert(key.as_str().unwrap().to_owned(), Value::Null);
+    }
+    init.insert("capabilities".into(), pinned["capabilities"].clone());
+    let init = Value::Object(init);
+
+    let same = init_identity(&init, &pinned, false);
+    assert_eq!(same["matches"], true, "{same:#}");
+    assert_eq!(same["observed_sha256"], same["pinned_sha256"]);
+    assert_eq!(same["pinned_version"], PINNED_VERSION);
+
+    // A key the pinned release never sent, as a self-update would add.
+    let mut added = init.clone();
+    added["next_release_key"] = json!(true);
+    let drifted = init_identity(&added, &pinned, false);
+    assert_eq!(drifted["matches"], false);
+    assert_ne!(drifted["observed_sha256"], drifted["pinned_sha256"]);
+    assert_eq!(
+        drifted["drift"],
+        json!([{"field":"init_keys","added":["next_release_key"],"removed":[],"reordered":false}])
+    );
+    // A key that went away.
+    let mut removed = init.clone();
+    removed.as_object_mut().unwrap().remove("permissionMode");
+    let drifted = init_identity(&removed, &pinned, false);
+    assert_eq!(drifted["drift"][0]["removed"], json!(["permissionMode"]));
+    // A capability that moved.
+    let mut capabilities = init.clone();
+    capabilities["capabilities"] = json!(["interrupt_receipt_v1"]);
+    let drifted = init_identity(&capabilities, &pinned, false);
+    assert_eq!(drifted["drift"][0]["field"], "capabilities");
+    assert_eq!(drifted["matches"], false);
+
+    // The fake's label is the one key a labeled fake may add; a real harness
+    // sending it has drifted like any other.
+    let mut labeled = init.clone();
+    labeled[FAKE_LABEL_KEY] = json!(fake::SOURCE);
+    assert_eq!(init_identity(&labeled, &pinned, true)["matches"], true);
+    assert_eq!(init_identity(&labeled, &pinned, false)["matches"], false);
+}
+
 #[test]
 fn stream_drift_names_every_field_that_moved() {
     let expected: Value = serde_json::from_str(QUALIFIED_STREAM).unwrap();

@@ -42,6 +42,7 @@ CASES = [
     'missing_credential_route_refused',
     'permission_mode_not_the_configured_default_refused',
     'service_runs_under_the_product_default_when_none_is_configured',
+    'service_refuses_a_stream_identity_drift_at_init',
     'surface_drift_refused',
     # Through the service, which is the only place these can be observed.
     'service_turn_completes',
@@ -635,6 +636,52 @@ def run_case(out, name):
         assert started[0]['requested_permission_mode'] == 'default', started
         assert started[0]['effective_permission_mode'] == 'default', started
         assert started[0]['effective_mode_matches_requested'] is True, started
+
+    elif name == 'service_refuses_a_stream_identity_drift_at_init':
+        # D11. The pinned stream identity was enforced only by
+        # re-qualification and tests; a harness whose `init` had moved ran as
+        # if it had not. The fake here sends one `init` key the pinned release
+        # never sent, and then asks for a permission. The host must refuse at
+        # `init`, record what it saw by digest, and answer no tool use.
+        case = ServiceCase(out, name, scenario={
+            'init': {'key_from_a_later_release': True},
+            'permission_request': {'tool_name': 'Bash', 'input': {'command': 'git tag x'}}})
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited', seconds=120)
+        events = case.host_events()
+        checked = [e for e in events if e['kind'] == 'stream_identity_checked']
+        assert len(checked) == 1, [e['kind'] for e in events]
+        identity = checked[0]['identity']
+        assert identity['matches'] is False, identity
+        assert identity['observed_sha256'] != identity['pinned_sha256'], identity
+        assert identity['drift'] == [{'field': 'init_keys', 'added': ['key_from_a_later_release'],
+                                      'removed': [], 'reordered': False}], identity
+        refused = [e for e in events if e['kind'] == 'stream_identity_refused']
+        assert len(refused) == 1, [e['kind'] for e in events]
+        assert refused[0]['refusal']['reason'] == 'stream_drift', refused
+        assert refused[0]['refusal']['observed_sha256'] == identity['observed_sha256'], refused
+        assert refused[0]['usage'] == 'unknown', refused
+        # Refused at `init`: nothing after it was acted on, and the harness
+        # never got an answer to anything.
+        # Not `kinds`: that name is this module's message helper, and binding
+        # it here would make it local to every case.
+        order = [e['kind'] for e in events]
+        assert order.index('stream_identity_checked') < order.index('stream_identity_refused'), order
+        for later in ('action_requested', 'request_declined_by_pio', 'control_applied',
+                      'request_denied_by_default', 'turn_completed', 'host_error'):
+            assert later not in order, order
+        assert case.markers_of('permission_decision') == [], case.markers_of('permission_decision')
+        # What the caller sees: the echo proved delivery, the run ended with no
+        # exit code claimed, and usage is unknown rather than none.
+        assert view['delivery'] == 'acknowledged', view
+        assert view['exit'] == 'unavailable', view
+        assert view['usage']['liability'] == 'unresolved', view['usage']
+        assert view['usage']['observations'] == [], view['usage']
+        # The child is stopped, not left running.
+        poll(lambda: case.harness_processes(), lambda p: not p, seconds=60)
+        (case.out / 'events.json').write_text(json.dumps(events, indent=2))
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     elif name == 'surface_drift_refused':
         # A genuine drift, not merely an unqualified executable: pin the fake's

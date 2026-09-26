@@ -43,6 +43,10 @@ pub const STREAM_ARGS: &[&str] = &[
     "stdio",
 ];
 
+/// How long a run refused at `init` waits for the replay echo that follows
+/// it, so the delivery is recorded as what it was.
+const REPLAY_WAIT: Duration = Duration::from_secs(2);
+
 /// How long PIO waits for the CLI to answer the attachment handshake.
 /// Measured on 2.1.278: it answers in about 0.7 s.
 const ATTACH_TIMEOUT: Duration = Duration::from_secs(30);
@@ -240,6 +244,9 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
     let mut tool_use_messages: Vec<Value> = Vec::new();
     let mut interrupt_deadline: Option<(std::time::Instant, String)> = None;
     let mut escalation: Option<Value> = None;
+    let pinned_stream: Value = serde_json::from_str(pio_claude::QUALIFIED_STREAM)?;
+    // Set when the run is refused mid-stream rather than finished.
+    let mut refusal: Option<Value> = None;
 
     while result.is_none() {
         // Anything the CLI sent during the handshake is processed first, in
@@ -281,6 +288,45 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
                         "skills":message["skills"].as_array().map(Vec::len),
                         "agents":message["agents"].as_array().map(Vec::len),
                         "messaging_socket_path_present":!message["messaging_socket_path"].is_null()}))?;
+                    // D11: the pinned stream identity, held to on every run
+                    // and not only by re-qualification. `init` is the first
+                    // message, so a drift refuses the run before any tool
+                    // use can be answered.
+                    let identity = pio_claude::init_identity(
+                        &message,
+                        &pinned_stream,
+                        life.spec["labeled_fake"] == true,
+                    );
+                    life.event(json!({"kind":"stream_identity_checked",
+                        "identity":identity}))?;
+                    if identity["matches"] != true {
+                        // The replay echo follows `init` directly (the measured
+                        // sequence), so it alone is read, and delivery is
+                        // recorded as what it was. Nothing else is acted on.
+                        if let Some(next) = child.receive(REPLAY_WAIT)?
+                            && next["type"] == "user"
+                            && next["isReplay"] == true
+                        {
+                            acknowledged = next["message"] == sent["message"];
+                            life.event(json!({"kind":"turn_acknowledged",
+                                "replay_matches_sent":acknowledged}))?;
+                        }
+                        let killed = child.child.kill().is_ok();
+                        let _ = child.child.wait();
+                        let record = json!({"reason":"stream_drift",
+                            "pinned_version":pio_claude::PINNED_VERSION,
+                            "observed_sha256":identity["observed_sha256"],
+                            "pinned_sha256":identity["pinned_sha256"],
+                            "drift":identity["drift"]});
+                        life.event(json!({"kind":"stream_identity_refused",
+                            "refusal":record,"killed":killed,
+                            "before_any_tool_use_answered":true,
+                            // Stopped after the brief arrived, before `result`,
+                            // which is the only message that reports usage.
+                            "usage":"unknown"}))?;
+                        refusal = Some(record);
+                        break;
+                    }
                     ensure!(
                         mode_matched == Some(true),
                         "effective_permission_mode_mismatch: requested {requested}, effective {}",
@@ -581,6 +627,9 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<StdioChild>) -> Result<()>
         "effective_mode_matches_requested":mode_matched,
         "child_exit":exit,
         "interrupt_escalation":escalation,
+        // A run refused at `init` (D11) ends here with the reason and what
+        // was observed, by digest; null for a run that was not refused.
+        "refusal":refusal,
         "output_digest":pio_core::digest(&all_output),
         "output_bytes":output_offset,
         "containment":tool_uses["containment"],

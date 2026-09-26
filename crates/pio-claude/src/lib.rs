@@ -581,6 +581,82 @@ pub fn stream_drift(expected: &Value, actual: &Value) -> Vec<Value> {
         .collect()
 }
 
+/// The fields of the stream identity a live `system/init` is held to on
+/// every run: its key set and its capability list. The rest of the identity
+/// (the product defaults, the message sequence, the handshake) is measured
+/// by re-qualification, not by one run.
+pub const INIT_IDENTITY_FIELDS: &[&str] = &["init_keys", "capabilities"];
+
+/// The key a labeled fake adds to everything it emits. A labeled fake's
+/// `init` may carry it beyond the pinned set; a real harness's may not.
+pub const FAKE_LABEL_KEY: &str = "source";
+
+fn sorted_strings(value: &Value) -> Vec<String> {
+    let mut list: Vec<String> = value
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    list.sort();
+    list
+}
+
+/// Compare one run's `system/init` with the pinned stream identity (D11).
+///
+/// Before this the product never looked: the stream identity was pinned and
+/// compared by re-qualification and by tests, and a self-updated harness
+/// whose `init` had moved ran exactly as if it had not. The host now refuses
+/// such a run at `init`, which is the first message, so before any tool use
+/// is answered. The record carries the observed and the pinned digests, so a
+/// refusal says what was seen and not only that something differed.
+pub fn init_identity(init: &Value, pinned: &Value, labeled_fake: bool) -> Value {
+    let mut keys: Vec<String> = init
+        .as_object()
+        .map(|fields| fields.keys().cloned().collect())
+        .unwrap_or_default();
+    if labeled_fake {
+        keys.retain(|key| key != FAKE_LABEL_KEY);
+    }
+    keys.sort();
+    let observed = json!({"init_keys":keys,"capabilities":init["capabilities"]});
+    let expected = json!({"init_keys":pinned["init_keys"],"capabilities":pinned["capabilities"]});
+    let digest = |value: &Value| {
+        format!(
+            "sha256:{}",
+            sha256_hex(serde_json::to_string(value).unwrap_or_default().as_bytes())
+        )
+    };
+    let mut drift = Vec::new();
+    for field in INIT_IDENTITY_FIELDS {
+        if observed[*field] == expected[*field] {
+            continue;
+        }
+        let seen = sorted_strings(&observed[*field]);
+        let want = sorted_strings(&expected[*field]);
+        drift.push(json!({
+            "field":field,
+            "added":seen.iter().filter(|k| !want.contains(k)).collect::<Vec<_>>(),
+            "removed":want.iter().filter(|k| !seen.contains(k)).collect::<Vec<_>>(),
+            // Same members, different order: capabilities are compared as
+            // the harness lists them.
+            "reordered":seen == want,
+        }));
+    }
+    json!({
+        "format":"pio-claude-init-identity/1",
+        "pinned_version":pinned["version"],
+        "compared":INIT_IDENTITY_FIELDS,
+        "observed_sha256":digest(&observed),
+        "pinned_sha256":digest(&expected),
+        "drift":drift,
+        "matches":drift.is_empty(),
+    })
+}
+
 fn inner_request_id(request: &Value) -> Result<String> {
     request["request_id"]
         .as_str()
