@@ -440,6 +440,122 @@ fn response_error(message: &Value) -> Option<Value> {
     message.get("error").cloned()
 }
 
+/// How long the host keeps reading the run's own thread after its turn has
+/// ended (review of L3, round 4, SPEND-9). Codex 0.157.0 can start a turn
+/// on the same thread by itself once it is idle: a goal's continuation
+/// (`ext/goal/src/runtime.rs:425-491`, reached from the thread-idle hook
+/// that runs right after `turn/completed`, `core/src/tasks/mod.rs:833-867`),
+/// before the host has closed stdin, in the same task that sent the
+/// turn's completion. Three seconds, shorter than the twenty the host gives
+/// the app-server to stop (`harness::STOP_DEADLINE`), and added to the end
+/// of every Codex run.
+pub const CONTINUATION_GRACE: Duration = Duration::from_secs(3);
+/// How long the host waits, after the run's own turn, for a turn it
+/// interrupted then to end.
+const INTERRUPTED_WAIT: Duration = Duration::from_secs(10);
+
+/// After the run's own turn: interrupt every other thread's turn still
+/// running and wait for it, and read the run's own thread for
+/// `CONTINUATION_GRACE`. A turn that starts there is recorded
+/// (`continuation_started`), interrupted (`control_sent`, control id
+/// `continuation`) and waited for; its usage is counted with the run's, and
+/// its end is a `turn_completed` marked `continuation`. A request there is
+/// declined by PIO: nobody is asked after the run's turn has ended. Bounded
+/// by the grace period and the wait, however the app-server behaves.
+fn after_turn(
+    life: &mut Lifecycle,
+    app: &mut AppServer,
+    others: &mut OtherThreads,
+    requests: &mut BTreeMap<u64, String>,
+    thread_id: &str,
+    own_turn: Option<&str>,
+) -> Result<()> {
+    let ended = Instant::now();
+    let grace = ended + CONTINUATION_GRACE;
+    let last = grace + INTERRUPTED_WAIT;
+    others.interrupt(life, app, requests, "run-ended")?;
+    let mut continuing: Option<String> = None;
+    loop {
+        let now = Instant::now();
+        let busy = continuing.is_some() || !others.turns.is_empty();
+        if now >= last || (now >= grace && !busy) {
+            return Ok(());
+        }
+        let Some(message) = app.receive(Duration::from_millis(25))? else {
+            continue;
+        };
+        let method = message["method"].as_str().unwrap_or("");
+        if method.is_empty() {
+            if let Some(control) = message["id"].as_u64().and_then(|id| requests.remove(&id)) {
+                life.event(json!({"kind":"control_response","control_id":control,
+                                  "result":message.get("result"),
+                                  "error":response_error(&message)}))?;
+            }
+            continue;
+        }
+        let params = &message["params"];
+        if let Some(other) = params["threadId"].as_str().filter(|t| *t != thread_id) {
+            let other = other.to_owned();
+            others.handle(life, app, &message, &other)?;
+            continue;
+        }
+        if message.get("id").is_some() {
+            let mut record = native_decline(method, params);
+            record["reason"] =
+                json!("declined by PIO: a request after the run's own turn had ended");
+            app.send(&json!({"id":message["id"],"error":{"code":-32000,
+                             "message":record["reason"]}}))?;
+            record["kind"] = json!("native_request_declined");
+            record["request_id"] = message["id"].clone();
+            record["phase"] = json!("after_turn");
+            life.event(record)?;
+            continue;
+        }
+        match method {
+            "turn/started" => {
+                let Some(turn) = params["turn"]["id"].as_str() else {
+                    continue;
+                };
+                if Some(turn) == own_turn || continuing.as_deref() == Some(turn) {
+                    continue;
+                }
+                life.event(json!({"kind":"continuation_started","turn_id":turn,
+                                  "after_own_turn_ms":ended.elapsed().as_millis() as u64}))?;
+                let request = app.request(
+                    "turn/interrupt",
+                    json!({"threadId":thread_id,"turnId":turn}),
+                )?;
+                requests.insert(request, "continuation".to_owned());
+                life.event(json!({"kind":"control_sent","control_id":"continuation",
+                                  "method":"turn/interrupt","turn_id":turn}))?;
+                continuing = Some(turn.to_owned());
+            }
+            "thread/tokenUsage/updated" => {
+                if let Some(total) = params["tokenUsage"]["total"]["totalTokens"].as_u64() {
+                    others.totals.insert(thread_id.to_owned(), total);
+                }
+                life.event(
+                    json!({"kind":"usage","thread_id":thread_id,"own_thread":true,
+                                  "turn_id":params["turnId"],"after_turn":true,
+                                  "total":params["tokenUsage"]["total"],
+                                  "last":params["tokenUsage"]["last"],
+                                  "run_total":others.run_total()}),
+                )?;
+            }
+            "turn/completed" if continuing.as_deref() == params["turn"]["id"].as_str() => {
+                let turn = &params["turn"];
+                life.event(json!({"kind":"turn_completed","turn_id":turn["id"],
+                                  "status":turn["status"],"error":turn["error"],
+                                  "continuation":true}))?;
+                continuing = None;
+            }
+            "error" => life.event(json!({"kind":"native_error","error":params["error"],
+                                         "after_turn":true}))?,
+            _ => {}
+        }
+    }
+}
+
 pub fn codex_host(root: &Path, command: &str, invocation_id: &str) -> Result<()> {
     let mut life = Lifecycle::claim(root, command, invocation_id, ADAPTER, |spec| {
         source(spec).to_owned()
@@ -989,28 +1105,24 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                 }
         }
     }
-    // Every thread this run did not start, with how it appeared and what it
-    // reported, for the exit to carry.
     // The run's own turn is over. Another thread's turn still running is
     // interrupted, and its end waited for, up to ten seconds, so its last
     // report (Codex reports a step an interrupt cut short, if its response
-    // had completed) is counted; nothing else is read now.
-    if !others.turns.is_empty() {
-        others.interrupt(life, app, &mut requests, "run-ended")?;
-        let until = Instant::now() + Duration::from_secs(10);
-        while !others.turns.is_empty() && Instant::now() < until {
-            let Some(message) = app.receive(Duration::from_millis(25))? else {
-                continue;
-            };
-            if let Some(other) = message["params"]["threadId"]
-                .as_str()
-                .filter(|t| *t != thread_id)
-                .map(str::to_owned)
-            {
-                others.handle(life, app, &message, &other)?;
-            }
-        }
-    }
+    // had completed) is counted. And for a grace period the host keeps
+    // reading the run's own thread: a turn Codex starts there by itself (a
+    // goal's continuation, review of L3, round 4, SPEND-9) is recorded,
+    // interrupted and waited for, and its usage counted, so the run reads
+    // as cut short rather than ended by itself.
+    after_turn(
+        life,
+        app,
+        &mut others,
+        &mut requests,
+        &thread_id,
+        turn_id.as_deref(),
+    )?;
+    // Every thread this run did not start, with how it appeared and what it
+    // reported, for the exit to carry.
     life.event(json!({"kind":"other_threads","threads":others.list()}))?;
     app.close_stdin();
     let exit = life.stop(&mut app.child)?;

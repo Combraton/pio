@@ -481,7 +481,13 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   `override-misses-alias` models an override without `memory_tool` beside
   the owner's `memory_tool = true`: each is refused for its own feature and
   no other. `overrides-on` turns all five off per launch over a home that
-  turns each on, and holds.
+  turns each on, and holds. Behind the override, the host keeps reading a
+  run's own thread for three seconds after its turn has ended: a turn Codex
+  starts there by itself (a goal's continuation) is interrupted, carried on
+  the exit (`pio.combraton.dev/continuations`), and its run charged as cut
+  short, and the row "No run took a turn of its own after its turn ended"
+  fails (`goal-continued`; `continuation-uncharged` charges it as ended by
+  itself, and the floor row fails).
 - **The pre-allowance.** Whether Codex honours the per-thread
   `tools.<name>.approval_mode: approve` and asks nothing before the lead's
   tool calls. The fake implements that mode itself, so the row shows that

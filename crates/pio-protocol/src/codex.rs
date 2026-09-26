@@ -20,6 +20,10 @@ pub const NATIVE_DECLINES: &str = "pio.combraton.dev/native-declines";
 /// its own usage, on `execution.exit.observed` (review of L3, round 3,
 /// SPEND-2).
 pub const OTHER_THREADS: &str = "pio.combraton.dev/other-threads";
+/// The turns Codex started by itself on a run's own thread after the run's
+/// turn had ended (a goal's continuation), each interrupted by the host, on
+/// `execution.exit.observed` (review of L3, round 4, SPEND-9).
+pub const CONTINUATIONS: &str = "pio.combraton.dev/continuations";
 const CONTENT_PATH: &str = "/extensions/pio.combraton.dev~1content";
 pub const FEATURES: &[&str] = &[
     "execution.controller",
@@ -983,6 +987,19 @@ impl Provider {
                     self.execution_event(e, "execution.usage.observed", observation, None);
                 }
             }
+            // The end of a turn Codex started by itself after the run's own
+            // (review of L3, round 4, SPEND-9): not the run's turn, whose
+            // status stands; carried with the exit's continuations instead.
+            "turn_completed" if event["continuation"] == true => {
+                if let Some(list) = e[&ns]["continuations"].as_array_mut()
+                    && let Some(started) = list
+                        .iter_mut()
+                        .rev()
+                        .find(|c| c["turn_id"] == event["turn_id"])
+                {
+                    started["status"] = event["status"].clone();
+                }
+            }
             "turn_completed" => {
                 let status = text(&event["status"]).to_owned();
                 e[&ns]["turn_status"] = status.clone().into();
@@ -1062,6 +1079,12 @@ impl Provider {
                             }
                             _ => json!([]),
                         };
+                    // And every turn Codex started by itself on the run's own
+                    // thread after its turn had ended: none, or each one.
+                    payload[CONTINUATIONS] = match &e[&ns]["continuations"] {
+                        Value::Array(list) => Value::Array(list.clone()),
+                        _ => json!([]),
+                    };
                 }
                 self.execution_event(e, "execution.exit.observed", payload, None);
             }
@@ -1076,6 +1099,15 @@ impl Provider {
             }
             "other_threads" => {
                 e[&ns]["other_threads"] = event["threads"].clone();
+            }
+            // A turn Codex started by itself on the run's own thread after
+            // the run's turn had ended, which the host interrupted.
+            "continuation_started" => {
+                let mut record = event.clone();
+                if let Some(fields) = record.as_object_mut() {
+                    fields.remove("kind");
+                }
+                push(&mut e[&ns]["continuations"], record);
             }
             // A request the host answered with an error by itself: never a
             // caller's decision, and never on the stream until now.

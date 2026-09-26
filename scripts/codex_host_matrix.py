@@ -39,7 +39,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'early_declines_in_every_wait', 'early_decline_then_exit', 'file_change_no_root',
          'file_change_root_inside',
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
-         'file_change_grant_root']
+         'file_change_grant_root', 'continuation_interrupted']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
@@ -337,6 +337,8 @@ def subagent_case(case, name):
         kinds = [m['kind'] for m in case.markers_records()]
         assert 'spawn_not_offered' in kinds and 'sub_agent_spawned' not in kinds, kinds
         assert 'memory_pipeline_not_started' in kinds, kinds
+        assert 'continuation_not_started' in kinds and 'continuation_started' not in kinds, kinds
+        assert events_of(case, 'continuation_started') == []
         assert not (case.codex_home / 'memories').exists(), 'the memory pipeline ran'
         assert events_of(case, 'other_thread') == [] and carried_declines(case, key=OTHER_THREADS) == []
         assert final['exit'] == {'code': 0}, final
@@ -675,7 +677,10 @@ def run_case(out, name):
         subagent_thread_attributed={'spawn_agent': True, 'subagent_steps': 2, 'subagent_step': 5000,
                                     'subagent_step_ms': 300, 'subagent_asks': True,
                                     'delay_ms': 4000, 'usage_total': 42},
-        features_off_decision_sent={'spawn_agent': True, 'memory_pipeline': True, 'delay_ms': 500},
+        features_off_decision_sent={'spawn_agent': True, 'memory_pipeline': True,
+                                    'continue_after_turn': True, 'delay_ms': 500},
+        continuation_interrupted={'continue_after_turn': True, 'continuation_step_ms': 60000,
+                                  'delay_ms': 100},
         early_declines_in_every_wait={'elicit_during': ['initialize', 'account/read', 'thread/start'],
                                       'delay_ms': 100},
         early_decline_then_exit={'elicit_during': ['account/read'], 'exit_after_early': True},
@@ -832,6 +837,42 @@ def run_case(out, name):
                                    'decline', body, 'application/json')
             exited(case)
             return dict(outcome='pass', network_approval=True, placement='not_classifiable')
+        if name == 'continuation_interrupted':
+            # A turn Codex starts by itself on the run's own thread once the
+            # run's turn has ended, as a goal's continuation does (review of
+            # L3, round 4, SPEND-9): the host, still reading that thread for
+            # its grace period, records it, interrupts it under control
+            # `continuation`, waits for its end, and the exit carries it. The
+            # run's own turn status stands.
+            response, _ = case.submit()
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = exited(case)
+            order = [json.loads(l) for f in case.store.glob('codex-*.events.jsonl')
+                     for l in f.read_text().splitlines()]
+            kinds = [e['kind'] for e in order]
+            own = events_of(case, 'turn_acknowledged')[0]['turn_id']
+            started = events_of(case, 'continuation_started')
+            assert [e['turn_id'] for e in started] == [f'{own}-continued'], started
+            assert kinds.index('continuation_started') > kinds.index('turn_completed'), kinds
+            sent = [e for e in events_of(case, 'control_sent') if e['control_id'] == 'continuation']
+            assert [(e['method'], e['turn_id']) for e in sent] == \
+                [('turn/interrupt', f'{own}-continued')], sent
+            assert any(e['kind'] == 'control_response' and e['control_id'] == 'continuation'
+                       for e in order), kinds
+            completed = events_of(case, 'turn_completed')
+            assert [(e['turn_id'], e['status'], e.get('continuation')) for e in completed] == [
+                (own, 'completed', None), (f'{own}-continued', 'interrupted', True)], completed
+            carried = carried_declines(case, key='pio.combraton.dev/continuations')
+            assert [(c['turn_id'], c.get('status')) for c in carried] == \
+                [(f'{own}-continued', 'interrupted')], carried
+            receipt = case.journal()[1][0]['receipt']
+            assert receipt['turn_status'] == 'completed', receipt
+            with case.client() as c:
+                output = c.query('execution.output.read', {'execution': 'work', 'offset': 0})['result']
+            import base64
+            assert 'SENTINEL-continued' not in base64.b64decode(output['data_base64']).decode()
+            assert final['exit'] == {'code': 0}, final
+            return dict(outcome='pass', continuation=carried[0])
         if name == 'user_input_declined':
             # Codex's other route for an MCP tool-call approval: declined by
             # PIO, recorded by how many questions and whether one is that

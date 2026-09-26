@@ -187,6 +187,12 @@ does with a permission prompt.
 - `meter-dies` (L3) fails the meter thread as the third start begins: the
   meter must cancel every run still going itself, within seconds, before
   alpha reaches its ceiling, and the run ends with the error;
+- `goal-continued` (L3) has Codex start a turn on `beta`'s own thread by
+  itself once `beta`'s has ended, as a goal's continuation does: the host,
+  reading the thread for its grace period, interrupts it, `beta` is charged
+  as cut short, and the row that looks for such a turn fails;
+  `continuation-uncharged` charges `beta` as ended by itself, and the floor
+  row fails;
 - `memory-pipeline-ran` (L3) has the fake write, at its first turn, what
   Codex's memory pipeline writes under the Codex home: the memory row must
   fail, listing each path by a Codex-chosen name or a digest, and no name a
@@ -528,8 +534,11 @@ def select_plan(name):
                      "generation), by the owner's own config.toml or per launch under a "
                      'recorded owner decision; the runner refuses to start otherwise (round 4, '
                      'U1). Behind that, a run whose sub-agent appears anyway is stopped at once '
-                     'and charged a step on each of its threads (round 3, SPEND-2), and a '
-                     'memory pipeline that writes anyway fails the memory row (round 3, S6). A '
+                     'and charged a step on each of its threads (round 3, SPEND-2), a turn '
+                     'Codex starts by itself on a run\'s thread after the run\'s own has ended '
+                     'is interrupted by the host, read for three seconds after that turn, and '
+                     'its run charged as cut short (round 4, SPEND-9), and a memory pipeline '
+                     'that writes anyway fails the memory row (round 3, S6). A '
                      'setting from a managed configuration (requirements.toml, MDM, cloud) '
                      'is not read, and could override either route',
                      "Codex's remote compaction makes a model call whose usage goes to "
@@ -765,6 +774,13 @@ MUTANTS = {
     # S6): the row that lists them fails, and no name an owner's session
     # could have given is in the receipt.
     'memory-pipeline-ran': "Codex's memory pipeline wrote nothing during the run",
+    # Codex starts a turn on beta's own thread by itself once beta's has
+    # ended, as a goal's continuation does (review of L3, round 4, SPEND-9):
+    # the host interrupts it and the row that looks for one fails; beta is
+    # charged as cut short. With that charge put back to "ended by itself",
+    # the floor row fails too.
+    'goal-continued': 'No run took a turn of its own after its turn ended',
+    'continuation-uncharged': "Every run's charge covers what it could have spent",
     # The meter thread fails as the third start begins (review of L3, round
     # 3, SPEND-5): it must stop every run itself, at once, and the run ends
     # with the error.
@@ -804,7 +820,8 @@ PLAN_MUTANTS = {**{m: {'L3'} for m in (
                     'image-generation-unguarded', 'override-misses-alias',
                     'step-past-in-flight', 'stopped-past-share', 'stopped-charge-capped',
                     'deadline-interrupted', 'interrupted-charged-reported',
-                    'memory-pipeline-ran', 'meter-dies', 'lead-exit-uncarried')},
+                    'memory-pipeline-ran', 'meter-dies', 'lead-exit-uncarried',
+                    'goal-continued', 'continuation-uncharged')},
                 'no-wait': {'L1b', 'L3'}, 'no-ask': {'L1b'}, 'alpha-outlasts': {'L1b'},
                 'helper-elsewhere': {'L1', 'L1b'}, 'wrong-model': {'L3'},
                 'reviewer-elsewhere': {'L3'}, 'no-pre-allow': {'L3'},
@@ -1652,6 +1669,9 @@ class CodexMeter(Meter):
         self.largest_step = 0
         self.subagents = []
         self.turn_status = None
+        # Turns Codex started by itself on the run's own thread after its
+        # turn had ended, which the host interrupted (round 4, SPEND-9).
+        self.continued = []
 
     def read(self, caller):
         raw, self.offset = spool(caller, self.identity, self.offset)
@@ -1697,8 +1717,12 @@ class CodexMeter(Meter):
                                        at=now()))
             print(f"SUB-AGENT {self.identity}: {event.get('thread_id')} "
                   f"({(event.get('how') or {}).get('by')})", flush=True)
-        elif kind == 'turn_completed':
+        elif kind == 'turn_completed' and not event.get('continuation'):
             self.turn_status = event.get('status')
+        elif kind == 'continuation_started':
+            self.continued.append(dict(turn_id=event.get('turn_id'), at=now()))
+            print(f"CONTINUED {self.identity}: {event.get('turn_id')} after its own turn; "
+                  'interrupted by the host', flush=True)
         elif self.identity == LEAD and untooled(event):
             self.untooled.append(dict(item_type=event.get('item_type'), status=event.get('status'),
                                       server=event.get('server'), total=self.host_total))
@@ -1712,7 +1736,8 @@ class CodexMeter(Meter):
     def summary(self, tool_calls=None):
         return dict(super().summary(tool_calls), threads=dict(self.threads),
                     host_total=self.host_total, largest_step=self.largest_step,
-                    subagents=list(self.subagents), turn_status=self.turn_status)
+                    subagents=list(self.subagents), turn_status=self.turn_status,
+                    continued=list(self.continued))
 
     def observe(self, event):
         """One event from the run's stream."""
@@ -2157,6 +2182,10 @@ def codex_scenario(mutant, calls):
         play.update(led_heavy_if=alpha, led_heavy_step=40_000, led_step_ms=6000)
     if mutant in ('memory-pipeline-ran', 'overrides-on'):
         play['memory_pipeline'] = True
+    if mutant in ('goal-continued', 'continuation-uncharged', 'overrides-on'):
+        # beta goes on by itself once its turn has ended, as a goal's
+        # continuation does (review of L3, round 4, SPEND-9).
+        play['continue_after_turn_if'] = beta
     if mutant in ('subagent-spawned', 'subagent-not-stopped', 'subagent-uncounted',
                   'overrides-on'):
         # alpha's first step also spawns a sub-agent, as 0.157.0 does, which
@@ -2722,7 +2751,7 @@ def host_steps(events):
     (a report's last step, or the rise between two reports on one thread),
     how many reports, every thread it did not start, and whether its own
     turn ended interrupted."""
-    threads, largest, steps, others, interrupted = {}, 0, 0, [], False
+    threads, largest, steps, others, interrupted, continued = {}, 0, 0, [], False, []
     for event in events:
         if event['kind'] == 'usage':
             thread = event.get('thread_id') or 'own'
@@ -2736,13 +2765,16 @@ def host_steps(events):
                 largest = max(largest, last)
         elif event['kind'] == 'other_thread' and event.get('thread_id') not in others:
             others.append(event.get('thread_id'))
-        elif event['kind'] == 'turn_completed':
+        elif event['kind'] == 'turn_completed' and not event.get('continuation'):
             interrupted = event.get('status') == 'interrupted'
+        elif event['kind'] == 'continuation_started':
+            continued.append(event.get('turn_id'))
     return dict(sum=sum(threads.values()), largest=largest, steps=steps, others=others,
-                interrupted=interrupted)
+                interrupted=interrupted, continued=continued)
 
 
 OTHER_THREADS = 'pio.combraton.dev/other-threads'
+CONTINUATIONS = 'pio.combraton.dev/continuations'
 
 
 def other_threads_carried(stream):
@@ -3107,10 +3139,15 @@ def codex_usage(views, meters, submitted, stopped=(), mutant=None):
         allowance = gauge.allowance()
         # Cut short: by the runner, or by an interrupt the host sent and
         # the turn ended on (round 3, SPEND-6).
+        # Or by the host's interrupt of a turn Codex started by itself after
+        # the run's own (round 4, SPEND-9).
         cut = identity in stopped or gauge.turn_status == 'interrupted' \
-            or (current.get('cancellation') or {}).get('outcome') == 'cancelled'
+            or (current.get('cancellation') or {}).get('outcome') == 'cancelled' \
+            or bool(gauge.continued)
         if mutant == 'interrupted-charged-reported':
             cut = identity in stopped
+        if mutant == 'continuation-uncharged':
+            cut = cut and not gauge.continued
         # What PIO saw it spend: its report (the sum over its threads), its
         # own meter's total, or the sum of its threads' host reports, if
         # higher (the meter is all there is when the service cannot be asked).
@@ -3715,7 +3752,7 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
             seen = max(reported if isinstance(reported, int) else 0, gauge.get('estimate') or 0,
                        steps_seen['sum'])
             running = current.get('runtime') != 'exited'
-            cut = run in stops or steps_seen['interrupted'] \
+            cut = run in stops or steps_seen['interrupted'] or bool(steps_seen['continued']) \
                 or (current.get('cancellation') or {}).get('outcome') == 'cancelled'
             allowance = max(step, steps_seen['largest']) * (1 + len(steps_seen['others']))
             floor = seen + (allowance if cut or running else 0)
@@ -3771,6 +3808,23 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
                  stopped_for, 'each such run stopped by the runner, for its sub-agent',
                  holds=lambda o: None if not o else all(o.values()),
                  note='none spawned, nothing to judge')
+        # No turn of Codex's own after a run's turn had ended (review of L3,
+        # round 4, SPEND-9): a goal's continuation, which the host, reading
+        # the run's thread for its grace period, interrupts; the run is then
+        # charged as cut short. From the host's own events and each exit.
+        continuations = {e['subject']['id']: (e.get('payload') or {}).get(CONTINUATIONS)
+                         for e in stream if e['type'] == 'execution.exit.observed'}
+        rows.add('No run took a turn of its own after its turn ended',
+                 dict(turns={run: sorted({*observed_steps[run]['continued'],
+                                          *(c.get('turn_id') for c in
+                                            (continuations.get(run) or []))})
+                             for run in usage if u_ran(usage[run])},
+                      not_carried=[r for r in exited_runs if continuations.get(r) is None]),
+                 'no turn started on any run\'s own thread after its turn had ended',
+                 holds=lambda o: not any(o['turns'].values()) and not o['not_carried'],
+                 note="the host's continuation_started events and the list each exit carries "
+                      '(pio.combraton.dev/continuations); such a turn is interrupted by the host '
+                      'and its run charged a step in flight')
         rows.add("Every run's charge stayed within its reserved share",
                  dict(runs=within, total=sum(r['charged'] for r in within.values()),
                       worst_case=WORST_CASE),
@@ -4243,9 +4297,10 @@ def main():
             assert all(u['off'] is True for u in record['unmetered']['features'].values())
             assert all(sent == FEATURES_OFF for sent in record['features_off_sent'].values()) \
                 and len(record['features_off_sent']) == len(RUNS), record['features_off_sent']
-            memory = next(r for r in record['rows']
-                          if r['row'] == "Codex's memory pipeline wrote nothing during the run")
-            assert memory['holds'] is True, memory
+            for name in ("Codex's memory pipeline wrote nothing during the run",
+                         'No run took a turn of its own after its turn ended'):
+                held = next(r for r in record['rows'] if r['row'] == name)
+                assert held['holds'] is True, held
             print(f'mutant {args.mutant}: holds on {wanted!r}, with all {len(UNMETERED)} '
                   f"features off per launch on {len(record['features_off_sent'])} threads")
             return
@@ -4421,6 +4476,15 @@ def main():
             assert took <= 5, died
             assert (spent.get('reported_total') or 0) < CHILD_CEILING, spent
             assert 'the meter stopped' in record['error']['message'], record['error']
+        if args.mutant == 'goal-continued':
+            # Interrupted by the host, and charged as cut short: its report
+            # plus a step in flight, which the floor agrees with.
+            beta = record['usage'][f'{LEAD}.beta']
+            assert beta['cut_short'] and beta['basis'] == STOPPED_BASIS, beta
+            assert beta['charged'] == beta['reported_total'] + beta['allowance'], beta
+            assert row_of("Every run's charge covers what it could have spent")['holds'] is True
+            continued = row_of('No run took a turn of its own after its turn ended')['observed']
+            assert continued['turns'][f'{LEAD}.beta'], continued
         if args.mutant == 'memory-pipeline-ran':
             changes = row_of("Codex's memory pipeline wrote nothing during the run")['observed']
             paths = {c['path'] for c in changes['changes']}

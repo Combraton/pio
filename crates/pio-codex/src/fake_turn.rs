@@ -294,6 +294,78 @@ fn play_sub_agent(play: &Play, steps: u64, asks: bool) -> Result<()> {
     play.turn.complete("completed")
 }
 
+/// Codex 0.157.0 continuing a thread by itself once its turn has ended, as
+/// an active goal does (read from source at `rust-v0.157.0`, not measured:
+/// `ext/goal/src/runtime.rs:425-491`, reached from the thread-idle hook right
+/// after `turn/completed`): `turn/started` for a new turn on the same thread,
+/// then `continuation_steps` model steps of `continuation_step` tokens, each
+/// `continuation_step_ms` long, reported as Codex reports a step, and the
+/// turn completes, unless interrupted first. None when the thread's config
+/// turned goals off.
+pub(crate) fn continue_thread(
+    previous: &Turn,
+    scenario: &Value,
+    waiting: Waiting,
+    markers: Option<PathBuf>,
+) -> Result<Option<Arc<Turn>>> {
+    if GOALS_OFF.load(Ordering::SeqCst) {
+        super::fake::marker(
+            &markers,
+            json!({"source":super::fake::SOURCE,"kind":"continuation_not_started"}),
+        )?;
+        return Ok(None);
+    }
+    let turn = Turn::continued(
+        format!("{}-continued", previous.id),
+        previous.thread.clone(),
+        previous.total(),
+    );
+    emit(
+        &json!({"method":"turn/started","params":{"threadId":turn.thread,
+        "turn":{"id":turn.id,"status":"inProgress","items":[],"error":null}}}),
+    )?;
+    super::fake::marker(
+        &markers,
+        json!({"source":super::fake::SOURCE,"kind":"continuation_started","turn":turn.id}),
+    )?;
+    let step_ms = scenario["continuation_step_ms"].as_u64().unwrap_or(1500);
+    let play = Play {
+        turn: turn.clone(),
+        waiting,
+        markers,
+        step: scenario["continuation_step"].as_u64().unwrap_or(4096),
+        first: None,
+        think: Duration::from_millis(step_ms),
+        answer: Duration::from_millis(step_ms),
+        requests: AtomicU64::new(0),
+        messages: AtomicU64::new(0),
+    };
+    let steps = scenario["continuation_steps"].as_u64().unwrap_or(3);
+    std::thread::spawn(move || {
+        let played = (|| -> Result<()> {
+            play.begin();
+            for n in 0..steps {
+                if !play.think() {
+                    return Ok(());
+                }
+                // Its own words, after the run's answer: never the run's.
+                play.say(&format!(
+                    "continuing the goal, step {} SENTINEL-continued",
+                    n + 1
+                ))?;
+                play.responded();
+                play.step(n + 1 < steps)?;
+            }
+            play.turn.complete("completed")
+        })();
+        if let Err(error) = played {
+            let _ = play.marker(json!({"kind":"continuation_failed","error":format!("{error:#}")}));
+            let _ = play.turn.complete("failed");
+        }
+    });
+    Ok(Some(turn))
+}
+
 /// Replies to the requests a scripted turn sent the client, keyed by request
 /// id, routed back by the main loop to the turn that waits for them.
 pub(crate) type Waiting = Arc<Mutex<HashMap<String, Sender<Value>>>>;
@@ -345,6 +417,20 @@ impl Turn {
 
     pub(crate) fn finished(&self) -> bool {
         self.finished.load(Ordering::SeqCst)
+    }
+
+    /// A turn Codex starts by itself on the same thread once the last one
+    /// has ended (a goal's continuation): the thread's total goes on from
+    /// where the last turn left it.
+    pub(crate) fn continued(id: String, thread: String, total: u64) -> Arc<Self> {
+        let turn = Self::new(id, thread);
+        turn.usage.lock().expect("usage lock").0 = total;
+        turn
+    }
+
+    /// The thread's total as this turn last reported it.
+    pub(crate) fn total(&self) -> u64 {
+        self.usage.lock().expect("usage lock").0
     }
 
     /// `turn/interrupt`: the script stops at its next step, the step in

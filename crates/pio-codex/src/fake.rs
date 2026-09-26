@@ -51,6 +51,11 @@
 //! `elicit_during` (a list of `initialize`, `account/read`, `thread/start`)
 //! sends a url-mode elicitation before answering each wait it names;
 //! `exit_after_early` then exits once the client has answered it.
+//! `continue_after_turn` (the plain turn) or `continue_after_turn_if` (a led
+//! run's prompt) has the thread start a turn of its own once its turn has
+//! ended, as a goal's continuation does (`fake_turn::continue_thread`:
+//! `continuation_steps`, `continuation_step`, `continuation_step_ms`), unless
+//! the thread's config turned goals off.
 //! `memory_pipeline` writes, at the first turn, what Codex's memory pipeline
 //! would under the Codex home (`memories/`, `memories_1.sqlite`), unless the
 //! thread's config turned memories off (`crate::features_off`).
@@ -172,9 +177,20 @@ pub fn run() -> Result<()> {
     let mut responses: std::collections::HashMap<String, u32> = Default::default();
     // The early request whose answer ends the fake, where the scenario says.
     let mut leave_after: Option<String> = None;
+    // Whether this thread goes on by itself once its turn has ended (a
+    // goal's continuation), and whether it has (review of L3, round 4,
+    // SPEND-9): `continue_after_turn`, or `continue_after_turn_if` a led
+    // run's prompt.
+    let mut continues = scenario["continue_after_turn"] == true;
+    let mut continued = false;
     loop {
-        if scripted.as_ref().is_some_and(|turn| turn.finished()) {
+        if let Some(turn) = scripted.as_ref().filter(|turn| turn.finished()).cloned() {
             scripted = None;
+            if continues && !continued {
+                continued = true;
+                scripted =
+                    fake_turn::continue_thread(&turn, &scenario, waiting.clone(), markers.clone())?;
+            }
         }
         let timeout = active
             .as_ref()
@@ -204,6 +220,22 @@ pub fn run() -> Result<()> {
                     send(
                         json!({"method":"turn/completed","params":{"threadId":thread_id,"turn":{"id":turn,"status":"completed","items":[],"error":null}}}),
                     )?;
+                    if continues && !continued {
+                        continued = true;
+                        let total = scenario
+                            .get("usage_total")
+                            .cloned()
+                            .unwrap_or(json!(42))
+                            .as_u64()
+                            .unwrap_or(0);
+                        let ended = fake_turn::Turn::continued(turn.clone(), thread_id, total);
+                        scripted = fake_turn::continue_thread(
+                            &ended,
+                            &scenario,
+                            waiting.clone(),
+                            markers.clone(),
+                        )?;
+                    }
                 }
             }
             Ok(Some(message)) => {
@@ -508,6 +540,10 @@ pub fn run() -> Result<()> {
                                     fake_turn::lead(playing, servers, script, queue, marks, dir)
                                 });
                             } else {
+                                continues = continues
+                                    || scenario["continue_after_turn_if"]
+                                        .as_str()
+                                        .is_some_and(|needle| text.contains(needle));
                                 let (dir, prompt) = (cwd.clone(), text.to_owned());
                                 std::thread::spawn(move || {
                                     fake_turn::led(playing, script, queue, marks, dir, prompt)
