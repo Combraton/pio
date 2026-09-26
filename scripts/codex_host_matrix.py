@@ -41,7 +41,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
          'file_change_grant_root', 'continuation_interrupted', 'subagent_turn_after_interrupt',
          'url_elicitation_with_approval_kind_declined', 'stream_retries_recorded',
-         'plugins_off_decision_sent']
+         'plugins_off_decision_sent', 'approval_settled_by_codex', 'approval_pending_at_turn_end']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # The lead tool's own server settings on Codex, as `lead_run.py` sends them
 # for L3 (after its first live run, 2026-09-26).
@@ -727,6 +727,11 @@ def run_case(out, name):
         url_elicitation_with_approval_kind_declined={'approval': 'elicitation', 'delay_ms': 100,
                                                      'elicitation_meta_kind': 'mcp_tool_call'},
         command_approval_lapses={'approval': 'command', 'delay_ms': 100},
+        # Codex settles the approval itself half a second in, and the turn
+        # goes on five seconds more: past the two-second answer deadline.
+        approval_settled_by_codex={'approval': 'command', 'approval_settles_itself_ms': 500,
+                                   'delay_ms': 5000},
+        approval_pending_at_turn_end={'approval': 'command', 'delay_ms': 100},
         form_elicitation_declined={'approval': 'elicitation', 'elicitation_mode': 'form',
                                    'delay_ms': 100},
         approval_cwd_through_a_link={'approval': 'command', 'delay_ms': 100},
@@ -989,6 +994,11 @@ def run_case(out, name):
             import base64
             assert 'SENTINEL-continued' not in base64.b64decode(output['data_base64']).decode()
             assert final['exit'] == {'code': 0}, final
+            # D5: the run's turn completed and reported its usage, but the
+            # continuation it interrupted may have spent a step never
+            # reported, so the usage is observed and the liability open.
+            assert final['usage']['observations'] and final['usage']['liability'] == 'unresolved', final['usage']
+            assert events_of(case, 'usage_final') == [], events_of(case, 'usage_final')
             return dict(outcome='pass', continuation=carried[0])
         if name == 'user_input_declined':
             # Codex's other route for an MCP tool-call approval: declined by
@@ -1087,6 +1097,76 @@ def run_case(out, name):
             assert 'example.invalid' not in json.dumps(refused), refused
             assert (final['runtime'], final['exit']) == ('exited', 'unavailable'), final
             return dict(outcome='pass', recorded=declined[0]['wait'], on_stream=True)
+        if name == 'approval_settled_by_codex':
+            # Codex settles a request itself, with `serverRequest/resolved`
+            # and no answer taken (review of L3, CH-8). It no longer holds
+            # the request, so PIO sends nothing for it (no lapse, though the
+            # turn outlives the deadline), and the action's one decision
+            # says Codex settled it and that nothing was sent.
+            response, _ = case.submit(delivery=2)
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = exited(case, seconds=30)
+            settled = [m['id'] for m in case.markers_records() if m['kind'] == 'approval_settled_by_codex']
+            assert settled == ['fake-request-1'], case.markers_records()
+            wire = [m for m in answered_once(case) if m['id'] == 'fake-request-1']
+            assert wire == [], f'PIO answered a request Codex no longer held: {wire}'
+            assert events_of(case, 'request_denied_by_default') == [], events_of(case, 'request_denied_by_default')
+            resolved = events_of(case, 'request_resolved')
+            assert [(r['request_id'], r.get('action_seq'), r.get('settled_by')) for r in resolved] == \
+                [('fake-request-1', 1, 'harness')], resolved
+            with case.client() as c:
+                stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                      'kinds': ['execution.execution']})['result']
+            decided = [i['event']['payload'].get('pio.combraton.dev/decision') for i in stream['items']
+                       if 'event' in i and i['event']['type'] == 'execution.action.answered']
+            assert [(d['decided_by'], d['decision'], d['basis'], d['sent']) for d in decided] == \
+                [('harness', None, 'settled_by_harness', False)], decided
+            assert [a['state'] for a in final['actions']] == ['answered'], final['actions']
+            late = json.dumps({'decision': 'accept'}).encode()
+            refused = case.execution_command('execution.respond_action', 'work', dict(
+                action_id=final['actions'][0]['action_id'],
+                response=dict(digest=digest(late), media_type='application/json')),
+                'answer-late', late, 'application/json')
+            assert refused['error']['data']['code'] == 'not_found' and \
+                refused['error']['data']['details'] == {'reason': 'already_decided', 'decided_by': 'harness'}, refused
+            return dict(outcome='pass', settled_by='harness', native_answers=len(wire))
+        if name == 'approval_pending_at_turn_end':
+            # The execution deadline (four seconds) stops the turn while its
+            # command approval waits for an answer (two minutes). The
+            # reviewer's probe of "an approval pending at exit": the action
+            # stayed `pending` on the exited run, and a later answer was
+            # accepted and never sent. Now the turn closes it, answered by
+            # nobody, and a later answer is refused.
+            response, _ = case.submit(deadline=4, delivery=120)
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = exited(case, seconds=60)
+            assert [a['state'] for a in final['actions']] == ['answered'], \
+                f"an approval stayed pending on an exited run: {final['actions']}"
+            assert [e['status'] for e in events_of(case, 'turn_completed')] == ['interrupted']
+            expired = events_of(case, 'request_expired_with_turn')
+            assert [(x['action_seq'], x['request_id'], x['decided_by'], x['sent']) for x in expired] == \
+                [(1, 'fake-request-1', 'nobody', None)], expired
+            for kind in ('request_denied_by_default', 'control_applied'):
+                assert events_of(case, kind) == [], (kind, events_of(case, kind))
+            wire = [m for m in answered_once(case) if m['id'] == 'fake-request-1']
+            assert wire == [], wire
+            with case.client() as c:
+                stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                      'kinds': ['execution.execution']})['result']
+            decided = [i['event']['payload'].get('pio.combraton.dev/decision') for i in stream['items']
+                       if 'event' in i and i['event']['type'] == 'execution.action.answered']
+            assert [(d['decided_by'], d['decision'], d['basis'], d['sent']) for d in decided] == \
+                [('nobody', None, 'expired_with_turn', False)], decided
+            late = json.dumps({'decision': 'accept'}).encode()
+            refused = case.execution_command('execution.respond_action', 'work', dict(
+                action_id=final['actions'][0]['action_id'],
+                response=dict(digest=digest(late), media_type='application/json')),
+                'answer-late', late, 'application/json')
+            assert refused['error']['data']['code'] == 'not_found' and \
+                refused['error']['data']['details'] == {'reason': 'already_decided', 'decided_by': 'nobody'}, refused
+            after = case.inspect()['result']
+            assert not [x for x in after['effects'] if '.response-' in x], after['effects']
+            return dict(outcome='pass', expired=len(expired), native_answers=len(wire))
         if name == 'command_approval_lapses':
             # A command approval nobody answers: after the caller's two
             # seconds, one decline of PIO's, and the command never runs. In
@@ -1109,6 +1189,21 @@ def run_case(out, name):
             items = [e for e in events_of(case, 'item_completed') if e['item_id'] == 'item-approval']
             assert [i['status'] for i in items] == ['declined'], 'the command ran although nobody allowed it'
             assert [a['state'] for a in final['actions']] == ['answered'], final['actions']
+            # One decision per action (review of L3, CH-7): the lapse is the
+            # service's, sent to the host as a control like any answer, and an
+            # answer after it is refused as already decided, never told
+            # `answered`.
+            controls = [json.loads(l) for f in case.store.glob('codex-*.controls.jsonl')
+                        for l in f.read_text().splitlines()]
+            assert [(c['decision'], c.get('decided_by')) for c in controls
+                    if c['kind'] == 'respond_action'] == [('decline', 'pio')], controls
+            late = json.dumps({'decision': 'accept'}).encode()
+            refused = case.execution_command('execution.respond_action', 'work', dict(
+                action_id=final['actions'][0]['action_id'],
+                response=dict(digest=digest(late), media_type='application/json')),
+                'answer-late', late, 'application/json')
+            assert refused['error']['data']['code'] == 'not_found' and \
+                refused['error']['data']['details'] == {'reason': 'already_decided', 'decided_by': 'pio'}, refused
             with case.client() as c:
                 stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
                                                       'kinds': ['execution.execution']})['result']
@@ -1332,7 +1427,12 @@ def run_case(out, name):
             assert [a['decision'] for a in answers] == [decision], answers
             assert [m['result'] for m in answered_once(case)] == [{'decision': decision}]
             items = [e for e in events_of(case, 'item_completed') if e['item_id'] == 'item-approval']
-            assert items and items[0]['status'] == ('completed' if decision == 'accept' else 'declined'), items
+            # D16: an accept's item completes by the command's own exit, not
+            # by the decision. Measured (docs/work/m2/codex-live/R6.json,
+            # "approval-allow"): the live accept gave `failed`, not
+            # `completed`; the fake plays that, and this asserts what it
+            # actually plays rather than a decision-shaped guess.
+            assert items and items[0]['status'] == ('failed' if decision == 'accept' else 'declined'), items
             # The decision records which kind of command approval it answered.
             requested = events_of(case, 'action_requested')
             expected_kind = 'writeStdin' if decision == 'decline' else 'command'
@@ -1384,6 +1484,10 @@ def run_case(out, name):
         delivery = final['deliveries'][0]
         assert final['delivery'] == 'acknowledged' and delivery['proof_class'] == 'provider_ack_id', final
         assert final['exit'] == {'code': 0} and final['usage']['observations'][0]['amount'] == 42 and final['usage']['liability'] == 'resolved', final
+        # D5: resolved because the turn completed with its final usage, which
+        # the host says once the run is over, and not at the step's report.
+        assert [(u['final'], u['run_total']) for u in events_of(case, 'usage')] == [(False, 42)]
+        assert [u['run_total'] for u in events_of(case, 'usage_final')] == [42]
         received = [m for m in case.markers_records() if m['kind'] == 'turn_received']
         assert len(received) == 1 and 'sha256:' + received[0]['input_sha256'] == digest(brief), received
         with case.client() as c:

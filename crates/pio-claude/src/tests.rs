@@ -167,10 +167,17 @@ fn qualify_refuses_an_unsupported_version_without_running_claude_arguments() {
         .unwrap()
     });
     assert_eq!(record["qualified"], false);
-    assert_eq!(
-        record["refusals"],
-        json!([{"reason":"unsupported_version","observed":"2.1.279"}])
-    );
+    assert_eq!(record["refusals"][0]["reason"], "unsupported_version");
+    assert_eq!(record["refusals"][0]["observed"], "2.1.279");
+    // D12: the refusal names the pin, the installed version and how to
+    // re-qualify, so a reader is never left to go looking for them.
+    assert_eq!(record["refusals"][0]["pinned"], PINNED_VERSION);
+    let detail = record["refusals"][0]["detail"].as_str().unwrap();
+    assert!(detail.contains(PINNED_VERSION), "{detail}");
+    assert!(detail.contains("2.1.279"), "{detail}");
+    assert!(detail.contains("docs/VERSION-POLICY.md"), "{detail}");
+    assert!(detail.contains("claude_requalify.py"), "{detail}");
+    assert_eq!(record["refusals"].as_array().unwrap().len(), 1);
     assert_eq!(
         record["surface"],
         json!({"skipped":"version_not_qualified"})
@@ -273,6 +280,59 @@ fn auth_route_reports_a_missing_route_as_unusable() {
     assert_eq!(route["usable"], false);
     assert_eq!(route["observed"]["authMethod"], "none");
     assert_eq!(route["account_identity_fields_dropped"], json!([]));
+}
+
+/// D10: the owner's dated model exception is compiled out of release builds.
+/// Built normally (dev, test, CI and the live runners: `test-exceptions` on,
+/// the default) this configuration is refused only for the ordinary reasons
+/// this file covers elsewhere; built `--no-default-features` — the release
+/// configuration — it is refused outright with one clear reason, whatever
+/// else the configuration says, because a real caller never sets either
+/// field and the exception has no other purpose.
+#[test]
+fn a_release_build_refuses_the_model_exception_outright() {
+    let dir = tempfile::tempdir().unwrap();
+    let record = serialized(|| {
+        let claude = fake_claude(
+            dir.path(),
+            PINNED_VERSION,
+            "top help",
+            r#"{"loggedIn":true,"authMethod":"claude.ai"}"#,
+        );
+        let config = json!({
+            "executable":claude,
+            "env":{"PATH":"/usr/bin:/bin"},
+            "config_dir":dir.path().join("config"),
+            "home":dir.path().join("home"),
+            "fixture_root":dir.path().join("fixtures"),
+            "labeled_fake":true,
+            "permission_mode":product_default_permission_mode(),
+            "model":"claude-opus-x",
+            "test_only_model_exception":MODEL_EXCEPTION,
+        });
+        service_admission(&dir.path().join("work"), &config).unwrap()
+    });
+    let reasons: Vec<&str> = record["refusals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["reason"].as_str().unwrap())
+        .collect();
+    if cfg!(feature = "test-exceptions") {
+        assert!(
+            !reasons.contains(&"test_only_model_exception_not_compiled_in"),
+            "{record}"
+        );
+    } else {
+        assert!(
+            reasons.contains(&"test_only_model_exception_not_compiled_in"),
+            "{record}"
+        );
+        assert!(
+            !reasons.contains(&"model_requires_the_dated_test_only_exception"),
+            "{record}"
+        );
+    }
 }
 
 #[test]
@@ -1067,6 +1127,58 @@ fn a_refusal_is_attributed_to_whoever_decided_it() {
     // None of them ran, whoever decided, so none is an effect.
     assert_eq!(record["out_of_fixture_effect_observed"], false);
     assert_eq!(record["liability"], "none_observed");
+}
+
+/// A cancelled turn still gets a `result` (measured on R5: SIGINT is answered
+/// with `terminal_reason: aborted_streaming`), so its denial list exists. A
+/// tool use whose `tool_result` arrived before the signal ran; one still in
+/// flight when it landed has no completed result, and nothing says whether
+/// it ran: `unknown`, never `performed`, and the liability stays open.
+#[test]
+fn an_interrupted_turn_s_tool_use_in_flight_is_unknown_not_performed() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, _) = workspace(dir.path());
+    let messages = vec![
+        tool_use("Read", "t1", json!({"file_path":"src/calc.py"})),
+        tool_use("Edit", "t2", json!({"file_path":"src/calc.py"})),
+    ];
+    let completed = vec!["t1".to_owned()];
+    let record = tool_use_records_after(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+        Some(&completed),
+    );
+    let uses = record["tool_uses"].as_array().unwrap();
+    assert_eq!(uses[0]["outcome"], "performed", "{record}");
+    assert_eq!(
+        uses[1]["outcome"], "unknown",
+        "an in-flight use of a cancelled turn is not performed: {record}"
+    );
+    assert_eq!(uses[1]["denied"], false);
+    assert_eq!(record["result_observed"], true);
+    assert_eq!(record["turn_interrupted"], true);
+    assert_eq!(record["unknown_outcome_count"], 1);
+    assert_eq!(record["liability"], "unresolved");
+    // The same `result` from a turn nobody interrupted: both ran.
+    let whole = tool_use_records(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+    );
+    assert!(
+        whole["tool_uses"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|u| u["outcome"] == "performed")
+    );
+    assert_eq!(whole["turn_interrupted"], false);
+    assert_eq!(whole["liability"], "none_observed", "{whole}");
 }
 
 /// D3. A turn killed or crashed before its final `result` has no denial list.

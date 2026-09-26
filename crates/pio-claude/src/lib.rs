@@ -339,7 +339,26 @@ pub fn qualify(
     if status != 0 || version.is_none() {
         refusals.push(json!({"reason":"version_unavailable","exit":status}));
     } else if version.as_deref() != Some(PINNED_VERSION) {
-        refusals.push(json!({"reason":"unsupported_version","observed":version}));
+        // D12: the Homebrew cask self-updates past PIO's pin (2.1.278 to
+        // 2.1.281 already happened once). The refusal names the pin, what is
+        // actually installed, and the zero-token command that re-qualifies a
+        // new version, so the reader never has to go looking for it.
+        refusals.push(json!({
+            "reason":"unsupported_version",
+            "observed":version,
+            "pinned":PINNED_VERSION,
+            "detail":format!(
+                "PIO pins Claude Code to an exact, re-qualified version ({PINNED_VERSION}); the \
+                 installed executable reports {}. This is a known pin (docs/VERSION-POLICY.md), \
+                 not a bug: the cask tracks latest and PIO trusts only a version it has \
+                 measured. To re-qualify at zero model tokens: `python3 scripts/\
+                 claude_requalify.py` against the installed cask (add `--isolated` to also skip \
+                 reading the owner's own configuration); on drift, update PINNED_VERSION and the \
+                 committed adapters/claude/<version>/ surface and stream identity from its \
+                 output, then re-run the offline Claude matrix.",
+                version.as_deref().unwrap_or("(unparseable)")
+            ),
+        }));
     }
     // Never run an unqualified executable with Claude-specific arguments.
     if !refusals.is_empty() {
@@ -785,10 +804,19 @@ pub fn service_admission(work: &Path, claude: &Value) -> Result<Value> {
     checks.push("environment");
 
     // PIO never selects a model outside the owner's dated, test-only exception,
-    // and the exception is refused on its own so it cannot sit unused.
+    // and the exception is refused on its own so it cannot sit unused. D10:
+    // that exception is compiled out of release builds; a real caller never
+    // sets either field, so that path is untouched, but a configuration that
+    // tries to use the exception in a release build gets one clear reason
+    // rather than a check it could pass by guessing the right token.
     let model = claude["model"].as_str();
     let exception = claude["test_only_model_exception"].as_str();
-    if model.is_some_and(str::is_empty) {
+    if !cfg!(feature = "test-exceptions") && (model.is_some() || exception.is_some()) {
+        refusals.push(refusal(
+            "test_only_model_exception_not_compiled_in",
+            json!({"reason":"the dated model exception is test-only; this PIO build was compiled without the test-exceptions feature, so claude.model is refused outright (D10)"}),
+        ));
+    } else if model.is_some_and(str::is_empty) {
         refusals.push(refusal("model_must_be_a_non_empty_name", Value::Null));
     } else if model.is_some() != exception.is_some_and(|e| e == MODEL_EXCEPTION) {
         refusals.push(refusal(
@@ -1032,6 +1060,27 @@ pub fn tool_use_records(
     workspace: &Path,
     cwd: &Path,
 ) -> Value {
+    tool_use_records_after(messages, denials, decided, workspace, cwd, None)
+}
+
+/// [`tool_use_records`] for a turn that may have been interrupted.
+///
+/// `interrupted` is `Some` when the turn was cut short (SIGINT answered by a
+/// `result` with `terminal_reason: aborted_streaming`, or any interrupt),
+/// carrying the ids of the tool uses whose `tool_result` arrived. A signal
+/// still gets a `result`, so its denial list exists, but a use in flight when
+/// the signal landed may have run, partly run, or never started: with no
+/// completed `tool_result` it is `unknown`, never `performed`, and leaves the
+/// liability unresolved. Measured on R5: the aborted `result` says nothing
+/// about the use it interrupted.
+pub fn tool_use_records_after(
+    messages: &[Value],
+    denials: Option<&Value>,
+    decided: &Value,
+    workspace: &Path,
+    cwd: &Path,
+    interrupted: Option<&[String]>,
+) -> Value {
     // A tool use the harness refused is an **attempt**, not an effect. The
     // `result` names every one it denied, by `tool_use_id`. PIO had this all
     // along and ignored it: R6 reported an out-of-fixture effect with
@@ -1078,6 +1127,17 @@ pub fn tool_use_records(
                 (true, _) => "attempted_and_denied",
                 // No `result`, so nothing says whether it ran.
                 (false, _) if !result_observed => "unknown",
+                // Interrupted with no completed `tool_result`: in flight
+                // when the signal landed, so nothing says whether it ran.
+                (false, _)
+                    if interrupted.is_some_and(|done| {
+                        !block["id"]
+                            .as_str()
+                            .is_some_and(|id| done.iter().any(|d| d == id))
+                    }) =>
+                {
+                    "unknown"
+                }
                 (false, _) => "performed",
             };
             records.push(json!({
@@ -1122,7 +1182,7 @@ pub fn tool_use_records(
         .count();
     let unknown = records.iter().filter(|r| r["outcome"] == "unknown").count();
     json!({
-        "format":"pio-claude-tool-uses/6",
+        "format":"pio-claude-tool-uses/7",
         "containment":{
             "mechanism":"harness_permission_rules_only",
             "os_sandbox_observed":false,
@@ -1141,6 +1201,9 @@ pub fn tool_use_records(
         // Whether the final `result` arrived, and how many uses it left
         // undecided because it did not.
         "result_observed":result_observed,
+        // Whether the turn was cut short, so that a use with no completed
+        // `tool_result` is unknown even though a `result` arrived.
+        "turn_interrupted":interrupted.is_some(),
         "unknown_outcome_count":unknown,
         "liability":if outside > 0 || unclassified > 0 || unknown > 0 {
             "unresolved"

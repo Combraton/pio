@@ -24,6 +24,10 @@ pub const OTHER_THREADS: &str = "pio.combraton.dev/other-threads";
 /// turn had ended (a goal's continuation), each interrupted by the host, on
 /// `execution.exit.observed` (review of L3, round 4, SPEND-9).
 pub const CONTINUATIONS: &str = "pio.combraton.dev/continuations";
+/// Why a run whose brief was delivered was refused and stopped (a Claude
+/// stream drift, D11, or a permission-mode mismatch), with its usage
+/// unknown, on `execution.exit.observed`.
+pub const REFUSAL: &str = "pio.combraton.dev/refusal";
 const CONTENT_PATH: &str = "/extensions/pio.combraton.dev~1content";
 pub const FEATURES: &[&str] = &[
     "execution.controller",
@@ -33,6 +37,20 @@ pub const FEATURES: &[&str] = &[
     "execution.usage",
     "execution.actions",
     "execution.steering",
+];
+/// [`FEATURES`] without `execution.steering` (D6): the host does not
+/// implement steering for an adapter whose [`Profile::steering_supported`]
+/// is false, so it is never advertised there. A caller that still asks for
+/// it in `core.negotiate` is refused `unknown_feature`/`unsupported_
+/// required_feature`, and `execution.steer` itself is refused
+/// `unsupported_required_feature` rather than a false "not running yet".
+pub const FEATURES_WITHOUT_STEERING: &[&str] = &[
+    "execution.controller",
+    "execution.output",
+    "execution.discovery",
+    "execution.workspaces",
+    "execution.usage",
+    "execution.actions",
 ];
 
 pub(crate) fn push(v: &mut Value, x: Value) {
@@ -154,6 +172,14 @@ pub struct Profile {
     pub delivery_evidence: &'static str,
     pub ack_proof_field: &'static str,
     pub usage_measure: &'static str,
+    /// Whether a `usage` report from this harness prices the whole turn, or
+    /// only the model step it arrived with. Codex's app-server and Claude's
+    /// `result` total the turn; OpenCode's `session/prompt` result does not
+    /// (D4: measured on `L1b`, an 11,514-token last step against a turn the
+    /// store's steps put at 96,495). PIO cannot see the rest of a multi-step
+    /// turn's spend from the protocol, so a partial report is recorded as
+    /// such rather than resolved.
+    pub usage_covers_whole_turn: bool,
     /// Decisions PIO may forward. Anything else widens a permission.
     pub decisions: &'static [&'static str],
     /// How cancel is actually performed, in the words the receipt uses.
@@ -164,6 +190,19 @@ pub struct Profile {
     pub guard_event: &'static str,
     pub guard_key: &'static str,
     pub exited_event: &'static str,
+    /// `execution.discovery.list`'s own record of this harness: a stable
+    /// installation id, the pinned version this build was qualified
+    /// against, and the label a report gives the real harness versus a
+    /// labeled fake standing in for it (D1: discovery must never report a
+    /// different adapter's harness).
+    pub installation_id: &'static str,
+    pub pinned_version: &'static str,
+    pub real_harness_name: &'static str,
+    pub fake_harness_name: &'static str,
+    /// Whether this host implements `execution.steer` at all. Only Codex
+    /// does; advertising the feature elsewhere and refusing the call with a
+    /// "not running yet" reason would be a false one (D6).
+    pub steering_supported: bool,
 }
 
 pub const PROFILES: &[Profile] = &[
@@ -174,6 +213,7 @@ pub const PROFILES: &[Profile] = &[
         delivery_evidence: "native_turn_acknowledged",
         ack_proof_field: "turn_id",
         usage_measure: "codex.tokens.total",
+        usage_covers_whole_turn: true,
         decisions: &["accept", "decline", "cancel"],
         cancel_description: "turn/interrupt, in band",
         session_event: "thread_started",
@@ -181,6 +221,11 @@ pub const PROFILES: &[Profile] = &[
         guard_event: "thread_settings_guard",
         guard_key: "thread_settings",
         exited_event: "app_server_exited",
+        installation_id: "codex-selected",
+        pinned_version: pio_codex::PINNED_VERSION,
+        real_harness_name: "Codex CLI app-server",
+        fake_harness_name: "PIO labeled fake Codex app-server (not Codex)",
+        steering_supported: true,
     },
     Profile {
         adapter: "claude",
@@ -192,6 +237,7 @@ pub const PROFILES: &[Profile] = &[
         delivery_evidence: "native_replay_echo",
         ack_proof_field: "replay_matches_sent",
         usage_measure: "claude.tokens.total",
+        usage_covers_whole_turn: true,
         decisions: &["allow", "deny"],
         // Measured: the in-band interrupt is unverified against 2.1.278.
         cancel_description: "SIGINT, escalating to SIGKILL, not in band",
@@ -200,6 +246,11 @@ pub const PROFILES: &[Profile] = &[
         guard_event: "settings_guard",
         guard_key: "permission_mode",
         exited_event: "harness_exited",
+        installation_id: "claude-selected",
+        pinned_version: pio_claude::PINNED_VERSION,
+        real_harness_name: "Claude Code CLI",
+        fake_harness_name: "PIO labeled fake Claude Code CLI (not Claude Code)",
+        steering_supported: false,
     },
     Profile {
         adapter: "opencode",
@@ -212,6 +263,7 @@ pub const PROFILES: &[Profile] = &[
         delivery_evidence: "native_session_update",
         ack_proof_field: "first_session_update",
         usage_measure: "opencode.tokens.total",
+        usage_covers_whole_turn: false,
         decisions: &["allow", "deny"],
         cancel_description: "session/cancel, in band, escalating to SIGKILL",
         session_event: "session_started",
@@ -219,6 +271,11 @@ pub const PROFILES: &[Profile] = &[
         guard_event: "settings_guard",
         guard_key: "session_configuration",
         exited_event: "harness_exited",
+        installation_id: "opencode-selected",
+        pinned_version: pio_opencode::PINNED_VERSION,
+        real_harness_name: "OpenCode ACP agent",
+        fake_harness_name: "PIO labeled fake OpenCode ACP agent (not OpenCode)",
+        steering_supported: false,
     },
 ];
 
@@ -518,11 +575,32 @@ impl Provider {
             }
             "execution.respond_action" => {
                 let action_id = text(&p["payload"]["action_id"]).to_owned();
+                // An answer past the deadline finds the lapse decided first.
+                self.lapse_overdue(e);
                 let pending = list(&e["view"]["actions"])
                     .iter()
                     .any(|a| a["action_id"] == action_id && a["state"] == "pending");
                 if !pending {
-                    return Err(err("not_found", json!({})));
+                    // Still `not_found`: no action by that id is pending. Where
+                    // one was and has been decided, say so and by whom, so an
+                    // answer that lost to PIO's lapse is refused as already
+                    // decided rather than told `answered` (CH-7).
+                    let decided = &e[format!("{ns}_actions")][&action_id]["decided_by"];
+                    let details = if decided.is_string() {
+                        json!({"reason":"already_decided","decided_by":decided})
+                    } else {
+                        json!({})
+                    };
+                    return Err(err("not_found", details));
+                }
+                // And no answer is taken for a run whose host is no longer
+                // running it: nothing would ever send it.
+                let runtime = text(&e["view"]["runtime"]);
+                if matches!(runtime, "exited" | "unknown") {
+                    return Err(err(
+                        "not_found",
+                        json!({"reason":"run_not_running","runtime":runtime}),
+                    ));
                 }
                 let response = p["payload"]["response"].clone();
                 let decision = self
@@ -557,6 +635,12 @@ impl Provider {
                         action["response_effect"] = effect.clone().into();
                     }
                 }
+                // One decision per action, and this is it: the caller's, on
+                // the stream now. A lapse is decided only for an action still
+                // pending, so none follows (CH-7).
+                let record = &mut e[format!("{ns}_actions")][&action_id];
+                record["decided_by"] = "caller".into();
+                record["on_stream"] = true.into();
                 if e["view"]["runtime_detail"]["action_id"] == action_id {
                     e["view"].as_object_mut().unwrap().remove("runtime_detail");
                     e["view"]["runtime"] = "active".into();
@@ -599,6 +683,144 @@ impl Provider {
                     "holder":self.grant(id).map(|g| g["holder"].clone()),
                     "recorded_by":"pio"}))
     }
+    /// CH-7: PIO's lapse is decided here, in the one place every answer to
+    /// a Codex approval is decided, so an action gets exactly one decision.
+    ///
+    /// Before this the host lapsed an overdue request itself, in the same
+    /// pass that read answers, but after the sweep. A caller's answer the
+    /// service had already accepted (and told the caller `answered`) could
+    /// reach the host after it had declined, and the stream then carried two
+    /// `execution.action.answered` for one action. Now an action still
+    /// `pending` in this view past its deadline is marked decided by PIO and a
+    /// decline is queued for the host like any answer. An answer that arrives
+    /// after that is refused as already decided (`not_found`, reason
+    /// `already_decided`), and a lapse is never decided for an action a
+    /// caller has answered. PIO's decision reaches the stream when the host
+    /// says it sent it (`request_denied_by_default`), so a lapse the host
+    /// could no longer send (Codex settled the request, or the turn ended)
+    /// is never shown as sent.
+    ///
+    /// The deadline is the one the host advertised, counted from when this
+    /// view recorded the request, and only strictly after it: never before
+    /// the advertised deadline, at most a second and a tick after it. Codex
+    /// only; the Claude and OpenCode hosts still lapse by themselves.
+    pub(crate) fn lapse_overdue(&mut self, e: &mut Value) {
+        // Nothing is decided for a run whose host no longer runs it: no
+        // lapse could be sent, and none is shown decided.
+        if self.adapter() != "codex" || matches!(text(&e["view"]["runtime"]), "exited" | "unknown")
+        {
+            return;
+        }
+        let ns = self.adapter().to_owned();
+        let records = format!("{ns}_actions");
+        let due: Vec<(String, Value)> = list(&e["view"]["actions"])
+            .iter()
+            .filter(|a| a["state"] == "pending")
+            .filter_map(|a| {
+                let action_id = text(&a["action_id"]);
+                let record = &e[&records][action_id];
+                let seconds = record["deadline_seconds"].as_u64()?;
+                let start = text(&a["requested_at"]);
+                (!start.is_empty() && self.now > crate::execution::after(start, seconds))
+                    .then(|| (action_id.to_owned(), record["seq"].clone()))
+            })
+            .collect();
+        for (action_id, seq) in due {
+            let control = format!("{action_id}.lapse");
+            let record = &mut e[&records][&action_id];
+            record["decided_by"] = "pio".into();
+            record["lapse_control"] = control.clone().into();
+            for action in e["view"]["actions"].as_array_mut().unwrap() {
+                if action["action_id"] == action_id.as_str() {
+                    action["state"] = "answered".into();
+                    action["answered_at"] = self.now.clone().into();
+                }
+            }
+            if e["view"]["runtime_detail"]["action_id"] == action_id.as_str() {
+                e["view"].as_object_mut().unwrap().remove("runtime_detail");
+                e["view"]["runtime"] = "active".into();
+            }
+            push(
+                &mut e[format!("{ns}_controls")],
+                json!({"id":control,"kind":"respond_action","action_seq":seq,
+                       "decision":"decline","decided_by":"pio","appended":false}),
+            );
+        }
+    }
+
+    /// A request settled without any answer from PIO reaching the harness:
+    /// Codex settled it itself (CH-8), or the turn ended with it open. The
+    /// action gets its one decision here, with who settled it and why, and
+    /// with no decision claimed sent. An answer a caller gave that never
+    /// reached the harness is not reported again: its decision is already
+    /// on the stream, so its response effect says it was not sent. A lapse
+    /// PIO had decided and not yet sent is superseded, and says so.
+    pub(crate) fn settle_unanswered(
+        &mut self,
+        e: &mut Value,
+        action_id: &str,
+        decided_by: &str,
+        basis: &str,
+        reason: &str,
+    ) {
+        let ns = self.adapter().to_owned();
+        let records = format!("{ns}_actions");
+        if !e[&records][action_id].is_object() {
+            return;
+        }
+        if e[&records][action_id]["on_stream"] == true {
+            let effect = list(&e["view"]["actions"])
+                .iter()
+                .find(|a| a["action_id"] == action_id)
+                .and_then(|a| a["response_effect"].as_str().map(str::to_owned));
+            if let Some(effect) = effect
+                && self
+                    .data
+                    .effects
+                    .get(&effect)
+                    .is_some_and(|r| r["status"] == "pending")
+            {
+                self.codex_observe_effect(&effect, "failed", &format!("{basis}_before_sent"), true);
+            }
+            e[&records][action_id]["not_sent"] = basis.into();
+            return;
+        }
+        let lapse_superseded = e[&records][action_id]["decided_by"] == "pio";
+        let record = &mut e[&records][action_id];
+        record["decided_by"] = decided_by.into();
+        record["on_stream"] = true.into();
+        let mut settled = false;
+        if let Some(actions) = e["view"]["actions"].as_array_mut() {
+            for action in actions {
+                if action["action_id"] == action_id {
+                    if action["state"] == "pending" {
+                        action["answered_at"] = self.now.clone().into();
+                    }
+                    action["state"] = "answered".into();
+                    settled = true;
+                }
+            }
+        }
+        if !settled {
+            return;
+        }
+        if e["view"]["runtime_detail"]["action_id"] == action_id {
+            e["view"].as_object_mut().unwrap().remove("runtime_detail");
+            e["view"]["runtime"] = "active".into();
+        }
+        let mut decision = json!({"decided_by":decided_by,"decision":Value::Null,
+                                  "basis":basis,"reason":reason,"sent":false});
+        if lapse_superseded {
+            decision["lapse_decided_not_sent"] = true.into();
+        }
+        self.execution_event(
+            e,
+            "execution.action.answered",
+            json!({"action_id":action_id,"pio.combraton.dev/decision":decision}),
+            None,
+        );
+    }
+
     fn codex_effect(
         &mut self,
         e: &mut Value,
@@ -643,10 +865,15 @@ impl Provider {
         }
     }
 
-    pub(crate) fn codex_discovery(&self) -> Value {
+    /// `execution.discovery.list` for whichever native adapter this service
+    /// is (D1): every field comes from this adapter's own [`Profile`] and
+    /// its own journal namespace, never Codex's by default, so `serve-claude`
+    /// and `serve-opencode` report their own harness instead of Codex's.
+    pub(crate) fn native_discovery(&self) -> Value {
         // The journal namespace is the adapter; for Codex this is `codex`,
         // so no persisted field name changes.
         let ns = self.adapter().to_owned();
+        let profile = self.profile();
         let executable = text(&self.host_config["executable"]);
         let detected = std::path::Path::new(executable).exists();
         let fake = self.host_config["labeled_fake"] == true;
@@ -659,8 +886,7 @@ impl Provider {
             .values()
             .filter(|e| e[&ns]["account_observed_at"].is_string())
             .max_by(|a, b| {
-                text(&a["codex"]["account_observed_at"])
-                    .cmp(text(&b["codex"]["account_observed_at"]))
+                text(&a[&ns]["account_observed_at"]).cmp(text(&b[&ns]["account_observed_at"]))
             });
         let (authentication, reachable, verified) = match observed {
             Some(e) => (
@@ -681,9 +907,14 @@ impl Provider {
         } else {
             "unknown"
         };
-        let mut installation = json!({"installation_id":"codex-selected","harness":if fake {"PIO labeled fake Codex app-server (not Codex)"} else {"Codex CLI app-server"},"detected":detected,"adapter_recognized":recognized,"version_supported":if qualified {"yes"} else if fake {"no"} else {"unknown"},"authentication":authentication,"reachable":reachable});
+        let harness = if fake {
+            profile.fake_harness_name
+        } else {
+            profile.real_harness_name
+        };
+        let mut installation = json!({"installation_id":profile.installation_id,"harness":harness,"detected":detected,"adapter_recognized":recognized,"version_supported":if qualified {"yes"} else if fake {"no"} else {"unknown"},"authentication":authentication,"reachable":reachable});
         if qualified {
-            installation["version"] = pio_codex::PINNED_VERSION.into();
+            installation["version"] = profile.pinned_version.into();
         }
         if let Some(at) = verified {
             installation["last_verified"] = at;
@@ -732,6 +963,9 @@ impl Provider {
         let phase = text(&observed["invocation"]["phase"]).to_owned();
         e[&ns]["phase"] = phase.clone().into();
 
+        // A lapse is decided before controls are appended, so it goes to the
+        // host in this pass (CH-7).
+        self.lapse_overdue(e);
         // Controls are appended only after the command that created them was
         // committed; a repeated append after a crash is ignored by the host.
         let mut controls_changed = false;
@@ -827,7 +1061,7 @@ impl Provider {
     ///
     /// Both hosts emit the same normalized events; what differs is in
     /// [`Profile`]. Kinds a harness never emits simply never match.
-    fn native_event(&mut self, e: &mut Value, id: &str, event: &Value) -> Result<()> {
+    pub(crate) fn native_event(&mut self, e: &mut Value, id: &str, event: &Value) -> Result<()> {
         // The journal namespace is the adapter; for Codex this is `codex`,
         // so no persisted field name changes.
         let ns = self.adapter().to_owned();
@@ -895,7 +1129,9 @@ impl Provider {
             }
             "action_requested" => {
                 let action_id = format!("{id}.action-{}", num(&event["action_seq"]));
-                e[format!("{ns}_actions")][&action_id] = json!({"seq":event["action_seq"],"method":event["method"],"approval_kind":event["approval_kind"],"request_id":event["request_id"]});
+                // The deadline is kept with the action: on Codex the service,
+                // not the host, decides the lapse (CH-7, `lapse_overdue`).
+                e[format!("{ns}_actions")][&action_id] = json!({"seq":event["action_seq"],"method":event["method"],"approval_kind":event["approval_kind"],"request_id":event["request_id"],"deadline_seconds":event["answer_deadline_seconds"]});
                 push(
                     &mut e["view"]["actions"],
                     json!({"action_id":action_id,"owner":profile.adapter,"state":"pending","requested_at":self.now}),
@@ -977,6 +1213,28 @@ impl Provider {
                 let control = text(&event["control_id"]).to_owned();
                 self.codex_observe_effect(&control, "pending", "native_response_written", false);
             }
+            // The turn ended with a request nobody's answer had reached.
+            "request_expired_with_turn" => {
+                let action_id = format!("{id}.action-{}", num(&event["action_seq"]));
+                self.settle_unanswered(
+                    e,
+                    &action_id,
+                    "nobody",
+                    "expired_with_turn",
+                    "the turn ended before any answer reached the harness; nothing was sent",
+                );
+            }
+            // Codex settled a request no answer from PIO had reached (CH-8).
+            "request_resolved" if event["settled_by"] == "harness" => {
+                let action_id = format!("{id}.action-{}", num(&event["action_seq"]));
+                self.settle_unanswered(
+                    e,
+                    &action_id,
+                    "harness",
+                    "settled_by_harness",
+                    "the harness settled the request itself; PIO sent no answer",
+                );
+            }
             "request_resolved" => {
                 // The app-server resolved a request we answered.
                 let answered: Vec<String> = list(&e["view"]["actions"])
@@ -998,12 +1256,17 @@ impl Provider {
                 }
             }
             "control_rejected" => {
-                self.codex_observe_effect(
-                    text(&event["control_id"]),
-                    "failed",
-                    "host_rejected_control",
-                    true,
-                );
+                // An answer already recorded as not sent, with the reason,
+                // is not failed a second time.
+                let control = text(&event["control_id"]).to_owned();
+                if self
+                    .data
+                    .effects
+                    .get(&control)
+                    .is_none_or(|r| r["status"] != "failed")
+                {
+                    self.codex_observe_effect(&control, "failed", "host_rejected_control", true);
+                }
             }
             "control_response" => {
                 let control = text(&event["control_id"]).to_owned();
@@ -1057,10 +1320,47 @@ impl Provider {
                         .as_str()
                         .map(str::to_owned)
                         .unwrap_or_else(|| format!("{id}.invocation-1"));
-                    let observation = json!({"invocation_id":invocation,"basis":"observed","measure":profile.usage_measure,"amount":total,"recorded_at":self.now});
+                    // D4: a harness whose `usage` report prices only the
+                    // model step it arrived with (OpenCode's `session/prompt`
+                    // result, never the running `usage_update` total) cannot
+                    // be recorded as an observed, resolved total — a
+                    // multi-step turn's real cost is higher and PIO cannot
+                    // see it from the protocol. The figure is kept (it is
+                    // real, and a floor), but named for what it covers and
+                    // left owing.
+                    let (basis, measure, liability) = if profile.usage_covers_whole_turn {
+                        ("observed", profile.usage_measure.to_owned(), "resolved")
+                    } else {
+                        (
+                            "estimated",
+                            format!("{}.last_step_only", profile.usage_measure),
+                            "unresolved",
+                        )
+                    };
+                    let observation = json!({"invocation_id":invocation,"basis":basis,"measure":measure,"amount":total,"recorded_at":self.now});
                     e["view"]["usage"]["observations"] = json!([observation.clone()]);
-                    e["view"]["usage"]["liability"] = "resolved".into();
+                    // Resolved only when the report covers the whole turn
+                    // (not OpenCode's last step, D4) and its host says it is
+                    // final (not a Codex per-step report, D5).
+                    e["view"]["usage"]["liability"] =
+                        if liability == "resolved" && event["final"] != false {
+                            "resolved"
+                        } else {
+                            "unresolved"
+                        }
+                        .into();
                     self.execution_event(e, "execution.usage.observed", observation, None);
+                }
+            }
+            // D5: the run's own turn completed and nothing was cut short, so
+            // the last report stands as the run's usage.
+            "usage_final" => {
+                e[&ns]["usage_final"] = event["run_total"].clone();
+                if e["view"]["usage"]["observations"]
+                    .as_array()
+                    .is_some_and(|a| !a.is_empty())
+                {
+                    e["view"]["usage"]["liability"] = "resolved".into();
                 }
             }
             // The end of a turn Codex started by itself after the run's own
@@ -1143,6 +1443,15 @@ impl Provider {
                     Value::Array(list) => Value::Array(list.clone()),
                     _ => json!([]),
                 };
+                // Why a delivered run was stopped before it could finish, and
+                // that its usage is unknown for that reason. Present only for
+                // a refused run.
+                if e[&ns]["refusal"].is_object() {
+                    payload[REFUSAL] = json!({"refusal":e[&ns]["refusal"],
+                        "delivered_before_refusal":true,
+                        "usage":"unknown",
+                        "usage_reason":"the harness was stopped before `result`, the only message that reports usage"});
+                }
                 // Every thread the run did not start, the same way (Codex
                 // only, the one host that tells threads apart): the
                 // host's final list, or what it had recorded as each thread
@@ -1253,6 +1562,9 @@ impl Provider {
                     e["view"].as_object_mut().unwrap().remove("runtime_detail");
                     e["view"]["runtime"] = "active".into();
                 }
+                let record = &mut e[format!("{ns}_actions")][&action_id];
+                record["decided_by"] = "pio".into();
+                record["on_stream"] = true.into();
                 let mut decision = json!({"decided_by":"pio",
                 "decision":event["decision"],
                 "basis":if declined { "out_of_scope" } else { "deadline_lapsed" },
@@ -1305,6 +1617,15 @@ impl Provider {
                 }
             }
 
+            // A Claude run refused after its brief was delivered: a drifted
+            // stream (D11) or a permission mode other than the one asked for.
+            // The child was stopped before `result`, the only message that
+            // reports usage, so what the turn spent is unknown, never none;
+            // the reason rides on the exit.
+            "stream_identity_refused" | "permission_mode_mismatch_refused" => {
+                e[&ns]["refusal"] = event["refusal"].clone();
+                e["view"]["usage"]["liability"] = "unresolved".into();
+            }
             // A turn that ended without the message that reports usage leaves
             // usage unknown, never zero.
             "result_missing" => {

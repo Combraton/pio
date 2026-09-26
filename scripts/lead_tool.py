@@ -149,9 +149,14 @@ class Api:
                       dict(name='execution', majors=[1], required=True,
                            required_features=['execution.controller', 'execution.output',
                                               'execution.discovery', 'execution.workspaces',
-                                              'execution.usage', 'execution.actions',
-                                              'execution.steering'],
-                           optional_features=[])],
+                                              'execution.usage', 'execution.actions'],
+                           # D6: `execution.steering` is advertised only on
+                           # Codex. This tool never calls `execution.steer`
+                           # itself, so the feature is optional here — it
+                           # selects when the host is Codex and is silently
+                           # absent on Claude or OpenCode, either way never
+                           # blocking negotiation.
+                           optional_features=['execution.steering'])],
             caller=dict(name='pio-lead-tool', version='1'),
             receive_limits=dict(max_frame_bytes=1048576)), grant=False)
 

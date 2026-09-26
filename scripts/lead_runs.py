@@ -643,31 +643,38 @@ def pass_plain_grants_are_not_leads(out, root, mutant=None):
 
 
 def pass_lead_cannot_answer(out, mutant=None):
-    """The one thing a lead may not do, proven where an action exists.
+    """The one thing a lead may not do, proven where an action exists and a
+    steer is genuinely deliverable.
 
     `serve-fake` advertises no `execution.actions`, so an
     `execution.respond_action` there is refused
     `unsupported_required_feature` **before** authorization is reached — a
-    refusal that says nothing about the lead's scope. So this half runs
-    through `serve-opencode` with the labeled ACP fake, where the feature is
-    real and a request is genuinely waiting.
+    refusal that says nothing about the lead's scope. This needs both a real
+    action and a real steer (D6: `execution.steering` is advertised only
+    where the host implements it, which is Codex alone — Claude and OpenCode
+    both refuse it truthfully now, so neither can carry this case's steer
+    property). So this runs through `serve-codex` with the labeled
+    app-server fake, where both features are real.
     """
-    import opencode_host_matrix as matrix
-    from approval_desk import ASKS
+    import codex_host_matrix as codex_matrix
     facts = {}
-    case = matrix.ServiceCase(out, 'lead-answer', model=matrix.REQUESTED,
-                              extra_credentials=(LEAD_CREDENTIAL,),
-                              scenario={'permission_request': ASKS})
+    case = codex_matrix.Case(out, 'lead-answer',
+                             scenario={'approval': 'command', 'delay_ms': 100})
+    # The matrix's own config carries only the owner's credential; this case
+    # also needs the lead's.
+    case.config['protocol']['credentials'].append(dict(credential=LEAD_CREDENTIAL))
+    case.config_path.write_text(json.dumps(case.config))
+    socket_path = case.root / 'public.sock'
     try:
         case.start()
-        case.submit(identity='lead.work', delivery_timeout=300)
+        case.submit(identity='lead.work', delivery=300)
         waiting = None
         for _ in range(240):
-            waiting = case.inspect('lead.work')
-            if waiting['runtime'] == 'requires_action':
+            waiting = case.inspect('lead.work').get('result')
+            if waiting and waiting['runtime'] == 'requires_action':
                 break
             time.sleep(0.5)
-        assert waiting['runtime'] == 'requires_action', waiting
+        assert waiting and waiting['runtime'] == 'requires_action', waiting
         action = waiting['runtime_detail']['action_id']
 
         rights = ['execution.submit', 'execution.steer', 'execution.read',
@@ -675,10 +682,11 @@ def pass_lead_cannot_answer(out, mutant=None):
         if mutant == 'may-answer':
             rights.append('execution.respond_action')
         grant_id = str(uuid.uuid4())
-        # The matrix's own client negotiates no `core.grants`, and a session
-        # that has not negotiated it cannot issue one.
-        owner = Caller(case.socket, CREDENTIAL, features=FEATURES,
-                       execution_features=matrix.FEATURES)
+        # Codex's own execution profile carries every feature this case
+        # needs, steering and actions alike, so both callers negotiate
+        # exactly it: no adapter-specific widening.
+        owner = Caller(socket_path, CREDENTIAL, features=FEATURES,
+                       execution_features=codex_matrix.FEATURES)
         audience = PROVIDER
         issued = owner.call(command(
             'core.grant.issue', dict(kind='core.grant', id=grant_id),
@@ -690,13 +698,8 @@ def pass_lead_cannot_answer(out, mutant=None):
         facts['rights'] = rights
         facts['action'] = action
 
-        # The session has to have negotiated the feature an operation needs,
-        # whatever the grant says — which is why the first attempt at this
-        # came back `unsupported_required_feature` rather than anything about
-        # scope. The matrix's own list does not carry steering because its
-        # cases never steer.
-        lead = Caller(case.socket, LEAD_CREDENTIAL, grant=grant_id, features=FEATURES,
-                      execution_features=(*matrix.FEATURES, 'execution.steering'))
+        lead = Caller(socket_path, LEAD_CREDENTIAL, grant=grant_id, features=FEATURES,
+                      execution_features=codex_matrix.FEATURES)
         # What the grant **does** carry, where the feature is real: a steer
         # under it is not refused for scope. Whether this harness then
         # accepts the steer is its own business; the claim here is about the
@@ -707,7 +710,7 @@ def pass_lead_cannot_answer(out, mutant=None):
                         dict(message=dict(digest=content_digest(note),
                                           media_type='text/plain')),
                         command_id='lead-steer',
-                        revision=case.inspect('lead.work')['revision'])
+                        revision=case.inspect('lead.work')['result']['revision'])
         steer['extensions'] = {'pio.combraton.dev/content':
                                dict(media_type='text/plain', text=note.decode())}
         steered = (owner if mutant == 'owner-steers' else lead).call(steer)
@@ -737,7 +740,7 @@ def pass_lead_cannot_answer(out, mutant=None):
         assert under['recorded_by'] == 'pio', under
         facts['under_grant'] = under
 
-        body = json.dumps({'decision': 'allow'}).encode()
+        body = json.dumps({'decision': 'accept'}).encode()
         attempt = command('execution.respond_action', subject('lead.work'),
                           dict(action_id=action,
                                response=dict(digest=content_digest(body),
@@ -755,16 +758,20 @@ def pass_lead_cannot_answer(out, mutant=None):
         facts['without_the_right'] = 'permission_denied / right_missing'
         # And the refusal is about the right, not about the action: the
         # owner answers the same one.
-        answered = case.respond(action, 'allow',
-                                case.inspect('lead.work')['revision'],
-                                identity='lead.work')
+        owner_body = json.dumps({'decision': 'accept'}).encode()
+        answered = case.execution_command(
+            'execution.respond_action', 'lead.work',
+            dict(action_id=action,
+                 response=dict(digest=content_digest(owner_body),
+                              media_type='application/json')),
+            'owner-answer', owner_body, 'application/json')
         assert answered.get('result', {}).get('outcome', {}).get(
             'state') == 'answered', answered
         facts['owner_answers_the_same_action'] = 'answered'
         lead.close()
         owner.close()
     finally:
-        case.cleanup()
+        case.close()
     return facts
 
 

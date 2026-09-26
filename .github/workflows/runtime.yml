@@ -45,6 +45,20 @@ jobs:
           cargo build --workspace --locked
           cargo test --workspace --locked
           cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: D10 the release configuration compiles out the test-only model exception
+        # `pio-cli` (and the crates that carry the exception) default the
+        # `test-exceptions` feature on, which is every build above. The
+        # release/packaged build turns it off with `--no-default-features`
+        # and refuses the exception key with a clear reason on all three
+        # adapters (OpenCode admission then has no path to succeed at all,
+        # so it is test scope only in a release build). This builds that
+        # configuration and runs only the targeted tests that assert the
+        # refusal; the rest of each crate's suite assumes the exception is
+        # available, exactly as every build above provides it.
+        run: |
+          cargo build --release --locked --no-default-features -p pio-cli
+          cargo test --workspace --locked --no-default-features \
+            a_release_build_refuses_the_model_exception_outright
           python3 scripts/check_docs.py
           git diff --exit-code -- Cargo.lock
       - name: Case cleanup guard self-tests
@@ -175,9 +189,17 @@ jobs:
         # exception is `runner-killed`, which must leave no receipt, every
         # reservation in the ledger, and the service stopped by the watchdog.
         # `desk-silent` waits out the 300-second delivery timeout.
+        # `grant-no-steer` is not run here: D6 made `execution.steering`
+        # advertised only on Codex, so OpenCode now refuses every steer
+        # `unsupported_required_feature` before the grant is ever consulted,
+        # whether or not the grant carries `execution.steer` — the row this
+        # mutant is named for cannot observe it on L1's own harness anymore.
+        # It still runs, and still must fail that row, played on Codex in
+        # the L3 step below, where steering is negotiated and the grant gate
+        # is reached.
         run: |
           PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --out target/lead-run
-          for m in no-tool reports-refused-as-started grant-may-answer grant-no-steer \
+          for m in no-tool reports-refused-as-started grant-may-answer \
                    wrong-child wrong-relay lead-without-brief lead-loops interrupted \
                    runner-killed release-refused setup-fails helper-elsewhere service-never-ready \
                    lead-submit-invalid third-admitted desk-silent; do

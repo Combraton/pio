@@ -43,6 +43,7 @@ CASES = [
     'permission_mode_not_the_configured_default_refused',
     'service_runs_under_the_product_default_when_none_is_configured',
     'service_refuses_a_stream_identity_drift_at_init',
+    'service_refuses_a_permission_mode_mismatch_at_init',
     'surface_drift_refused',
     # Through the service, which is the only place these can be observed.
     'service_turn_completes',
@@ -52,6 +53,7 @@ CASES = [
     'service_denies_a_request_nobody_answers',
     'service_records_who_decided_and_what',
     'service_refuses_an_unqualified_executable_at_start',
+    'service_refuses_conformance_only_controls',
     'service_refuses_a_host_that_was_never_attached',
     'service_answers_a_request_it_will_not_act_on',
     'service_interrupt_escalates_when_the_signal_is_ignored',
@@ -678,7 +680,60 @@ def run_case(out, name):
         assert view['exit'] == 'unavailable', view
         assert view['usage']['liability'] == 'unresolved', view['usage']
         assert view['usage']['observations'] == [], view['usage']
+        # And why, on the exit: refused after delivery, usage unknown.
+        with case.client() as c:
+            stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                  'kinds': ['execution.execution']})['result']
+        exits = [i['event']['payload'] for i in stream['items']
+                 if 'event' in i and i['event']['type'] == 'execution.exit.observed']
+        assert [(x['pio.combraton.dev/refusal']['refusal']['reason'],
+                 x['pio.combraton.dev/refusal']['usage']) for x in exits] == \
+            [('stream_drift', 'unknown')], exits
         # The child is stopped, not left running.
+        poll(lambda: case.harness_processes(), lambda p: not p, seconds=60)
+        (case.out / 'events.json').write_text(json.dumps(events, indent=2))
+        (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'service_refuses_a_permission_mode_mismatch_at_init':
+        # The harness reports a permission mode other than the one PIO asked
+        # for. `init` arrives only after the brief, so the brief was
+        # delivered. This failed through `host_error`, and the caller saw a
+        # lost host: delivery ambiguous, runtime unknown, usage liability
+        # `none`. It is refused the way D11 refuses a drift: the echo alone
+        # is read, the child stopped before any tool use is answered, and the
+        # turn ends with usage unresolved and the reason on the exit.
+        case = ServiceCase(out, name, scenario={
+            'init': {'permissionMode': 'bypassPermissions'},
+            'permission_request': {'tool_name': 'Bash', 'input': {'command': 'git tag x'}}})
+        case.start()
+        case.submit()
+        view = poll(lambda: case.inspect(), lambda v: v['runtime'] in ('exited', 'unknown'),
+                    seconds=120)
+        events = case.host_events()
+        order = [e['kind'] for e in events]
+        refused = [e for e in events if e['kind'] == 'permission_mode_mismatch_refused']
+        assert len(refused) == 1, order
+        assert refused[0]['refusal'] == {'reason': 'effective_permission_mode_mismatch',
+                                         'requested_permission_mode': 'acceptEdits',
+                                         'effective_permission_mode': 'bypassPermissions'}, refused
+        assert refused[0]['usage'] == 'unknown' and refused[0]['killed'] is True, refused
+        for later in ('host_error', 'action_requested', 'request_declined_by_pio',
+                      'control_applied', 'request_denied_by_default', 'turn_completed'):
+            assert later not in order, order
+        assert case.markers_of('permission_decision') == [], case.markers_of('permission_decision')
+        # Delivered and stopped, not lost: the echo proved delivery, the run
+        # exited with no exit code claimed, and usage is unknown, not none.
+        assert (view['delivery'], view['runtime'], view['exit']) == \
+            ('acknowledged', 'exited', 'unavailable'), view
+        assert view['usage'] == {'observations': [], 'liability': 'unresolved'}, view['usage']
+        with case.client() as c:
+            stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                  'kinds': ['execution.execution']})['result']
+        exits = [i['event']['payload'] for i in stream['items']
+                 if 'event' in i and i['event']['type'] == 'execution.exit.observed']
+        assert [x['pio.combraton.dev/refusal']['refusal']['reason'] for x in exits] == \
+            ['effective_permission_mode_mismatch'], exits
+        assert exits[0]['pio.combraton.dev/refusal']['usage'] == 'unknown', exits
         poll(lambda: case.harness_processes(), lambda p: not p, seconds=60)
         (case.out / 'events.json').write_text(json.dumps(events, indent=2))
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
@@ -972,6 +1027,21 @@ def run_case(out, name):
         admission = json.loads((case.store / 'claude-admission.json').read_text())
         assert admission['stream_spawned'] is False, admission
 
+    elif name == 'service_refuses_conformance_only_controls':
+        # D9: a launch control that exists only for the conformance
+        # participant (here, fault injection into every response) must
+        # never start a product service, whatever the config says.
+        case = ServiceCase(out, name)
+        config = json.loads(case.config_path.read_text())
+        config['protocol']['faults'] = {
+            'response_internal_error': [{'operation': 'execution.submit', 'times': 1}]}
+        case.config_path.write_text(json.dumps(config))
+        daemon = case.start(expect_ready=False)
+        assert daemon.wait(timeout=120) != 0, \
+            'the service started with a conformance-only control'
+        stderr = (case.out / 'daemon-0.stderr').read_text()
+        assert 'conformance-only' in stderr, stderr[:500]
+
 
     elif name == 'service_refuses_a_host_that_was_never_attached':
         # A pre-delivery refusal through the service, which this matrix did not
@@ -1044,8 +1114,14 @@ def run_case(out, name):
         # `basis: observed, amount: 0, liability: resolved` — it told the
         # protocol a cancelled turn provably cost nothing, and the ledger
         # counted zero for a turn that had spent a session's prefix.
+        # Two tool uses before the signal: one whose result arrived and one
+        # still in flight, both inside the fixture.
         case = ServiceCase(out, name, scenario={'delay_ms': 30000,
-                                                'abort_on_interrupt': True})
+                                                'abort_on_interrupt': True,
+                                                'tool_uses_before_delay': [
+                                                    {'name': 'Read', 'input': {'file_path': 'README.md'},
+                                                     'result': True},
+                                                    {'name': 'Edit', 'input': {'file_path': 'README.md'}}]})
         case.start()
         case.submit()
         poll(lambda: case.inspect(), lambda v: v['delivery'] == 'acknowledged')
@@ -1066,6 +1142,17 @@ def run_case(out, name):
         # And nothing reached the protocol as a measurement.
         assert view['usage']['liability'] == 'unresolved', view['usage']
         assert view['usage'].get('observations', []) == [], view['usage']
+        # The aborted `result` says nothing of the use the signal cut short:
+        # the one whose result arrived was performed, the one in flight is
+        # unknown, never `performed`, and the effects liability stays open.
+        audit = [e['record'] for e in events if e['kind'] == 'tool_uses']
+        assert len(audit) == 1 and audit[0]['result_observed'] is True \
+            and audit[0]['turn_interrupted'] is True, audit
+        outcomes = [(u['tool'], u['tool_use_id'], u['outcome']) for u in audit[0]['tool_uses']]
+        assert outcomes == [('Read', 'toolu_fake_early_0', 'performed'),
+                            ('Edit', 'toolu_fake_early_1', 'unknown')], \
+            f'an in-flight tool use of a cancelled turn was recorded: {outcomes}'
+        assert audit[0]['unknown_outcome_count'] == 1 and audit[0]['liability'] == 'unresolved', audit
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
 
     elif name == 'service_restart_reattaches_without_a_duplicate_launch':

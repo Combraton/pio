@@ -79,6 +79,7 @@ CASES = [
     'service_refuses_a_downgraded_session_before_any_prompt',
     'service_tells_a_harness_refusal_apart_from_a_pio_decline',
     'service_records_who_decided_and_what',
+    'session_cancel_sent_as_notification_not_request',
 ]
 
 
@@ -703,9 +704,16 @@ def run_case(out, name):
         # This harness returns no acknowledgment identifier, so no proof class
         # is claimed. ADR 005 section 7.
         assert 'proof_class' not in delivery or delivery['proof_class'] is None, delivery
-        assert view['usage']['liability'] == 'resolved', view['usage']
+        # D4: `session/prompt`'s usage prices the last model step, not the
+        # turn (measured on L1b: an 11,514-token last step against a turn the
+        # store's steps put at 96,495). PIO cannot see the rest of a
+        # multi-step turn from the protocol, so the figure is kept but named
+        # for what it covers, and liability stays open rather than resolved.
+        assert view['usage']['liability'] == 'unresolved', view['usage']
+        assert [o['basis'] for o in view['usage']['observations']] == \
+            ['estimated'], view['usage']
         assert [o['measure'] for o in view['usage']['observations']] == \
-            ['opencode.tokens.total'], view['usage']
+            ['opencode.tokens.total.last_step_only'], view['usage']
         # The measure itself, on the host's own record. Found where the
         # harness put it — `usage`, not `_meta.usage` — and summed from
         # whatever counters are there rather than from a list written in
@@ -1097,6 +1105,25 @@ def run_case(out, name):
         view = poll(lambda: case.inspect(), lambda v: v['runtime'] == 'exited')
         assert view['exit'] == 'unavailable', view
         (case.out / 'view.json').write_text(json.dumps(view, indent=2))
+
+    elif name == 'session_cancel_sent_as_notification_not_request':
+        # D8: `session/cancel` is an ACP notification — no id, no response
+        # ever awaited — never a request. The labeled fake now refuses the
+        # request framing outright, so a host that regressed to
+        # `Rpc::request` would be caught here instead of the fake quietly
+        # tolerating both, as it used to.
+        from public_api import command
+        case = ServiceCase(out, name, model=REQUESTED, scenario={'delay_ms': 3000})
+        case.start()
+        case.submit()
+        poll(lambda: case.markers_of('prompt_received'), lambda m: len(m) >= 1)
+        revision = case.inspect()['revision']
+        with case.client() as c:
+            c.call(command('execution.cancel', dict(kind='execution.execution', id='work'),
+                           {}, command_id='work.cancel', revision=revision))
+        poll(lambda: case.markers_of('cancelled'), lambda m: len(m) >= 1, seconds=30)
+        assert case.markers_of('cancel_sent_as_request_not_notification') == [], \
+            'session/cancel must never be sent as a request'
 
     else:
         raise AssertionError(f'unknown case {name}')

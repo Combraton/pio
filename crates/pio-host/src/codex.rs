@@ -226,7 +226,7 @@ impl OtherThreads {
                                   "turn_id":params["turnId"],
                                   "total":params["tokenUsage"]["total"],
                                   "last":params["tokenUsage"]["last"],
-                                  "run_total":self.run_total()}))?;
+                                  "run_total":self.run_total(),"final":false}))?;
             }
             "turn/started" => {
                 if let Some(turn) = params["turn"]["id"].as_str() {
@@ -564,6 +564,8 @@ const INTERRUPTED_WAIT: Duration = Duration::from_secs(10);
 /// its end is a `turn_completed` marked `continuation`. A request there is
 /// declined by PIO: nobody is asked after the run's turn has ended. Bounded
 /// by the grace period and the wait, however the app-server behaves.
+/// Returns whether a continuation started: a turn it interrupted, whose
+/// step in flight may never be reported.
 fn after_turn(
     life: &mut Lifecycle,
     app: &mut AppServer,
@@ -571,11 +573,12 @@ fn after_turn(
     requests: &mut BTreeMap<u64, String>,
     thread_id: &str,
     own_turn: Option<&str>,
-) -> Result<()> {
+) -> Result<bool> {
     let ended = Instant::now();
     let grace = ended + CONTINUATION_GRACE;
     let last = grace + INTERRUPTED_WAIT;
     let mut continuing: Option<String> = None;
+    let mut continued = false;
     loop {
         // Every other thread's turn still running, each once: one begun
         // after the run's own turn ended is interrupted too.
@@ -583,7 +586,7 @@ fn after_turn(
         let now = Instant::now();
         let busy = continuing.is_some() || !others.turns.is_empty();
         if now >= last || (now >= grace && !busy) {
-            return Ok(());
+            return Ok(continued);
         }
         let Some(message) = app.receive(Duration::from_millis(25))? else {
             continue;
@@ -633,6 +636,7 @@ fn after_turn(
                 life.event(json!({"kind":"control_sent","control_id":"continuation",
                                   "method":"turn/interrupt","turn_id":turn}))?;
                 continuing = Some(turn.to_owned());
+                continued = true;
             }
             "thread/tokenUsage/updated" => {
                 if let Some(total) = params["tokenUsage"]["total"]["totalTokens"].as_u64() {
@@ -643,7 +647,7 @@ fn after_turn(
                                   "turn_id":params["turnId"],"after_turn":true,
                                   "total":params["tokenUsage"]["total"],
                                   "last":params["tokenUsage"]["last"],
-                                  "run_total":others.run_total()}),
+                                  "run_total":others.run_total(),"final":false}),
                 )?;
             }
             "turn/completed" if continuing.as_deref() == params["turn"]["id"].as_str() => {
@@ -1048,13 +1052,20 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
     // The caller's own delivery timeout is how long their decision may take.
     // A request nobody answers holds the turn open for ever, so, as on the
     // other two hosts, the default is a single decline, recorded as PIO's
-    // (owner decision, 2026-09-25: "if I don't answer, it lapses").
+    // (owner decision, 2026-09-25: "if I don't answer, it lapses"). The
+    // service decides that lapse, where it decides every answer, and sends
+    // it here as a control marked `decided_by: pio`; this host keeps no
+    // clock of its own, so a caller's answer and the lapse can never both
+    // be decided for one request (review of L3, CH-7).
     let answer_timeout = life.spec["action_answer_timeout_seconds"]
         .as_u64()
         .map(Duration::from_secs)
         .unwrap_or(Duration::from_secs(120));
-    // Request id, whether it is an MCP tool-call elicitation, and its lapse.
-    let mut pending_actions: BTreeMap<u64, (Value, bool, Instant)> = BTreeMap::new();
+    // Request id and whether it is an MCP tool-call elicitation.
+    let mut pending_actions: BTreeMap<u64, (Value, bool)> = BTreeMap::new();
+    // A request settled without an answer from this host, and by whom, so a
+    // control that arrives for it later is refused as already decided.
+    let mut settled: BTreeMap<u64, &'static str> = BTreeMap::new();
     // Every notification is the run's only if it names the run's own thread
     // (review of L3, round 3, SPEND-2). Codex 0.157.0 attaches every thread
     // it creates to every initialized connection
@@ -1111,14 +1122,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                         (method == "item/commandExecution/requestApproval")
                             .then(|| params["kind"].as_str().unwrap_or("command").to_owned())
                     };
-                    pending_actions.insert(
-                        action_seq,
-                        (
-                            message["id"].clone(),
-                            elicitation,
-                            Instant::now() + answer_timeout,
-                        ),
-                    );
+                    pending_actions.insert(action_seq, (message["id"].clone(), elicitation));
                     let mut event = json!({"kind":"action_requested","action_seq":action_seq,"request_id":message["id"],"method":method,"approval_kind":approval_kind,"turn_id":params["turnId"],"item_id":params["itemId"],"command":params["command"],"cwd_digest":params["cwd"].as_str().map(|c|pio_codex::sha256_hex(c.as_bytes())),"reason":params["reason"],
                         "answer_deadline_seconds":answer_timeout.as_secs(),
                         "if_nobody_answers":{"decision":"decline","decided_by":"pio","always_option_taken":false}});
@@ -1228,17 +1232,41 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                     if let Some(total) = params["tokenUsage"]["total"]["totalTokens"].as_u64() {
                         others.totals.insert(thread_id.clone(), total);
                     }
+                    // A step's report, never the turn's last word: whether
+                    // it is final is known only once the turn has ended
+                    // (D5, `usage_final`).
                     life.event(
                         json!({"kind":"usage","thread_id":thread_id,"own_thread":true,
                                           "turn_id":params["turnId"],
                                           "total":params["tokenUsage"]["total"],
                                           "last":params["tokenUsage"]["last"],
-                                          "run_total":others.run_total()}),
+                                          "run_total":others.run_total(),"final":false}),
                     )?;
                 }
-                "serverRequest/resolved" => life.event(
-                    json!({"kind":"request_resolved","request_id":message["params"]["requestId"]}),
-                )?,
+                "serverRequest/resolved" => {
+                    // A request this host has not answered, settled by Codex
+                    // itself: it no longer holds it, so nothing is sent for
+                    // it from here on, not a caller's answer and not PIO's
+                    // lapse, and the record says Codex settled it (review of
+                    // L3, CH-8). A request this host answered is Codex
+                    // confirming that answer, as before.
+                    let request = &message["params"]["requestId"];
+                    let unanswered = pending_actions
+                        .iter()
+                        .find(|(_, (rpc, _))| rpc == request)
+                        .map(|(seq, _)| *seq);
+                    match unanswered {
+                        Some(seq) => {
+                            pending_actions.remove(&seq);
+                            settled.insert(seq, "harness");
+                            life.event(json!({"kind":"request_resolved","request_id":request,
+                                              "action_seq":seq,"settled_by":"harness"}))?;
+                        }
+                        None => {
+                            life.event(json!({"kind":"request_resolved","request_id":request}))?
+                        }
+                    }
+                }
                 // A server that starts during the turn (one Codex does not
                 // wait for at thread start) says so here: every server that
                 // started on the run's thread is recorded, the witness that
@@ -1263,41 +1291,54 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                 _ => {}
             }
         }
-        // A request nobody answered in time: one decline, recorded as PIO's.
-        let overdue: Vec<u64> = pending_actions
-            .iter()
-            .filter(|(_, (_, _, lapses))| Instant::now() >= *lapses)
-            .map(|(seq, _)| *seq)
-            .collect();
-        for seq in overdue {
-            let Some((rpc, elicitation, _)) = pending_actions.remove(&seq) else {
-                continue;
-            };
-            let body = answer_body(elicitation, "decline");
-            app.respond(&rpc, body.clone())?;
-            life.event(json!({"kind":"request_denied_by_default","action_seq":seq,
-                "decision":"decline","decided_by":"pio",
-                "after_seconds":answer_timeout.as_secs(),"sent":body,
-                "always_option_taken":false}))?;
-        }
-        // Controls are deduplicated by the lifecycle; each arrives once.
+        // Controls are deduplicated by the lifecycle; each arrives once. A
+        // request is answered by whichever control for it arrives first: the
+        // caller's answer, or PIO's lapse, which the service decides only for
+        // an action nobody has answered (CH-7).
         for control in life.controls()? {
             let id = control["id"].as_str().unwrap_or_default().to_owned();
             match control["kind"].as_str() {
                     Some("respond_action") => {
                         let decision = control["decision"].as_str().unwrap_or("");
-                        let rpc = control["action_seq"]
-                            .as_u64()
+                        let seq = control["action_seq"].as_u64();
+                        let lapse = control["decided_by"] == "pio";
+                        // The turn has ended: Codex holds none of its
+                        // requests any more, so nothing is sent. Whatever is
+                        // still pending is closed below with the turn.
+                        let rpc = seq
+                            .filter(|_| ALLOWED_DECISIONS.contains(&decision))
+                            .filter(|_| turn_status.is_none())
                             .and_then(|seq| pending_actions.remove(&seq));
                         match rpc {
-                            Some((rpc, elicitation, _)) if ALLOWED_DECISIONS.contains(&decision) => {
+                            Some((rpc, elicitation)) if lapse => {
+                                // Nobody answered in time: one decline,
+                                // recorded as PIO's.
                                 let body = answer_body(elicitation, decision);
                                 app.respond(&rpc, body.clone())?;
+                                settled.extend(seq.map(|seq| (seq, "pio")));
+                                life.event(json!({"kind":"request_denied_by_default","action_seq":seq,
+                                    "control_id":id,"decision":decision,"decided_by":"pio",
+                                    "after_seconds":answer_timeout.as_secs(),"sent":body,
+                                    "always_option_taken":false}))?;
+                            }
+                            Some((rpc, elicitation)) => {
+                                let body = answer_body(elicitation, decision);
+                                app.respond(&rpc, body.clone())?;
+                                settled.extend(seq.map(|seq| (seq, "caller")));
                                 life.event(json!({"kind":"control_applied","control_id":id,"action_seq":control["action_seq"],"decision":decision,"sent":body,"always_option_taken":false}),
                                 )?;
                             }
-                            _ => life.event(json!({"kind":"control_rejected","control_id":id,"reason":"no pending action or decision not allowed"}),
-                            )?,
+                            None => {
+                                let by = seq.and_then(|seq| settled.get(&seq)).copied();
+                                let reason = match by {
+                                    Some(_) => "already_decided",
+                                    None if turn_status.is_some() => "turn_ended",
+                                    None => "no pending action or decision not allowed",
+                                };
+                                life.event(json!({"kind":"control_rejected","control_id":id,
+                                    "action_seq":control["action_seq"],"reason":reason,
+                                    "decided_by":by}))?;
+                            }
                         }
                     }
                     Some("interrupt") => match &turn_id {
@@ -1337,7 +1378,17 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                 }
         }
     }
-    // The run's own turn is over. Another thread's turn still running is
+    // The run's own turn is over, and with it every request of the turn
+    // that nobody answered: Codex holds none of them any more and no answer
+    // will ever be sent. Each is closed here, answered by nobody, so it does
+    // not stay pending on an exited run and a later answer is refused
+    // (review of L3, "an approval pending at exit").
+    for (seq, (rpc, _)) in std::mem::take(&mut pending_actions) {
+        life.event(json!({"kind":"request_expired_with_turn","action_seq":seq,
+                          "request_id":rpc,"decided_by":"nobody","sent":Value::Null,
+                          "turn_status":turn_status}))?;
+    }
+    // Another thread's turn still running is
     // interrupted, and its end waited for, up to ten seconds, so its last
     // report (Codex reports a step an interrupt cut short, if its response
     // had completed) is counted. And for a grace period the host keeps
@@ -1345,7 +1396,7 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
     // goal's continuation, review of L3, round 4, SPEND-9) is recorded,
     // interrupted and waited for, and its usage counted, so the run reads
     // as cut short rather than ended by itself.
-    after_turn(
+    let continued = after_turn(
         life,
         app,
         &mut others,
@@ -1353,6 +1404,20 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
         &thread_id,
         turn_id.as_deref(),
     )?;
+    // D5. Codex reports usage a step at a time, so no report is the run's
+    // last word until the run is over. It is final only when the run's own
+    // turn completed and nothing was cut short: no thread of the run was
+    // interrupted (a sub-agent at the end, or a continuation), since Codex
+    // reports an interrupted step only if its response had completed. Then,
+    // and only then, the liability is resolved; a turn interrupted, failed
+    // or lost with its host stays unresolved, whatever it reported.
+    let cut_short = continued || !others.interrupted.is_empty();
+    if turn_status.as_ref().and_then(Value::as_str) == Some("completed")
+        && !cut_short
+        && !others.totals.is_empty()
+    {
+        life.event(json!({"kind":"usage_final","run_total":others.run_total()}))?;
+    }
     // Every thread this run did not start, with how it appeared and what it
     // reported, for the exit to carry.
     life.event(json!({"kind":"other_threads","threads":others.list()}))?;

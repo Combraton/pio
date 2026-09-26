@@ -9,15 +9,30 @@ publish.workspace = true
 name = "pio"
 path = "src/main.rs"
 
+[features]
+# D10: the owner's dated, test-only model exceptions (Codex, Claude and
+# OpenCode admission) and the rehearsal-only FEATURES_OFF/PLUGINS_OFF tokens.
+# On by default, which is every dev, test, CI and live-runner build; the
+# release/packaged build runs `cargo build --release -p pio-cli
+# --no-default-features` and gets a `pio` that refuses the exception key with
+# a clear reason on all three adapters (OpenCode admission then has no path
+# to succeed at all, so it is test scope only in a release build).
+default = ["test-exceptions"]
+test-exceptions = [
+    "pio-protocol/test-exceptions",
+    "pio-claude/test-exceptions",
+    "pio-opencode/test-exceptions",
+]
+
 [dependencies]
 pio-core = { path = "../pio-core" }
 pio-host = { path = "../pio-host" }
 anyhow.workspace = true
 serde_json.workspace = true
-pio-protocol = { path = "../pio-protocol" }
+pio-protocol = { path = "../pio-protocol", default-features = false }
 pio-codex = { path = "../pio-codex" }
-pio-claude = { path = "../pio-claude" }
-pio-opencode = { path = "../pio-opencode" }
+pio-claude = { path = "../pio-claude", default-features = false }
+pio-opencode = { path = "../pio-opencode", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"

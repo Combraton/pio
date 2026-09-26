@@ -20,6 +20,9 @@
 //! `abort_on_interrupt` (SIGINT during `delay_ms` ends the turn the way the
 //! real harness was measured to: an aborted `result` with an empty usage
 //! block),
+//! `tool_uses_before_delay` (`[{"name":…,"input":…,"result":bool}]`, tool uses
+//! reported before `delay_ms`, each with its `tool_result` only where
+//! `result` is true, so one can be in flight when an interrupt lands),
 //! `foreign_control_request` (a control request PIO must not answer on the
 //! user's behalf, used to prove it still answers *something*),
 //! `markers` (directory for independent records).
@@ -343,6 +346,22 @@ pub fn run() -> Result<()> {
     let mut replay = sent.clone();
     replay["isReplay"] = json!(true);
     emit(&replay)?;
+
+    // Tool uses the model starts before the delay, each followed by its
+    // `tool_result` only where `result` is true: one without is still in
+    // flight when an interrupt lands during the delay.
+    if let Some(uses) = scenario["tool_uses_before_delay"].as_array() {
+        for (index, use_) in uses.iter().enumerate() {
+            let id = format!("toolu_fake_early_{index}");
+            emit(&assistant(json!([{
+                "type":"tool_use","name":&use_["name"],"id":id,"input":&use_["input"]}])))?;
+            if use_["result"] == true {
+                emit(&json!({"type":"user","message":{"role":"user","content":[{
+                    "type":"tool_result","tool_use_id":id,"is_error":false,
+                    "content":"fixture"}]},"source":SOURCE}))?;
+            }
+        }
+    }
 
     // A harness that ignores the interrupt. Nothing in PIO produces this; it
     // exists so a host's bounded escalation can be proven rather than assumed.

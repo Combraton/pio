@@ -4,6 +4,7 @@ Read [repository scope](../README.md), then [execution spec](spec/SPEC.md) and [
 
 - [Development workflow](https://github.com/Combraton/combraton/blob/main/docs/DEVELOPMENT.md) — ownership, parallel work, reviews and fresh-session recovery.
 - [Verification](VERIFICATION.md) — commands that actually exist and their limits.
+- [Version policy](VERSION-POLICY.md) — exact harness pins, why, and the zero-token re-qualification procedure for each (D12).
 - [Decision records](decisions/README.md) — accepted internal choices and supersessions.
 - [Task work](work/README.md) — durable plans and handoffs.
 - [Shared baseline](https://github.com/Combraton/combraton/blob/main/docs/architecture/BASELINE.md) — product ownership and invariants.

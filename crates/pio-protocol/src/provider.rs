@@ -418,7 +418,11 @@ impl Provider {
     }
     pub fn execution_features(&self) -> &'static [&'static str] {
         if self.native() {
-            crate::codex::FEATURES
+            if self.profile().steering_supported {
+                crate::codex::FEATURES
+            } else {
+                crate::codex::FEATURES_WITHOUT_STEERING
+            }
         } else if self.durable.is_some() {
             &[
                 "execution.controller",

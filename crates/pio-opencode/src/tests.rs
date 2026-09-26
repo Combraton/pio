@@ -66,6 +66,16 @@ fn a_version_that_is_not_the_pin_is_refused_without_running_further_arguments() 
     });
     assert_eq!(record["qualified"], false);
     assert_eq!(record["refusals"][0]["reason"], "unsupported_version");
+    assert_eq!(record["refusals"][0]["observed"], "9.9.9");
+    // D12: the refusal names the pin, the installed version and how to
+    // re-qualify, so a reader is never left to go looking for them.
+    assert_eq!(record["refusals"][0]["pinned"], PINNED_VERSION);
+    let detail = record["refusals"][0]["detail"].as_str().unwrap();
+    assert!(detail.contains(PINNED_VERSION), "{detail}");
+    assert!(detail.contains("9.9.9"), "{detail}");
+    assert!(detail.contains("docs/VERSION-POLICY.md"), "{detail}");
+    assert!(detail.contains("pio opencode qualify"), "{detail}");
+    assert_eq!(record["refusals"].as_array().unwrap().len(), 1);
     assert_eq!(record["surface"]["skipped"], "version_not_qualified");
 }
 
@@ -184,6 +194,51 @@ fn the_owner_excluded_provider_is_refused_outright() {
     assert!(reasons(&record).contains(&"provider_excluded_by_the_owner".to_owned()));
 }
 
+/// D18: the helper-provider refusal used to exist only in
+/// `scripts/lead_run.py`'s L3 rehearsal; every `serve-opencode` admission
+/// must refuse it now, not only a run driven through that script.
+#[test]
+fn a_helper_model_on_another_provider_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("opencode.json"),
+        json!({"small_model":"another-provider/helper-model"}).to_string(),
+    )
+    .unwrap();
+    let record = admitted(
+        dir.path(),
+        &service(
+            json!("minimax-coding-plan/MiniMax-M2.7-highspeed"),
+            json!({"config_dir":dir.path().display().to_string()}),
+        ),
+    );
+    assert_eq!(record["admitted"], false, "{record}");
+    assert!(
+        reasons(&record).contains(&"helper_elsewhere".to_owned()),
+        "{record}"
+    );
+}
+
+#[test]
+fn a_helper_model_on_the_session_s_own_provider_is_admitted() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("opencode.json"),
+        json!({"small_model":"minimax-coding-plan/MiniMax-M2.7-highspeed",
+               "agent":{"title":{"model":"minimax-coding-plan/MiniMax-M2.7-highspeed"}}})
+        .to_string(),
+    )
+    .unwrap();
+    let record = admitted(
+        dir.path(),
+        &service(
+            json!("minimax-coding-plan/MiniMax-M2.7-highspeed"),
+            json!({"config_dir":dir.path().display().to_string()}),
+        ),
+    );
+    assert_eq!(record["admitted"], true, "{record}");
+}
+
 #[test]
 fn a_model_requires_the_dated_exception_and_a_run_requires_a_model() {
     let dir = tempfile::tempdir().unwrap();
@@ -201,6 +256,36 @@ fn a_model_requires_the_dated_exception_and_a_run_requires_a_model() {
         reasons(&undated).contains(&"model_requires_the_dated_test_only_exception".to_owned()),
         "{undated}"
     );
+}
+
+/// D10: the owner's dated model exception is compiled out of release builds.
+/// Built normally (dev, test, CI and the live runners: `test-exceptions` on,
+/// the default) this configuration is admitted, exactly as
+/// `a_helper_model_on_the_session_s_own_provider_is_admitted` proves without
+/// the helper. Built `cargo build --no-default-features` — the release
+/// configuration — OpenCode admission refuses it outright and says so with
+/// one reason: OpenCode has no other path to a model at all (the owner's
+/// default is a forbidden gateway), so it is test scope only in a release
+/// build.
+#[test]
+fn a_release_build_refuses_the_model_exception_outright() {
+    let dir = tempfile::tempdir().unwrap();
+    let record = admitted(
+        dir.path(),
+        &service(
+            json!("minimax-coding-plan/MiniMax-M2.7-highspeed"),
+            json!({}),
+        ),
+    );
+    if cfg!(feature = "test-exceptions") {
+        assert_eq!(record["admitted"], true, "{record}");
+    } else {
+        assert_eq!(record["admitted"], false, "{record}");
+        assert!(
+            reasons(&record).contains(&"test_only_model_exception_not_compiled_in".to_owned()),
+            "{record}"
+        );
+    }
 }
 
 #[test]
