@@ -50,6 +50,7 @@ CASES = [
     'service_denies_a_request_nobody_answers',
     'service_records_who_decided_and_what',
     'service_refuses_an_unqualified_executable_at_start',
+    'service_refuses_conformance_only_controls',
     'service_refuses_a_host_that_was_never_attached',
     'service_answers_a_request_it_will_not_act_on',
     'service_interrupt_escalates_when_the_signal_is_ignored',
@@ -892,6 +893,21 @@ def run_case(out, name):
         assert 'claude_not_qualified' in stderr, stderr[:500]
         admission = json.loads((case.store / 'claude-admission.json').read_text())
         assert admission['stream_spawned'] is False, admission
+
+    elif name == 'service_refuses_conformance_only_controls':
+        # D9: a launch control that exists only for the conformance
+        # participant (here, fault injection into every response) must
+        # never start a product service, whatever the config says.
+        case = ServiceCase(out, name)
+        config = json.loads(case.config_path.read_text())
+        config['protocol']['faults'] = {
+            'response_internal_error': [{'operation': 'execution.submit', 'times': 1}]}
+        case.config_path.write_text(json.dumps(config))
+        daemon = case.start(expect_ready=False)
+        assert daemon.wait(timeout=120) != 0, \
+            'the service started with a conformance-only control'
+        stderr = (case.out / 'daemon-0.stderr').read_text()
+        assert 'conformance-only' in stderr, stderr[:500]
 
 
     elif name == 'service_refuses_a_host_that_was_never_attached':
