@@ -3593,7 +3593,10 @@ def judge(rows, record, observed, desk, meters, state, rehearse):
              'a positive amount per run that ran',
              holds=lambda u: bool(u) and all(isinstance(a, int) and a > 0
                                              for a in u.values()),
-             note="Codex's own total, which covers every step, and is what is charged"
+             note="Codex's own total, the sum over the run's threads, which covers every step: "
+                  'what a run that ended by itself is charged; a run cut short is charged it '
+                  'plus a step in flight on each of its threads, and one not seen exited at '
+                  'least its share (review of L3, round 3)'
              if HARNESS == 'codex' else
              "OpenCode's last model step; charged times the steps it could have taken")
 

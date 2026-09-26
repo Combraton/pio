@@ -580,6 +580,12 @@ holds only because of what the fake does (reviews of L3, F13 and round 2):
   dedicated_tools = true`, which is off by default. Whether the owner's
   memory pipeline runs during L3, and what it costs, is not measured; the
   owner may want it off for the run.
+- **Placement is a snapshot.** Where a command approval's cwd lands is
+  decided when the request arrives; the command runs only after the desk
+  or the relay answers. A link changed in between changes where it runs
+  without PIO seeing it (review of L3, round 3, R3-HC-8; deferred, see
+  STATE.md). The children could make such a link without asking; nothing
+  in this rehearsal does.
 - **Children under other names.** The lead's tool starts only the plan's
   children (`PIO_LEAD_CHILDREN`), so a lead that names another is refused
   before anything reaches the service (`child-renamed`). Behind that, the
