@@ -39,7 +39,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'early_declines_in_every_wait', 'early_decline_then_exit', 'file_change_no_root',
          'file_change_root_inside',
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
-         'file_change_grant_root', 'continuation_interrupted']
+         'file_change_grant_root', 'continuation_interrupted', 'subagent_turn_after_interrupt']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # Owner decision for L3, 2026-09-25: the model is asked for under the dated
 # exception, and the provider is checked from Codex's answer, never sent.
@@ -343,19 +343,42 @@ def subagent_case(case, name):
         assert events_of(case, 'other_thread') == [] and carried_declines(case, key=OTHER_THREADS) == []
         assert final['exit'] == {'code': 0}, final
         return dict(outcome='pass', sent=sent[0]['sent'])
-    if name == 'subagent_interrupted_with_the_run':
+    if name in ('subagent_interrupted_with_the_run', 'subagent_turn_after_interrupt'):
         poll(lambda: events_of(case, 'other_thread_turn'),
              lambda turns: any(e['state'] == 'started' for e in turns))
         case.execution_command('execution.cancel', 'work', {}, 'cancel-sub')
         final = exited(case)
-        sent = [e for e in events_of(case, 'control_sent') if e.get('method') == 'turn/interrupt']
-        assert sorted(e.get('thread_id') or 'own' for e in sent) == ['fake-sub-thread-1', 'own'], sent
+        order = [json.loads(l) for f in case.store.glob('codex-*.events.jsonl')
+                 for l in f.read_text().splitlines()]
+        sent = [e for e in order if e['kind'] == 'control_sent'
+                and e.get('method') == 'turn/interrupt']
+        own = [e for e in sent if not e.get('thread_id')]
+        subs = [e for e in sent if e.get('thread_id') == sub]
+        # Interrupted **with** the run: under the cancel's own control id,
+        # before the run's own turn ended, never only afterwards as the
+        # host's 'run-ended' sweep (review of L3, round 4, R4-HC-1).
+        assert len(own) == 1 and own[0]['control_id'] != 'run-ended', sent
+        assert subs and subs[0]['control_id'] == own[0]['control_id'], sent
+        own_end = next(i for i, e in enumerate(order) if e['kind'] == 'turn_completed')
+        assert order.index(subs[0]) < own_end, [e['kind'] for e in order]
         interrupted = [m for m in case.markers_records() if m['kind'] == 'sub_agent_interrupted']
-        assert [m['thread'] for m in interrupted] == [sub], interrupted
         turns = events_of(case, 'other_thread_turn')
-        assert [e['state'] for e in turns] == ['started', 'interrupted'], turns
         assert final['cancellation'].get('outcome') == 'cancelled', final
-        return dict(outcome='pass', interrupted=[sub])
+        if name == 'subagent_interrupted_with_the_run':
+            assert [m['thread'] for m in interrupted] == [sub], interrupted
+            assert [e['state'] for e in turns] == ['started', 'interrupted'], turns
+            return dict(outcome='pass', interrupted=[sub], control=subs[0]['control_id'])
+        # Set going again on the same thread after the cancel: its new turn
+        # is interrupted too, by the sweep after the run's own turn, since
+        # what was interrupted is a thread's turn, not the thread.
+        assert [(m['thread'], m['turn']) for m in interrupted] == [
+            (sub, 'fake-sub-turn-1'), (sub, 'fake-sub-turn-1-again')], interrupted
+        assert [(e['control_id'], e['turn_id']) for e in subs] == [
+            (own[0]['control_id'], 'fake-sub-turn-1'), ('run-ended', 'fake-sub-turn-1-again')], subs
+        assert [(e['turn_id'], e['state']) for e in turns] == [
+            ('fake-sub-turn-1', 'started'), ('fake-sub-turn-1', 'interrupted'),
+            ('fake-sub-turn-1-again', 'started'), ('fake-sub-turn-1-again', 'interrupted')], turns
+        return dict(outcome='pass', interrupted=[e['turn_id'] for e in subs])
     final = exited(case)
     assert final['exit'] == {'code': 0}, final
     # The run's own turn ended the run, once, and the agent's did not.
@@ -686,6 +709,9 @@ def run_case(out, name):
         early_decline_then_exit={'elicit_during': ['account/read'], 'exit_after_early': True},
         subagent_interrupted_with_the_run={'spawn_agent': True, 'subagent_steps': 2,
                                            'subagent_step_ms': 60000, 'delay_ms': 60000},
+        subagent_turn_after_interrupt={'spawn_agent': True, 'subagent_steps': 2,
+                                       'subagent_step_ms': 60000, 'subagent_restarts': True,
+                                       'delay_ms': 60000},
         early_elicitation_declined={'elicit_during_thread_start': True, 'delay_ms': 100},
         user_input_declined={'approval': 'user_input', 'delay_ms': 100},
         file_change_grant_root={'approval': 'fileChange', 'delay_ms': 100, 'approval_grant_root': '/'},
@@ -708,7 +734,7 @@ def run_case(out, name):
         if name in ('file_change_no_root', 'file_change_root_inside'):
             return file_change_case(case, name)
         if name in ('subagent_thread_attributed', 'subagent_interrupted_with_the_run',
-                    'features_off_decision_sent'):
+                    'features_off_decision_sent', 'subagent_turn_after_interrupt'):
             return subagent_case(case, name)
         if name == 'unqualified_executable_refused':
             daemon = case.start(expect_ready=False)

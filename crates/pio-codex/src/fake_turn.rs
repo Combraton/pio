@@ -265,6 +265,52 @@ pub(crate) fn spawn_agent(
     Ok(true)
 }
 
+/// A sub-agent Codex set going again on the same thread after its turn was
+/// interrupted: a new turn, its own steps, unless interrupted in turn
+/// (`subagent_restarts`; review of L3, round 4, R4-HC-1).
+pub(crate) fn restart_sub_agent(
+    previous: &Turn,
+    scenario: &Value,
+    waiting: Waiting,
+    markers: Option<PathBuf>,
+) -> Result<()> {
+    let turn = Turn::continued(
+        format!("{}-again", previous.id),
+        previous.thread.clone(),
+        previous.total(),
+    );
+    SUB_TURNS.lock().expect("sub turns lock").push(turn.clone());
+    emit(
+        &json!({"method":"turn/started","params":{"threadId":turn.thread,
+        "turn":{"id":turn.id,"status":"inProgress","items":[],"error":null}}}),
+    )?;
+    super::fake::marker(
+        &markers,
+        json!({"source":super::fake::SOURCE,"kind":"sub_agent_restarted","thread":turn.thread,
+               "turn":turn.id}),
+    )?;
+    let step_ms = scenario["subagent_step_ms"].as_u64().unwrap_or(1500);
+    let play = Play {
+        turn,
+        waiting,
+        markers,
+        step: scenario["subagent_step"].as_u64().unwrap_or(4096),
+        first: None,
+        think: Duration::from_millis(step_ms),
+        answer: Duration::from_millis(step_ms),
+        requests: AtomicU64::new(0),
+        messages: AtomicU64::new(0),
+    };
+    let steps = scenario["subagent_steps"].as_u64().unwrap_or(2);
+    std::thread::spawn(move || {
+        if let Err(error) = play_sub_agent(&play, steps, false) {
+            let _ = play.marker(json!({"kind":"sub_agent_failed","error":format!("{error:#}")}));
+            let _ = play.turn.complete("failed");
+        }
+    });
+    Ok(())
+}
+
 fn play_sub_agent(play: &Play, steps: u64, asks: bool) -> Result<()> {
     play.begin();
     for n in 0..steps {

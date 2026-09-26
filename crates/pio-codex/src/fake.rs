@@ -46,7 +46,9 @@
 //! `spawn_agent_if` (a led run's prompt) or `spawn_agent` (the plain turn)
 //! spawns a sub-agent as Codex 0.157.0 does (`fake_turn::spawn_agent`):
 //! `subagent_steps`, `subagent_step`, `subagent_step_ms` and
-//! `subagent_asks`; none is spawned when the thread's config sets
+//! `subagent_asks`, and `subagent_restarts` sets the agent going again on its
+//! thread, once, after its turn is interrupted; none is spawned when the
+//! thread's config sets
 //! `agents.enabled = false` and does not turn `features.multi_agent_v2` on.
 //! `elicit_during` (a list of `initialize`, `account/read`, `thread/start`)
 //! sends a url-mode elicitation before answering each wait it names;
@@ -699,9 +701,21 @@ pub fn run() -> Result<()> {
                         if let Some(sub) = sub {
                             marker(
                                 &markers,
-                                json!({"source":SOURCE,"kind":"sub_agent_interrupted","thread":sub.thread}),
+                                json!({"source":SOURCE,"kind":"sub_agent_interrupted","thread":sub.thread,
+                                       "turn":sub.id}),
                             )?;
                             sub.interrupt()?;
+                            // Set going again on the same thread, once
+                            // (`subagent_restarts`).
+                            if scenario["subagent_restarts"] == true && !sub.id.ends_with("-again")
+                            {
+                                fake_turn::restart_sub_agent(
+                                    &sub,
+                                    &scenario,
+                                    waiting.clone(),
+                                    markers.clone(),
+                                )?;
+                            }
                         }
                     }
                     "turn/interrupt" if scripted.is_some() => {

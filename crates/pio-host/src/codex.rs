@@ -161,7 +161,9 @@ struct OtherThreads {
     seen: BTreeMap<String, Value>,
     totals: BTreeMap<String, u64>,
     turns: BTreeMap<String, String>,
-    interrupted: std::collections::BTreeSet<String>,
+    /// Each (thread, turn) already interrupted: a later turn on a thread
+    /// interrupted once is interrupted too (review of L3, round 4, R4-HC-1).
+    interrupted: std::collections::BTreeSet<(String, String)>,
 }
 
 impl OtherThreads {
@@ -234,7 +236,10 @@ impl OtherThreads {
                                   "turn_id":params["turn"]["id"],"state":"started"}))?;
             }
             "turn/completed" => {
-                self.turns.remove(other);
+                // Only the turn that ended: a turn begun since stays running.
+                if self.turns.get(other).map(String::as_str) == params["turn"]["id"].as_str() {
+                    self.turns.remove(other);
+                }
                 life.event(json!({"kind":"other_thread_turn","thread_id":other,
                                   "turn_id":params["turn"]["id"],
                                   "state":params["turn"]["status"]}))?;
@@ -254,13 +259,13 @@ impl OtherThreads {
         control: &str,
     ) -> Result<()> {
         for (other, turn) in &self.turns {
-            if !self.interrupted.insert(other.clone()) {
+            if !self.interrupted.insert((other.clone(), turn.clone())) {
                 continue;
             }
             let request = app.request("turn/interrupt", json!({"threadId":other,"turnId":turn}))?;
             requests.insert(request, control.to_owned());
             life.event(json!({"kind":"control_sent","control_id":control,
-                              "method":"turn/interrupt","thread_id":other}))?;
+                              "method":"turn/interrupt","thread_id":other,"turn_id":turn}))?;
         }
         Ok(())
     }
@@ -473,9 +478,11 @@ fn after_turn(
     let ended = Instant::now();
     let grace = ended + CONTINUATION_GRACE;
     let last = grace + INTERRUPTED_WAIT;
-    others.interrupt(life, app, requests, "run-ended")?;
     let mut continuing: Option<String> = None;
     loop {
+        // Every other thread's turn still running, each once: one begun
+        // after the run's own turn ended is interrupted too.
+        others.interrupt(life, app, requests, "run-ended")?;
         let now = Instant::now();
         let busy = continuing.is_some() || !others.turns.is_empty();
         if now >= last || (now >= grace && !busy) {
