@@ -34,6 +34,20 @@ pub const FEATURES: &[&str] = &[
     "execution.actions",
     "execution.steering",
 ];
+/// [`FEATURES`] without `execution.steering` (D6): the host does not
+/// implement steering for an adapter whose [`Profile::steering_supported`]
+/// is false, so it is never advertised there. A caller that still asks for
+/// it in `core.negotiate` is refused `unknown_feature`/`unsupported_
+/// required_feature`, and `execution.steer` itself is refused
+/// `unsupported_required_feature` rather than a false "not running yet".
+pub const FEATURES_WITHOUT_STEERING: &[&str] = &[
+    "execution.controller",
+    "execution.output",
+    "execution.discovery",
+    "execution.workspaces",
+    "execution.usage",
+    "execution.actions",
+];
 
 pub(crate) fn push(v: &mut Value, x: Value) {
     if !v.is_array() {
@@ -161,6 +175,10 @@ pub struct Profile {
     pub pinned_version: &'static str,
     pub real_harness_name: &'static str,
     pub fake_harness_name: &'static str,
+    /// Whether this host implements `execution.steer` at all. Only Codex
+    /// does; advertising the feature elsewhere and refusing the call with a
+    /// "not running yet" reason would be a false one (D6).
+    pub steering_supported: bool,
 }
 
 pub const PROFILES: &[Profile] = &[
@@ -182,6 +200,7 @@ pub const PROFILES: &[Profile] = &[
         pinned_version: pio_codex::PINNED_VERSION,
         real_harness_name: "Codex CLI app-server",
         fake_harness_name: "PIO labeled fake Codex app-server (not Codex)",
+        steering_supported: true,
     },
     Profile {
         adapter: "claude",
@@ -203,6 +222,7 @@ pub const PROFILES: &[Profile] = &[
         pinned_version: pio_claude::PINNED_VERSION,
         real_harness_name: "Claude Code CLI",
         fake_harness_name: "PIO labeled fake Claude Code CLI (not Claude Code)",
+        steering_supported: false,
     },
     Profile {
         adapter: "opencode",
@@ -226,6 +246,7 @@ pub const PROFILES: &[Profile] = &[
         pinned_version: pio_opencode::PINNED_VERSION,
         real_harness_name: "OpenCode ACP agent",
         fake_harness_name: "PIO labeled fake OpenCode ACP agent (not OpenCode)",
+        steering_supported: false,
     },
 ];
 

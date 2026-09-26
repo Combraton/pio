@@ -964,6 +964,57 @@ fn discovery_reports_each_adapter_s_own_harness_not_codex_s() {
     }
 }
 
+/// D6: `execution.steering` is a Codex-only feature. It is advertised for
+/// Codex, and refused for Claude and OpenCode with the true, specific
+/// reason that the feature does not exist there — never the false "needs a
+/// running turn" `execution.steer` itself used to give once negotiated.
+#[test]
+fn steering_is_advertised_only_where_the_host_implements_it() {
+    for (adapter, steering_supported) in [("codex", true), ("claude", false), ("opencode", false)] {
+        let root = tempfile::tempdir().unwrap();
+        let store = root.path().join("store");
+        std::fs::create_dir(&store).unwrap();
+        std::fs::set_permissions(&store, std::os::unix::fs::PermissionsExt::from_mode(0o700))
+            .unwrap();
+        let host = json!({"adapter":adapter,"labeled_fake":true,
+            "executable":"/bin/false","qualification_binding":null});
+        let mut cfg = config();
+        cfg["executor"] = json!({"host_id":format!("{adapter}-host")});
+        let mut p = Provider::with_host(&store, cfg, Some(host)).unwrap();
+        assert_eq!(
+            p.execution_features().contains(&"execution.steering"),
+            steering_supported,
+            "{adapter}"
+        );
+        let mut s = Session {
+            principal: Some("owner".into()),
+            receive: 1048576,
+            ..Session::default()
+        };
+        let core = json!({"name":"core","majors":[1],"required":true,
+            "required_features":["core.events","core.capabilities","core.effects"],
+            "optional_features":[]});
+        let execution = json!({"name":"execution","majors":[1],"required":true,
+            "required_features":["execution.steering"],"optional_features":[]});
+        let negotiate = json!({"operation":"core.negotiate","message_id":"m",
+            "payload":{"caller":{"name":"test","version":"1"},
+                      "receive_limits":{"max_frame_bytes":1048576},
+                      "profiles":[core,execution]}});
+        let result = p.handle(&mut s, "core.negotiate", &negotiate);
+        if steering_supported {
+            assert!(result.is_ok(), "{adapter}: {result:?}");
+        } else {
+            let error = result.unwrap_err();
+            assert_eq!(error.code, "unsupported_required_feature", "{adapter}");
+            assert_eq!(
+                error.details["unsatisfied"],
+                json!([{"profile":"execution","feature":"execution.steering","reason":"unknown_feature"}]),
+                "{adapter}"
+            );
+        }
+    }
+}
+
 /// L3 (owner decision, 2026-09-25): on Codex a lead-tool spec may name the
 /// lead server's own tools to pre-allow, and nothing else is widened. The
 /// shape and credential refusals are OpenCode's; `pre_allowed_tools` must
