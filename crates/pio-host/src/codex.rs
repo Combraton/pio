@@ -1236,9 +1236,30 @@ fn run_turn(life: &mut Lifecycle, server: &mut Option<AppServer>) -> Result<()> 
                                           "run_total":others.run_total()}),
                     )?;
                 }
-                "serverRequest/resolved" => life.event(
-                    json!({"kind":"request_resolved","request_id":message["params"]["requestId"]}),
-                )?,
+                "serverRequest/resolved" => {
+                    // A request this host has not answered, settled by Codex
+                    // itself: it no longer holds it, so nothing is sent for
+                    // it from here on, not a caller's answer and not PIO's
+                    // lapse, and the record says Codex settled it (review of
+                    // L3, CH-8). A request this host answered is Codex
+                    // confirming that answer, as before.
+                    let request = &message["params"]["requestId"];
+                    let unanswered = pending_actions
+                        .iter()
+                        .find(|(_, (rpc, _))| rpc == request)
+                        .map(|(seq, _)| *seq);
+                    match unanswered {
+                        Some(seq) => {
+                            pending_actions.remove(&seq);
+                            settled.insert(seq, "harness");
+                            life.event(json!({"kind":"request_resolved","request_id":request,
+                                              "action_seq":seq,"settled_by":"harness"}))?;
+                        }
+                        None => {
+                            life.event(json!({"kind":"request_resolved","request_id":request}))?
+                        }
+                    }
+                }
                 // A server that starts during the turn (one Codex does not
                 // wait for at thread start) says so here: every server that
                 // started on the run's thread is recorded, the witness that

@@ -41,7 +41,7 @@ CASES = ['j1_turn_completes', 'approvals_reviewer_must_be_user', 'approvals_revi
          'early_elicitation_declined', 'user_input_declined', 'network_and_unplaced_approval',
          'file_change_grant_root', 'continuation_interrupted', 'subagent_turn_after_interrupt',
          'url_elicitation_with_approval_kind_declined', 'stream_retries_recorded',
-         'plugins_off_decision_sent']
+         'plugins_off_decision_sent', 'approval_settled_by_codex']
 LEAD_TOOL = 'pio.combraton.dev/lead-tool'
 # The lead tool's own server settings on Codex, as `lead_run.py` sends them
 # for L3 (after its first live run, 2026-09-26).
@@ -727,6 +727,10 @@ def run_case(out, name):
         url_elicitation_with_approval_kind_declined={'approval': 'elicitation', 'delay_ms': 100,
                                                      'elicitation_meta_kind': 'mcp_tool_call'},
         command_approval_lapses={'approval': 'command', 'delay_ms': 100},
+        # Codex settles the approval itself half a second in, and the turn
+        # goes on five seconds more: past the two-second answer deadline.
+        approval_settled_by_codex={'approval': 'command', 'approval_settles_itself_ms': 500,
+                                   'delay_ms': 5000},
         form_elicitation_declined={'approval': 'elicitation', 'elicitation_mode': 'form',
                                    'delay_ms': 100},
         approval_cwd_through_a_link={'approval': 'command', 'delay_ms': 100},
@@ -1087,6 +1091,39 @@ def run_case(out, name):
             assert 'example.invalid' not in json.dumps(refused), refused
             assert (final['runtime'], final['exit']) == ('exited', 'unavailable'), final
             return dict(outcome='pass', recorded=declined[0]['wait'], on_stream=True)
+        if name == 'approval_settled_by_codex':
+            # Codex settles a request itself, with `serverRequest/resolved`
+            # and no answer taken (review of L3, CH-8). It no longer holds
+            # the request, so PIO sends nothing for it (no lapse, though the
+            # turn outlives the deadline), and the action's one decision
+            # says Codex settled it and that nothing was sent.
+            response, _ = case.submit(delivery=2)
+            assert response['result']['outcome']['admission'] == 'admitted', response
+            final = exited(case, seconds=30)
+            settled = [m['id'] for m in case.markers_records() if m['kind'] == 'approval_settled_by_codex']
+            assert settled == ['fake-request-1'], case.markers_records()
+            wire = [m for m in answered_once(case) if m['id'] == 'fake-request-1']
+            assert wire == [], f'PIO answered a request Codex no longer held: {wire}'
+            assert events_of(case, 'request_denied_by_default') == [], events_of(case, 'request_denied_by_default')
+            resolved = events_of(case, 'request_resolved')
+            assert [(r['request_id'], r.get('action_seq'), r.get('settled_by')) for r in resolved] == \
+                [('fake-request-1', 1, 'harness')], resolved
+            with case.client() as c:
+                stream = c.query('core.events.read', {'limit': 1000, 'from': 'start',
+                                                      'kinds': ['execution.execution']})['result']
+            decided = [i['event']['payload'].get('pio.combraton.dev/decision') for i in stream['items']
+                       if 'event' in i and i['event']['type'] == 'execution.action.answered']
+            assert [(d['decided_by'], d['decision'], d['basis'], d['sent']) for d in decided] == \
+                [('harness', None, 'settled_by_harness', False)], decided
+            assert [a['state'] for a in final['actions']] == ['answered'], final['actions']
+            late = json.dumps({'decision': 'accept'}).encode()
+            refused = case.execution_command('execution.respond_action', 'work', dict(
+                action_id=final['actions'][0]['action_id'],
+                response=dict(digest=digest(late), media_type='application/json')),
+                'answer-late', late, 'application/json')
+            assert refused['error']['data']['code'] == 'not_found' and \
+                refused['error']['data']['details'] == {'reason': 'already_decided', 'decided_by': 'harness'}, refused
+            return dict(outcome='pass', settled_by='harness', native_answers=len(wire))
         if name == 'command_approval_lapses':
             # A command approval nobody answers: after the caller's two
             # seconds, one decline of PIO's, and the command never runs. In

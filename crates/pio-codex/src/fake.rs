@@ -9,7 +9,10 @@
 //! `turn/started`), `approval` (`null`, `"command"` or `"fileChange"`),
 //! `delay_ms` before completion (default 200), `usage_total` (default 42;
 //! `null` sends no usage), `agent_text`, `steer` (default true),
-//! `markers` (directory for independent spawn and turn markers).
+//! `markers` (directory for independent spawn and turn markers),
+//! `approval_settles_itself_ms` (Codex settles the pending approval itself
+//! after that long, with `serverRequest/resolved` and no answer taken, and
+//! the turn ends `delay_ms` later).
 //!
 //! For lead runs (M4, L3): `model_reported` and `model_provider` are what
 //! `thread/start` answers (default: the model asked for, else
@@ -248,6 +251,9 @@ pub fn run() -> Result<()> {
     let mut cwd = String::new();
     // Active turn: id, completion deadline, pending approval request id.
     let mut active: Option<(String, Instant, Option<String>)> = None;
+    // When Codex settles the pending approval itself, with no answer from
+    // the client (`approval_settles_itself_ms`; review of L3, CH-8).
+    let mut settles_at: Option<Instant> = None;
     let mut turns = 0u64;
     // Every response the client sent, by request id: a request answered
     // twice is a defect the host's own record cannot show (review of L3,
@@ -270,11 +276,39 @@ pub fn run() -> Result<()> {
                     fake_turn::continue_thread(&turn, &scenario, waiting.clone(), markers.clone())?;
             }
         }
+        // Codex settles a request itself, and tells the client with
+        // `serverRequest/resolved` alone: no answer was taken from it. The
+        // turn then goes on for `delay_ms`, so a client that still thinks the
+        // request is open has time to answer it.
+        if let (Some(at), Some((turn, deadline, pending))) = (settles_at, active.as_mut())
+            && Instant::now() >= at
+            && let Some(request) = pending.take()
+        {
+            settles_at = None;
+            let thread_id = thread.clone().unwrap_or_default();
+            send(
+                json!({"method":"serverRequest/resolved","params":{"threadId":thread_id,"requestId":request}}),
+            )?;
+            send(
+                json!({"method":"item/completed","params":{"threadId":thread_id,"turnId":turn,"item":{"type":"commandExecution","id":"item-approval","command":"echo fixture","cwd":cwd,"status":"declined","commandActions":[]}}}),
+            )?;
+            marker(
+                &markers,
+                json!({"source":SOURCE,"kind":"approval_settled_by_codex","id":request}),
+            )?;
+            *deadline = Instant::now()
+                + Duration::from_millis(scenario["delay_ms"].as_u64().unwrap_or(200));
+        }
         let timeout = active
             .as_ref()
             .filter(|(_, _, pending)| pending.is_none())
             .map(|(_, deadline, _)| deadline.saturating_duration_since(Instant::now()))
-            .unwrap_or(Duration::from_millis(250));
+            .unwrap_or(Duration::from_millis(250))
+            .min(
+                settles_at
+                    .map(|at| at.saturating_duration_since(Instant::now()))
+                    .unwrap_or(Duration::MAX),
+            );
         match lines.recv_timeout(timeout) {
             Ok(None) | Err(RecvTimeoutError::Disconnected) => break,
             Err(RecvTimeoutError::Timeout) => {
@@ -902,6 +936,9 @@ pub fn run() -> Result<()> {
                                     params["kind"] = json!(approval_kind);
                                 }
                                 send(json!({"method":method,"id":request,"params":params}))?;
+                                settles_at = scenario["approval_settles_itself_ms"]
+                                    .as_u64()
+                                    .map(|ms| Instant::now() + Duration::from_millis(ms));
                                 Some(request)
                             }
                             None => None,

@@ -724,6 +724,79 @@ impl Provider {
         }
     }
 
+    /// A request settled without any answer from PIO reaching the harness:
+    /// Codex settled it itself (CH-8), or the turn ended with it open. The
+    /// action gets its one decision here, with who settled it and why, and
+    /// with no decision claimed sent. An answer a caller gave that never
+    /// reached the harness is not reported again: its decision is already
+    /// on the stream, so its response effect says it was not sent. A lapse
+    /// PIO had decided and not yet sent is superseded, and says so.
+    pub(crate) fn settle_unanswered(
+        &mut self,
+        e: &mut Value,
+        action_id: &str,
+        decided_by: &str,
+        basis: &str,
+        reason: &str,
+    ) {
+        let ns = self.adapter().to_owned();
+        let records = format!("{ns}_actions");
+        if !e[&records][action_id].is_object() {
+            return;
+        }
+        if e[&records][action_id]["on_stream"] == true {
+            let effect = list(&e["view"]["actions"])
+                .iter()
+                .find(|a| a["action_id"] == action_id)
+                .and_then(|a| a["response_effect"].as_str().map(str::to_owned));
+            if let Some(effect) = effect
+                && self
+                    .data
+                    .effects
+                    .get(&effect)
+                    .is_some_and(|r| r["status"] == "pending")
+            {
+                self.codex_observe_effect(&effect, "failed", &format!("{basis}_before_sent"), true);
+            }
+            e[&records][action_id]["not_sent"] = basis.into();
+            return;
+        }
+        let lapse_superseded = e[&records][action_id]["decided_by"] == "pio";
+        let record = &mut e[&records][action_id];
+        record["decided_by"] = decided_by.into();
+        record["on_stream"] = true.into();
+        let mut settled = false;
+        if let Some(actions) = e["view"]["actions"].as_array_mut() {
+            for action in actions {
+                if action["action_id"] == action_id {
+                    if action["state"] == "pending" {
+                        action["answered_at"] = self.now.clone().into();
+                    }
+                    action["state"] = "answered".into();
+                    settled = true;
+                }
+            }
+        }
+        if !settled {
+            return;
+        }
+        if e["view"]["runtime_detail"]["action_id"] == action_id {
+            e["view"].as_object_mut().unwrap().remove("runtime_detail");
+            e["view"]["runtime"] = "active".into();
+        }
+        let mut decision = json!({"decided_by":decided_by,"decision":Value::Null,
+                                  "basis":basis,"reason":reason,"sent":false});
+        if lapse_superseded {
+            decision["lapse_decided_not_sent"] = true.into();
+        }
+        self.execution_event(
+            e,
+            "execution.action.answered",
+            json!({"action_id":action_id,"pio.combraton.dev/decision":decision}),
+            None,
+        );
+    }
+
     fn codex_effect(
         &mut self,
         e: &mut Value,
@@ -1116,6 +1189,17 @@ impl Provider {
                 let control = text(&event["control_id"]).to_owned();
                 self.codex_observe_effect(&control, "pending", "native_response_written", false);
             }
+            // Codex settled a request no answer from PIO had reached (CH-8).
+            "request_resolved" if event["settled_by"] == "harness" => {
+                let action_id = format!("{id}.action-{}", num(&event["action_seq"]));
+                self.settle_unanswered(
+                    e,
+                    &action_id,
+                    "harness",
+                    "settled_by_harness",
+                    "the harness settled the request itself; PIO sent no answer",
+                );
+            }
             "request_resolved" => {
                 // The app-server resolved a request we answered.
                 let answered: Vec<String> = list(&e["view"]["actions"])
@@ -1137,12 +1221,17 @@ impl Provider {
                 }
             }
             "control_rejected" => {
-                self.codex_observe_effect(
-                    text(&event["control_id"]),
-                    "failed",
-                    "host_rejected_control",
-                    true,
-                );
+                // An answer already recorded as not sent, with the reason,
+                // is not failed a second time.
+                let control = text(&event["control_id"]).to_owned();
+                if self
+                    .data
+                    .effects
+                    .get(&control)
+                    .is_none_or(|r| r["status"] != "failed")
+                {
+                    self.codex_observe_effect(&control, "failed", "host_rejected_control", true);
+                }
             }
             "control_response" => {
                 let control = text(&event["control_id"]).to_owned();
