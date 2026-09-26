@@ -305,7 +305,8 @@ fn permission_mode_guard_requires_the_configured_default() {
     );
     assert_eq!(configured_bypass["allowed"], false);
 
-    // An absent or unreadable default refuses rather than assuming one.
+    // An absent default is the product's own, which is not `acceptEdits`;
+    // an unreadable one refuses rather than assuming anything.
     for settings in [
         json!({}),
         json!({"permissions":{}}),
@@ -315,6 +316,41 @@ fn permission_mode_guard_requires_the_configured_default() {
         assert_eq!(guard["allowed"], false, "{settings}");
         assert!(!guard["unresolved"].as_array().unwrap().is_empty());
     }
+}
+
+/// D2. Most installations configure no `permissions.defaultMode`, and the
+/// guard refused every one of them. Absent means the product's own default,
+/// measured as `default` in `system/init`; the guard compares against that,
+/// and requesting it passes no flag, because `--permission-mode` does not
+/// accept the name.
+#[test]
+fn an_absent_default_mode_is_the_product_default_and_is_compared_like_any_other() {
+    assert_eq!(product_default_permission_mode(), "default");
+    for settings in [json!({}), json!({"permissions":{"allow":["Bash(cat)"]}})] {
+        let guard = permission_mode_guard(&settings, "default");
+        assert_eq!(guard["allowed"], true, "{guard:#}");
+        assert_eq!(guard["configured"], "default");
+        assert_eq!(guard["configured_source"], "product_default");
+        assert_eq!(guard["unresolved"], json!([]));
+        // Still equality: an absent default admits nothing broader, and
+        // nothing narrower either, since no ordering is established.
+        for requested in ["acceptEdits", "plan", "manual", FORBIDDEN_MODE] {
+            let refused = permission_mode_guard(&settings, requested);
+            assert_eq!(refused["allowed"], false, "{requested}: {refused:#}");
+        }
+    }
+    // A configured value still comes from the user's settings.
+    let configured = permission_mode_guard(
+        &json!({"permissions":{"defaultMode":"acceptEdits"}}),
+        "acceptEdits",
+    );
+    assert_eq!(configured["configured_source"], "user_settings");
+    // The product default has no flag spelling; every other mode is passed.
+    assert!(permission_mode_args("default").is_empty());
+    assert_eq!(
+        permission_mode_args("acceptEdits"),
+        ["--permission-mode", "acceptEdits"]
+    );
 }
 
 #[test]
@@ -427,6 +463,99 @@ fn checked_in_stream_identity_carries_every_compared_field() {
     assert_eq!(identity["capabilities"][0], "interrupt_receipt_v1");
 }
 
+/// The pin and the compiled-in identities name one release: both identities
+/// are the ones checked in under `adapters/claude/<PINNED_VERSION>`, and the
+/// committed zero-token re-qualification for that version measured the same
+/// executable version, qualified with no findings, against the same surface
+/// and stream. A stale `PINNED_VERSION` fails closed at run time, but a pin
+/// pointing at another release's identity would qualify the wrong interface
+/// silently. The Codex adapter has the same test.
+#[test]
+fn pin_names_the_identity_directory_and_the_requalification_record() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let directory = workspace.join(format!("adapters/claude/{PINNED_VERSION}"));
+    let surface = std::fs::read_to_string(directory.join("surface-identity.json"))
+        .expect("a surface identity for PINNED_VERSION");
+    let stream = std::fs::read_to_string(directory.join("stream-identity.json"))
+        .expect("a stream identity for PINNED_VERSION");
+    assert_eq!(
+        surface, QUALIFIED_SURFACE,
+        "the compiled-in surface identity is not the one checked in for {PINNED_VERSION}"
+    );
+    assert_eq!(
+        stream, QUALIFIED_STREAM,
+        "the compiled-in stream identity is not the one checked in for {PINNED_VERSION}"
+    );
+    let surface: Value = serde_json::from_str(&surface).unwrap();
+    let stream: Value = serde_json::from_str(&stream).unwrap();
+    assert_eq!(surface["version"], PINNED_VERSION);
+    assert_eq!(stream["version"], PINNED_VERSION);
+    let record: Value = serde_json::from_str(
+        &std::fs::read_to_string(workspace.join(format!(
+            "docs/work/m3/claude-qualification/requalification-{PINNED_VERSION}.json"
+        )))
+        .expect("a committed re-qualification record for PINNED_VERSION"),
+    )
+    .unwrap();
+    assert_eq!(record["executable"]["version"], PINNED_VERSION);
+    assert_eq!(record["qualified"], true);
+    assert_eq!(record["findings"], json!([]));
+    assert_eq!(record["model_calls"], 0);
+    assert_eq!(
+        record["cli_surface"]["surface_listing_sha256"],
+        surface["surface_listing_sha256"]
+    );
+    assert_eq!(record["stream_identity"], stream);
+}
+
+/// D11. The product holds each run's `system/init` to the pinned stream
+/// identity: the key set and the capability list, with both digests
+/// recorded. A labeled fake may carry its label key and nothing else.
+#[test]
+fn init_is_held_to_the_pinned_stream_identity() {
+    let pinned: Value = serde_json::from_str(QUALIFIED_STREAM).unwrap();
+    let mut init = serde_json::Map::new();
+    for key in pinned["init_keys"].as_array().unwrap() {
+        init.insert(key.as_str().unwrap().to_owned(), Value::Null);
+    }
+    init.insert("capabilities".into(), pinned["capabilities"].clone());
+    let init = Value::Object(init);
+
+    let same = init_identity(&init, &pinned, false);
+    assert_eq!(same["matches"], true, "{same:#}");
+    assert_eq!(same["observed_sha256"], same["pinned_sha256"]);
+    assert_eq!(same["pinned_version"], PINNED_VERSION);
+
+    // A key the pinned release never sent, as a self-update would add.
+    let mut added = init.clone();
+    added["next_release_key"] = json!(true);
+    let drifted = init_identity(&added, &pinned, false);
+    assert_eq!(drifted["matches"], false);
+    assert_ne!(drifted["observed_sha256"], drifted["pinned_sha256"]);
+    assert_eq!(
+        drifted["drift"],
+        json!([{"field":"init_keys","added":["next_release_key"],"removed":[],"reordered":false}])
+    );
+    // A key that went away.
+    let mut removed = init.clone();
+    removed.as_object_mut().unwrap().remove("permissionMode");
+    let drifted = init_identity(&removed, &pinned, false);
+    assert_eq!(drifted["drift"][0]["removed"], json!(["permissionMode"]));
+    // A capability that moved.
+    let mut capabilities = init.clone();
+    capabilities["capabilities"] = json!(["interrupt_receipt_v1"]);
+    let drifted = init_identity(&capabilities, &pinned, false);
+    assert_eq!(drifted["drift"][0]["field"], "capabilities");
+    assert_eq!(drifted["matches"], false);
+
+    // The fake's label is the one key a labeled fake may add; a real harness
+    // sending it has drifted like any other.
+    let mut labeled = init.clone();
+    labeled[FAKE_LABEL_KEY] = json!(fake::SOURCE);
+    assert_eq!(init_identity(&labeled, &pinned, true)["matches"], true);
+    assert_eq!(init_identity(&labeled, &pinned, false)["matches"], false);
+}
+
 #[test]
 fn stream_drift_names_every_field_that_moved() {
     let expected: Value = serde_json::from_str(QUALIFIED_STREAM).unwrap();
@@ -523,7 +652,7 @@ fn workspace(dir: &Path) -> (PathBuf, PathBuf) {
 fn placement_of(input: Value, fixture: &Path, cwd: &Path) -> String {
     let record = tool_use_records(
         &[tool_use("Read", "t1", input)],
-        &Value::Null,
+        Some(&json!([])),
         &Value::Null,
         fixture,
         cwd,
@@ -879,7 +1008,7 @@ fn a_tool_use_the_harness_refused_is_an_attempt_and_not_an_effect() {
     // reported it as an observed effect with unresolved liability anyway.
     let denials = json!([{"tool_name":"Read","tool_use_id":"t2",
                           "tool_input":{"file_path":"…"}}]);
-    let record = tool_use_records(&messages, &denials, &Value::Null, &fixture, &fixture);
+    let record = tool_use_records(&messages, Some(&denials), &Value::Null, &fixture, &fixture);
     let uses = record["tool_uses"].as_array().unwrap();
     // Both are still recorded: an attempt is worth knowing about.
     assert_eq!(uses.len(), 2);
@@ -919,7 +1048,7 @@ fn a_refusal_is_attributed_to_whoever_decided_it() {
         "t1": {"by":"caller","decision":"deny"},
         "t2": {"by":"pio","decision":"deny","reason":"target_outside_the_fixture_workspace"},
     });
-    let record = tool_use_records(&messages, &denials, &decided, &fixture, &fixture);
+    let record = tool_use_records(&messages, Some(&denials), &decided, &fixture, &fixture);
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses[0]["outcome"], "denied_by_caller");
     assert_eq!(uses[0]["decided_by"], "caller");
@@ -940,6 +1069,68 @@ fn a_refusal_is_attributed_to_whoever_decided_it() {
     assert_eq!(record["liability"], "none_observed");
 }
 
+/// D3. A turn killed or crashed before its final `result` has no denial list.
+/// The audit used to read that absence as "nothing was refused" and record
+/// PIO's own decline as `performed`, `denied: false`. A deny PIO sent is a
+/// refusal whether or not a `result` confirms it; a use nobody denied, with
+/// no `result`, is `unknown` and leaves the liability unresolved.
+#[test]
+fn without_a_result_a_denied_use_stays_denied_and_the_rest_are_unknown() {
+    let dir = tempfile::tempdir().unwrap();
+    let (fixture, outside) = workspace(dir.path());
+    let messages = vec![
+        tool_use(
+            "Read",
+            "t1",
+            json!({"file_path":outside.join("marker.txt")}),
+        ),
+        tool_use("Bash", "t2", json!({"command":"git tag x"})),
+        tool_use("Read", "t3", json!({"file_path":"src/calc.py"})),
+        tool_use("Bash", "t4", json!({"command":"git tag y"})),
+    ];
+    let decided = json!({
+        "t1": {"by":"pio","decision":"deny","reason":"target_outside_the_fixture_workspace"},
+        "t2": {"by":"caller","decision":"deny"},
+        "t4": {"by":"caller","decision":"allow"},
+    });
+    let record = tool_use_records(&messages, None, &decided, &fixture, &fixture);
+    let uses = record["tool_uses"].as_array().unwrap();
+    assert_eq!(uses[0]["outcome"], "declined_by_pio", "{record}");
+    assert_eq!(uses[0]["denied"], true);
+    assert_eq!(uses[0]["denied_by_harness"], false);
+    assert_eq!(uses[1]["outcome"], "denied_by_caller");
+    assert_eq!(uses[1]["denied"], true);
+    // Nobody denied these, and no `result` says whether they ran: an allow is
+    // a decision, not an observation that the use completed.
+    assert_eq!(uses[2]["outcome"], "unknown");
+    assert_eq!(uses[2]["denied"], false);
+    assert_eq!(uses[3]["outcome"], "unknown");
+    assert!(uses.iter().all(|u| u["outcome"] != "performed"), "{record}");
+    assert_eq!(record["result_observed"], false);
+    assert_eq!(record["unknown_outcome_count"], 2);
+    assert_eq!(record["declined_by_pio_count"], 1);
+    assert_eq!(record["denied_by_caller_count"], 1);
+    // PIO's decline outside the workspace never ran, so it is no effect.
+    assert_eq!(record["out_of_fixture_effect_observed"], false);
+    assert_eq!(record["liability"], "unresolved");
+
+    // The same uses with a `result` that refused nothing: the undecided
+    // inside-fixture read ran, and PIO's decline is still a decline.
+    let settled = tool_use_records(
+        &messages[..3],
+        Some(&json!([])),
+        &decided,
+        &fixture,
+        &fixture,
+    );
+    let uses = settled["tool_uses"].as_array().unwrap();
+    assert_eq!(uses[0]["outcome"], "declined_by_pio");
+    assert_eq!(uses[2]["outcome"], "performed");
+    assert_eq!(settled["result_observed"], true);
+    assert_eq!(settled["unknown_outcome_count"], 0);
+    assert_eq!(settled["liability"], "none_observed", "{settled}");
+}
+
 #[test]
 fn every_tool_use_is_recorded_and_targets_outside_the_fixture_are_flagged() {
     let dir = tempfile::tempdir().unwrap();
@@ -952,7 +1143,13 @@ fn every_tool_use_is_recorded_and_targets_outside_the_fixture_are_flagged() {
             json!({"file_path":outside.join("secret.txt")}),
         ),
     ];
-    let record = tool_use_records(&messages, &Value::Null, &Value::Null, &fixture, &fixture);
+    let record = tool_use_records(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+    );
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses.len(), 2, "a tool use went unrecorded");
     assert_eq!(uses[0]["placement"], "inside_fixture");
@@ -981,7 +1178,13 @@ fn a_receipt_carries_labels_and_digests_rather_than_paths() {
             json!({"file_path":outside.join("secret.txt")}),
         ),
     ];
-    let record = tool_use_records(&messages, &Value::Null, &Value::Null, &fixture, &fixture);
+    let record = tool_use_records(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+    );
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses[0]["target_label"], "<fixture>/src/calc.py");
     assert_eq!(uses[1]["target_label"], "<outside>");
@@ -1000,7 +1203,13 @@ fn a_shell_command_is_not_classifiable_rather_than_assumed_contained() {
     let dir = tempfile::tempdir().unwrap();
     let (fixture, _) = workspace(dir.path());
     let messages = vec![tool_use("Bash", "t1", json!({"command":"cat /etc/passwd"}))];
-    let record = tool_use_records(&messages, &Value::Null, &Value::Null, &fixture, &fixture);
+    let record = tool_use_records(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+    );
     let uses = record["tool_uses"].as_array().unwrap();
     assert_eq!(uses[0]["placement"], "not_classifiable");
     assert!(uses[0]["target_label"].is_null());
@@ -1014,7 +1223,13 @@ fn a_clean_run_inside_the_fixture_reports_no_outstanding_liability() {
     let dir = tempfile::tempdir().unwrap();
     let (fixture, _) = workspace(dir.path());
     let messages = vec![tool_use("Read", "t1", json!({"file_path":"src/calc.py"}))];
-    let record = tool_use_records(&messages, &Value::Null, &Value::Null, &fixture, &fixture);
+    let record = tool_use_records(
+        &messages,
+        Some(&json!([])),
+        &Value::Null,
+        &fixture,
+        &fixture,
+    );
     assert_eq!(record["liability"], "none_observed");
     assert_eq!(record["out_of_fixture_effect_observed"], false);
 }

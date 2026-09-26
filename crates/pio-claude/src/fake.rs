@@ -97,7 +97,11 @@ fn flag_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
 }
 
 /// The `system/init` key set measured from the real harness, so a matrix run
-/// exercises the same shape the adapter pins.
+/// exercises the same shape the adapter pins. The key set and the capability
+/// list come from the pinned stream identity itself, because the host now
+/// refuses an `init` that differs from it (D11): a pinned key the fake has
+/// no value for is present as null. The fake reproduces the shape, not the
+/// values.
 fn init_message(scenario: &Value, args: &[String]) -> Value {
     let mode = flag_value(args, "--permission-mode").unwrap_or("default");
     let mut init = json!({
@@ -112,7 +116,6 @@ fn init_message(scenario: &Value, args: &[String]) -> Value {
             Some("apiKey") => "ANTHROPIC_API_KEY",
             _ => "none",
         },
-        "capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1","msg_lifecycle_v1"],
         "tools":["Bash","Read","Edit"],"mcp_servers":[],"plugins":[],
         "slash_commands":[],"skills":[],"agents":[],
         "memory_paths":[],"output_style":"default",
@@ -121,6 +124,15 @@ fn init_message(scenario: &Value, args: &[String]) -> Value {
         "messaging_socket_path":Value::Null,
         "source":SOURCE,
     });
+    let pinned: Value = serde_json::from_str(super::QUALIFIED_STREAM).unwrap_or_default();
+    init["capabilities"] = pinned["capabilities"].clone();
+    for key in pinned["init_keys"].as_array().into_iter().flatten() {
+        if let Some(key) = key.as_str()
+            && init.get(key).is_none()
+        {
+            init[key] = Value::Null;
+        }
+    }
     if let Some(overrides) = scenario["init"].as_object() {
         for (key, value) in overrides {
             init[key] = value.clone();
@@ -319,7 +331,10 @@ pub fn run() -> Result<()> {
         &markers,
         json!({"event":"turn_received","attached":attached,
                             "permission_prompt_tool":prompt_tool,
-                            "initialize_received":handshook}),
+                            "initialize_received":handshook,
+                            // The mode flag it was given, or null for none, so
+                            // a case can prove what PIO actually passed.
+                            "permission_mode_flag":flag_value(&args, "--permission-mode")}),
     )?;
 
     emit(&init_message(&scenario, &args))?;

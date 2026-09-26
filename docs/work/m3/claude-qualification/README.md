@@ -1,5 +1,45 @@
 # Claude Code qualification, re-qualification and the zero-token probe
 
+## Re-pin to 2.1.281 (2026-09-26)
+
+The cask self-updated and the qualified 2.1.278 binary is gone, so main refused the installed 2.1.281 (`unsupported_version`, D12). PIO is now pinned to **2.1.281**, with its identities in [`adapters/claude/2.1.281/`](../../../../adapters/claude/2.1.281/). The 2.1.278 identities and the records below the line stay as they were.
+
+**How it was measured: zero tokens, fully isolated.** `scripts/claude_requalify.py` gained `--isolated`, and all three runs used it: **no child saw the owner's configuration**. The version, the helps and `auth status` ran with a scratch `HOME` and `CLAUDE_CONFIG_DIR`, the same environment `pio claude qualify` gives them, and every stream launch failed authentication before any model call. So the owner's credential route was **not** observed this time (`configured_route.skipped`) and the owner's files were not snapshotted (`user_configuration_unchanged: "not_observed"`), rather than reporting a comparison that was never made.
+
+```sh
+python3 scripts/claude_requalify.py --isolated --executable /opt/homebrew/bin/claude --out FRESH_DIR [--adapters DIR] [--update-baseline]
+```
+
+| File | Run | Result |
+| --- | --- | --- |
+| [drift-2.1.278-to-2.1.281.json](drift-2.1.278-to-2.1.281.json) | against a copy of the 2.1.278 identities | exit 3, the four findings below |
+| (baseline run, not committed) | `--update-baseline` into scratch | wrote the two identities now in `adapters/claude/2.1.281/` |
+| [requalification-2.1.281.json](requalification-2.1.281.json) | against the committed 2.1.281 identities | **qualified**, exit 0, `findings: []`, `model_calls: 0` |
+| [wrong-executable-control-2.1.281.json](wrong-executable-control-2.1.281.json) | `target/debug/pio claude qualify --executable ~/.local/bin/codex --work <scratch>`, built from base `f051063` plus the re-pin | refused `unsupported_version` against `pinned: 2.1.281`, exit 3, surface `skipped`, so no Claude-specific argument reached the other harness |
+
+The three runs agree: identical binary digest, surface listing and stream identity.
+
+**Executable.** `/opt/homebrew/bin/claude` resolves into the cask directory `2.1.281`; `2.1.281 (Claude Code)`; Mach-O sha256 `a922981f6f3b55a2…`. Surface listing `3f6807e14e3840dc…`, top help byte-identical over three runs.
+
+**Drift from 2.1.278, measured:**
+
+| Field | 2.1.278 | 2.1.281 |
+| --- | --- | --- |
+| surface | listing `0dd17ec7…` | listing `3f6807e1…`: **only the top-level `--help` changed** (`ae85d661…` → `06f5c456…`); the seven subcommand helps are byte-identical |
+| `init_keys` | 24 keys | 26: **added `per_turn_effort_active` and `view_mode`**, none removed |
+| `capabilities` | `interrupt_receipt_v1`, `interrupt_cancel_queued_v1`, `msg_lifecycle_v1` | the same three, then **`mcp_read_resource_v1`, `mcp_tool_ui_meta_v1`** |
+| `product_default_model` | `claude-opus-5[1m]` | **`claude-opus-5-5[1m]`** |
+
+Unchanged: `message_sequence` (`system/init → user → assistant → result/success`), the 21 `result_keys`, `product_default_permission_mode: default`, `init_waits_for_stdin: true` (nothing emitted in 20 s before a write), and the attachment (`--permission-prompt-tool stdio` accepted; the handshake answered `success` with the same five keys). The requested `--permission-mode acceptEdits` is echoed as `acceptEdits`, and the replay echo still equals what was sent.
+
+**Two observations beyond the identity.** The isolated, empty-configuration run now reports **`plugins: 2`** (2.1.278: 0) and 47 slash commands (46). ADR 004 §8's discriminator — an empty configuration shows no plugins, the owner's shows eleven — therefore needs the plugin **names**, not an empty list, from 2.1.281 on. The help text itself is not recorded (only digests), and 2.1.278's binary is gone, so *what* changed in the top-level help is not known.
+
+**Not measured at zero tokens, and still not:** anything about a real turn — per-message usage, the in-band interrupt, the permission wire shapes, the owner's route on 2.1.281. `pio claude qualify` was **not** run against the real 2.1.281: by rule only the script ran the real binary. Both digest the same eight helps with an isolated `HOME` and `CLAUDE_CONFIG_DIR`, and on 2.1.278 the two agreed byte for byte, but that agreement is **not re-measured** for 2.1.281. The unit test `pin_names_the_identity_directory_and_the_requalification_record` ties the pin, both identities and this record together.
+
+---
+
+The rest of this file is the **2.1.278** record of 2026-09-20.
+
 Evidence for [issue #7](https://github.com/Combraton/pio/issues/7), recorded 2026-09-20 on the macOS arm64 workstation. **No model call was made and no credential was read: `model_calls` is 0 and the user's configuration is byte-identical before and after.** Home-relative paths are shown as `~` and scratch paths as `<scratch>`.
 
 Re-qualification is **one command**, because the cask tracks latest and self-updates:

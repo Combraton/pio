@@ -1,0 +1,19 @@
+{
+  "command_count": 8,
+  "commands": {
+    "<top>": "06f5c4560d04939252e707e0bdee9c047e50aeb81ad8926a7ba74ec27f2432cd",
+    "agents": "4895bfe1bf2874fa7a3eaddd383e31d311b3cba9be58ac5c66e80c571dd60278",
+    "auth": "07245cbb719ae3b2d0fb0d4700338c41b7a5e7b3f21db70469e40b00f8f2abb0",
+    "doctor": "6975b99fb1910a7fbb1cf9977bbaeca33d9530cc59422788bbb2a200982955ea",
+    "install": "4dc358a42314bf21801781a0fe1d856ba5196a7aa59d48de63fd8e6632dd9505",
+    "mcp": "7119050de7984dc9d616f6b632fa3ee7fef92667eb5298ba57c73051e59cad46",
+    "plugin": "b0214cc3567a6eff8fc62215006a94043c8debaacc89c366d4e0ce8b70a0c5ab",
+    "project": "fa6e79173381d13045aacb1d41e46ed3f0aab4ac9db57ee3ef13f496ac429449"
+  },
+  "format": "pio-claude-surface-identity/1",
+  "surface_listing_sha256": "3f6807e14e3840dc815a39d8259666dab6b62cab4683349d98e1a5d89d8f8911",
+  "top_help_digests_over_3_runs": [
+    "06f5c4560d04939252e707e0bdee9c047e50aeb81ad8926a7ba74ec27f2432cd"
+  ],
+  "version": "2.1.281"
+}
