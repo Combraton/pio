@@ -3,24 +3,33 @@
 
 Each mutant edits a clean worktree of HEAD (see `source_mutant.py`) and the
 named test must fail **for that reason**. Most go round the public-wire
-boundary: `crates/pio-client/tests/dependencies.rs` fails if pio-client, or
-the command-line code on it, reaches a PIO service crate, and each of these
-reaches one another way. The verifier's two bypasses of the first cut are B1
-and B2. (The command line's own mutants, which need the binary, are in
-`client_cli_matrix.py --mutant`.)
+boundary, which `crates/pio-boundary` holds structurally: the dependency
+graph with every feature on, an allow-list, the source files rustc's own
+dep-info says it compiled, and no symlink in the crate. B1 to B7 are the
+verifier's bypasses (review of T1, rounds 1 and 2): the first cut's text
+scans lost to B3 to B7. (The command line's own mutants, which need the
+binary, are in `client_cli_matrix.py --mutant`.)
 
     client_source_mutants.py [--mutant NAME]...     (all of them by default)
 
-- `direct-pio-core`: pio-client depends on pio-core;
-- `transitive-pio-protocol`: on pio-protocol, which reaches pio-core too;
+- `direct-pio-core`, `transitive-pio-protocol`: pio-client depends on the
+  service, directly or through pio-protocol;
 - `B1-optional-feature`: an optional pio-core behind a feature, re-exported;
-- `B2-path-include`: a service source file compiled in with a module path;
-- `cli-borrows-service`: the command-line code names pio_protocol;
+- `B2-path-include`, `B3-cfg-attr-path`, `B4-spaced-attribute`: a service
+  source file compiled into pio-client by `#[path]`, by `cfg_attr`, and by
+  `# [path]` with a space;
+- `B5-symlinked-module`: a module file in pio-client that is a symlink to a
+  service source file;
+- `B6-helper-module`: a helper module under `client_cli/` that uses pio_core;
+- `B7-glob-import`: the CLI crate's root imports pio_core, reached with
+  `use super::*` (in pio-cli this was main.rs; the CLI now has a crate of
+  its own, and its root cannot name pio_core);
+- `cli-borrows-service`: the command line names pio_protocol;
+- `cli-depends-on-core`: pio-client-cli declares pio-core;
 - `ledger-lenient`: the caller ledger parses its request with serde_json,
   which takes a duplicate key the service refuses;
 - `watch-notices-repeat`: a follower checks only events against its saved
-  position, so a gap or an epoch change is repeated when it resumes inside a
-  page;
+  position, so a gap or an epoch change is repeated when it resumes;
 - `watch-stop-keeps-page`: a follower stopped on a page's last item keeps
   its cursor at the page's start.
 """
@@ -33,8 +42,15 @@ import source_mutant
 
 CLIENT_TOML = 'crates/pio-client/Cargo.toml'
 CLIENT_LIB = 'crates/pio-client/src/lib.rs'
-BOUNDARY = ['test', '--quiet', '-p', 'pio-client', '--test', 'dependencies']
+CLI_TOML = 'crates/pio-client-cli/Cargo.toml'
+CLI_LIB = 'crates/pio-client-cli/src/lib.rs'
+CLI_MAIN = 'crates/pio-client-cli/src/client_cli.rs'
+BOUNDARY = ['test', '--quiet', '-p', 'pio-boundary']
 REACH = 'reaches PIO service internals through'
+OUTSIDE = 'compiles source files from outside its directory'
+UNBUILT = 'does not build on its own declared dependencies'
+ENCODING = '../../pio-protocol/src/encoding.rs'
+LEAK = '#[allow(dead_code)]\nmod leak;\n'
 
 MUTANTS = {
     'direct-pio-core': (
@@ -44,23 +60,48 @@ MUTANTS = {
         [(CLIENT_TOML, None,
           'pio-protocol = { path = "../pio-protocol", default-features = false }\n')],
         BOUNDARY, [REACH, '"pio-protocol"', '"pio-host"']),
+    # The review's bypasses, each tried on the crate it named.
     'B1-optional-feature': (
         [(CLIENT_TOML, None, 'pio-core = { path = "../pio-core", optional = true }\n\n'
                              '[features]\nleak = ["dep:pio-core"]\n'),
          (CLIENT_LIB, None, '#[cfg(feature = "leak")]\npub use pio_core;\n')],
         BOUNDARY, [REACH, 'outside its allow-list', 'pio-core (by path)']),
     'B2-path-include': (
-        [(CLIENT_LIB, None, '#[' + 'path = "../../pio-protocol/src/encoding.rs"]\n'
-                            '#[allow(dead_code)]\nmod leak;\n')],
-        BOUNDARY, ['sources reach outside the crate', 'encoding.rs']),
+        [(CLIENT_LIB, None, f'#[path = "{ENCODING}"]\n' + LEAK)],
+        BOUNDARY, [OUTSIDE, 'pio-protocol/src/encoding.rs']),
+    'B3-cfg-attr-path': (
+        [(CLIENT_LIB, None, f'#[cfg_attr(all(), path = "{ENCODING}")]\n' + LEAK)],
+        BOUNDARY, [OUTSIDE, 'pio-protocol/src/encoding.rs']),
+    'B4-spaced-attribute': (
+        [(CLIENT_LIB, None, f'# [path = "{ENCODING}"]\n' + LEAK)],
+        BOUNDARY, [OUTSIDE, 'pio-protocol/src/encoding.rs']),
+    'B5-symlinked-module': (
+        [('crates/pio-client/src/leak.rs', source_mutant.SYMLINK, ENCODING),
+         (CLIENT_LIB, None, LEAK)],
+        BOUNDARY, ['has symlinks inside its directory', 'crates/pio-client/src/leak.rs',
+                   OUTSIDE]),
+    'B6-helper-module': (
+        [(CLI_MAIN, None, '\nmod helper;\n'),
+         ('crates/pio-client-cli/src/client_cli/helper.rs', None,
+          '#[allow(unused_imports)]\nuse pio_core::digest;\n')],
+        BOUNDARY, [UNBUILT, 'pio_core']),
+    'B7-glob-import': (
+        [(CLI_LIB, None, '#[allow(unused_imports)]\nuse pio_core::digest;\n'),
+         (CLI_MAIN, 'use crate::ledger;\n',
+          'use crate::ledger;\n#[allow(unused_imports)]\nuse super::*;\n')],
+        BOUNDARY, [UNBUILT, 'pio_core']),
     'cli-borrows-service': (
-        [('crates/pio-cli/src/client_cli.rs', 'use crate::ledger;\n',
+        [(CLI_MAIN, 'use crate::ledger;\n',
           'use crate::ledger;\n#[allow(unused_imports)]\nuse pio_protocol as _service;\n')],
-        BOUNDARY, ['the command line reaches past the public client', 'pio_protocol']),
+        BOUNDARY, [UNBUILT, 'pio_protocol']),
+    'cli-depends-on-core': (
+        [(CLI_TOML, '[dev-dependencies]', 'pio-core = { path = "../pio-core" }\n\n'
+                                          '[dev-dependencies]')],
+        BOUNDARY, [REACH, '"pio-core"', 'pio-core (by path)']),
     'ledger-lenient': (
-        [('crates/pio-cli/src/ledger.rs', 'Ok(pio_client::encoding::parse(bytes)?)',
+        [('crates/pio-client-cli/src/ledger.rs', 'Ok(pio_client::encoding::parse(bytes)?)',
           'Ok(serde_json::from_slice(bytes)?)')],
-        ['test', '--quiet', '-p', 'pio-cli', '--bin', 'pio', 'ledger::'],
+        ['test', '--quiet', '-p', 'pio-client-cli', '--lib', 'ledger::'],
         ['a_request_file_is_parsed_as_strictly_as_the_service_parses_it', 'FAILED']),
     'watch-notices-repeat': (
         [('crates/pio-client/src/watch.rs',

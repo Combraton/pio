@@ -1,7 +1,5 @@
 use anyhow::{Context, Result, bail};
 use std::path::Path;
-mod client_cli;
-mod ledger;
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -389,7 +387,7 @@ fn run() -> Result<()> {
             );
         }
         // Everything a caller does, through the public client (M4 rule 1).
-        Some("client") => client_cli::run(&args[1..])?,
+        Some("client") => pio_client_cli::run(&args[1..])?,
         Some("fake") => {
             let action = args.get(1).context(
                 "fake requires daemon, request, host, child, identity or fill-projection",

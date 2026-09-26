@@ -1,0 +1,12 @@
+[package]
+name = "pio-boundary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "The public-wire boundary of pio-client, pio-client-cli and the screen, checked from the dependency graph and the compiler's own list of source files"
+
+# A checker, depended on by nothing. Its tests read `cargo metadata` and the
+# dep-info rustc writes when it compiles each public-wire crate.
+[dependencies]
+serde_json.workspace = true

@@ -644,6 +644,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
+name = "pio-boundary"
+version = "0.1.0-dev"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "pio-claude"
 version = "0.1.0-dev"
 dependencies = [
@@ -659,19 +666,16 @@ name = "pio-cli"
 version = "0.1.0-dev"
 dependencies = [
  "anyhow",
- "base64",
- "libc",
  "pio-claude",
  "pio-client",
+ "pio-client-cli",
  "pio-codex",
  "pio-core",
  "pio-host",
  "pio-opencode",
  "pio-protocol",
- "rusqlite",
  "serde_json",
  "tempfile",
- "uuid",
 ]
 
 [[package]]
@@ -684,6 +688,20 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "uuid",
+]
+
+[[package]]
+name = "pio-client-cli"
+version = "0.1.0-dev"
+dependencies = [
+ "anyhow",
+ "base64",
+ "libc",
+ "pio-client",
+ "rusqlite",
+ "serde_json",
+ "tempfile",
  "uuid",
 ]
 

@@ -18,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TREE = ROOT / 'target/mutant-tree'
 TARGET = ROOT / 'target/mutant-target'
+SYMLINK = object()
 
 
 def _remove_tree():
@@ -30,7 +31,8 @@ def _remove_tree():
 @contextlib.contextmanager
 def mutated(edits):
     """`edits` is a list of `(relative path, old, new)`. `old` must occur
-    exactly once; `old=None` appends `new` to the file."""
+    exactly once; `old=None` appends `new` to the file, creating it if it
+    does not exist; `old=SYMLINK` makes the path a symlink to `new`."""
     _remove_tree()
     TREE.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(['git', 'worktree', 'add', '--detach', '--force', str(TREE), 'HEAD'],
@@ -38,6 +40,14 @@ def mutated(edits):
     try:
         for relative, old, new in edits:
             path = TREE / relative
+            if old is SYMLINK:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                os.symlink(new, path)
+                continue
+            if old is None and not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(new)
+                continue
             text = path.read_text()
             if old is None:
                 text += new

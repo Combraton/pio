@@ -791,7 +791,7 @@ MUTANT_CASE = {'cross-run': 'approvals_answer_and_refusals',
                'saved-page-end': 'watch_detach_resume'}
 # Mutants in the source: `pio client` built from a worktree of HEAD with one
 # edit, and the named case run against it.
-CLI = 'crates/pio-cli/src/client_cli.rs'
+CLI = 'crates/pio-client-cli/src/client_cli.rs'
 SOURCE_MUTANTS = {
     # M3 of the review: a refusal read by a person exits 0.
     'human-refusal-exits-0': ('approvals_answer_and_refusals', CLI,

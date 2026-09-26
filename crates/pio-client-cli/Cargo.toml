@@ -1,0 +1,23 @@
+[package]
+name = "pio-client-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "`pio client`: the command line over PIO's public client, and the caller ledger"
+
+# Public wire only, like pio-client: this crate's one PIO dependency is
+# pio-client. `pio client` lives here rather than in pio-cli, which links
+# the whole service, so the dependency graph itself enforces M4 rule 1 for
+# the command line; crates/pio-boundary checks it.
+[dependencies]
+pio-client = { path = "../pio-client" }
+anyhow.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+uuid.workspace = true
+libc.workspace = true
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"

@@ -179,29 +179,32 @@ jobs:
           cargo --version
       - name: Build
         run: cargo build --workspace --locked
-      - name: The boundary, with every feature on, and its source mutants
-        # pio-client may not reach a PIO service crate by any path, nor may
-        # the command-line code on it; each mutant goes round that one way
-        # (the review's B1 and B2 among them) and must fail for its reason.
+      - name: The boundary, held structurally, and its source mutants
+        # pio-client and pio-client-cli may not reach a PIO service crate:
+        # the graph with every feature on, an allow-list, the files rustc's
+        # dep-info says it compiled, and no symlink. Each mutant goes round
+        # that one way (the review's B1 to B7 among them) and must fail for
+        # its reason.
         run: |
-          cargo test -p pio-client --locked --test dependencies --test folds
+          cargo test -p pio-boundary --locked
+          cargo test -p pio-client --locked --test folds
           python3 scripts/client_source_mutants.py
       - name: The folds in Rust against the Python folds, and their mutants
         run: |
           python3 scripts/fold_parity.py --out target/fold-parity --record
-          for mutant in walk-drops-offer board-exited-running board-liability-uncertain \
-                        blocks-nobody-unknown; do
+          for mutant in walk-drops-offer board-exited-running board-exited-still-waiting \
+                        board-liability-uncertain blocks-nobody-unknown; do
             python3 scripts/fold_parity.py --out "target/fold-parity-$mutant" --mutant "$mutant"
           done
       - name: pio client end to end, and its mutants
         # serve-fake, and serve-opencode, serve-claude and serve-codex behind
-        # their labeled fakes. Four mutants the script plays and five built
-        # from the source (the review's M3 and M4 among them).
+        # their labeled fakes. Four mutants the script plays and six built
+        # from the source (the review's M3, M4 and M6 among them).
         run: |
           python3 scripts/client_cli_matrix.py --out target/client-cli
           for mutant in cross-run fresh-epoch forgot-last saved-page-end \
                         human-refusal-exits-0 answer-always-deny approvals-gap-blind \
-                        ledger-exits-0 watch-ignores-stream; do
+                        ledger-exits-0 watch-ignores-stream watch-drops-notices; do
             python3 scripts/client_cli_matrix.py --out "target/client-cli-$mutant" --mutant "$mutant"
           done
       - name: No case left its store behind
