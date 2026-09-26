@@ -189,9 +189,17 @@ jobs:
         # exception is `runner-killed`, which must leave no receipt, every
         # reservation in the ledger, and the service stopped by the watchdog.
         # `desk-silent` waits out the 300-second delivery timeout.
+        # `grant-no-steer` is not run here: D6 made `execution.steering`
+        # advertised only on Codex, so OpenCode now refuses every steer
+        # `unsupported_required_feature` before the grant is ever consulted,
+        # whether or not the grant carries `execution.steer` — the row this
+        # mutant is named for cannot observe it on L1's own harness anymore.
+        # It still runs, and still must fail that row, played on Codex in
+        # the L3 step below, where steering is negotiated and the grant gate
+        # is reached.
         run: |
           PYTHONPATH=scripts python3 scripts/lead_run.py --rehearse --out target/lead-run
-          for m in no-tool reports-refused-as-started grant-may-answer grant-no-steer \
+          for m in no-tool reports-refused-as-started grant-may-answer \
                    wrong-child wrong-relay lead-without-brief lead-loops interrupted \
                    runner-killed release-refused setup-fails helper-elsewhere service-never-ready \
                    lead-submit-invalid third-admitted desk-silent; do
