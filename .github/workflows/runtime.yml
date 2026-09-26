@@ -10,9 +10,11 @@ jobs:
     # minutes at 89f1fad. Without them this job took 11 to 18 minutes there,
     # 13 to 18 on CI at 866a903, and 17 locally with the Codex matrix at 41
     # cases (round 3). After round 4 it took 22 minutes locally: the Codex
-    # matrix has 45 cases, and every Codex run reads its thread for three
+    # matrix had 45 cases, and every Codex run reads its thread for three
     # seconds after its turn (11 minutes for the matrix at three
-    # repetitions).
+    # repetitions). For L3's second attempt the matrix has 46 cases
+    # (`plugins_off_decision_sent`); at 81174a1, run locally beside the
+    # lead-runs job, its steps took about 25 minutes, the matrix 9.
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -137,7 +139,9 @@ jobs:
     # check. At 89f1fad these steps took 27 to 30 minutes of the one job;
     # at 866a903 this job took 27 to 29 minutes on CI. With round 3's
     # mutants (57 for L3, two at a time) it took 34 minutes locally; with
-    # round 4's (67 for L3), 37 minutes locally, L3's desk-silent aside.
+    # round 4's (67 for L3), 37 minutes locally, L3's desk-silent aside;
+    # for L3's second attempt there are 72, which took 25 minutes locally at
+    # 81174a1, two at a time.
     timeout-minutes: 60
     strategy:
       fail-fast: false
