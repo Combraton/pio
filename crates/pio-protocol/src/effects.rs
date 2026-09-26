@@ -33,26 +33,32 @@ impl Provider {
         )
     }
     pub fn expire_obligations(&mut self) -> anyhow::Result<()> {
+        // Find first, then mutate only the expired effects, so only they
+        // become changed keys for the commit.
         let mut expired = vec![];
-        for (id, record) in &mut self.data.effects {
+        for (id, record) in self.data.effects.iter() {
             if record.is_null() || record["effect"]["target"]["kind"] == "execution.execution" {
                 continue;
             }
-            for obligation in record["obligations"].as_array_mut().unwrap() {
+            for (index, obligation) in record["obligations"].as_array().unwrap().iter().enumerate()
+            {
                 if obligation["state"] == "open"
                     && obligation["deadline"]
                         .as_str()
                         .is_some_and(|deadline| deadline <= self.now.as_str())
                 {
-                    obligation["state"] = "overdue".into();
-                    expired.push((id.clone(), obligation["id"].clone()));
+                    expired.push((id.clone(), index, obligation["id"].clone()));
                 }
             }
         }
         if expired.is_empty() {
             return Ok(());
         }
-        for (id, obligation) in expired {
+        for (id, index, _) in &expired {
+            self.data.effects.get_mut(id).unwrap()["obligations"][*index]["state"] =
+                "overdue".into();
+        }
+        for (id, _, obligation) in expired {
             let record = self.data.effects.get_mut(&id).unwrap();
             record["revision"] = (num(&record["revision"]) + 1).into();
             let revision = num(&record["revision"]);

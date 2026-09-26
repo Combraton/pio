@@ -91,6 +91,12 @@ pub mod projections;
 
 pub struct Store {
     conn: Connection,
+    /// Retained projection totals at the revision they describe; see
+    /// [`projections`]. A cache only: recomputed from the rows whenever the
+    /// committed revision differs.
+    totals: Option<projections::Totals>,
+    last_commit: projections::CommitCost,
+    peak_commit: projections::CommitCost,
 }
 
 impl Store {
@@ -119,7 +125,12 @@ impl Store {
                 [Uuid::new_v4().to_string()],
             )?;
         }
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            totals: None,
+            last_commit: projections::CommitCost::default(),
+            peak_commit: projections::CommitCost::default(),
+        })
     }
 
     pub fn identity(&self) -> Result<(String, u64)> {

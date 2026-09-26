@@ -1,6 +1,6 @@
 # ADR 002 — one journal for Core and Execution
 
-- Status: **accepted implementation choice**, within the owner's two permitted alternatives after review of PR #4 at `fa70a63`; not milestone acceptance.
+- Status: **accepted implementation choice**, within the owner's two permitted alternatives after review of PR #4 at `fa70a63`; not milestone acceptance. Amended 2026-09-26: [changed-key commits](#changed-key-commits-2026-09-26) replace the whole-state scan per commit.
 - Date: 2026-09-16. Owner: Codex. Scope: PIO-local persistence; no Protocol schema changes.
 - Authority: [ADR 001](001-standalone-stack.md), [PLAN](../work/standalone-0.1/PLAN.md), owner instruction to settle persistence before Execution.
 
@@ -60,3 +60,40 @@ Implemented on `codex/m2-codex-app-server` ([issue #5](https://github.com/Combra
 **Measured cost.** On the macOS arm64 workstation, across two runs of the ignored probe `measure_commit_cost_at_record_bound`, a projection of 32,767 small records cost 199–206 ms for a no-op commit and 203–205 ms for a one-record commit in a debug build, and 28–29 ms and 31–32 ms in release. The service's durable tick commits once per execution every 25 ms, so a debug build near the record bound starves clients while any execution exists. Since `b217936` the durable tick uses delayed missed ticks, so a slow tick is not immediately followed by another and clients can take the provider lock between ticks. Requests still pay the commit cost. In the public headroom case one refused submit took about 1.6 s on the workstation and 4.9 s under deliberate CPU contention. On CI at `df069bf` the case exceeded the fixed 3 s socket timeout used by the other cases, so the two capacity cases now use a 60 s client timeout and record their latency. The bound is a safety limit, not a supported operating point. Tracked changed keys remain the prerequisite for any throughput claim. **Owner obligation (2026-09-16):** the bound is a safety cap for M2; incremental commits that process only changed keys are required before M4 and before repetition-heavy live testing in M3b, and no throughput claim is made until then.
 
 **Not bounded.** Journal and outbox history, the host `invocations` table, the content-addressed spool, total disk, memory beyond the projection, and throughput. A refused `execution.submit` can leave one unreferenced content-addressed script object, which is not an effect.
+
+## Changed-key commits (2026-09-26)
+
+This meets the owner's obligation above (G6/S7): incremental commits that process only changed keys, before M4 and before repetition-heavy testing. It is implemented on `codex/w3-changed-key-commits` at `15641f4`. The capacity bound and its values are unchanged. No throughput claim follows.
+
+**What a commit reads.** The provider's retained collections (subjects, dedupe outcomes, executions, effects, events) record the key of every mutation. They give read access and a few mutating methods (`insert`, `get_mut`, `remove` and `retain`, or `push`, `drain` and `retain` for events), and each method records its key. There is no general mutable access, so a change the commit could miss does not compile. Inserting an equal value is not a change. `Provider::commit` passes `meta` and the changed keys, each with its current value or a deletion, to `Store::commit_changes` or `commit_admission_changes`. The store reads and compares only those keys, skips any whose value equals the stored one, and stages the rest.
+
+**Unchanged.** Journal facts and their order (upserts, then deletes, each in key order); the revision fence; the no-op rule, under which nothing is re-checked or journaled; capacity refusal before staging, with the same `CapacityExceeded` values; and the admission thresholds. The commit points did not move, only what each commit reads. So Protocol intent still commits before host admission, and the commit holding `dispatch_intent` still precedes the host's `invocation.intent`. The whole-state `commit_protocol` and `commit_admission` remain for offline tooling (`pio fake fill-projection`) and tests. They compute the same change set from a full diff.
+
+**Capacity accounting.** The store keeps the projection's byte and record totals for one committed revision and applies each commit's size delta, using the stored lengths of replaced or deleted records. It recomputes the totals from row lengths, with an SQL aggregate and no JSON parsing, at a store handle's first commit (the service's startup commit). It also recomputes them whenever the committed revision is not the one they describe, for example after another connection committed. If the totals ever fall short of a removal, the commit is refused as `protocol_projection_totals_inconsistent`.
+
+**Evidence.** `examined` counts every projection record a commit reads, parses or compares, stored or proposed, including the totals recomputation.
+
+- **Scaling.** `commit_cost_does_not_scale_with_prior_executions` (pio-protocol) opens a provider with N = 10 and N = 1,000 completed prior executions. They are copies of one real scripted execution: its execution, delivery effect, subject, dedupe outcome and events, renamed and renumbered. That is 82 and 8,002 retained records. A new submit's commit examines 6 records and stages 6 at both sizes. From the submit to the run's exit, no commit examines more than 7. The test bound is 32.
+- **Mutant.** `Provider::commit` restored to the pre-amendment whole-state form (`data.records()` into `commit_protocol` or `commit_admission`). The test kills it at N = 10: `commit_cost_scales_with_state: a commit examined 184 records with 82 retained (10 prior executions); bound 32`. With the assertion disabled, the pre-amendment code ran for more than 10 minutes at N = 1,000 in a debug build before it was stopped. Each request's tick commits once per execution, and each of those commits was whole-state.
+- **Equivalence.** A store-level test drives a whole-state store and a changed-key store through the same states. The change sets are conservative, naming unchanged and absent keys. Journals, projections and totals are identical. A test-only oracle runs after every commit in every provider unit test. It checks that the committed projection equals the whole in-memory state, which is what the whole-state form wrote, so a commit that missed a change fails. Three more local mutants were killed: `get_mut` not recording its key (the oracle, in 9 tests); event retention not recording deletions (the retention capacity test); and stale totals used after another connection's commit (the stale-totals test, which projected 67,108,865 instead of 33,554,434).
+- **Store level.** At 10 and 1,000 execution-like records, a changed-key commit examines exactly the keys it names, while the whole-state form examines at least twice the record count. A fresh handle's first commit adds the one row-length scan.
+- **Matrices at `15641f4`.** Public process matrix, one repetition: 24 cases, with 17 pass, 2 intended property failures, 3 defense refusals and 2 classifier controls, the same classes as before. The refused submit in `capacity_headroom_admitted_completes` took 0.44 s, against 1.6 s recorded above. That refusal still reloads the whole projection. The fake-host matrix, one repetition: 18 cases, with 13 pass, 1 intended property failure, 3 defense refusals and 1 classifier control, as before. Caller recovery passed. The runner shows 206 pass, 73 unsupported and 1 skipped, plus 2 supplemental passes.
+
+**Measured cost.** These are from the ignored probe `measure_commit_cost_at_record_bound` at 32,767 records. It ran on the macOS arm64 workstation from an external SSD, under load from other builds (load average about 27). In release:
+
+| Commit | Changed-key | Whole-state |
+| --- | --- | --- |
+| No-op | 23–62 µs | 29–96 ms |
+| One record | 9–34 ms | 35–450 ms |
+
+A durable one-record commit (`synchronous=FULL`, `fullfsync`) is dominated by the sync. The one-time totals scan took 5–9 ms. In debug, a changed-key no-op took 56 µs and a one-record commit 9 ms, against 562 ms for a whole-state no-op.
+
+**Still linear in retained state, but not commit cost.**
+
+- The execution tick runs at the start of every request and commits once per execution, settled ones included. Each such commit is now a no-op that examines one record (`meta`), but the tick is still linear in executions: a clone, a timeout check and a short write transaction each.
+- A command's snapshot of subject revisions and its change-event pass iterate all subjects in memory.
+- Obligation expiry scans all effects in memory.
+- Rollback (`reload`) still reloads the whole projection. It runs after a refused or failed commit, or when a command is refused inside `apply`.
+- Startup loads the whole projection.
+
+These are in-memory or failure-path costs. The bound remains a safety cap, not an operating point. If request latency across many runs matters, the tick and rollback are the next items.
