@@ -463,3 +463,30 @@ L1 held two rows only because nothing could fail them: no approval was asked, an
 - **Attempt 2 held** (2026-09-25, at `0ba60de`): 32 of 33 rows hold, and "PIO deleted no session" is inconclusive. The desk request was the same as in attempt 1 (`inside_fixture`; `once` / `always` / `reject`). It was allowed once by the relay, from the owner's advance decision, within a second of reaching the desk, so it was not answered live. The lead's read of `alpha` waited 53.1 s and returned `exited`, so the row held on the exited branch, not on the limit. 82,910 charged. See the evidence README.
 
 **Step 2 order:** ~~G1 and G6 (the events fold)~~ **done** (G6's server half, changed-key commits, done 2026-09-26), ~~G2 (the approval walk)~~ **done**, ~~G3 (blocks and the audit)~~ **done**. Each with its own headless case and a mutant. Next: step 3, orchestrate.
+
+## M4 T1 — what now exists in Rust
+
+The screen's rule 1 now has a crate behind it. **`crates/pio-client`** is the public API in Rust, and `pio client` is built on it and on nothing else; the screen will be its second consumer. Its dependency test fails if it reaches `pio-core`, `pio-protocol`, `pio-host` or an adapter by any path (proof and mutant in [verification](../../VERIFICATION.md#m4-t1--the-public-client-and-the-command-line-on-it)).
+
+| The screen needs | In `pio_client` | On the command line |
+| --- | --- | --- |
+| A session: the socket, the local-API credential, negotiation | `Client::connect` (refuses a socket another user bound) | `--socket`, `--credential-file` or `PIO_SOCKET`, `PIO_CREDENTIAL_FILE` |
+| The board, refreshed without re-reading settled runs (G1, G6) | `board::Board`: `absorb` one page, `draw` what moved, `view` rows, groups, counts, notes | `pio client list` |
+| One run's view, the truth line's sources | `Client::inspect` | `pio client inspect ID` |
+| Blocks as they arrive, the audit filled in place (G3) | `blocks::Transcript`: `feed` reads, per-harness `Decoder`, `fill_from_exit` | `pio client output ID --follow` prints the bytes; the blocks are the screen's |
+| The approval walk and who decided (G2) | `walk::walk`, `walk::decisions` | `pio client approvals` |
+| Answer, cancel, steer, fenced at the run's revision and the epoch | `respond_action`, `cancel`, `steer`, `fenced`, `decision_word` | `pio client answer RUN ACTION allow\|deny`, `cancel`, `steer` |
+| A stale controller | `claim_controller`, `controller_epochs` | `pio client claim` |
+| Leaving and coming back (screen 7) | `watch::WatchState`: page cursor plus last delivered event, replaced atomically | `pio client watch --state FILE` |
+| Grants, subscriptions, discovery, capabilities, reconcile, submit | `grant_issue/get/revoke`, `events_subscribe/unsubscribe`, `notification`, `discovery`, `capabilities`, `reconcile`, `submit` | `submit` and `reconcile` through the caller ledger |
+
+The three folds are **ports**, not rewrites: each is held to the Python fold that proved its gap, on the same recorded streams, field for field (`scripts/fold_parity.py`, 19 recordings from the labeled fakes of all three release harnesses and `serve-fake`). Where the Python and the Rust could disagree they now cannot silently: a port that drifts fails `cargo test`.
+
+Decisions this step made, for the screen to inherit:
+
+- **A run's word on the board** comes from its view alone, first match wins: `needs approval` (a pending action), `uncertain` (delivery ambiguous, usage liability unresolved, runtime unknown), `refused`, `failed`, `cancelled`, `finished`, `running`; a run the stream names and nobody has read is `unknown`, not a guess. The violet note counts `uncertain` and `unknown`. OpenCode's runs read `uncertain` after they exit, because their usage liability is unresolved (the last-step usage of D4), which is the truth rather than a board defect.
+- **A refusal is printed whole**, the service's error object, and exits 3. An answer aimed at the wrong run, or fenced at a stale epoch, can never read as a success; `client_cli_matrix.py` proves both on `serve-opencode`.
+- **An answer is sent in the harness's own single-use word**: Codex `accept`/`decline`, the others `allow`/`deny`, chosen from the action's `owner`. Nothing wider is encodable.
+- **A board whose read of a run is refused keeps the last view it had**, as the Python fold does; the row's `drawn_revision` then trails its `revision`, so its age shows.
+
+Not done here: G7 (projects) stays client configuration for the screen; the steering-author proposal is still [protocol#17](https://github.com/Combraton/protocol/issues/17).

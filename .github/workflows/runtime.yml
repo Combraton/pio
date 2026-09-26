@@ -95,6 +95,24 @@ jobs:
           PYTHONPATH=scripts python3 scripts/approval_desk.py --out target/desk-codex --harness codex
           PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-claude --harness claude
           PYTHONPATH=scripts python3 scripts/transcript_blocks.py --out target/blocks-codex --harness codex
+      - name: The public client and the command line on it (M4 T1)
+        # pio-client may not reach a PIO service crate (its dependency test,
+        # and the mutant that must break it); its three folds must agree
+        # with the Python folds they were ported from, field for field, on
+        # the committed recordings and on fresh ones, and each fold's mutant
+        # must fail at its field; then `pio client` end to end against
+        # serve-fake and serve-opencode (labeled fake), with its mutants.
+        run: |
+          cargo test -p pio-client --locked --test dependencies --test folds
+          python3 scripts/client_boundary_mutant.py
+          python3 scripts/fold_parity.py --out target/fold-parity --record
+          for mutant in walk-drops-offer board-exited-running blocks-nobody-unknown; do
+            python3 scripts/fold_parity.py --out "target/fold-parity-$mutant" --mutant "$mutant"
+          done
+          python3 scripts/client_cli_matrix.py --out target/client-cli
+          for mutant in cross-run fresh-epoch forgot-last saved-page-end; do
+            python3 scripts/client_cli_matrix.py --out "target/client-cli-$mutant" --mutant "$mutant"
+          done
       - name: A lead that starts runs, and the scope it holds (M4b step 3)
         run: PYTHONPATH=scripts python3 scripts/lead_runs.py --out target/lead-runs
       - name: No private paths in any committed file

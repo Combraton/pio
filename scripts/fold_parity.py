@@ -376,7 +376,9 @@ def mutant_binary(name, scratch):
     text = source.read_text()
     assert text.count(old) == 1, f'mutant {name}: the edit no longer applies to {relative}'
     source.write_text(text.replace(old, new))
-    return fold_binary(tree, scratch / 'target')
+    # One target directory for every mutant build, inside the repository's
+    # own (ignored) target: the dependencies compile once, not per mutant.
+    return fold_binary(tree, ROOT / 'target/fold-mutant')
 
 
 def main():
