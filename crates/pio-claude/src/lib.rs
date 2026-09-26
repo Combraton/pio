@@ -1,4 +1,4 @@
-//! Claude Code 2.1.278 qualification. Binds the user-selected executable, the
+//! Claude Code qualification, pinned to 2.1.281. Binds the user-selected executable, the
 //! binary it actually resolves to, and the command-line surface it exposes,
 //! before any native work. Qualification runs the executable only with an
 //! isolated `CLAUDE_CONFIG_DIR`; it never reads the user's credentials, never
@@ -11,13 +11,14 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub const PINNED_VERSION: &str = "2.1.278";
+pub const PINNED_VERSION: &str = "2.1.281";
 
-/// Command-line surface captured from the qualified 2.1.278 executable. Claude
+/// Command-line surface captured from the qualified executable, at zero
+/// tokens, under `adapters/claude/<PINNED_VERSION>`. Claude
 /// Code publishes no schemas, so the interface PIO can pin is the surface it
 /// drives. See [ADR 004](../../../docs/decisions/004-claude-code-adapter.md).
 pub const QUALIFIED_SURFACE: &str =
-    include_str!("../../../adapters/claude/2.1.278/surface-identity.json");
+    include_str!("../../../adapters/claude/2.1.281/surface-identity.json");
 
 /// Helps that make up the surface identity. The top-level help plus every
 /// subcommand PIO might touch, so a self-update that changes the interface
@@ -31,7 +32,7 @@ pub const SURFACE_COMMANDS: &[&str] = &[
 /// Stream identity captured from the qualified executable at zero tokens. A
 /// help digest cannot see the wire, so the pinned interface is both artefacts.
 pub const QUALIFIED_STREAM: &str =
-    include_str!("../../../adapters/claude/2.1.278/stream-identity.json");
+    include_str!("../../../adapters/claude/2.1.281/stream-identity.json");
 
 /// Fields of the stream identity that must match exactly for a qualified run.
 pub const STREAM_IDENTITY_FIELDS: &[&str] = &[

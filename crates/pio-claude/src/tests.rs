@@ -427,6 +427,51 @@ fn checked_in_stream_identity_carries_every_compared_field() {
     assert_eq!(identity["capabilities"][0], "interrupt_receipt_v1");
 }
 
+/// The pin and the compiled-in identities name one release: both identities
+/// are the ones checked in under `adapters/claude/<PINNED_VERSION>`, and the
+/// committed zero-token re-qualification for that version measured the same
+/// executable version, qualified with no findings, against the same surface
+/// and stream. A stale `PINNED_VERSION` fails closed at run time, but a pin
+/// pointing at another release's identity would qualify the wrong interface
+/// silently. The Codex adapter has the same test.
+#[test]
+fn pin_names_the_identity_directory_and_the_requalification_record() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let directory = workspace.join(format!("adapters/claude/{PINNED_VERSION}"));
+    let surface = std::fs::read_to_string(directory.join("surface-identity.json"))
+        .expect("a surface identity for PINNED_VERSION");
+    let stream = std::fs::read_to_string(directory.join("stream-identity.json"))
+        .expect("a stream identity for PINNED_VERSION");
+    assert_eq!(
+        surface, QUALIFIED_SURFACE,
+        "the compiled-in surface identity is not the one checked in for {PINNED_VERSION}"
+    );
+    assert_eq!(
+        stream, QUALIFIED_STREAM,
+        "the compiled-in stream identity is not the one checked in for {PINNED_VERSION}"
+    );
+    let surface: Value = serde_json::from_str(&surface).unwrap();
+    let stream: Value = serde_json::from_str(&stream).unwrap();
+    assert_eq!(surface["version"], PINNED_VERSION);
+    assert_eq!(stream["version"], PINNED_VERSION);
+    let record: Value = serde_json::from_str(
+        &std::fs::read_to_string(workspace.join(format!(
+            "docs/work/m3/claude-qualification/requalification-{PINNED_VERSION}.json"
+        )))
+        .expect("a committed re-qualification record for PINNED_VERSION"),
+    )
+    .unwrap();
+    assert_eq!(record["executable"]["version"], PINNED_VERSION);
+    assert_eq!(record["qualified"], true);
+    assert_eq!(record["findings"], json!([]));
+    assert_eq!(record["model_calls"], 0);
+    assert_eq!(
+        record["cli_surface"]["surface_listing_sha256"],
+        surface["surface_listing_sha256"]
+    );
+    assert_eq!(record["stream_identity"], stream);
+}
+
 #[test]
 fn stream_drift_names_every_field_that_moved() {
     let expected: Value = serde_json::from_str(QUALIFIED_STREAM).unwrap();
